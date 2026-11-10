@@ -5483,18 +5483,35 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
           return 'ui';
         }
         if (RegExp(
-          r'\b(?:player|character|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
+          r'\b(?:player|character|pawn|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
         ).hasMatch(lower)) {
           return 'character';
+        }
+        if (RegExp(
+          r'\b(?:arena|blockout|greybox|graybox|level|map|compound|sector|courtyard|room|world|stage|zone|biome|terrain)\b',
+        ).hasMatch(lower)) {
+          return 'level';
         }
         return 'actor';
       }
 
       final currentArchetype = classifyAssetArchetype(feat.title);
+      final derivedAssetNames =
+          TaskHowToBlueprint.deriveConcreteAssetName(feat.title);
+      final featPascal = derivedAssetNames.pascalName.isNotEmpty
+          ? derivedAssetNames.pascalName
+          : 'GameplayFeature';
+      final featSnake = derivedAssetNames.snakeName.isNotEmpty
+          ? derivedAssetNames.snakeName
+          : 'gameplay_feature';
       final hasPrecedingSameArchetype = featOrderIdx > 0 &&
           allReleaseFeatures
               .take(featOrderIdx)
               .any((f) => classifyAssetArchetype(f.title) == currentArchetype);
+      final hasPrecedingCharacterFeature = featOrderIdx > 0 &&
+          allReleaseFeatures
+              .take(featOrderIdx)
+              .any((f) => classifyAssetArchetype(f.title) == 'character');
       final isGreenfieldFirstFeature =
           (featOrderIdx <= 0 || !hasPrecedingSameArchetype) &&
               effectiveCpIndex == 0;
@@ -5507,13 +5524,39 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
       final compactPrecedingSummary = precedingFeatureTitles.length <= 3
           ? precedingFeatureTitles.join(', ')
           : '${precedingFeatureTitles.first}, ..., ${precedingFeatureTitles.sublist(precedingFeatureTitles.length - 2).join(', ')} (${precedingFeatureTitles.length} total)';
-      final engineAssetHint = engineLabel == 'UNREAL 5'
-          ? 'BP_PlayerCharacter / Actor Blueprint and IMC_Default'
+      final engineAssetHint = switch (currentArchetype) {
+        'character' => engineLabel == 'UNREAL 5'
+            ? 'BP_PlayerCharacter (ACharacter) and IMC_Default'
+            : (engineLabel == 'UNITY C#'
+                ? 'PlayerController.cs / MonoBehaviour Prefab and CharacterController / Rigidbody'
+                : 'player_character.tscn (CharacterBody) + player_character.gd and Project Input Map'),
+        'ui' => engineLabel == 'UNREAL 5'
+            ? 'WBP_$featPascal (UUserWidget) with CanvasPanel'
+            : (engineLabel == 'UNITY C#'
+                ? '${featPascal}Canvas.prefab / ${featPascal}UI.cs (PlayerController.cs / MonoBehaviour Prefab UI)'
+                : '${featSnake}_hud.tscn (Control / CanvasLayer) + ${featSnake}_hud.gd'),
+        'level' => engineLabel == 'UNREAL 5'
+            ? 'Level Map L_$featPascal (/Game/Maps/) with World Outliner Actors (StaticMeshActor floor/ramps, BoxCollision / KillZVolume, PhysicalMaterial, and PlayerStart + BP_PlayerCharacter for playtest)'
+            : (engineLabel == 'UNITY C#'
+                ? 'Scene $featPascal.unity (Assets/Scenes/) with Floor/Ramp GameObjects, Colliders, PhysicMaterial, and PlayerController.cs / MonoBehaviour Prefab spawn'
+                : 'Level Scene $featSnake.tscn (res://scenes/levels/) with StaticBody/CollisionShape floor/ramps and player_character spawn'),
+        _ => engineLabel == 'UNREAL 5'
+            ? 'BP_$featPascal (AActor) with StaticMeshComponent and Collision Component'
+            : (engineLabel == 'UNITY C#'
+                ? '$featPascal.prefab / ${featPascal}Controller.cs (PlayerController.cs / MonoBehaviour Prefab and Collider)'
+                : '$featSnake.tscn (Node3D / Area3D / StaticBody3D) + $featSnake.gd'),
+      };
+      final needsFirstFeaturePlayerBootstrap =
+          (currentArchetype == 'level' || currentArchetype == 'actor') &&
+              !hasPrecedingCharacterFeature &&
+              effectiveCpIndex == 0;
+      final playerBootstrapLabel = engineLabel == 'UNREAL 5'
+          ? 'PlayerStart spawn point above the floor with BP_PlayerCharacter / Default Pawn assigned in World Settings (do NOT make IMC_Default a floor component)'
           : (engineLabel == 'UNITY C#'
-              ? 'PlayerController.cs / MonoBehaviour Prefab and Rigidbody/Collider'
-              : 'player.tscn / CharacterBody + GDScript and Project Input Map');
+              ? 'PlayerCharacter spawn point above the floor in the Scene Hierarchy'
+              : 'PlayerStart / player_character spawn node above the floor in the Main Scene');
       final projectBuildStateContext = isGreenfieldFirstFeature
-          ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Asset Setup). On Task 1, explicitly instruct how to create the new ${currentArchetype == 'character' ? 'Character Blueprint / Prefab / Scene' : (currentArchetype == 'ui' ? 'UI Widget / Canvas / Control Scene' : 'Actor Blueprint / Prefab / Scene')} ($engineAssetHint), specify its exact Parent Class / Root Node and folder path, and explain how to place or spawn it in the active level.'
+          ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Setup). On Task 1, explicitly instruct how to set up ${currentArchetype == 'level' ? 'the Level Map & World Outliner geometry' : (currentArchetype == 'character' ? 'the Character Blueprint / Prefab / Scene' : (currentArchetype == 'ui' ? 'the UI Widget / Canvas / Control Scene' : 'the Actor Blueprint / Prefab / Scene'))} ($engineAssetHint), specify its exact folder path, and ${needsFirstFeaturePlayerBootstrap ? 'include placing a $playerBootstrapLabel so pressing Play spawns the player landing on the floor.' : 'explain how to place or spawn it in the active level.'}'
           : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
 
       // Build Epic-Scoped Cumulative Project Ledger:

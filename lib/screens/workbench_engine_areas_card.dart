@@ -625,10 +625,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         ),
 
         // ══════════════════════════════════════════════════════════════════════
-        // SECTION 01 · BLUEPRINT / PREFAB / SCENE & COMPONENTS (Calm Card Row 1)
+        // SEPARATE INITIAL SETUP AREA (Top Banner)
         // ══════════════════════════════════════════════════════════════════════
         Container(
-          padding: const EdgeInsets.fromLTRB(22, 16, 22, 18),
+          key: ValueKey('initial_setup_area_${node.id}'),
+          padding: const EdgeInsets.fromLTRB(22, 14, 22, 16),
           decoration: const BoxDecoration(
             border: Border(
               bottom: BorderSide(color: Color(0x16FFFFFF)),
@@ -637,7 +638,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Merged Section 01 Header Bar (01 + Title + Asset Name + Parent Class + Create/Existing Badge)
+              // Initial Setup Header Bar (INITIAL SETUP + Title + Asset Name + Parent Class + Create/Existing Badge)
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -654,26 +655,31 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         ),
                         decoration: BoxDecoration(
                           color:
-                              const Color(0xFF38BDF8).withValues(alpha: 0.14),
+                              const Color(0xFF10B981).withValues(alpha: 0.14),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
-                            color: const Color(0xFF38BDF8)
-                                .withValues(alpha: 0.36),
+                            color: const Color(0xFF10B981)
+                                .withValues(alpha: 0.38),
                           ),
                         ),
                         child: Text(
-                          '01',
+                          'INITIAL SETUP',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
+                            fontSize: 10.5,
                             fontWeight: FontWeight.w800,
-                            color: const Color(0xFF7DD3FC),
+                            letterSpacing: 0.3,
+                            color: const Color(0xFF6EE7B7),
                           ),
                         ),
                       ),
                       const SizedBox(width: 9),
                       Flexible(
                         child: Text(
-                          assetSpec.sec1Title,
+                          assetSpec.archetype == 'level'
+                              ? 'Level Map, Floor & PlayerStart Bootstrap'
+                              : (assetSpec.levelHookupTitle.contains('PLAYER')
+                                  ? 'First-Feature Asset, Character Pawn & PlayerStart Setup'
+                                  : 'Asset Creation & Initial Setup'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
@@ -758,7 +764,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               ),
               const SizedBox(height: 11),
 
-              // Single Container for Listed-Out Action Steps (1 · 2 · 3 — 1 action per line)
+              // Single Container for Initial Setup Steps (1 · 2 · 3 — 1 action per line)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 15,
@@ -793,7 +799,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                   fontSize: 13,
                                   fontWeight: FontWeight.w800,
                                   height: 1.48,
-                                  color: const Color(0xFF7DD3FC),
+                                  color: const Color(0xFF34D399),
                                 ),
                               ),
                             ),
@@ -837,7 +843,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         ),
 
         // ══════════════════════════════════════════════════════════════════════
-        // SECTIONS 02 & 03 · DYNAMIC COMPACT 2-COLUMN WORKBENCH SPLIT
+        // 2-COLUMN WORKBENCH SPLIT:
+        //   LEFT PANEL  = 01 Components / World Outliner + 02 Details Panel Values
+        //   RIGHT PANEL = Task Steps (STEPS) → 03 Event Graph / Script & Level Setup
         // ══════════════════════════════════════════════════════════════════════
         LayoutBuilder(
           builder: (context, splitConstraints) {
@@ -885,6 +893,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             final double sec2DynamicWidth =
                 longestContentWidth.clamp(250.0, maxAllowedColWidth);
 
+            final bool showSpawnRowInTree = assetSpec.archetype == 'level' ||
+                assetSpec.levelHookupTitle.contains('PLAYER');
+
             final Widget section02Widget = Container(
               key: ValueKey('area2_selected_component_header_${node.id}'),
               padding: isTwoCol
@@ -900,7 +911,237 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Section 02 Header
+                  // ── SECTION 01 · COMPONENTS / WORLD OUTLINER (Top of Left Panel) ──
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFF38BDF8).withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: const Color(0xFF38BDF8)
+                                .withValues(alpha: 0.36),
+                          ),
+                        ),
+                        child: Text(
+                          '01',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF7DD3FC),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          assetSpec.sec1Title,
+                          style: GoogleFonts.inter(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                            color: const Color(0xFFCBD5E1),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0E121A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0x1CFFFFFF),
+                      ),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 11,
+                            vertical: 7.5,
+                          ),
+                          decoration: const BoxDecoration(
+                            color: Color(0x0BFFFFFF),
+                            border: Border(
+                              bottom: BorderSide(color: Color(0x14FFFFFF)),
+                            ),
+                          ),
+                          child: Text(
+                            '${assetSpec.assetIcon} ${assetSpec.assetName} ${assetSpec.archetype == 'level' ? '(Persistent Level)' : '(Self)'}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                        ),
+                        for (int cIdx = 0;
+                            cIdx < components.length;
+                            cIdx++) ...[
+                          Builder(
+                            builder: (context) {
+                              final comp = components[cIdx];
+                              final bool isCompActive = comp.componentKey
+                                          .toLowerCase() ==
+                                      activeTargetComp.componentKey
+                                          .toLowerCase() ||
+                                  comp.taskIndices.contains(selectedTaskIdx);
+                              final bool isLastRow =
+                                  cIdx == components.length - 1 &&
+                                      !showSpawnRowInTree;
+                              final String treeBranch =
+                                  isLastRow ? '└─' : '├─';
+                              return InkWell(
+                                onTap: () {
+                                  if (comp.taskIndices.isNotEmpty) {
+                                    final targetTIdx = comp.taskIndices.first;
+                                    _rebuild(() {
+                                      _selectedTaskIndexByCheckpoint[node.id] =
+                                          targetTIdx;
+                                      _selectedSubStepIndexByTask[
+                                          '${node.id}_$targetTIdx'] = 0;
+                                    });
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 11,
+                                    vertical: 7.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isCompActive
+                                        ? const Color(0xFF38BDF8)
+                                            .withValues(alpha: 0.11)
+                                        : Colors.transparent,
+                                    border: Border(
+                                      left: isCompActive
+                                          ? const BorderSide(
+                                              color: Color(0xFF38BDF8),
+                                              width: 3,
+                                            )
+                                          : BorderSide.none,
+                                      bottom: isLastRow
+                                          ? BorderSide.none
+                                          : const BorderSide(
+                                              color: Color(0x0FFFFFFF),
+                                            ),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Expanded(
+                                        child: Text(
+                                          '$treeBranch ${comp.icon} ${comp.componentKey}',
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 11.5,
+                                            fontWeight: isCompActive
+                                                ? FontWeight.w700
+                                                : FontWeight.w500,
+                                            color: isCompActive
+                                                ? const Color(0xFFF8FAFC)
+                                                : const Color(0xFF94A3B8),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Wrap(
+                                        spacing: 4,
+                                        children: [
+                                          for (final tIdx in comp.taskIndices)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 5.5,
+                                                vertical: 1.5,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: isCompActive
+                                                    ? const Color(0xFF38BDF8)
+                                                        .withValues(alpha: 0.22)
+                                                    : const Color(0x12FFFFFF),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'T${tIdx + 1}',
+                                                style:
+                                                    GoogleFonts.jetBrainsMono(
+                                                  fontSize: 10,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: isCompActive
+                                                      ? const Color(0xFF7DD3FC)
+                                                      : const Color(0xFFCBD5E1),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                        if (showSpawnRowInTree)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 11,
+                              vertical: 7.5,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '└─ 🎯 PlayerStart (BP_PlayerCharacter)',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11.2,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF6EE7B7),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 5.5,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981)
+                                        .withValues(alpha: 0.16),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    'SPAWN',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF6EE7B7),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ── SECTION 02 · DETAILS PANEL VALUES (Bottom of Left Panel) ──
                   Row(
                     children: [
                       Container(
@@ -1267,6 +1508,196 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // ── TOP OF RIGHT PANEL · TASK STEPS (STEPS) ──
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              const Color(0xFF38BDF8).withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: const Color(0xFF38BDF8)
+                                .withValues(alpha: 0.36),
+                          ),
+                        ),
+                        child: Text(
+                          'STEPS',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: const Color(0xFF7DD3FC),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      Expanded(
+                        child: Text(
+                          'Task Steps (T${selectedTaskIdx + 1} · ${selectedHowTo.shortTaskTitle})',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                            color: const Color(0xFFCBD5E1),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 13,
+                      vertical: 11,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0E121A),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0x18FFFFFF),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (int sIdx = 0;
+                            sIdx < selectedHowTo.subSteps.length;
+                            sIdx++)
+                          Builder(
+                            builder: (context) {
+                              final subStep = selectedHowTo.subSteps[sIdx];
+                              final bool isSubActive = sIdx == activeSubStepIdx;
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  bottom:
+                                      sIdx == selectedHowTo.subSteps.length - 1
+                                          ? 0
+                                          : 7,
+                                ),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(6),
+                                  onTap: () {
+                                    _rebuild(() {
+                                      _selectedSubStepIndexByTask[
+                                          '${node.id}_$selectedTaskIdx'] = sIdx;
+                                    });
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 7,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: isSubActive
+                                          ? const Color(0xFF38BDF8)
+                                              .withValues(alpha: 0.08)
+                                          : const Color(0x05FFFFFF),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: isSubActive
+                                            ? const Color(0xFF38BDF8)
+                                                .withValues(alpha: 0.28)
+                                            : Colors.transparent,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        SizedBox(
+                                          width: 30,
+                                          child: Text(
+                                            '${selectedTaskIdx + 1}.${sIdx + 1}',
+                                            style: GoogleFonts.jetBrainsMono(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w800,
+                                              height: 1.48,
+                                              color: const Color(0xFF7DD3FC),
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          child: Text.rich(
+                                            TextSpan(
+                                              children: [
+                                                TextSpan(
+                                                  text:
+                                                      '${subStep.shortTitle}: ',
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: 13.5,
+                                                    fontWeight: FontWeight.w700,
+                                                    height: 1.48,
+                                                    color: const Color(
+                                                      0xFFF8FAFC,
+                                                    ),
+                                                  ),
+                                                ),
+                                                _buildSemanticStepSpan(
+                                                  text: subStep.instruction,
+                                                  baseStyle: GoogleFonts.inter(
+                                                    fontSize: 13.5,
+                                                    height: 1.48,
+                                                    color: const Color(
+                                                      0xFFCBD5E1,
+                                                    ),
+                                                  ),
+                                                  tuningItems: tuningItems,
+                                                  edgeItems: edgeItems,
+                                                  isCodeBlock: false,
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── FLOW DIVIDER (STEPS → SECTION 03) ──
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Divider(
+                          color: Color(0x16FFFFFF),
+                          height: 1,
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        child: Text(
+                          '▼ FLOWS INTO SECTION 03',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF64748B),
+                          ),
+                        ),
+                      ),
+                      const Expanded(
+                        child: Divider(
+                          color: Color(0x16FFFFFF),
+                          height: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── BOTTOM OF RIGHT PANEL · SECTION 03 ──
                   Wrap(
                     spacing: 8,
                     runSpacing: 8,

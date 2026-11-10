@@ -356,7 +356,68 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       }
     }
 
+    // 0b. Check task title for Arena / Floor / Ramp / Blockout geometry so it never falls through to IMC_Default or CharacterMovement
+    if (titleLower.contains('floor') ||
+        titleLower.contains('arena') ||
+        titleLower.contains('geometry') ||
+        titleLower.contains('blockout') ||
+        titleLower.contains('slab') ||
+        titleLower.contains('platform')) {
+      if (isUnreal) {
+        return (
+          icon: '📦',
+          componentKey: 'StaticMeshActor_ArenaFloor',
+          displayLabel: unrealCppMode
+              ? 'ArenaFloorMesh (UStaticMeshComponent)'
+              : 'StaticMeshActor_ArenaFloor (StaticMesh)',
+        );
+      } else if (isUnity) {
+        return (
+          icon: '📦',
+          componentKey: 'ArenaFloor',
+          displayLabel: is2D
+              ? 'ArenaFloor (BoxCollider2D)'
+              : 'ArenaFloor (MeshCollider / BoxCollider)',
+        );
+      } else {
+        return (
+          icon: '📦',
+          componentKey: 'ArenaFloor',
+          displayLabel: is2D
+              ? 'ArenaFloor (StaticBody2D)'
+              : 'ArenaFloor (StaticBody3D)',
+        );
+      }
+    }
+    if (titleLower.contains('ramp') || titleLower.contains('incline')) {
+      if (isUnreal) {
+        return (
+          icon: '🦴',
+          componentKey: 'StaticMeshActor_Ramp_Incline',
+          displayLabel: unrealCppMode
+              ? 'RampInclineMesh (UStaticMeshComponent)'
+              : 'StaticMeshActor_Ramp_Incline (StaticMesh)',
+        );
+      } else if (isUnity) {
+        return (
+          icon: '🦴',
+          componentKey: 'RampInclineMesh',
+          displayLabel: 'RampInclineMesh (MeshCollider)',
+        );
+      } else {
+        return (
+          icon: '🦴',
+          componentKey: 'RampInclineMesh',
+          displayLabel: is2D
+              ? 'RampInclineMesh (StaticBody2D)'
+              : 'RampInclineMesh (StaticBody3D)',
+        );
+      }
+    }
+
     // 1. Check if any subStep has an explicit area1Hierarchy child component noun (prioritizing ← SELECTED / [ACTIVE])
+    final isInputTaskTitle =
+        titleLower.contains('input') || titleLower.contains('mapping');
     for (final step in bp.subSteps) {
       final rawH = step.area1Hierarchy?.trim() ?? '';
       if (rawH.isNotEmpty) {
@@ -378,9 +439,17 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
               clean.toLowerCase().startsWith('class ')) {
             continue;
           }
+          final cleanLower = clean.toLowerCase();
+          if (!isInputTaskTitle &&
+              (cleanLower.startsWith('imc_') ||
+                  cleanLower.contains('input mapping context') ||
+                  cleanLower.startsWith('ia_') ||
+                  cleanLower.contains('input action'))) {
+            continue;
+          }
           if (!verbPrefixRegex.hasMatch(clean)) {
             final key = clean.split('(').first.trim();
-            final lower = clean.toLowerCase();
+            final lower = cleanLower;
             final icon = lower.contains('camera')
                 ? '📷'
                 : (lower.contains('box') ||
@@ -388,11 +457,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         lower.contains('trigger') ||
                         lower.contains('collision') ||
                         lower.contains('area') ||
-                        lower.contains('ray')
+                        lower.contains('ray') ||
+                        lower.contains('floor') ||
+                        lower.contains('volume')
                     ? '📦'
                     : (lower.contains('mesh') ||
                             lower.contains('sprite') ||
-                            lower.contains('visual')
+                            lower.contains('visual') ||
+                            lower.contains('ramp')
                         ? '🦴'
                         : '⚙️'));
             return (
@@ -599,9 +671,13 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     ).hasMatch(lowerTitle)) {
       archetype = 'ui';
     } else if (RegExp(
-      r'\b(?:player|character|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
+      r'\b(?:player|character|pawn|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
     ).hasMatch(lowerTitle)) {
       archetype = 'character';
+    } else if (RegExp(
+      r'\b(?:arena|blockout|greybox|graybox|level|map|compound|sector|courtyard|room|world|stage|zone|biome|terrain)\b',
+    ).hasMatch(lowerTitle)) {
+      archetype = 'level';
     } else {
       archetype = 'actor';
     }
@@ -621,43 +697,71 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     ];
     final featIdx = allReleaseFeats.indexWhere((f) => f.id == feat.id);
     bool isFirstOfArchetype = true;
-    if (archetype == 'character' && featIdx > 0) {
+    bool hasPrecedingCharacter = false;
+    if (featIdx > 0) {
       for (int i = 0; i < featIdx; i++) {
         final prevLower = allReleaseFeats[i].title.toLowerCase();
-        if (RegExp(
-          r'\b(?:player|character|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
-        ).hasMatch(prevLower)) {
+        final isPrevChar = RegExp(
+          r'\b(?:player|character|pawn|strafe|locomotion|dash|sprint|jump|crouch|slide|grapple|parry|aim|camera|footstep)\b',
+        ).hasMatch(prevLower);
+        if (isPrevChar) {
+          hasPrecedingCharacter = true;
+        }
+        if (archetype == 'character' && isPrevChar) {
           isFirstOfArchetype = false;
-          break;
         }
       }
     }
     final isNewAssetOnTask =
         selectedTaskIdx == 0 && checkpointIndex == 0 && isFirstOfArchetype;
+    final verifyCheckLower = selectedHowTo.taskDoneCheck.toLowerCase();
+    final needsPlayerSpawnSetup =
+        (archetype == 'level' || archetype == 'actor') &&
+            (!hasPrecedingCharacter ||
+                verifyCheckLower.contains('player') ||
+                verifyCheckLower.contains('character') ||
+                verifyCheckLower.contains('pawn') ||
+                verifyCheckLower.contains('land') ||
+                verifyCheckLower.contains('stand') ||
+                verifyCheckLower.contains('spawn'));
 
-    final sec1Title = isUnrealBp
-        ? 'Blueprint & Components'
-        : (isUnrealCpp
-            ? 'C++ Class & Subobjects (.h)'
+    final sec1Title = archetype == 'level'
+        ? (isUnreal
+            ? 'World Outliner & Level Actors'
             : (isUnity
-                ? 'Prefab & Components (Hierarchy)'
-                : 'Scene & Nodes (.tscn)'));
-    final sec2Title = isUnrealBp
+                ? 'Scene Hierarchy & GameObjects'
+                : 'Scene Tree & Level Nodes'))
+        : (isUnrealBp
+            ? 'Blueprint & Components'
+            : (isUnrealCpp
+                ? 'C++ Class & Subobjects (.h)'
+                : (isUnity
+                    ? 'Prefab & Components (Hierarchy)'
+                    : 'Scene & Nodes (.tscn)')));
+    final sec2Title = isUnrealBp || (isUnreal && archetype == 'level')
         ? 'Details Panel Values'
         : (isUnrealCpp
             ? 'UPROPERTY & Default Values'
             : (isUnity ? 'Inspector Window Values' : 'Inspector Dock Values'));
-    final sec3Title = isUnrealBp
-        ? 'Event Graph & Level Setup'
-        : (isUnrealCpp
-            ? 'C++ Implementation (.cpp) & Level Setup'
+    final sec3Title = archetype == 'level'
+        ? (isUnreal
+            ? 'Level Blueprint & World Settings'
             : (isUnity
-                ? 'C# MonoBehaviour (.cs) & Scene Setup'
-                : 'GDScript (.gd) & Main Scene Setup'));
+                ? 'Scene Setup & C# Behaviour'
+                : 'Level Script (.gd) & World Setup'))
+        : (isUnrealBp
+            ? 'Event Graph & Level Setup'
+            : (isUnrealCpp
+                ? 'C++ Implementation (.cpp) & Level Setup'
+                : (isUnity
+                    ? 'C# MonoBehaviour (.cs) & Scene Setup'
+                    : 'GDScript (.gd) & Main Scene Setup')));
 
-    final assetIcon = isUnrealBp
-        ? '📘'
-        : (isUnrealCpp ? '⚡' : (isUnity ? '📦' : '🎬'));
+    final assetIcon = archetype == 'level'
+        ? '🗺'
+        : (isUnrealBp
+            ? '📘'
+            : (isUnrealCpp ? '⚡' : (isUnity ? '📦' : '🎬')));
 
     String assetName;
     String parentClassLabel;
@@ -698,6 +802,34 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         assetName = '${snakeName}_hud.tscn';
         parentClassLabel = 'Root Node: Control (CanvasLayer)';
         folderPath = 'res://scenes/ui/';
+      }
+    } else if (archetype == 'level') {
+      final cleanLevelPascal = pascalName.replaceAll(
+        RegExp(r'(?:Blockout|Greybox|Graybox)$', caseSensitive: false),
+        '',
+      );
+      final effectiveLevelPascal =
+          cleanLevelPascal.isNotEmpty ? cleanLevelPascal : pascalName;
+      final cleanLevelSnake = snakeName.replaceAll(
+        RegExp(r'_(?:blockout|greybox|graybox)$', caseSensitive: false),
+        '',
+      );
+      final effectiveLevelSnake =
+          cleanLevelSnake.isNotEmpty ? cleanLevelSnake : snakeName;
+      if (isUnreal) {
+        assetName = 'L_$effectiveLevelPascal';
+        parentClassLabel = 'Asset Type: Level Map (.umap)';
+        folderPath = '/Game/Maps/';
+      } else if (isUnity) {
+        assetName = '$effectiveLevelPascal.unity';
+        parentClassLabel = 'Asset Type: Scene (.unity)';
+        folderPath = 'Assets/Scenes/';
+      } else {
+        assetName = '$effectiveLevelSnake.tscn';
+        parentClassLabel = is2D
+            ? 'Root Node: Node2D (Level Scene)'
+            : 'Root Node: Node3D (Level Scene)';
+        folderPath = 'res://scenes/levels/';
       }
     } else {
       if (isUnrealBp) {
@@ -872,6 +1004,64 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             ),
           ]);
         }
+      } else if (archetype == 'level') {
+        if (isUnreal) {
+          setupSteps.addAll([
+            (
+              label: 'Create Level with Floor',
+              detail:
+                  'Click File → New Level → Basic (includes lighting & floor slab) and save as $folderPath$assetName',
+            ),
+            (
+              label: 'Setup Playtest Character Pawn',
+              detail:
+                  'In /Game/Characters/, create/select BP_PlayerCharacter (Parent: Character with CapsuleComponent & CharacterMovement gravity) and set World Settings → Default Pawn Class = BP_PlayerCharacter',
+            ),
+            (
+              label: 'Place PlayerStart Above Floor',
+              detail:
+                  'In Place Actors → Basic, place PlayerStart at Location (0, 0, 120) above the floor so pressing Play spawns the character landing on the floor',
+            ),
+          ]);
+        } else if (isUnity) {
+          setupSteps.addAll([
+            (
+              label: 'Create Scene with Floor',
+              detail:
+                  'Click File → New Scene (Basic) → Save as $folderPath$assetName and add ${activeTargetComp.displayLabel} at (0, 0, 0)',
+            ),
+            (
+              label: 'Setup Playtest Character',
+              detail:
+                  'Create/place PlayerCharacter in Hierarchy with ${is2D ? 'Rigidbody2D + CapsuleCollider2D' : 'CharacterController / Rigidbody + CapsuleCollider'} and gravity enabled',
+            ),
+            (
+              label: 'Position Player Spawn Above Floor',
+              detail:
+                  'Set PlayerCharacter Transform Position = (0, 2, 0) above the floor collider so Play mode drops and lands firm on the floor',
+            ),
+          ]);
+        } else {
+          final rootNode = is2D ? 'Node2D' : 'Node3D';
+          final bodyNode = is2D ? 'CharacterBody2D' : 'CharacterBody3D';
+          setupSteps.addAll([
+            (
+              label: 'Create Level Scene with Floor',
+              detail:
+                  'Create $rootNode root scene → Save as $folderPath$assetName and add ${activeTargetComp.displayLabel} at (0, 0, 0)',
+            ),
+            (
+              label: 'Setup Playtest Character Scene',
+              detail:
+                  'Create/instantiate player_character.tscn ($bodyNode with CapsuleShape and gravity) inside $assetName',
+            ),
+            (
+              label: 'Position PlayerStart Above Floor',
+              detail:
+                  'Place PlayerStart / player_character at Position (0, 2, 0) above the floor collision so pressing Play lands firm on the floor',
+            ),
+          ]);
+        }
       } else {
         if (isUnrealBp) {
           setupSteps.addAll([
@@ -885,11 +1075,18 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
               detail:
                   'Open $assetName → In Components panel, click + Add → Attach ${activeTargetComp.displayLabel}',
             ),
-            (
-              label: 'Configure Defaults',
-              detail:
-                  'Select ${activeTargetComp.componentKey} → Apply Details values (02) and Event Graph (03)',
-            ),
+            if (needsPlayerSpawnSetup)
+              (
+                label: 'Setup PlayerStart & Pawn',
+                detail:
+                    'Set World Settings → Default Pawn Class = BP_PlayerCharacter and place PlayerStart at Location (0, 0, 120) above the floor',
+              )
+            else
+              (
+                label: 'Configure Defaults',
+                detail:
+                    'Select ${activeTargetComp.componentKey} → Apply Details values (02) and Event Graph (03)',
+              ),
           ]);
         } else if (isUnrealCpp) {
           setupSteps.addAll([
@@ -951,20 +1148,26 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     } else {
       setupSteps.addAll([
         (
-          label: 'Open Asset',
+          label: archetype == 'level' ? 'Open Level Map' : 'Open Asset',
           detail: 'Double-click $folderPath$assetName',
         ),
         (
-          label: 'Select Component',
+          label: archetype == 'level' ? 'Select Level Actor' : 'Select Component',
           detail:
-              'Click ${activeTargetComp.displayLabel} in the ${isUnrealBp ? 'Components panel' : (isUnrealCpp ? 'Class subobject list' : (isUnity ? 'Hierarchy / Inspector' : 'Scene Dock'))}',
+              'Click ${activeTargetComp.displayLabel} in the ${archetype == 'level' ? (isUnreal ? 'World Outliner' : (isUnity ? 'Scene Hierarchy' : 'Scene Tree')) : (isUnrealBp ? 'Components panel' : (isUnrealCpp ? 'Class subobject list' : (isUnity ? 'Hierarchy / Inspector' : 'Scene Dock')))}',
         ),
       ]);
     }
 
-    final levelHookupTitle = isUnreal
-        ? '🗺 LEVEL SETUP'
-        : (isUnity ? '🗺 SCENE SETUP' : '🗺 MAIN SCENE SETUP');
+    final levelHookupTitle = needsPlayerSpawnSetup
+        ? (isUnreal
+            ? '🗺 LEVEL & PLAYER START SETUP'
+            : (isUnity
+                ? '🗺 SCENE & PLAYER SPAWN SETUP'
+                : '🗺 MAIN SCENE & PLAYER SPAWN SETUP'))
+        : (isUnreal
+            ? '🗺 LEVEL SETUP'
+            : (isUnity ? '🗺 SCENE SETUP' : '🗺 MAIN SCENE SETUP'));
     final levelHookupSteps = <String>[];
     if (selectedTaskIdx == 0 && checkpointIndex == 0) {
       if (archetype == 'character') {
@@ -1011,26 +1214,52 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             'Click Instantiate Child Scene (🔗) under CanvasLayer → Select $assetName',
           ]);
         }
+      } else if (archetype == 'level') {
+        if (isUnreal) {
+          levelHookupSteps.addAll([
+            'World Outliner ($assetName) → Place ${activeTargetComp.componentKey} at Location = (0, 0, 0) with BlockAll collision',
+            'World Settings → GameMode Override → Set Default Pawn Class = BP_PlayerCharacter (ACharacter with CapsuleComponent & gravity)',
+            'Place Actors → Position PlayerStart at Location = (0, 0, 120) above ${activeTargetComp.componentKey} so the player character lands firm on Play',
+          ]);
+        } else if (isUnity) {
+          levelHookupSteps.addAll([
+            'Scene Hierarchy ($assetName) → Verify ${activeTargetComp.componentKey} is at Position = (0, 0, 0) with Collider attached',
+            'Hierarchy → Place PlayerCharacter with CharacterController / Rigidbody at Position = (0, 2, 0) above the floor',
+          ]);
+        } else {
+          levelHookupSteps.addAll([
+            'Scene Tree ($assetName) → Verify ${activeTargetComp.componentKey} is at Position = (0, 0, 0) with CollisionShape attached',
+            'Scene Tree → Instantiate player_character.tscn at Position = (0, 2, 0) above the floor so the character lands firm on Play',
+          ]);
+        }
       } else {
         if (isUnrealBp) {
           levelHookupSteps.addAll([
             'Content Browser ($folderPath) → Drag $assetName into the Level Viewport',
             'Details Panel → Transform → Set Location = (0, 0, 0)',
+            if (needsPlayerSpawnSetup)
+              'World Settings → Set Default Pawn Class = BP_PlayerCharacter and place PlayerStart at Location = (0, 0, 120) above $assetName',
           ]);
         } else if (isUnrealCpp) {
           levelHookupSteps.addAll([
             'Place Actors / Outliner → Place an instance of $assetName in the Level Viewport',
             'Details Panel → Transform → Set Location = (0, 0, 0)',
+            if (needsPlayerSpawnSetup)
+              'World Settings → Set DefaultPawnClass = APlayerCharacter::StaticClass() and place PlayerStart at Location = (0, 0, 120)',
           ]);
         } else if (isUnity) {
           levelHookupSteps.addAll([
             'Project Window ($folderPath) → Drag $assetName into the active Scene Hierarchy',
             'Inspector → Transform → Set Position = (0, 0, 0)',
+            if (needsPlayerSpawnSetup)
+              'Scene Hierarchy → Place PlayerCharacter at Position = (0, 2, 0) above $assetName',
           ]);
         } else {
           levelHookupSteps.addAll([
             'Main Level Scene → Click Instantiate Child Scene (🔗) in Scene Dock → Select $assetName',
             'Inspector → Transform → Set Position = (0, 0, 0)',
+            if (needsPlayerSpawnSetup)
+              'Main Level Scene → Instantiate player_character.tscn at Position = (0, 2, 0) above $assetName',
           ]);
         }
       }
