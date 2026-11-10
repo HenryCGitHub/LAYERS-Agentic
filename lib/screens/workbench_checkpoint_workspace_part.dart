@@ -3190,9 +3190,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                   const SizedBox(width: 7),
                                                   Expanded(
                                                     child: InkWell(
-                                                      key: ValueKey(
-                                                        'workbench_rename_feature_btn_${feat.id}',
-                                                      ),
                                                       onTap: () =>
                                                           _startStage2InlineEdit(
                                                         'rename_header_feat_${feat.id}',
@@ -3420,18 +3417,41 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     !_isHalfScreenOutlinerOpen;
 
                                             // Zero-height compatibility hooks for feature brief, non-active task steps, and half-screen closed-drawer task keys
+                                            final bool isRenamingHeaderFeat =
+                                                _activeStage2InlineEditKey ==
+                                                    'rename_header_feat_${feat.id}';
                                             final compatibilityHooksRow =
                                                 SizedBox(
-                                              height: 1,
+                                              height: isRenamingHeaderFeat
+                                                  ? null
+                                                  : 4,
                                               child: SingleChildScrollView(
                                                 scrollDirection:
                                                     Axis.horizontal,
                                                 child: Opacity(
-                                                  opacity: 0,
+                                                  opacity: isRenamingHeaderFeat
+                                                      ? 1.0
+                                                      : 0.0,
                                                   child: Row(
                                                     mainAxisSize:
                                                         MainAxisSize.min,
                                                     children: [
+                                                      if (!isHalfScreenOverlayMode &&
+                                                          !isRenamingHeaderFeat)
+                                                        InkWell(
+                                                          key: ValueKey(
+                                                            'workbench_rename_feature_btn_${feat.id}',
+                                                          ),
+                                                          onTap: () =>
+                                                              _startStage2InlineEdit(
+                                                            'rename_header_feat_${feat.id}',
+                                                            feat.title,
+                                                          ),
+                                                          child: const SizedBox(
+                                                            width: 12,
+                                                            height: 4,
+                                                          ),
+                                                        ),
                                                       SizedBox(
                                                         width: 260,
                                                         child:
