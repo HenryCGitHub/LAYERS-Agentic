@@ -1002,94 +1002,81 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF181E2C),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFF262E40),
-                      ),
-                    ),
-                    child: Text(
-                      'INITIAL SETUP',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 9.8,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.4,
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF181E2C),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: const Color(0xFF262E40),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${assetSpec.assetIcon} ${assetSpec.assetName}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 12.2,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFFF8FAFC),
-                    ),
+                ),
+                child: Text(
+                  'INITIAL SETUP',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.8,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.4,
+                    color: const Color(0xFF94A3B8),
                   ),
-                ],
+                ),
               ),
-              Wrap(
-                spacing: 6,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF181E2C),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFF262E40),
-                      ),
-                    ),
-                    child: Text(
-                      assetSpec.parentClassLabel,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.2,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
+              Text(
+                '${assetSpec.assetIcon} ${assetSpec.assetName}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12.2,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFF8FAFC),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF181E2C),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: const Color(0xFF262E40),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 7,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF181E2C),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                        color: const Color(0xFF262E40),
-                      ),
-                    ),
-                    child: Text(
-                      assetSpec.isNewAssetOnTask
-                          ? '+ Create in ${assetSpec.folderPath}'
-                          : 'Existing in ${assetSpec.folderPath}',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.2,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF94A3B8),
-                      ),
-                    ),
+                ),
+                child: Text(
+                  assetSpec.parentClassLabel,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.2,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF94A3B8),
                   ),
-                ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 7,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF181E2C),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: const Color(0xFF262E40),
+                  ),
+                ),
+                child: Text(
+                  assetSpec.isNewAssetOnTask
+                      ? '+ Create in ${assetSpec.folderPath}'
+                      : 'Existing in ${assetSpec.folderPath}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.2,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF94A3B8),
+                  ),
+                ),
               ),
             ],
           ),
@@ -1806,11 +1793,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                   Container(
                                                     constraints:
                                                         const BoxConstraints(
-                                                      maxWidth: 120,
+                                                      maxWidth: 95,
                                                     ),
                                                     padding: const EdgeInsets
                                                         .symmetric(
-                                                      horizontal: 6.5,
+                                                      horizontal: 6,
                                                       vertical: 2,
                                                     ),
                                                     decoration: BoxDecoration(
@@ -1841,7 +1828,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                           TextOverflow.ellipsis,
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
-                                                        fontSize: 10.8,
+                                                        fontSize: 10.5,
                                                         fontWeight:
                                                             FontWeight.w700,
                                                         color: isFocused
@@ -1857,7 +1844,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                     const SizedBox(width: 4),
                                                     for (final badge in row
                                                         .usedInSteps
-                                                        .take(2))
+                                                        .take(1))
                                                       Padding(
                                                         padding:
                                                             const EdgeInsets
