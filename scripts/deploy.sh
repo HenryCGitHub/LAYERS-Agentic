@@ -53,13 +53,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
-    git fetch origin gh-pages
-    git worktree add -B gh-pages "$WORKTREE_DIR" origin/gh-pages
-else
-    git worktree add --detach "$WORKTREE_DIR"
-    (cd "$WORKTREE_DIR" && git checkout --orphan gh-pages)
-fi
+git worktree add --detach "$WORKTREE_DIR"
+(cd "$WORKTREE_DIR" && git checkout --orphan gh-pages && git rm -rf --cached . >/dev/null 2>&1 || true)
 
 # Clean previous build files from worktree except .git
 find "$WORKTREE_DIR" -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
@@ -67,17 +62,12 @@ find "$WORKTREE_DIR" -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
 # Copy new build files
 rsync -a --exclude='.git' build/web/ "$WORKTREE_DIR/"
 
-echo "=== [4/4] Committing and pushing to origin/gh-pages ==="
+echo "=== [4/4] Committing and pushing orphan branch to origin/gh-pages ==="
 cd "$WORKTREE_DIR"
 git add -A
-
-if git rev-parse --verify HEAD >/dev/null 2>&1 && git diff-index --quiet HEAD --; then
-    echo "No changes detected. gh-pages is already up to date."
-else
-    git commit -m "Deploy: ${CURRENT_COMMIT} ($(date -u +'%Y-%m-%d %H:%M:%S UTC'))"
-    git push -u origin gh-pages
-    echo "Successfully published to origin/gh-pages!"
-fi
+git commit -m "Deploy: ${CURRENT_COMMIT} ($(date -u +'%Y-%m-%d %H:%M:%S UTC'))"
+git push --force -u origin gh-pages
+echo "Successfully published clean orphan commit to origin/gh-pages!"
 
 cd "$PROJECT_ROOT"
 echo "=== Deployment complete! ==="
