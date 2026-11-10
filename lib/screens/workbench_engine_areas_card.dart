@@ -2085,33 +2085,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                         ? const Color(0xFF181E2C)
                                         : const Color(0xFF0B0E15),
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border(
-                                      left: isSubActive
-                                          ? const BorderSide(
-                                              color: Color(0xFF38BDF8),
-                                              width: 3,
-                                            )
-                                          : const BorderSide(
-                                              color: Color(0xFF1E2534),
-                                            ),
-                                      top: BorderSide(
-                                        color: isSubActive
-                                            ? const Color(0xFF38BDF8)
-                                                .withValues(alpha: 0.42)
-                                            : const Color(0xFF1E2534),
-                                      ),
-                                      right: BorderSide(
-                                        color: isSubActive
-                                            ? const Color(0xFF38BDF8)
-                                                .withValues(alpha: 0.42)
-                                            : const Color(0xFF1E2534),
-                                      ),
-                                      bottom: BorderSide(
-                                        color: isSubActive
-                                            ? const Color(0xFF38BDF8)
-                                                .withValues(alpha: 0.42)
-                                            : const Color(0xFF1E2534),
-                                      ),
+                                    border: Border.all(
+                                      color: isSubActive
+                                          ? const Color(0xFF38BDF8)
+                                              .withValues(alpha: 0.45)
+                                          : const Color(0xFF1E2534),
                                     ),
                                   ),
                                   child: Row(
