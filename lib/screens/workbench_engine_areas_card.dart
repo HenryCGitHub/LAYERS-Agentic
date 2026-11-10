@@ -1028,16 +1028,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      '${assetSpec.assetIcon} ${assetSpec.assetName}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12.2,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFFF8FAFC),
-                      ),
+                  Text(
+                    '${assetSpec.assetIcon} ${assetSpec.assetName}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12.2,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFF8FAFC),
                     ),
                   ),
                 ],
@@ -2187,23 +2185,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     alignment: WrapAlignment.spaceBetween,
                     crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              assetSpec.sec3Title,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: 12.2,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.2,
-                                color: const Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ),
-                        ],
+                      Text(
+                        assetSpec.sec3Title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12.2,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                          color: const Color(0xFF94A3B8),
+                        ),
                       ),
                       Wrap(
                         spacing: 6,
