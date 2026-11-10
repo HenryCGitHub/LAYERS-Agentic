@@ -108,6 +108,16 @@ class AppTheme {
   static const double radiusLg = 12.0;  // Modals, workstation containers, toast
   static const double radiusPill = 999.0; // Status badges, pill counters
 
+  // ── Standardized Typography Scale (4 Even Sizes · 3 Weights) ──────────────
+  static const double fontTitle = 18.0; // Active Task Header
+  static const double fontItem = 16.0;  // Step Headers, Outliner Epics & Features, Rail Links
+  static const double fontBody = 14.0;  // Code lines, Verify text, Setup cards, Nested Tasks, Buttons
+  static const double fontMicro = 12.0; // Badges ([E]/[F]/[T1]), Overlines, Pills, Counters, Line #s
+
+  static const FontWeight weightBold = FontWeight.w700;
+  static const FontWeight weightSemi = FontWeight.w600;
+  static const FontWeight weightRegular = FontWeight.w400;
+
   // ── Purposeful Semantic Accents (Monochrome Precision: Emerald & Amber Only) ─
   static const Color accentAmber = Color(0xFFFBBF24); // Guard / AI Warning Amber (Dark)
   static const Color accentAmberLight = Color(0xFFB45309); // Muted Ochre (Light)
@@ -453,4 +463,13 @@ mixin WorkbenchThemeMixin {
   Color get accentAmber => AppTheme.accentAmberFor(isDark);
   Color get accentCyan => AppTheme.accentCyanFor(isDark);
   Color get accentViolet => AppTheme.accentPurpleFor(isDark);
+
+  double get fontTitle => AppTheme.fontTitle;
+  double get fontItem => AppTheme.fontItem;
+  double get fontBody => AppTheme.fontBody;
+  double get fontMicro => AppTheme.fontMicro;
+
+  FontWeight get weightBold => AppTheme.weightBold;
+  FontWeight get weightSemi => AppTheme.weightSemi;
+  FontWeight get weightRegular => AppTheme.weightRegular;
 }

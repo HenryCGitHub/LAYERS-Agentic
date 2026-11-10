@@ -1619,10 +1619,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
+                            fontSize: fontMicro,
                             fontWeight: tIdx == selectedTaskIdx
-                                ? FontWeight.w700
-                                : FontWeight.w600,
+                                ? weightBold
+                                : weightSemi,
                             letterSpacing: 0.4,
                             color: tIdx == selectedTaskIdx
                                 ? textPrimary
@@ -1634,8 +1634,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                       Text(
                         'OVERVIEW',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w600,
+                          fontSize: fontMicro,
+                          fontWeight: weightSemi,
                           color: tIdx == selectedTaskIdx &&
                                   isTaskOverviewSelected
                               ? accentCyan
@@ -1660,11 +1660,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           child: Text(
                             '${(sIdx + 1).toString().padLeft(2, '0')} · ${howToBlueprints[tIdx].subSteps[sIdx].shortTitle}',
                             style: GoogleFonts.inter(
-                              fontSize: 13.5,
+                              fontSize: fontBody,
                               fontWeight: tIdx == selectedTaskIdx &&
                                       sIdx == activeSubStepIdx
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
+                                  ? weightBold
+                                  : weightRegular,
                               color: tIdx == selectedTaskIdx &&
                                       sIdx == activeSubStepIdx
                                   ? textPrimary
@@ -1687,8 +1687,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           Text(
                             '✓',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
+                              fontSize: fontMicro,
+                              fontWeight: weightBold,
                               color: accentEmerald,
                             ),
                           ),
@@ -1715,8 +1715,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         Text(
                           'Step ${effectiveSubStepIdx + 1}/${selectedHowTo.subSteps.length}',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                            fontSize: fontMicro,
+                            fontWeight: weightSemi,
                             color: activeSubStep.subtask.completed
                                 ? accentEmerald
                                 : accentCyan,
@@ -1943,8 +1943,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         child: Text(
                                           '☰',
                                           style: GoogleFonts.inter(
-                                            fontSize: 13,
-                                            fontWeight: FontWeight.w600,
+                                            fontSize: fontBody,
+                                            fontWeight: weightSemi,
                                             color: _isHalfScreenOutlinerOpen
                                                 ? textPrimary
                                                 : textSecondary,
@@ -1958,16 +1958,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                           overflow: TextOverflow.ellipsis,
                                           text: TextSpan(
                                             style: GoogleFonts.inter(
-                                              fontSize: 13.5,
-                                              fontWeight: FontWeight.w700,
+                                              fontSize: fontBody,
+                                              fontWeight: weightBold,
                                               color: textPrimary,
                                             ),
                                             children: [
                                               TextSpan(
                                                 text: '$epicShortCode › ',
                                                 style: GoogleFonts.inter(
-                                                  fontSize: 12.5,
-                                                  fontWeight: FontWeight.w500,
+                                                  fontSize: fontMicro,
+                                                  fontWeight: weightSemi,
                                                   color: textMuted,
                                                 ),
                                               ),
@@ -2818,9 +2818,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       'Blueprint',
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
-                                                        fontSize: 11,
-                                                        fontWeight:
-                                                            FontWeight.w700,
+                                                        fontSize: fontMicro,
+                                                        fontWeight: weightSemi,
                                                         color: !_unrealCppMode
                                                             ? const Color(
                                                                 0xFFF8FAFC,
@@ -2872,9 +2871,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                       'C++',
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
-                                                        fontSize: 11,
-                                                        fontWeight:
-                                                            FontWeight.w700,
+                                                        fontSize: fontMicro,
+                                                        fontWeight: weightSemi,
                                                         color: _unrealCppMode
                                                             ? const Color(
                                                                 0xFFF8FAFC,
@@ -3814,10 +3812,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               '‹ Prev',
                                                               style: GoogleFonts
                                                                   .jetBrainsMono(
-                                                                fontSize: 11,
+                                                                fontSize:
+                                                                    fontMicro,
                                                                 fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
+                                                                    weightSemi,
                                                                 color: canGoToPreviousStep
                                                                     ? const Color(
                                                                         0xFFCBD5E1,
@@ -3892,10 +3890,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               'Next ›',
                                                               style: GoogleFonts
                                                                   .jetBrainsMono(
-                                                                fontSize: 11,
+                                                                fontSize:
+                                                                    fontMicro,
                                                                 fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
+                                                                    weightSemi,
                                                                 color: (activeSubStep
                                                                             .subtask
                                                                             .completed ||
@@ -3974,10 +3972,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               '⚑ Issue',
                                                               style: GoogleFonts
                                                                   .inter(
-                                                                fontSize: 11.5,
+                                                                fontSize:
+                                                                    fontMicro,
                                                                 fontWeight:
-                                                                    FontWeight
-                                                                        .w600,
+                                                                    weightSemi,
                                                                 color: isDrawerOpen
                                                                     ? const Color(
                                                                         0xFFFBBF24,
@@ -4082,10 +4080,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                           : 'Done & Next Task →')),
                                                               style: GoogleFonts
                                                                   .inter(
-                                                                fontSize: 12,
+                                                                fontSize:
+                                                                    fontBody,
                                                                 fontWeight:
-                                                                    FontWeight
-                                                                        .w700,
+                                                                    weightBold,
                                                                 color: (activeSubStep
                                                                             .subtask
                                                                             .completed ||
@@ -4150,9 +4148,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                           style:
                                                                               GoogleFonts.jetBrainsMono(
                                                                             fontSize:
-                                                                                10.5,
+                                                                                fontMicro,
                                                                             fontWeight:
-                                                                                FontWeight.w800,
+                                                                                weightBold,
                                                                             color:
                                                                                 const Color(0xFF38BDF8),
                                                                           ),
@@ -4189,9 +4187,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                           style:
                                                                               GoogleFonts.inter(
                                                                             fontSize:
-                                                                                15.0,
+                                                                                fontTitle,
                                                                             fontWeight:
-                                                                                FontWeight.w700,
+                                                                                weightBold,
                                                                             color:
                                                                                 const Color(0xFFF8FAFC),
                                                                           ),
@@ -4291,10 +4289,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                     style: GoogleFonts
                                                                         .jetBrainsMono(
                                                                       fontSize:
-                                                                          10.2,
+                                                                          fontMicro,
                                                                       fontWeight:
-                                                                          FontWeight
-                                                                              .w800,
+                                                                          weightBold,
                                                                       color: const Color(
                                                                         0xFF34D399,
                                                                       ),
@@ -4312,11 +4309,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                         baseStyle:
                                                                             GoogleFonts.inter(
                                                                           fontSize:
-                                                                              12.4,
+                                                                              fontBody,
                                                                           fontWeight:
-                                                                              FontWeight.w500,
+                                                                              weightRegular,
                                                                           height:
-                                                                              1.35,
+                                                                              1.4,
                                                                           color:
                                                                               const Color(0xFFE2E8F0),
                                                                         ),

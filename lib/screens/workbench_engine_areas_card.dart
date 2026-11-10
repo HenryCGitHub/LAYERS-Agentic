@@ -1013,8 +1013,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           Text(
                             'INITIAL SETUP',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.0,
-                              fontWeight: FontWeight.w800,
+                              fontSize: fontMicro,
+                              fontWeight: weightBold,
                               letterSpacing: 0.4,
                               color: const Color(0xFF94A3B8),
                             ),
@@ -1022,7 +1022,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           Text(
                             '·',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11,
+                              fontSize: fontMicro,
+                              fontWeight: weightSemi,
                               color: const Color(0xFF475569),
                             ),
                           ),
@@ -1031,8 +1032,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11.8,
-                              fontWeight: FontWeight.w700,
+                              fontSize: fontBody,
+                              fontWeight: weightBold,
                               color: const Color(0xFF38BDF8),
                             ),
                           ),
@@ -1051,8 +1052,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             child: Text(
                               assetSpec.parentClassLabel,
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10.0,
-                                fontWeight: FontWeight.w600,
+                                fontSize: fontMicro,
+                                fontWeight: weightSemi,
                                 color: const Color(0xFF94A3B8),
                               ),
                             ),
@@ -1074,8 +1075,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         child: Text(
                           '+ Create in ${assetSpec.folderPath}',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.0,
-                            fontWeight: FontWeight.w600,
+                            fontSize: fontMicro,
+                            fontWeight: weightSemi,
                             color: const Color(0xFF38BDF8),
                           ),
                         ),
@@ -1107,9 +1108,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             Text(
                               '${stIdx + 1}. ${assetSpec.setupSteps[stIdx].label}:',
                               style: GoogleFonts.inter(
-                                fontSize: 11.8,
-                                fontWeight: FontWeight.w700,
-                                height: 1.35,
+                                fontSize: fontBody,
+                                fontWeight: weightBold,
+                                height: 1.4,
                                 color: const Color(0xFFF8FAFC),
                               ),
                             ),
@@ -1118,8 +1119,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                               _buildSemanticStepSpan(
                                 text: assetSpec.setupSteps[stIdx].detail,
                                 baseStyle: GoogleFonts.inter(
-                                  fontSize: 11.8,
-                                  height: 1.35,
+                                  fontSize: fontBody,
+                                  fontWeight: weightRegular,
+                                  height: 1.4,
                                   color: const Color(0xFF94A3B8),
                                 ),
                                 tuningItems: tuningItems,
@@ -1415,8 +1417,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         child: Text(
                           'STEPS ($activeTaskDoneSteps/${selectedHowTo.subSteps.length})',
                           style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.8,
-                            fontWeight: FontWeight.w800,
+                            fontSize: fontMicro,
+                            fontWeight: weightBold,
                             letterSpacing: 0.4,
                             color: const Color(0xFF94A3B8),
                           ),
@@ -1440,8 +1442,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                               TextSpan(
                                 text: 'TARGET: ',
                                 style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 9.8,
-                                  fontWeight: FontWeight.w800,
+                                  fontSize: fontMicro,
+                                  fontWeight: weightBold,
                                   color: const Color(0xFF64748B),
                                 ),
                               ),
@@ -1449,16 +1451,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                 text:
                                     '${assetSpec.assetIcon} ${assetSpec.assetName}',
                                 style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10.6,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: fontMicro,
+                                  fontWeight: weightSemi,
                                   color: const Color(0xFFE2E8F0),
                                 ),
                               ),
                               TextSpan(
                                 text: ' › ',
                                 style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10.6,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: fontMicro,
+                                  fontWeight: weightSemi,
                                   color: const Color(0xFF64748B),
                                 ),
                               ),
@@ -1466,8 +1468,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                 text:
                                     '${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
                                 style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 10.6,
-                                  fontWeight: FontWeight.w700,
+                                  fontSize: fontMicro,
+                                  fontWeight: weightSemi,
                                   color: const Color(0xFF38BDF8),
                                 ),
                               ),
@@ -1539,8 +1541,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       child: Text(
                         '✦ Copy Task Prompt',
                         style: GoogleFonts.inter(
-                          fontSize: 11.0,
-                          fontWeight: FontWeight.w600,
+                          fontSize: fontMicro,
+                          fontWeight: weightSemi,
                           color: const Color(0xFFCBD5E1),
                         ),
                       ),
@@ -1652,8 +1654,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           borderRadius:
                                               BorderRadius.circular(4),
                                           child: Container(
-                                            width: 16,
-                                            height: 16,
+                                            width: 18,
+                                            height: 18,
                                             alignment: Alignment.center,
                                             decoration: BoxDecoration(
                                               color: isSubDone
@@ -1674,8 +1676,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             child: Text(
                                               isSubDone ? '✓' : '',
                                               style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10.0,
-                                                fontWeight: FontWeight.w800,
+                                                fontSize: fontMicro,
+                                                fontWeight: weightBold,
                                                 height: 1.0,
                                                 color: const Color(0xFF05101A),
                                               ),
@@ -1684,12 +1686,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                         ),
                                         const SizedBox(width: 9),
                                         SizedBox(
-                                          width: 28,
+                                          width: 32,
                                           child: Text(
                                             '${selectedTaskIdx + 1}.${sIdx + 1}',
                                             style: GoogleFonts.jetBrainsMono(
-                                              fontSize: 11.8,
-                                              fontWeight: FontWeight.w800,
+                                              fontSize: fontBody,
+                                              fontWeight: weightBold,
                                               color: const Color(0xFF38BDF8),
                                             ),
                                           ),
@@ -1700,8 +1702,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.inter(
-                                              fontSize: 12.8,
-                                              fontWeight: FontWeight.w700,
+                                              fontSize: fontItem,
+                                              fontWeight: weightBold,
                                               color: isSubActive
                                                   ? const Color(0xFFF8FAFC)
                                                   : const Color(0xFFE2E8F0),
@@ -1739,8 +1741,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             child: Text(
                                               '⧉ Copy code',
                                               style: GoogleFonts.inter(
-                                                fontSize: 10.6,
-                                                fontWeight: FontWeight.w600,
+                                                fontSize: fontMicro,
+                                                fontWeight: weightSemi,
                                                 color:
                                                     const Color(0xFFCBD5E1),
                                               ),
@@ -1770,8 +1772,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             child: Text(
                                               isStepExpanded ? '▴' : '▾',
                                               style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 11.5,
-                                                fontWeight: FontWeight.w700,
+                                                fontSize: fontMicro,
+                                                fontWeight: weightBold,
                                                 color: isSubActive
                                                     ? const Color(0xFF38BDF8)
                                                     : const Color(0xFF64748B),
@@ -1822,14 +1824,15 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                   CrossAxisAlignment.start,
                                               children: [
                                                 SizedBox(
-                                                  width: 28,
+                                                  width: 32,
                                                   child: Text(
                                                     (lineIdx + 1)
                                                         .toString()
                                                         .padLeft(2, '0'),
                                                     style: GoogleFonts
                                                         .jetBrainsMono(
-                                                      fontSize: 11.8,
+                                                      fontSize: fontMicro,
+                                                      fontWeight: weightRegular,
                                                       height: 1.75,
                                                       color: const Color(
                                                         0xFF475569,
@@ -1844,7 +1847,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                           stepCodeLines[lineIdx],
                                                       baseStyle: GoogleFonts
                                                           .jetBrainsMono(
-                                                        fontSize: 12.6,
+                                                        fontSize: fontBody,
+                                                        fontWeight: weightRegular,
                                                         height: 1.75,
                                                         color: textPrimary,
                                                       ),
@@ -1903,7 +1907,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         r'(?<method>\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\())',
       );
 
-      final baseFontSize = baseStyle.fontSize ?? 12.5;
+      final baseFontSize = baseStyle.fontSize ?? fontBody;
       final codeSpans = <InlineSpan>[];
       int codeCursor = 0;
       for (final match in codeSyntaxRegex.allMatches(text)) {
@@ -1932,7 +1936,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             text: token,
             style: GoogleFonts.jetBrainsMono(
               fontSize: baseFontSize,
-              fontWeight: FontWeight.w500,
+              fontWeight: weightRegular,
               fontStyle: tokenFontStyle,
               color: tokenColor,
               height: baseStyle.height,
@@ -2012,8 +2016,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       return TextSpan(text: text, style: baseStyle);
     }
 
-    final baseFontSize = baseStyle.fontSize ?? 14.0;
-    final monoSize = isCodeBlock ? baseFontSize : baseFontSize * 0.93;
+    final baseFontSize = baseStyle.fontSize ?? fontBody;
+    final monoSize = baseFontSize;
 
     final spans = <InlineSpan>[];
     int cursor = 0;
@@ -2031,7 +2035,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           text: matchedText,
           style: GoogleFonts.jetBrainsMono(
             fontSize: monoSize,
-            fontWeight: FontWeight.w500,
+            fontWeight: isCodeBlock ? weightRegular : weightSemi,
             color: accentCyan,
             height: baseStyle.height,
           ),
