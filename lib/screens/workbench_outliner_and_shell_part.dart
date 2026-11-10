@@ -883,7 +883,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
-                                fontSize: fontItem,
+                                fontSize: fontMicro,
                                 fontWeight: isConceptActive
                                     ? weightSemi
                                     : weightRegular,
@@ -935,7 +935,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
-                                fontSize: fontItem,
+                                fontSize: fontMicro,
                                 fontWeight: weightRegular,
                                 color: textSecondary,
                               ),
@@ -1311,10 +1311,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                       mainAxisAlignment:
                                           MainAxisAlignment.spaceBetween,
                                       children: [
-                                        // Unnumbered [E] micro-square tier badge (20x20px, 4px radius)
+                                        // Unnumbered [E] micro-square tier badge (18x18px, 4px radius)
                                         Container(
-                                          width: 20,
-                                          height: 20,
+                                          width: 18,
+                                          height: 18,
                                           alignment: Alignment.center,
                                           decoration: BoxDecoration(
                                             color: allBeatDone
@@ -1359,7 +1359,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.inter(
-                                              fontSize: fontItem,
+                                              fontSize: fontMicro,
                                               fontWeight: weightSemi,
                                               color: allBeatDone
                                                   ? textMuted
@@ -1467,11 +1467,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     ),
                                   ),
                                   child: RichText(
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
                                     text: TextSpan(
                                       style: GoogleFonts.inter(
-                                        fontSize: fontBody,
+                                        fontSize: fontMicro,
                                         fontWeight: weightRegular,
                                         height: 1.38,
                                         color: const Color(0xFF94A3B8),
@@ -1560,7 +1558,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                       child: Text(
                                         '+ Add feature',
                                         style: GoogleFonts.inter(
-                                          fontSize: 13.5,
+                                          fontSize: fontMicro,
+                                          fontWeight: weightRegular,
                                           color: textMuted,
                                         ),
                                       ),
@@ -1659,8 +1658,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               child: Text(
                                 '+ Add Epic',
                                 style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
+                                  fontSize: fontMicro,
+                                  fontWeight: weightSemi,
                                   color: textMuted,
                                 ),
                               ),
@@ -1790,8 +1789,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                            fontSize: fontMicro,
+                            fontWeight: weightSemi,
                             color: textSecondary,
                           ),
                         ),
@@ -1800,8 +1799,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       Text(
                         '$totalInbox',
                         style: GoogleFonts.jetBrainsMono(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
+                          fontSize: fontMicro,
+                          fontWeight: weightSemi,
                           color: pendingCount > 0 ? accentEmerald : textMuted,
                         ),
                       ),
@@ -1881,10 +1880,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
-                                fontSize: 14,
-                                fontWeight: isRelComplete
-                                    ? FontWeight.w600
-                                    : FontWeight.w500,
+                                fontSize: fontMicro,
+                                fontWeight: weightSemi,
                                 color: isRelComplete
                                     ? accentEmerald
                                     : textSecondary,
@@ -1895,8 +1892,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           Text(
                             nextReleaseRightLabel,
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
+                              fontSize: fontMicro,
+                              fontWeight: weightSemi,
                               color: isRelComplete ? accentEmerald : textMuted,
                             ),
                           ),
@@ -2089,10 +2086,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       width: 0,
                       height: 0,
                     ),
-                    // Unnumbered [F] micro-square tier badge (20x20px, 4px radius)
+                    // Unnumbered [F] micro-square tier badge (18x18px, 4px radius)
                     Container(
-                      width: 20,
-                      height: 20,
+                      width: 18,
+                      height: 18,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         color: isDone
@@ -2152,7 +2149,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   displayTitle,
                                   maxLines: 2,
                                   style: GoogleFonts.inter(
-                                    fontSize: fontItem,
+                                    fontSize: fontMicro,
                                     height: 1.25,
                                     fontWeight: weightSemi,
                                     color: isDone
@@ -2361,11 +2358,9 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           border: Border.all(color: const Color(0x14FFFFFF)),
                         ),
                         child: RichText(
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
                           text: TextSpan(
                             style: GoogleFonts.inter(
-                              fontSize: fontBody,
+                              fontSize: fontMicro,
                               fontWeight: weightRegular,
                               height: 1.35,
                               color: const Color(0xFFCBD5E1),
@@ -2601,7 +2596,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
                                               style: GoogleFonts.inter(
-                                                fontSize: fontBody,
+                                                fontSize: fontMicro,
                                                 fontWeight: isTaskActive
                                                     ? weightBold
                                                     : weightSemi,
@@ -2706,8 +2701,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                 child: Text(
                                   '+ Add Build Task...',
                                   style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600,
+                                    fontSize: fontMicro,
+                                    fontWeight: weightSemi,
                                     color: const Color(0xFF64748B),
                                   ),
                                 ),
