@@ -1550,11 +1550,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       builder: (context) {
                         final subStep = selectedHowTo.subSteps[sIdx];
                         final bool isSubActive = sIdx == activeSubStepIdx;
-                        final bool isSubDone = _isHowToSubStepDone(
-                          node.id,
-                          selectedTaskIdx,
-                          sIdx,
-                        );
+                        final bool isSubDone = subStep.subtask.completed;
                         return Padding(
                           padding: EdgeInsets.only(
                             bottom: sIdx == selectedHowTo.subSteps.length - 1
