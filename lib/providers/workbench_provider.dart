@@ -34,16 +34,53 @@ enum WorkbenchStage {
 class WorkbenchProvider extends ChangeNotifier {
   final Map<String, TierDocument> documents = {};
 
+  static const String ownerAdminEmail = 'henryyoungchoi@gmail.com';
+
   final AuthService _authService = AuthService();
   final FirestoreVaultService _firestoreService = FirestoreVaultService();
   final bool enableAutoLoad;
 
+  /// Optional test-only email override so widget tests can verify Admin/Invitee UI deterministically.
+  @visibleForTesting
+  String? testOverrideUserEmail;
+
   bool _isCloudSynced = false;
   bool get isCloudSynced => _isCloudSynced;
-  bool get isUserLoggedIn => _authService.isLoggedIn;
-  String? get userEmail => _authService.currentUser?.email;
+  bool get isUserLoggedIn =>
+      testOverrideUserEmail != null || _authService.isLoggedIn;
+  String? get userEmail =>
+      testOverrideUserEmail ?? _authService.currentUser?.email;
   String? get userDisplayName => _authService.currentUser?.displayName;
   String? get authLastError => _authService.lastError;
+  bool get isAdminUser =>
+      (userEmail ?? '').trim().toLowerCase() == ownerAdminEmail;
+
+  String? _myAiAccessStatus;
+  String? get myAiAccessStatus => isAdminUser ? 'approved' : _myAiAccessStatus;
+  bool get isSessionApprovedForAi =>
+      isUserLoggedIn && (isAdminUser || _myAiAccessStatus == 'approved');
+
+  List<AiAccessRecord> _aiAccessRecords = const [];
+  List<AiAccessRecord> get aiAccessRecords =>
+      List.unmodifiable(_aiAccessRecords);
+  List<AiAccessRecord> get pendingInvites =>
+      _aiAccessRecords.where((r) => r.status == 'invited').toList();
+  List<AiAccessRecord> get activeApprovedMembers =>
+      _aiAccessRecords.where((r) => r.status == 'approved').toList();
+  List<AiAccessRecord> get revokedMembers =>
+      _aiAccessRecords.where((r) => r.status == 'revoked').toList();
+
+  String? _pendingUrlInviteToken;
+  String? _pendingUrlInvitedEmail;
+  String? _inviteFeedbackMessage;
+  String? get pendingUrlInviteToken => _pendingUrlInviteToken;
+  String? get pendingUrlInvitedEmail => _pendingUrlInvitedEmail;
+  String? get inviteFeedbackMessage => _inviteFeedbackMessage;
+  bool get hasPendingInviteLanding =>
+      _pendingUrlInviteToken != null &&
+      _pendingUrlInviteToken!.isNotEmpty &&
+      !isSessionApprovedForAi;
+
   DateTime? _lastCloudSyncAt;
   DateTime? get lastCloudSyncAt => _lastCloudSyncAt;
   final Map<String, List<Map<String, String>>> _projectCollaborators = {};
@@ -68,6 +105,10 @@ class WorkbenchProvider extends ChangeNotifier {
 
   String _apiKey = GeminiAgentClient.resolveDefaultApiKey();
   String get apiKey => _apiKey;
+  bool get isUsingHostedGoogleAi =>
+      _apiKey.trim().isEmpty &&
+      isSessionApprovedForAi &&
+      GeminiAgentClient.effectiveProxyBaseUrl.isNotEmpty;
   bool get hasLiveAiKey =>
       GeminiAgentClient.hasKey(_apiKey) &&
       GeminiAgentClient.lastErrorStatus == null;
@@ -263,8 +304,36 @@ class WorkbenchProvider extends ChangeNotifier {
   WorkbenchProvider({this.enableAutoLoad = false}) {
     _authService.addListener(_onAuthStateChanged);
     if (enableAutoLoad) {
+      GeminiAgentClient.isProxyAuthenticated = () => isSessionApprovedForAi;
+      GeminiAgentClient.authTokenProvider ??=
+          ({bool forceRefresh = false}) =>
+              _authService.getValidIdToken(forceRefresh: forceRefresh);
       initVault();
     }
+  }
+
+  @visibleForTesting
+  void setAiAccessRecordsForTest(
+    List<AiAccessRecord> records, {
+    String? myStatus,
+  }) {
+    _aiAccessRecords = List<AiAccessRecord>.from(records);
+    if (myStatus != null) {
+      _myAiAccessStatus = myStatus;
+    }
+    notifyListeners();
+  }
+
+  @visibleForTesting
+  void setPendingUrlInviteForTest({
+    String? token,
+    String? invitedEmail,
+    String? feedbackMessage,
+  }) {
+    _pendingUrlInviteToken = token;
+    _pendingUrlInvitedEmail = invitedEmail;
+    _inviteFeedbackMessage = feedbackMessage;
+    notifyListeners();
   }
 
   @override
@@ -297,8 +366,22 @@ class WorkbenchProvider extends ChangeNotifier {
 
   void _setOfflineState([String? customReason]) {
     final err = GeminiAgentClient.lastErrorStatus;
-    _offlineErrorMessage = customReason ??
-        'App is offline — Unable to reach Gemini AI${err != null ? " ($err)" : ""}. Check your connection or API key in AI Settings.';
+    if (customReason != null) {
+      _offlineErrorMessage = customReason;
+      return;
+    }
+    if (!isUserLoggedIn && _apiKey.trim().isEmpty) {
+      _offlineErrorMessage =
+          'App is offline — Sign in with Google to use LAYERS-Agentic.';
+      return;
+    }
+    if (isUserLoggedIn && !isSessionApprovedForAi && _apiKey.trim().isEmpty) {
+      _offlineErrorMessage =
+          'App is offline — Invite required for ${userEmail ?? "this Google account"}.';
+      return;
+    }
+    _offlineErrorMessage =
+        'App is offline — Unable to reach Gemini AI${err != null ? " ($err)" : ""}. Check your connection and try again.';
   }
 
   void updateAiConfig({

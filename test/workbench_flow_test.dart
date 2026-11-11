@@ -14,6 +14,7 @@ import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/project_pitch_screen.dart';
+import 'package:layers_agentic/services/firestore_vault_service.dart';
 import 'package:layers_agentic/utils/section_text_utils.dart';
 
 Future<Map<String, dynamic>?> _mockGeminiResponder(
@@ -8695,24 +8696,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.totalEstimatedCostUsd, equals(0.0));
         expect(find.text('0 in · 0 out · \$0.00'), findsOneWidget);
 
-        // 4. Open AI settings dialog and verify pricing rates & reset button in dialog
-        final aiSettingsBtn = find.byKey(const ValueKey('ai_settings_btn'));
-        expect(aiSettingsBtn, findsOneWidget);
-        await tester.tap(aiSettingsBtn);
-        await tester.pumpAndSettle();
-
-        expect(find.text('04 · ACCUMULATIVE TOKEN USAGE & EST. COST'), findsOneWidget);
-        expect(find.text('\$0.75 / 1M'), findsOneWidget);
-        expect(find.text('\$3.75 / 1M (inc. thinking)'), findsOneWidget);
-
-        final dialogResetBtn = find.byKey(const ValueKey('reset_token_usage_btn'));
-        expect(dialogResetBtn, findsOneWidget);
-        await tester.ensureVisible(dialogResetBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(dialogResetBtn);
-        await tester.pumpAndSettle();
-
-        expect(provider.totalInputTokens, equals(0));
+        // 4. Verify legacy API Key Settings button is removed (hosted Google AI is automatic)
+        expect(find.byKey(const ValueKey('ai_settings_btn')), findsNothing);
+        final tooltipWidget = tester.widget<Tooltip>(
+          find.ancestor(
+            of: pillFinder,
+            matching: find.byType(Tooltip),
+          ),
+        );
+        expect(tooltipWidget.message, contains('\$0.75 / 1M'));
+        expect(tooltipWidget.message, contains('\$3.75 / 1M'));
       },
     );
 
@@ -9244,6 +9237,268 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           GeminiAgentClient.testHttpPost = prevHttp;
           GeminiAgentClient.testBaseRetryDelay = prevDelay;
         }
+      },
+    );
+
+    test(
+      'GeminiAgentClient Firebase Auth Proxy: routes empty apiKey via Bearer token, refreshes once on 401, and respects personal key override',
+      () async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        final prevProxyOverride = GeminiAgentClient.proxyBaseUrlOverride;
+        final prevIsAuth = GeminiAgentClient.isProxyAuthenticated;
+        final prevTokenProvider = GeminiAgentClient.authTokenProvider;
+
+        GeminiAgentClient.testMockResponder = null;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+        GeminiAgentClient.proxyBaseUrlOverride =
+            'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy/';
+        GeminiAgentClient.isProxyAuthenticated = () => true;
+
+        int tokenFetchCount = 0;
+        bool sawForceRefresh = false;
+        GeminiAgentClient.authTokenProvider = ({bool forceRefresh = false}) async {
+          tokenFetchCount++;
+          if (forceRefresh) sawForceRefresh = true;
+          return forceRefresh ? 'fresh_firebase_jwt' : 'stale_firebase_jwt';
+        };
+
+        final capturedUris = <Uri>[];
+        final capturedHeaders = <Map<String, String>>[];
+
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          capturedUris.add(uri);
+          capturedHeaders.add(headers ?? const {});
+          final auth = headers?['Authorization'];
+          if (auth == 'Bearer stale_firebase_jwt') {
+            return http.Response('{"error":{"code":401}}', 401);
+          }
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': '{"proxyOk": true}'},
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        };
+
+        try {
+          expect(GeminiAgentClient.hasKey(''), isTrue);
+
+          final proxyRes = await GeminiAgentClient.generateJson(
+            prompt: 'Hello via Firebase Google Sign-In',
+            apiKey: '',
+          );
+          expect(proxyRes, isNotNull);
+          expect(proxyRes!['proxyOk'], isTrue);
+          expect(tokenFetchCount, equals(2));
+          expect(sawForceRefresh, isTrue);
+          expect(capturedUris.length, equals(2));
+          expect(
+            capturedUris.last.toString(),
+            equals(
+              'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy/v1beta/models/gemini-3.8-flash:generateContent',
+            ),
+          );
+          expect(
+            capturedHeaders.last['Authorization'],
+            equals('Bearer fresh_firebase_jwt'),
+          );
+          expect(capturedHeaders.last.containsKey('x-goog-api-key'), isFalse);
+
+          // Personal override key bypasses proxy and calls Google API directly
+          capturedUris.clear();
+          capturedHeaders.clear();
+          final overrideRes = await GeminiAgentClient.generateJson(
+            prompt: 'Hello with personal override key',
+            apiKey: 'AQ.PersonalOverrideKey',
+          );
+          expect(overrideRes, isNotNull);
+          expect(
+            capturedUris.single.host,
+            equals('generativelanguage.googleapis.com'),
+          );
+          expect(
+            capturedHeaders.single['x-goog-api-key'],
+            equals('AQ.PersonalOverrideKey'),
+          );
+          expect(capturedHeaders.single.containsKey('Authorization'), isFalse);
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+          GeminiAgentClient.proxyBaseUrlOverride = prevProxyOverride;
+          GeminiAgentClient.isProxyAuthenticated = prevIsAuth;
+          GeminiAgentClient.authTokenProvider = prevTokenProvider;
+        }
+      },
+    );
+
+    testWidgets(
+      'Team Access & Invites UI: Admin Pending/Active/Revoked Dashboard, Send/Cancel/Revoke/Re-Invite, and Invitee Landing Overlay',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevTokenProvider = GeminiAgentClient.authTokenProvider;
+        final prevProxyOverride = GeminiAgentClient.proxyBaseUrlOverride;
+        GeminiAgentClient.proxyBaseUrlOverride =
+            'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy';
+        GeminiAgentClient.authTokenProvider =
+            ({bool forceRefresh = false}) async => 'admin_jwt_token';
+
+        final calledRoutes = <String>[];
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          calledRoutes.add(uri.path);
+          final parsed = body is String ? jsonDecode(body) as Map : {};
+          if (uri.path.endsWith('/sendInvite')) {
+            final target = parsed['email']?.toString() ?? '';
+            return http.Response(
+              jsonEncode({
+                'ok': true,
+                'email': target,
+                'status': 'invited',
+                'emailSent': true,
+                'inviteUrl':
+                    'https://henrycgithub.github.io/LAYERS-Agentic/?invite=tok123&invited_email=$target',
+              }),
+              200,
+            );
+          }
+          if (uri.path.endsWith('/revokeInvite')) {
+            return http.Response(
+              jsonEncode({
+                'ok': true,
+                'email': parsed['email'],
+                'status': 'revoked',
+              }),
+              200,
+            );
+          }
+          return http.Response('{}', 200);
+        };
+
+        addTearDown(() {
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.authTokenProvider = prevTokenProvider;
+          GeminiAgentClient.proxyBaseUrlOverride = prevProxyOverride;
+        });
+
+        final provider = WorkbenchProvider();
+
+        // 1. Invitee opening `?invite=tok_abc&invited_email=sam@studio.io` sees the Invite Acceptance Overlay
+        provider.setPendingUrlInviteForTest(
+          token: 'tok_abc',
+          invitedEmail: 'sam@studio.io',
+        );
+
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('invite_acceptance_overlay')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('sam@studio.io'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('accept_invite_google_btn')),
+          findsOneWidget,
+        );
+
+        // Dismiss overlay and switch to Admin session
+        await tester.tap(find.byKey(const ValueKey('dismiss_invite_overlay_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('invite_acceptance_overlay')),
+          findsNothing,
+        );
+
+        provider.testOverrideUserEmail = 'henryyoungchoi@gmail.com';
+        provider.setAiAccessRecordsForTest([
+          const AiAccessRecord(
+            email: 'pending@studio.io',
+            status: 'invited',
+            inviteUrl:
+                'https://henrycgithub.github.io/LAYERS-Agentic/?invite=p1',
+          ),
+          const AiAccessRecord(
+            email: 'active@studio.io',
+            status: 'approved',
+            displayName: 'Active Dev',
+          ),
+        ]);
+        await tester.pumpAndSettle();
+
+        // 2. Top bar shows Admin `Invites · 1 pending` pill (and no API key settings icon)
+        expect(find.byKey(const ValueKey('ai_settings_btn')), findsNothing);
+        final teamBtn = find.byKey(const ValueKey('team_invites_btn'));
+        expect(teamBtn, findsOneWidget);
+        expect(find.text('Invites · 1 pending'), findsOneWidget);
+
+        // 3. Open Team Access & Invites dialog
+        await tester.tap(teamBtn);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('team_invites_dialog')), findsOneWidget);
+        expect(find.text('PENDING INVITES (1)'), findsOneWidget);
+        expect(find.text('ACTIVE MEMBERS (2)'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('pending_invite_row_pending@studio.io')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('active_member_row_active@studio.io')),
+          findsOneWidget,
+        );
+
+        // 4. Send a new invite inside the app -> adds to Pending Invites (2)
+        await tester.enterText(
+          find.byKey(const ValueKey('team_invite_email_input')),
+          'newmember@studio.io',
+        );
+        await tester.tap(find.byKey(const ValueKey('team_send_invite_btn')));
+        await tester.pumpAndSettle();
+
+        expect(calledRoutes.last, contains('/sendInvite'));
+        expect(find.text('PENDING INVITES (2)'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('pending_invite_row_newmember@studio.io')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Invite email sent to newmember@studio.io.'),
+          findsOneWidget,
+        );
+
+        // 5. Revoke active member -> moves to REVOKED / CANCELLED (1) with Re-Invite button
+        await tester.tap(
+          find.byKey(const ValueKey('revoke_member_btn_active@studio.io')),
+        );
+        await tester.pumpAndSettle();
+        expect(calledRoutes.last, contains('/revokeInvite'));
+        expect(find.text('ACTIVE MEMBERS (1)'), findsOneWidget);
+        expect(find.text('REVOKED / CANCELLED (1)'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('reinvite_member_btn_active@studio.io')),
+          findsOneWidget,
+        );
+
+        // 6. Re-Invite revoked user -> moves back into Pending Invites
+        await tester.tap(
+          find.byKey(const ValueKey('reinvite_member_btn_active@studio.io')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('PENDING INVITES (3)'), findsOneWidget);
       },
     );
   });

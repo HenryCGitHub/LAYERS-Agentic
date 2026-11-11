@@ -10,8 +10,19 @@ import '../constants/text_style_guide.dart';
 /// - Exponential backoff + jitter retries on transient `429` / `503` / `5xx` responses.
 class GeminiAgentClient {
   static const String _rawEnvKey = String.fromEnvironment('GEMINI_API_KEY');
+  static const String _rawEnvProxyUrl =
+      String.fromEnvironment('GEMINI_PROXY_URL');
+  static const String defaultProxyBaseUrl =
+      'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy';
   static const String pinnedLiveFlashModel = 'gemini-3.8-flash';
   static String? _cachedDefaultKey;
+
+  /// Optional override for the Firebase Cloud Function proxy URL (used in tests or custom deployments).
+  static String? proxyBaseUrlOverride;
+
+  /// Registered by `WorkbenchProvider` in live app mode so signed-in Google users route through `geminiProxy` automatically.
+  static bool Function()? isProxyAuthenticated;
+  static Future<String?> Function({bool forceRefresh})? authTokenProvider;
 
   static const Map<String, String> _jsonHeaders = {
     'Content-Type': 'application/json',
@@ -89,6 +100,101 @@ class GeminiAgentClient {
         'x-goog-api-key': key,
       };
 
+  static Map<String, String> _buildProxyHeaders(String bearerToken) =>
+      <String, String>{
+        ..._jsonHeaders,
+        'Authorization': 'Bearer $bearerToken',
+      };
+
+  static String get effectiveProxyBaseUrl {
+    final override = proxyBaseUrlOverride;
+    if (override != null) {
+      return override.trim().replaceAll(RegExp(r'/+$'), '');
+    }
+    if (_rawEnvProxyUrl.trim().isNotEmpty) {
+      return _rawEnvProxyUrl.trim().replaceAll(RegExp(r'/+$'), '');
+    }
+    return defaultProxyBaseUrl;
+  }
+
+  static bool get canUseAuthenticatedProxy =>
+      effectiveProxyBaseUrl.isNotEmpty &&
+      isProxyAuthenticated != null &&
+      authTokenProvider != null &&
+      isProxyAuthenticated!();
+
+  /// Calls an authenticated admin/invite route (`/sendInvite`, `/acceptInvite`, `/revokeInvite`)
+  /// on `geminiProxy` using the caller's Firebase Google ID token (with 1 automatic 401 refresh).
+  static Future<({int statusCode, Map<String, dynamic> body})>
+      postAuthenticatedProxyAction({
+    required String routePath,
+    Map<String, dynamic>? payload,
+  }) async {
+    final baseUrl = effectiveProxyBaseUrl;
+    if (baseUrl.isEmpty || authTokenProvider == null) {
+      return (
+        statusCode: 401,
+        body: <String, dynamic>{
+          'ok': false,
+          'error': {'message': 'Sign in with Google required.'},
+        },
+      );
+    }
+    var token = await authTokenProvider!(forceRefresh: false);
+    if (token == null || token.trim().isEmpty) {
+      return (
+        statusCode: 401,
+        body: <String, dynamic>{
+          'ok': false,
+          'error': {'message': 'Sign in with Google required.'},
+        },
+      );
+    }
+
+    final normalizedRoute =
+        routePath.startsWith('/') ? routePath : '/$routePath';
+    final uri = Uri.parse('$baseUrl$normalizedRoute');
+    final encodedBody = jsonEncode(payload ?? const <String, dynamic>{});
+
+    try {
+      var res = await _postWithTransientRetry(
+        uri: uri,
+        headers: _buildProxyHeaders(token),
+        body: encodedBody,
+        timeoutDuration: const Duration(seconds: 25),
+      );
+      if (res.statusCode == 401) {
+        final freshToken = await authTokenProvider!(forceRefresh: true);
+        if (freshToken != null && freshToken.trim().isNotEmpty) {
+          res = await _postWithTransientRetry(
+            uri: uri,
+            headers: _buildProxyHeaders(freshToken),
+            body: encodedBody,
+            timeoutDuration: const Duration(seconds: 25),
+          );
+        }
+      }
+      Map<String, dynamic> decoded = const <String, dynamic>{};
+      if (res.body.trim().isNotEmpty) {
+        try {
+          final raw = jsonDecode(res.body);
+          if (raw is Map) {
+            decoded = Map<String, dynamic>.from(raw);
+          }
+        } catch (_) {}
+      }
+      return (statusCode: res.statusCode, body: decoded);
+    } catch (e) {
+      return (
+        statusCode: 502,
+        body: <String, dynamic>{
+          'ok': false,
+          'error': {'message': 'Unable to reach invite service: $e'},
+        },
+      );
+    }
+  }
+
   static bool _isTransientStatus(int statusCode) =>
       statusCode == 408 ||
       statusCode == 429 ||
@@ -149,7 +255,8 @@ class GeminiAgentClient {
   static bool hasKey(String apiKey) {
     if (testMockResponder != null) return true;
     final key = apiKey.trim().isNotEmpty ? apiKey.trim() : resolveDefaultApiKey();
-    return key.isNotEmpty;
+    if (key.isNotEmpty) return true;
+    return canUseAuthenticatedProxy;
   }
 
   static Future<void> _ensureModelCapabilitiesLoaded(
@@ -334,15 +441,30 @@ class GeminiAgentClient {
       return mockRes;
     }
     final key = apiKey.trim().isNotEmpty ? apiKey.trim() : resolveDefaultApiKey();
-    if (key.isEmpty) {
-      lastErrorStatus = 'Missing API Key';
-      return null;
+    final bool useProxy = key.isEmpty;
+    String? proxyBearerToken;
+
+    if (useProxy) {
+      if (!canUseAuthenticatedProxy) {
+        lastErrorStatus = 'Sign in with Google required';
+        return null;
+      }
+      proxyBearerToken = await authTokenProvider!(forceRefresh: false);
+      if (proxyBearerToken == null || proxyBearerToken.trim().isEmpty) {
+        lastErrorStatus = 'Sign in with Google required';
+        return null;
+      }
+    } else {
+      await _ensureModelCapabilitiesLoaded(pinnedLiveFlashModel, key);
     }
 
-    await _ensureModelCapabilitiesLoaded(pinnedLiveFlashModel, key);
-
     const modelsToTry = <String>[pinnedLiveFlashModel, 'gemini-flash-latest'];
-    final requestHeaders = _buildRequestHeaders(key);
+    final String baseApiRoot = useProxy
+        ? effectiveProxyBaseUrl
+        : 'https://generativelanguage.googleapis.com';
+    Map<String, String> requestHeaders = useProxy
+        ? _buildProxyHeaders(proxyBearerToken!)
+        : _buildRequestHeaders(key);
 
     final normalizedThinking = thinkingLevel.trim().toUpperCase();
     final hasTools =
@@ -356,10 +478,11 @@ class GeminiAgentClient {
     ];
 
     int? lastNon200Status;
+    bool refreshedProxyTokenOnce = false;
 
     for (final model in modelsToTry) {
       final uri = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
+        '$baseApiRoot/v1beta/models/$model:generateContent',
       );
       final isHeavyPlanningModel = model.contains('pro');
       final timeoutDuration =
@@ -401,6 +524,25 @@ class GeminiAgentClient {
           body: jsonEncode(requestPayload),
           timeoutDuration: timeoutDuration,
         );
+
+        // If Firebase ID token expired right at the boundary, force-refresh once and retry.
+        if (useProxy &&
+            response.statusCode == 401 &&
+            !refreshedProxyTokenOnce &&
+            authTokenProvider != null) {
+          refreshedProxyTokenOnce = true;
+          final freshToken = await authTokenProvider!(forceRefresh: true);
+          if (freshToken != null && freshToken.trim().isNotEmpty) {
+            proxyBearerToken = freshToken;
+            requestHeaders = _buildProxyHeaders(freshToken);
+            response = await _postWithTransientRetry(
+              uri: uri,
+              headers: requestHeaders,
+              body: jsonEncode(requestPayload),
+              timeoutDuration: timeoutDuration,
+            );
+          }
+        }
 
         // If `gemini-flash-latest` alias upgraded on the backend and prefers the alternate
         // native thinkingConfig schema, flip and retry automatically.

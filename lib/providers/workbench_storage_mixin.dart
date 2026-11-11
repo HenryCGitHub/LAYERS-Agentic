@@ -14,75 +14,303 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
   void _onAuthStateChanged() {
     final user = _authService.currentUser;
-    if (user != null) {
-      _isCloudSynced = true;
-      _lastCloudSyncAt = DateTime.now();
-      bool initialLocalPushDone = false;
-      // Push any existing local documents up to Firestore on login
-      Future.wait([
-        for (final doc in documents.values)
-          _firestoreService.saveDocument(uid: user.uid, doc: doc),
-      ]).then((_) {
-        initialLocalPushDone = true;
-      });
-      if (_activeProjectId != null) {
-        _firestoreService.saveSettings(
-          uid: user.uid,
-          settings: {
-            'activeDocumentId': _activeProjectId,
-            'themeMode': _isDark ? 'dark' : 'light',
-          },
-        );
-      } else {
-        _firestoreService.fetchUserSettings(uid: user.uid).then((remoteSettings) {
-          if (remoteSettings == null) return;
-          final remoteTheme = remoteSettings['themeMode']?.toString();
-          if (remoteTheme != null) {
-            _isDark = remoteTheme != 'light';
-          }
-          final remoteActiveId = remoteSettings['activeDocumentId']?.toString();
-          if (remoteActiveId != null && documents.containsKey(remoteActiveId)) {
-            _restoreProjectState(remoteActiveId);
-          }
-          notifyListeners();
-        });
-      }
-      _firestoreService.startRealtimeSync(
-        uid: user.uid,
-        onSync: (remoteDocs) {
-          _lastCloudSyncAt = DateTime.now();
-          if (remoteDocs.isEmpty && !initialLocalPushDone) return;
-          // Skip intermediate snapshot reconciliation while local batch writes or agent operations are in flight
-          if (_isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) return;
-          // Reconcile remote deletions once initial local push has finished
-          if (initialLocalPushDone && remoteDocs.isNotEmpty) {
-            final removedIds = documents.keys
-                .where((localId) => !remoteDocs.containsKey(localId))
-                .toList();
-            for (final removedId in removedIds) {
-              documents.remove(removedId);
-              LocalVaultService.deleteDocument(removedId);
-            }
-          }
-          for (final entry in remoteDocs.entries) {
-            documents[entry.key] = entry.value;
-            LocalVaultService.saveDocument(entry.value);
-          }
-          if (_activeProjectId == null || !documents.containsKey(_activeProjectId)) {
-            final projs = savedProjects;
-            if (projs.isNotEmpty) {
-              _restoreProjectState(projs.first.id);
-            }
-          } else {
-            _restoreProjectState(_activeProjectId!);
-          }
+    if (user == null) {
+      _isCloudSynced = false;
+      _myAiAccessStatus = null;
+      _aiAccessRecords = const [];
+      _firestoreService.stopRealtimeSync();
+      notifyListeners();
+      return;
+    }
+
+    final email = (user.email ?? '').trim().toLowerCase();
+    if (email == WorkbenchProvider.ownerAdminEmail) {
+      _myAiAccessStatus = 'approved';
+      _pendingUrlInviteToken = null;
+      _pendingUrlInvitedEmail = null;
+      _inviteFeedbackMessage = null;
+      _startApprovedCloudSync(user.uid, isAdmin: true, userEmail: email);
+      notifyListeners();
+      return;
+    }
+
+    // Non-admin sign-in: verify or activate invite BEFORE touching Firestore `users/{uid}`
+    unawaited(_verifyOrAcceptInvitedLogin(user.uid, email));
+  }
+
+  void _startApprovedCloudSync(
+    String uid, {
+    required bool isAdmin,
+    required String userEmail,
+  }) {
+    GeminiAgentClient.lastErrorStatus = null;
+    _offlineErrorMessage = null;
+    _isCloudSynced = true;
+    _lastCloudSyncAt = DateTime.now();
+
+    if (isAdmin) {
+      _firestoreService.watchAllAiAccessEntries(
+        onEntries: (entries) {
+          _aiAccessRecords = entries;
           notifyListeners();
         },
       );
     } else {
-      _isCloudSynced = false;
-      _firestoreService.stopRealtimeSync();
+      _firestoreService.watchMyAiAccess(
+        email: userEmail,
+        onStatus: (status) {
+          if (status == 'revoked') {
+            _myAiAccessStatus = 'revoked';
+            _isCloudSynced = false;
+            _firestoreService.stopRealtimeSync();
+            _offlineErrorMessage =
+                'Access for $userEmail has been revoked by the workspace admin.';
+            unawaited(_authService.signOut());
+            notifyListeners();
+          } else if (status != null) {
+            _myAiAccessStatus = status;
+            notifyListeners();
+          }
+        },
+      );
     }
+
+    bool initialLocalPushDone = false;
+    Future.wait([
+      for (final doc in documents.values)
+        _firestoreService.saveDocument(uid: uid, doc: doc),
+    ]).then((_) {
+      initialLocalPushDone = true;
+    });
+    if (_activeProjectId != null) {
+      _firestoreService.saveSettings(
+        uid: uid,
+        settings: {
+          'activeDocumentId': _activeProjectId,
+          'themeMode': _isDark ? 'dark' : 'light',
+        },
+      );
+    } else {
+      _firestoreService.fetchUserSettings(uid: uid).then((remoteSettings) {
+        if (remoteSettings == null) return;
+        final remoteTheme = remoteSettings['themeMode']?.toString();
+        if (remoteTheme != null) {
+          _isDark = remoteTheme != 'light';
+        }
+        final remoteActiveId = remoteSettings['activeDocumentId']?.toString();
+        if (remoteActiveId != null && documents.containsKey(remoteActiveId)) {
+          _restoreProjectState(remoteActiveId);
+        }
+        notifyListeners();
+      });
+    }
+    _firestoreService.startRealtimeSync(
+      uid: uid,
+      onSync: (remoteDocs) {
+        _lastCloudSyncAt = DateTime.now();
+        if (remoteDocs.isEmpty && !initialLocalPushDone) return;
+        if (_isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) return;
+        if (initialLocalPushDone && remoteDocs.isNotEmpty) {
+          final removedIds = documents.keys
+              .where((localId) => !remoteDocs.containsKey(localId))
+              .toList();
+          for (final removedId in removedIds) {
+            documents.remove(removedId);
+            LocalVaultService.deleteDocument(removedId);
+          }
+        }
+        for (final entry in remoteDocs.entries) {
+          documents[entry.key] = entry.value;
+          LocalVaultService.saveDocument(entry.value);
+        }
+        if (_activeProjectId == null ||
+            !documents.containsKey(_activeProjectId)) {
+          final projs = savedProjects;
+          if (projs.isNotEmpty) {
+            _restoreProjectState(projs.first.id);
+          }
+        } else {
+          _restoreProjectState(_activeProjectId!);
+        }
+        notifyListeners();
+      },
+    );
+  }
+
+  Future<void> _verifyOrAcceptInvitedLogin(
+    String uid,
+    String signedInEmail,
+  ) async {
+    final res = await GeminiAgentClient.postAuthenticatedProxyAction(
+      routePath: '/acceptInvite',
+      payload: <String, dynamic>{
+        if (_pendingUrlInviteToken != null)
+          'inviteToken': _pendingUrlInviteToken,
+        if (_pendingUrlInvitedEmail != null)
+          'invitedEmail': _pendingUrlInvitedEmail,
+      },
+    );
+
+    if (res.statusCode == 200 && res.body['status'] == 'approved') {
+      _myAiAccessStatus = 'approved';
+      _pendingUrlInviteToken = null;
+      _pendingUrlInvitedEmail = null;
+      _inviteFeedbackMessage = null;
+      _startApprovedCloudSync(uid, isAdmin: false, userEmail: signedInEmail);
+      notifyListeners();
+      return;
+    }
+
+    final errorObj = res.body['error'];
+    final serverMsg = (errorObj is Map ? errorObj['message'] : null)?.toString();
+
+    if (res.statusCode == 409) {
+      // Wrong Google account selected for the invite link: keep invite modal open and prompt account switch
+      _myAiAccessStatus = 'uninvited';
+      _inviteFeedbackMessage = serverMsg ??
+          'This invite was sent to $_pendingUrlInvitedEmail, but you signed in as $signedInEmail. Please switch Google accounts.';
+      await _authService.signOut();
+      notifyListeners();
+      return;
+    }
+
+    // Uninvited or revoked user: sign out immediately (server already purged uninvited Firebase Auth UID)
+    _myAiAccessStatus = res.body['status']?.toString() ?? 'uninvited';
+    _offlineErrorMessage = serverMsg ??
+        'Invite required — $signedInEmail has not been invited to this workspace yet.';
+    await _authService.signOut();
+    notifyListeners();
+  }
+
+  /// Sends (or resends) an email invite to [rawEmail] via `geminiProxy` `/sendInvite` (Admin-only).
+  Future<({bool ok, bool emailSent, String? inviteUrl, String message})>
+      sendUserInvite(
+    String rawEmail, {
+    bool resetStatus = false,
+  }) async {
+    final cleanEmail = rawEmail.trim().toLowerCase();
+    if (cleanEmail.isEmpty || !cleanEmail.contains('@')) {
+      return (
+        ok: false,
+        emailSent: false,
+        inviteUrl: null,
+        message: 'Enter a valid email address.',
+      );
+    }
+    if (cleanEmail == WorkbenchProvider.ownerAdminEmail) {
+      return (
+        ok: false,
+        emailSent: false,
+        inviteUrl: null,
+        message: 'Workspace owner already has full access.',
+      );
+    }
+
+    final res = await GeminiAgentClient.postAuthenticatedProxyAction(
+      routePath: '/sendInvite',
+      payload: <String, dynamic>{
+        'email': cleanEmail,
+        'resetStatus': resetStatus,
+      },
+    );
+
+    if (res.statusCode == 200 && res.body['ok'] == true) {
+      final emailSent = res.body['emailSent'] == true;
+      final inviteUrl = res.body['inviteUrl']?.toString();
+      final nextStatus = (res.body['status'] ?? 'invited').toString();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final updated = <AiAccessRecord>[
+        AiAccessRecord(
+          email: cleanEmail,
+          status: nextStatus,
+          inviteUrl: inviteUrl,
+          invitedAtMs: nowMs,
+        ),
+        for (final r in _aiAccessRecords)
+          if (r.email != cleanEmail) r,
+      ];
+      _aiAccessRecords = updated;
+      notifyListeners();
+      return (
+        ok: true,
+        emailSent: emailSent,
+        inviteUrl: inviteUrl,
+        message: emailSent
+            ? 'Invite email sent to $cleanEmail.'
+            : 'Invite created for $cleanEmail — invite link copied to clipboard.',
+      );
+    }
+
+    final errObj = res.body['error'];
+    final errMsg = (errObj is Map ? errObj['message'] : null)?.toString() ??
+        'Failed to send invite (HTTP ${res.statusCode}).';
+    return (
+      ok: false,
+      emailSent: false,
+      inviteUrl: null,
+      message: errMsg,
+    );
+  }
+
+  /// Cancels a pending invite or revokes an active member's access (Admin-only).
+  Future<bool> revokeUserInvite(String rawEmail) async {
+    final cleanEmail = rawEmail.trim().toLowerCase();
+    if (cleanEmail.isEmpty || cleanEmail == WorkbenchProvider.ownerAdminEmail) {
+      return false;
+    }
+    final res = await GeminiAgentClient.postAuthenticatedProxyAction(
+      routePath: '/revokeInvite',
+      payload: <String, dynamic>{'email': cleanEmail},
+    );
+    if (res.statusCode == 200 && res.body['ok'] == true) {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      _aiAccessRecords = [
+        for (final r in _aiAccessRecords)
+          if (r.email == cleanEmail)
+            AiAccessRecord(
+              email: r.email,
+              status: 'revoked',
+              displayName: r.displayName,
+              invitedAtMs: r.invitedAtMs,
+              acceptedAtMs: r.acceptedAtMs,
+              revokedAtMs: nowMs,
+            )
+          else
+            r,
+      ];
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  /// Accepts a `?invite=<token>` link by signing in with Google and verifying via `/acceptInvite`.
+  Future<bool> acceptPendingInviteWithGoogle() async {
+    _inviteFeedbackMessage = null;
+    notifyListeners();
+    final cred = await _authService.signInWithGoogle();
+    if (cred == null || cred.user == null) {
+      notifyListeners();
+      return false;
+    }
+    final uid = cred.user!.uid;
+    final email = (cred.user!.email ?? '').trim().toLowerCase();
+    if (email == WorkbenchProvider.ownerAdminEmail) {
+      _myAiAccessStatus = 'approved';
+      _pendingUrlInviteToken = null;
+      _pendingUrlInvitedEmail = null;
+      _startApprovedCloudSync(uid, isAdmin: true, userEmail: email);
+      notifyListeners();
+      return true;
+    }
+    await _verifyOrAcceptInvitedLogin(uid, email);
+    return _myAiAccessStatus == 'approved';
+  }
+
+  void dismissPendingUrlInvite() {
+    _pendingUrlInviteToken = null;
+    _pendingUrlInvitedEmail = null;
+    _inviteFeedbackMessage = null;
     notifyListeners();
   }
 
@@ -91,7 +319,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final user = _authService.currentUser;
     for (final doc in documents.values) {
       await LocalVaultService.saveDocument(doc);
-      if (user != null) {
+      if (user != null && isSessionApprovedForAi) {
         await _firestoreService.saveDocument(uid: user.uid, doc: doc);
       }
     }
@@ -117,7 +345,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _persistDocument(proj);
 
     final user = _authService.currentUser;
-    if (user != null) {
+    if (user != null && isSessionApprovedForAi) {
       await _firestoreService.inviteCollaborator(
         projectId: proj.id,
         projectTitle: proj.title,
@@ -125,6 +353,9 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         collaboratorEmail: cleanEmail,
         role: role,
       );
+      if (isAdminUser) {
+        unawaited(sendUserInvite(cleanEmail));
+      }
     }
     notifyListeners();
     return true;
@@ -141,8 +372,18 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  /// Loads saved projects from LocalStorage / SharedPreferences and starts Cloud Firestore sync if logged in.
+  /// Loads saved projects from LocalStorage / SharedPreferences, detects `?invite=` URL params,
+  /// and starts Cloud Firestore sync if an approved Google account is logged in.
   Future<void> initVault() async {
+    try {
+      final qp = Uri.base.queryParameters;
+      final urlInvite = qp['invite']?.trim();
+      if (urlInvite != null && urlInvite.isNotEmpty) {
+        _pendingUrlInviteToken = urlInvite;
+        _pendingUrlInvitedEmail = qp['invited_email']?.trim().toLowerCase();
+      }
+    } catch (_) {}
+
     try {
       final loaded = await LocalVaultService.loadVaultData();
       // Ignore legacy static placeholder docs (`proj_vanguard`) if they don't have a concept_blueprint_json
@@ -155,9 +396,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       if (loaded.themeMode != null) {
         _isDark = loaded.themeMode != 'light';
       }
-      if (loaded.apiKey != null && loaded.apiKey!.trim().isNotEmpty) {
-        _apiKey = loaded.apiKey!.trim();
-      }
+      // API keys are no longer loaded from browser localStorage; all live calls authenticate via Google Sign-In + geminiProxy.
+      _apiKey = GeminiAgentClient.resolveDefaultApiKey();
       if (loaded.modelName != null && loaded.modelName!.trim().isNotEmpty) {
         _conversationModel = 'gemini-flash-latest';
       }
@@ -916,7 +1156,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     void writeNow() {
       LocalVaultService.saveDocument(doc);
       final user = _authService.currentUser;
-      if (user != null) {
+      if (user != null && isSessionApprovedForAi) {
         _pendingCloudWriteDocIds.add(doc.id);
         _firestoreService.saveDocument(uid: user.uid, doc: doc).whenComplete(() {
           _pendingCloudWriteDocIds.remove(doc.id);
@@ -939,14 +1179,14 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final activeId = _activeProjectId ?? 'proj_main';
     LocalVaultService.saveSettings(
       activeDocumentId: activeId,
-      apiKey: _apiKey,
+      apiKey: '',
       modelName: _conversationModel,
       planningModel: _planningModel,
       thinkingLevel: _thinkingLevel,
       themeMode: _isDark ? 'dark' : 'light',
     );
     final user = _authService.currentUser;
-    if (user != null) {
+    if (user != null && isSessionApprovedForAi) {
       _firestoreService.saveSettings(
         uid: user.uid,
         settings: {

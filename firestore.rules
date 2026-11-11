@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email != null;
+    }
+
+    function callerEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    function isAdmin() {
+      return isSignedIn() && callerEmail() == 'henryyoungchoi@gmail.com';
+    }
+
+    function isApprovedUser() {
+      return isAdmin() || (
+        isSignedIn() &&
+        exists(/databases/$(database)/documents/ai_access/$(callerEmail())) &&
+        get(/databases/$(database)/documents/ai_access/$(callerEmail())).data.status == 'approved'
+      );
+    }
+
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid && isApprovedUser();
+
+      match /documents/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == uid && isApprovedUser();
+      }
+    }
+
+    match /collaborations/{collabId} {
+      allow read, write: if isApprovedUser();
+    }
+
+    match /ai_access/{email} {
+      allow read: if isAdmin();
+      allow get: if isSignedIn() && callerEmail() == email.lower();
+      allow write: if false;
+    }
+  }
+}

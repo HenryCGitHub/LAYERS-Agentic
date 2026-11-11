@@ -1,0 +1,15 @@
+{
+  "name": "layers-agentic-functions",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Firebase Cloud Functions v2 Gemini Flash Auth Proxy & Email Invite Service for LAYERS-Agentic",
+  "engines": {
+    "node": "22"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "firebase-functions": "^6.3.0",
+    "nodemailer": "^6.10.0"
+  }
+}

@@ -27,6 +27,18 @@ class AuthService extends ChangeNotifier {
   }
   bool get isLoggedIn => currentUser != null;
 
+  /// Returns a valid Firebase ID token for authenticating against the LAYERS Cloud Function proxy.
+  Future<String?> getValidIdToken({bool forceRefresh = false}) async {
+    try {
+      final user = currentUser;
+      if (user == null) return null;
+      return await user.getIdToken(forceRefresh);
+    } catch (e) {
+      debugPrint('Firebase getIdToken error: $e');
+      return null;
+    }
+  }
+
   String? _lastError;
   String? get lastError => _lastError;
 
