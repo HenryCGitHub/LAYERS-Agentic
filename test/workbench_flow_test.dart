@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/release_planner_agent.dart';
@@ -9146,6 +9148,102 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         await tester.pumpAndSettle();
         expect(find.textContaining('Floor_Greenhouse'), findsWidgets);
+      },
+    );
+
+    test(
+      'GeminiAgentClient HTTP Resilience: x-goog-api-key Header Only (Zero URL Key Leak) & 503 Backoff + Flash Failover',
+      () async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.testMockResponder = null;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+
+        final capturedUris = <Uri>[];
+        final capturedHeaders = <Map<String, String>>[];
+        int callCount = 0;
+
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          callCount++;
+          capturedUris.add(uri);
+          capturedHeaders.add(headers ?? const {});
+          // First 2 attempts return transient 503; 3rd attempt succeeds on gemini-3.8-flash
+          if (callCount <= 2) {
+            return http.Response('{"error":{"code":503}}', 503);
+          }
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': '{"ok": true, "attempt": $callCount}'},
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        };
+
+        try {
+          final res = await GeminiAgentClient.generateJson(
+            prompt: 'Ping',
+            apiKey: 'AQ.TestAuthKey_NeverInUrl',
+          );
+          expect(res, isNotNull);
+          expect(res!['ok'], isTrue);
+          expect(callCount, equals(3));
+          for (final u in capturedUris) {
+            expect(u.toString(), isNot(contains('AQ.TestAuthKey_NeverInUrl')));
+            expect(u.queryParameters.containsKey('key'), isFalse);
+          }
+          for (final h in capturedHeaders) {
+            expect(h['x-goog-api-key'], equals('AQ.TestAuthKey_NeverInUrl'));
+          }
+
+          // Also verify Flash-only failover to gemini-flash-latest if gemini-3.8-flash stays 503
+          capturedUris.clear();
+          callCount = 0;
+          GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+            callCount++;
+            capturedUris.add(uri);
+            if (uri.path.contains('gemini-3.8-flash')) {
+              return http.Response('{"error":{"code":503}}', 503);
+            }
+            return http.Response(
+              jsonEncode({
+                'candidates': [
+                  {
+                    'content': {
+                      'parts': [
+                        {'text': '{"fallbackModel": "gemini-flash-latest"}'},
+                      ],
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          };
+
+          final fallbackRes = await GeminiAgentClient.generateJson(
+            prompt: 'Ping failover',
+            apiKey: 'AQ.TestAuthKey_NeverInUrl',
+          );
+          expect(fallbackRes, isNotNull);
+          expect(fallbackRes!['fallbackModel'], equals('gemini-flash-latest'));
+          expect(
+            capturedUris.last.path,
+            contains('gemini-flash-latest:generateContent'),
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+        }
       },
     );
   });

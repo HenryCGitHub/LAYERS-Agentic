@@ -629,7 +629,11 @@ extension _ShellDialogsExt on WorkbenchShell {
                           child: Text(
                             workbench.aiLastErrorStatus == 'HTTP 402'
                                 ? 'API Notice (HTTP 402): AI Studio prepayment credits are depleted on the current key. App is offline until credits are topped up or a new Gemini API key is saved below.'
-                                : 'API Notice (${workbench.aiLastErrorStatus}): Live Gemini call returned an auth/quota error. App is offline until a valid Gemini API key is saved below.',
+                                : (workbench.aiLastErrorStatus == 'HTTP 503' ||
+                                        workbench.aiLastErrorStatus ==
+                                            'HTTP 429'
+                                    ? 'API Notice (${workbench.aiLastErrorStatus}): Google Gemini Flash servers hit a temporary capacity/rate spike even after automatic retries. Your API key is fine — try your action again in a few seconds.'
+                                    : 'API Notice (${workbench.aiLastErrorStatus}): Live Gemini call returned an auth/quota error. App is offline until a valid Gemini API key is saved below.'),
                             style: GoogleFonts.inter(
                               fontSize: 11.5,
                               height: 1.35,
@@ -655,7 +659,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                         decoration: InputDecoration(
                           filled: true,
                           fillColor: bgRecessed,
-                          hintText: 'AIzaSy... (pre-configured if built with key)',
+                          hintText: 'AQ.... or AIzaSy... (saved locally in browser)',
                           hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),

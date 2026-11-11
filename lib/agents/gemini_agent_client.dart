@@ -1,11 +1,13 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 import '../constants/text_style_guide.dart';
 
 /// Lightweight, resilient Gemini JSON client for LAYERS-Agentic.
 /// Supports:
-/// - Explicit live model pinning to `gemini-3.8-flash` (never auto-upgrading to Argon/Pro).
-/// - User-entered local browser API key via AI Settings (no keys baked into public `gh-pages`).
+/// - Explicit live model pinning to `gemini-3.8-flash` with Flash-only `gemini-flash-latest` failover (never Argon/Pro).
+/// - Header-only `x-goog-api-key` auth (never exposing API keys in DevTools URLs).
+/// - Exponential backoff + jitter retries on transient `429` / `503` / `5xx` responses.
 class GeminiAgentClient {
   static const String _rawEnvKey = String.fromEnvironment('GEMINI_API_KEY');
   static const String pinnedLiveFlashModel = 'gemini-3.8-flash';
@@ -14,6 +16,9 @@ class GeminiAgentClient {
   static const Map<String, String> _jsonHeaders = {
     'Content-Type': 'application/json',
   };
+  static final Random _jitterRandom = Random();
+  static const int _maxTransientAttempts = 3;
+  static const Duration _defaultBaseRetryDelay = Duration(milliseconds: 900);
   static const Duration _heavyModelTimeout = Duration(seconds: 60);
   static const Duration _standardModelTimeout = Duration(seconds: 60);
   static const Duration _metadataTimeout = Duration(seconds: 6);
@@ -70,6 +75,69 @@ class GeminiAgentClient {
     String preferredModel,
   )? testMockResponder;
 
+  /// Optional test-only HTTP POST & backoff delay hooks for verifying header security and 503 retries.
+  static Future<http.Response> Function(
+    Uri uri, {
+    Map<String, String>? headers,
+    Object? body,
+  })? testHttpPost;
+  static Duration? testBaseRetryDelay;
+
+  static Map<String, String> _buildRequestHeaders(String key) =>
+      <String, String>{
+        ..._jsonHeaders,
+        'x-goog-api-key': key,
+      };
+
+  static bool _isTransientStatus(int statusCode) =>
+      statusCode == 408 ||
+      statusCode == 429 ||
+      statusCode == 500 ||
+      statusCode == 502 ||
+      statusCode == 503 ||
+      statusCode == 504;
+
+  static Future<http.Response> _postWithTransientRetry({
+    required Uri uri,
+    required Map<String, String> headers,
+    required String body,
+    required Duration timeoutDuration,
+  }) async {
+    final baseDelay = testBaseRetryDelay ?? _defaultBaseRetryDelay;
+    http.Response? lastResponse;
+    Object? lastError;
+
+    for (int attempt = 0; attempt < _maxTransientAttempts; attempt++) {
+      try {
+        final future = testHttpPost != null
+            ? testHttpPost!(uri, headers: headers, body: body)
+            : http.post(uri, headers: headers, body: body);
+        final res = await future.timeout(timeoutDuration);
+        lastResponse = res;
+        if (!_isTransientStatus(res.statusCode) ||
+            attempt == _maxTransientAttempts - 1) {
+          return res;
+        }
+      } catch (err) {
+        lastError = err;
+        if (attempt == _maxTransientAttempts - 1) {
+          rethrow;
+        }
+      }
+
+      final expMs = baseDelay.inMilliseconds * (1 << attempt);
+      final jitterMs =
+          testBaseRetryDelay != null ? 0 : _jitterRandom.nextInt(250);
+      final waitMs = expMs + jitterMs;
+      if (waitMs > 0) {
+        await Future<void>.delayed(Duration(milliseconds: waitMs));
+      }
+    }
+
+    if (lastResponse != null) return lastResponse;
+    throw lastError ?? StateError('Gemini HTTP request failed');
+  }
+
   static String resolveDefaultApiKey() {
     if (_cachedDefaultKey != null) return _cachedDefaultKey!;
     if (_rawEnvKey.trim().isNotEmpty) {
@@ -88,13 +156,16 @@ class GeminiAgentClient {
     String model,
     String key,
   ) async {
-    if (_modelMetadataChecked) return;
+    if (_modelMetadataChecked || testHttpPost != null) return;
     _modelMetadataChecked = true;
     try {
       final metaUri = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/$model?key=$key',
+        'https://generativelanguage.googleapis.com/v1beta/models/$model',
       );
-      final res = await http.get(metaUri).timeout(_metadataTimeout);
+      final res = await http.get(
+        metaUri,
+        headers: <String, String>{'x-goog-api-key': key},
+      ).timeout(_metadataTimeout);
       if (res.statusCode == 200) {
         final meta = jsonDecode(res.body) as Map<String, dynamic>;
         final outLimit = meta['outputTokenLimit'];
@@ -270,7 +341,8 @@ class GeminiAgentClient {
 
     await _ensureModelCapabilitiesLoaded(pinnedLiveFlashModel, key);
 
-    const modelsToTry = <String>[pinnedLiveFlashModel];
+    const modelsToTry = <String>[pinnedLiveFlashModel, 'gemini-flash-latest'];
+    final requestHeaders = _buildRequestHeaders(key);
 
     final normalizedThinking = thinkingLevel.trim().toUpperCase();
     final hasTools =
@@ -283,13 +355,16 @@ class GeminiAgentClient {
       },
     ];
 
+    int? lastNon200Status;
+
     for (final model in modelsToTry) {
       final uri = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$key',
+        'https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent',
       );
       final isHeavyPlanningModel = model.contains('pro');
       final timeoutDuration =
           isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
+      int? modelLastStatus;
 
       try {
         final genConfig = <String, dynamic>{
@@ -320,13 +395,12 @@ class GeminiAgentClient {
             },
         };
 
-        var response = await http
-            .post(
-              uri,
-              headers: _jsonHeaders,
-              body: jsonEncode(requestPayload),
-            )
-            .timeout(timeoutDuration);
+        var response = await _postWithTransientRetry(
+          uri: uri,
+          headers: requestHeaders,
+          body: jsonEncode(requestPayload),
+          timeoutDuration: timeoutDuration,
+        );
 
         // If `gemini-flash-latest` alias upgraded on the backend and prefers the alternate
         // native thinkingConfig schema, flip and retry automatically.
@@ -336,15 +410,15 @@ class GeminiAgentClient {
             normalizedThinking: normalizedThinking,
             useThinkingLevelEnum: _cachedSupportsThinkingLevel,
           );
-          response = await http
-              .post(
-                uri,
-                headers: _jsonHeaders,
-                body: jsonEncode(requestPayload),
-              )
-              .timeout(timeoutDuration);
+          response = await _postWithTransientRetry(
+            uri: uri,
+            headers: requestHeaders,
+            body: jsonEncode(requestPayload),
+            timeoutDuration: timeoutDuration,
+          );
         }
 
+        modelLastStatus = response.statusCode;
         if (response.statusCode == 200) {
           lastErrorStatus = null;
           final parsed = _parseCandidateResponseJson(response.body);
@@ -355,14 +429,17 @@ class GeminiAgentClient {
           // Fail fast on auth/billing errors instead of retrying across models
           lastErrorStatus = 'HTTP ${response.statusCode}';
           return null;
+        } else {
+          lastNon200Status = response.statusCode;
         }
       } catch (_) {
         // Proceed to JSON-mode fallback if tools were active, or next model
       }
 
-      // If a deeply nested function-calling schema timed out or returned MALFORMED_FUNCTION_CALL,
-      // retry once in direct JSON mode (`responseMimeType: 'application/json'`) with LOW thinking budget.
-      if (hasTools) {
+      // If a deeply nested function-calling schema timed out or returned MALFORMED_FUNCTION_CALL
+      // (and this model endpoint is NOT actively returning 429/503), retry once in direct JSON mode.
+      if (hasTools &&
+          (modelLastStatus == null || !_isTransientStatus(modelLastStatus))) {
         try {
           final rawToolParams = functionDeclarations.first['parameters'];
           final effectiveFallbackSchema = responseSchema ??
@@ -385,13 +462,12 @@ class GeminiAgentClient {
             'contents': contentsPayload,
             'generationConfig': fallbackGenConfig,
           };
-          final fallbackRes = await http
-              .post(
-                uri,
-                headers: _jsonHeaders,
-                body: jsonEncode(fallbackPayload),
-              )
-              .timeout(timeoutDuration);
+          final fallbackRes = await _postWithTransientRetry(
+            uri: uri,
+            headers: requestHeaders,
+            body: jsonEncode(fallbackPayload),
+            timeoutDuration: timeoutDuration,
+          );
           if (fallbackRes.statusCode == 200) {
             lastErrorStatus = null;
             final parsed = _parseCandidateResponseJson(fallbackRes.body);
@@ -401,11 +477,16 @@ class GeminiAgentClient {
               fallbackRes.statusCode == 403) {
             lastErrorStatus = 'HTTP ${fallbackRes.statusCode}';
             return null;
+          } else {
+            lastNon200Status = fallbackRes.statusCode;
           }
         } catch (_) {
           continue;
         }
       }
+    }
+    if (lastNon200Status != null) {
+      lastErrorStatus = 'HTTP $lastNon200Status';
     }
     return null;
   }
