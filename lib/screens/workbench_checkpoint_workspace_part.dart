@@ -895,6 +895,51 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       }
     }
 
+    // Honor AI-synthesized / saved canonical feature asset (`primary_asset` / `primarySharedScriptOrScene`)
+    // when compatible with the active engine mode so INITIAL SETUP & TARGET match step scripts 1:1.
+    final cpStatesForAsset = FeatureStateNode.getStatesForDocument(feat);
+    final cpForAsset =
+        (checkpointIndex >= 0 && checkpointIndex < cpStatesForAsset.length)
+            ? cpStatesForAsset[checkpointIndex]
+            : (cpStatesForAsset.isNotEmpty ? cpStatesForAsset.first : null);
+    final rawCanonicalAsset = (feat.sections['primary_asset'] ??
+            cpForAsset?.parameters['primarySharedScriptOrScene'] ??
+            '')
+        .trim();
+    if (rawCanonicalAsset.isNotEmpty) {
+      final lowerAsset = rawCanonicalAsset.toLowerCase();
+      final bool isCompatibleWithActiveEngine;
+      if (isUnrealBp) {
+        isCompatibleWithActiveEngine = lowerAsset.startsWith('/game/') ||
+            lowerAsset.startsWith('bp_') ||
+            lowerAsset.startsWith('wbp_') ||
+            lowerAsset.startsWith('l_');
+      } else if (isUnrealCpp) {
+        isCompatibleWithActiveEngine = lowerAsset.startsWith('source/') ||
+            lowerAsset.endsWith('.h') ||
+            lowerAsset.endsWith('.cpp') ||
+            RegExp(r'^[AU][A-Z][A-Za-z0-9_]+$').hasMatch(rawCanonicalAsset);
+      } else if (isUnity) {
+        isCompatibleWithActiveEngine = lowerAsset.startsWith('assets/') ||
+            lowerAsset.endsWith('.cs') ||
+            lowerAsset.endsWith('.prefab') ||
+            lowerAsset.endsWith('.unity');
+      } else {
+        isCompatibleWithActiveEngine = lowerAsset.startsWith('res://') ||
+            lowerAsset.endsWith('.gd') ||
+            lowerAsset.endsWith('.tscn');
+      }
+      if (isCompatibleWithActiveEngine) {
+        final slashIdx = rawCanonicalAsset.lastIndexOf('/');
+        if (slashIdx != -1 && slashIdx < rawCanonicalAsset.length - 1) {
+          folderPath = rawCanonicalAsset.substring(0, slashIdx + 1);
+          assetName = rawCanonicalAsset.substring(slashIdx + 1);
+        } else {
+          assetName = rawCanonicalAsset;
+        }
+      }
+    }
+
     final setupSteps = <({String label, String detail})>[];
     if (isNewAssetOnTask) {
       if (archetype == 'character') {
@@ -2780,8 +2825,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         totalDoneSteps >= totalStepsCount;
                                 final scheduledUpgrades = widget.workbench
                                     .scheduledInboxUpgradesForFeature(feat.id);
-                                final isUpgradeBadge = states.length > 1 ||
-                                    feat.sections['lifecycle'] == 'upgrade';
 
                                 final Widget? unrealToggleWidget =
                                     selectedHowTo.engineLabel == 'UNREAL 5' &&
@@ -3140,119 +3183,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                   ),
                                                 ),
                                               ),
-                                              const SizedBox(width: 6),
-                                              featureActionsPopupMenu,
                                             ],
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 8),
-                                      if (!isHalfScreenOverlayMode)
-                                        _activeStage2InlineEditKey ==
-                                                'rename_header_feat_${feat.id}'
-                                            ? _buildStage2InlineEditor(
-                                                editKey:
-                                                    'rename_header_feat_${feat.id}',
-                                                inputKey: const ValueKey(
-                                                  'workbench_rename_live_feature_input',
-                                                ),
-                                                saveBtnKey: const ValueKey(
-                                                  'confirm_workbench_rename_live_feature_btn',
-                                                ),
-                                                hintText: 'Feature title...',
-                                                onSave: (val) => widget
-                                                    .workbench
-                                                    .renameLiveFeature(
-                                                  feat.id,
-                                                  val,
-                                                ),
-                                              )
-                                            : Row(
-                                                children: [
-                                                  Container(
-                                                    width: 17,
-                                                    height: 17,
-                                                    alignment: Alignment.center,
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(
-                                                        0xFF5E6AD2,
-                                                      ).withValues(alpha: 0.14),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        4,
-                                                      ),
-                                                      border: Border.all(
-                                                        color: const Color(
-                                                          0xFF6875F5,
-                                                        ).withValues(
-                                                          alpha: 0.38,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      'F',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 9.5,
-                                                        fontWeight:
-                                                            FontWeight.w800,
-                                                        height: 1.0,
-                                                        color: const Color(
-                                                          0xFFA5B4FC,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 7),
-                                                  Expanded(
-                                                    child: InkWell(
-                                                      onTap: () =>
-                                                          _startStage2InlineEdit(
-                                                        'rename_header_feat_${feat.id}',
-                                                        feat.title,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        4,
-                                                      ),
-                                                      child: Text(
-                                                        featShortTitle,
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                        style:
-                                                            GoogleFonts.inter(
-                                                          fontSize: 14.5,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: const Color(
-                                                            0xFFF8FAFC,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 6),
-                                                  Text(
-                                                    isUpgradeBadge
-                                                        ? 'UPGRADE'
-                                                        : 'NEW',
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: 9.5,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                      color: isUpgradeBadge
-                                                          ? const Color(
-                                                              0xFF7DD3FC,
-                                                            )
-                                                          : const Color(
-                                                              0xFF64748B,
-                                                            ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
                                       if (!isHalfScreenOverlayMode)
                                         Container(
                                           key: ValueKey(
@@ -3361,7 +3295,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                         ),
                                       ),
 
-                                      // ── B. Prior Checkpoints Stack & Scheduled Inbox Compatibility Hooks (Reclaims 42px top banner space) ──
+                                      // ── B. Prior Checkpoints Stack & Scheduled Inbox Compatibility Hooks ──
                                       SizedBox(
                                         height: 1,
                                         child: SingleChildScrollView(
@@ -3371,25 +3305,27 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
-                                                for (int cpIdx = 0;
-                                                    cpIdx < states.length;
-                                                    cpIdx++)
-                                                  InkWell(
-                                                    key: ValueKey(
-                                                      'outline_cp_${feat.id}_$cpIdx',
+                                                if (isHalfScreenOverlayMode ||
+                                                    states.length <= 1)
+                                                  for (int cpIdx = 0;
+                                                      cpIdx < states.length;
+                                                      cpIdx++)
+                                                    InkWell(
+                                                      key: ValueKey(
+                                                        'outline_cp_${feat.id}_$cpIdx',
+                                                      ),
+                                                      onTap: () {
+                                                        _rebuild(() {
+                                                          _manualCheckpointFocusIndex =
+                                                              cpIdx;
+                                                          _manualCheckpointFocusFeatureId =
+                                                              feat.id;
+                                                        });
+                                                      },
+                                                      child: Text(
+                                                        'CP${cpIdx + 1} · ${states[cpIdx].releaseVersion}',
+                                                      ),
                                                     ),
-                                                    onTap: () {
-                                                      _rebuild(() {
-                                                        _manualCheckpointFocusIndex =
-                                                            cpIdx;
-                                                        _manualCheckpointFocusFeatureId =
-                                                            feat.id;
-                                                      });
-                                                    },
-                                                    child: Text(
-                                                      'CP${cpIdx + 1} · ${states[cpIdx].releaseVersion}',
-                                                    ),
-                                                  ),
                                                 for (final upg
                                                     in scheduledUpgrades)
                                                   InkWell(
@@ -3438,36 +3374,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     'rename_header_feat_${feat.id}';
                                             final compatibilityHooksRow =
                                                 SizedBox(
-                                              height: isRenamingHeaderFeat
-                                                  ? null
-                                                  : 4,
+                                              height: 4,
                                               child: SingleChildScrollView(
                                                 scrollDirection:
                                                     Axis.horizontal,
                                                 child: Opacity(
-                                                  opacity: isRenamingHeaderFeat
-                                                      ? 1.0
-                                                      : 0.0,
+                                                  opacity: 0.0,
                                                   child: Row(
                                                     mainAxisSize:
                                                         MainAxisSize.min,
                                                     children: [
-                                                      if (!isHalfScreenOverlayMode &&
-                                                          !isRenamingHeaderFeat)
-                                                        InkWell(
-                                                          key: ValueKey(
-                                                            'workbench_rename_feature_btn_${feat.id}',
-                                                          ),
-                                                          onTap: () =>
-                                                              _startStage2InlineEdit(
-                                                            'rename_header_feat_${feat.id}',
-                                                            feat.title,
-                                                          ),
-                                                          child: const SizedBox(
-                                                            width: 12,
-                                                            height: 4,
-                                                          ),
-                                                        ),
                                                       SizedBox(
                                                         width: 260,
                                                         child:
@@ -3721,20 +3637,546 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                             final isSelectedTaskCompleted =
                                                 selectedTaskIdx <
                                                         node.checklist.length &&
+                                                    (node
+                                                            .checklist[
+                                                                selectedTaskIdx]
+                                                            .completed ||
+                                                        (activeBp.subSteps
+                                                                .isNotEmpty &&
+                                                            activeBp.subSteps
+                                                                .every(
+                                                              (s) => s.subtask
+                                                                  .completed,
+                                                            )));
+                                            final bool isFixTaskActive =
+                                                selectedTaskIdx <
+                                                        node.checklist.length &&
                                                     node
                                                         .checklist[
                                                             selectedTaskIdx]
-                                                        .completed;
+                                                        .text
+                                                        .trim()
+                                                        .startsWith('[FIX]');
                                             final isDrawerOpen =
                                                 _inlineBugDrawerNodeId ==
                                                     node.id;
-                                            final verifySentenceText = activeBp
-                                                    .taskDoneCheck
-                                                    .trim()
-                                                    .isNotEmpty
-                                                ? activeBp.taskDoneCheck.trim()
-                                                : activeSubStep.verifyResult
+                                            final verifySentenceText =
+                                                activeSubStep.verifyResult
+                                                        .trim()
+                                                        .isNotEmpty
+                                                    ? activeSubStep.verifyResult
+                                                        .trim()
+                                                    : activeBp.taskDoneCheck
+                                                        .trim();
+                                            final String taskGoalFallbackText =
+                                                activeBp.taskDoneCheck.trim();
+
+                                            // Resolve canonical shared asset & progressive upgrade tuning deltas for the Desktop Context Bar
+                                            final String resolvedSharedAssetLabel =
+                                                (feat.sections['primary_asset'] ??
+                                                        node.parameters[
+                                                            'primarySharedScriptOrScene'] ??
+                                                        activeSubStep.stepPath)
                                                     .trim();
+                                            final List<String> upgradeDeltaChips =
+                                                <String>[];
+                                            if (index > 0 &&
+                                                index < states.length) {
+                                              final prevState =
+                                                  states[index - 1];
+                                              final prevMap = <String, String>{};
+                                              for (final raw
+                                                  in prevState.tuningParams) {
+                                                final p = raw.split(
+                                                  _ReleaseWorkbenchScreenState
+                                                      ._tuningVarDelimiterRegex,
+                                                );
+                                                final k = p.first.trim();
+                                                if (k.isNotEmpty) {
+                                                  prevMap[k.toLowerCase()] =
+                                                      p.length > 1
+                                                          ? p
+                                                              .sublist(1)
+                                                              .join(':')
+                                                              .trim()
+                                                          : '';
+                                                }
+                                              }
+                                              for (final raw
+                                                  in node.tuningParams) {
+                                                final p = raw.split(
+                                                  _ReleaseWorkbenchScreenState
+                                                      ._tuningVarDelimiterRegex,
+                                                );
+                                                final k = p.first.trim();
+                                                if (k.isEmpty) continue;
+                                                final curVal = p.length > 1
+                                                    ? p
+                                                        .sublist(1)
+                                                        .join(':')
+                                                        .trim()
+                                                    : '';
+                                                final prevVal =
+                                                    prevMap[k.toLowerCase()];
+                                                if (prevVal == null) {
+                                                  upgradeDeltaChips.add(
+                                                    curVal.isNotEmpty
+                                                        ? '+$k: $curVal'
+                                                        : '+$k',
+                                                  );
+                                                } else if (prevVal != curVal &&
+                                                    curVal.isNotEmpty) {
+                                                  upgradeDeltaChips.add(
+                                                    '$k: $prevVal → $curVal',
+                                                  );
+                                                }
+                                              }
+                                              if (upgradeDeltaChips.isEmpty &&
+                                                  node.coveredScope
+                                                      .isNotEmpty) {
+                                                upgradeDeltaChips.addAll(
+                                                  node.coveredScope.take(2),
+                                                );
+                                              } else if (upgradeDeltaChips
+                                                      .isEmpty &&
+                                                  node.trigger
+                                                      .trim()
+                                                      .isNotEmpty) {
+                                                upgradeDeltaChips
+                                                    .add(node.trigger.trim());
+                                              }
+                                            }
+
+                                            final Widget?
+                                                desktopFeatureContextBar =
+                                                isHalfScreenOverlayMode
+                                                    ? null
+                                                    : Container(
+                                                        key: ValueKey(
+                                                          'desktop_feature_context_bar_${node.id}',
+                                                        ),
+                                                        margin: const EdgeInsets
+                                                            .only(bottom: 10),
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .fromLTRB(
+                                                          14,
+                                                          9,
+                                                          12,
+                                                          9,
+                                                        ),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: const Color(
+                                                            0xFF0E131D,
+                                                          ),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(8),
+                                                          border: Border.all(
+                                                            color: const Color(
+                                                              0xFF1E293B,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                        child: Column(
+                                                          crossAxisAlignment:
+                                                              CrossAxisAlignment
+                                                                  .stretch,
+                                                          children: [
+                                                            Row(
+                                                              mainAxisAlignment:
+                                                                  MainAxisAlignment
+                                                                      .spaceBetween,
+                                                              children: [
+                                                                Expanded(
+                                                                  child:
+                                                                      isRenamingHeaderFeat
+                                                                          ? _buildStage2InlineEditor(
+                                                                              editKey: 'rename_header_feat_${feat.id}',
+                                                                              inputKey: const ValueKey(
+                                                                                'workbench_rename_live_feature_input',
+                                                                              ),
+                                                                              saveBtnKey: const ValueKey(
+                                                                                'confirm_workbench_rename_live_feature_btn',
+                                                                              ),
+                                                                              hintText: 'Feature title...',
+                                                                              onSave: (val) => widget.workbench.renameLiveFeature(
+                                                                                feat.id,
+                                                                                val,
+                                                                              ),
+                                                                            )
+                                                                          : Wrap(
+                                                                              spacing: 8,
+                                                                              runSpacing: 6,
+                                                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                                                              children: [
+                                                                                InkWell(
+                                                                                  key: ValueKey(
+                                                                                    'workbench_rename_feature_btn_${feat.id}',
+                                                                                  ),
+                                                                                  borderRadius: BorderRadius.circular(4),
+                                                                                  onTap: () => _startStage2InlineEdit(
+                                                                                    'rename_header_feat_${feat.id}',
+                                                                                    feat.title,
+                                                                                  ),
+                                                                                  child: Padding(
+                                                                                    padding: const EdgeInsets.symmetric(
+                                                                                      horizontal: 2,
+                                                                                      vertical: 1,
+                                                                                    ),
+                                                                                    child: Row(
+                                                                                      mainAxisSize: MainAxisSize.min,
+                                                                                      children: [
+                                                                                        Text(
+                                                                                          '$epicShortCode › ',
+                                                                                          style: GoogleFonts.jetBrainsMono(
+                                                                                            fontSize: fontMicro,
+                                                                                            fontWeight: weightSemi,
+                                                                                            color: const Color(0xFF64748B),
+                                                                                          ),
+                                                                                        ),
+                                                                                        Flexible(
+                                                                                          child: Text(
+                                                                                            featShortTitle,
+                                                                                            maxLines: 1,
+                                                                                            overflow: TextOverflow.ellipsis,
+                                                                                            style: GoogleFonts.inter(
+                                                                                              fontSize: fontBody,
+                                                                                              fontWeight: weightBold,
+                                                                                              color: const Color(0xFFF8FAFC),
+                                                                                            ),
+                                                                                          ),
+                                                                                        ),
+                                                                                        const SizedBox(width: 4),
+                                                                                        Text(
+                                                                                          '✎',
+                                                                                          style: GoogleFonts.inter(
+                                                                                            fontSize: fontMicro,
+                                                                                            color: const Color(0xFF64748B),
+                                                                                          ),
+                                                                                        ),
+                                                                                      ],
+                                                                                    ),
+                                                                                  ),
+                                                                                ),
+                                                                                if (states.length > 1)
+                                                                                  Container(
+                                                                                    padding: const EdgeInsets.symmetric(
+                                                                                      horizontal: 4,
+                                                                                      vertical: 2,
+                                                                                    ),
+                                                                                    decoration: BoxDecoration(
+                                                                                      color: const Color(0xFF07090E),
+                                                                                      borderRadius: BorderRadius.circular(6),
+                                                                                      border: Border.all(
+                                                                                        color: const Color(0xFF1E293B),
+                                                                                      ),
+                                                                                    ),
+                                                                                    child: Row(
+                                                                                      mainAxisSize: MainAxisSize.min,
+                                                                                      children: [
+                                                                                        for (int cpIdx = 0; cpIdx < states.length; cpIdx++) ...[
+                                                                                          if (cpIdx > 0)
+                                                                                            Padding(
+                                                                                              padding: const EdgeInsets.symmetric(horizontal: 3),
+                                                                                              child: Text(
+                                                                                                '→',
+                                                                                                style: GoogleFonts.jetBrainsMono(
+                                                                                                  fontSize: 9.5,
+                                                                                                  color: const Color(0xFF475569),
+                                                                                                ),
+                                                                                              ),
+                                                                                            ),
+                                                                                          InkWell(
+                                                                                            key: ValueKey(
+                                                                                              'outline_cp_${feat.id}_$cpIdx',
+                                                                                            ),
+                                                                                            borderRadius: BorderRadius.circular(4),
+                                                                                            onTap: () {
+                                                                                              _rebuild(() {
+                                                                                                _manualCheckpointFocusIndex = cpIdx;
+                                                                                                _manualCheckpointFocusFeatureId = feat.id;
+                                                                                              });
+                                                                                            },
+                                                                                            child: Container(
+                                                                                              padding: const EdgeInsets.symmetric(
+                                                                                                horizontal: 6,
+                                                                                                vertical: 2,
+                                                                                              ),
+                                                                                              decoration: BoxDecoration(
+                                                                                                color: cpIdx == index
+                                                                                                    ? const Color(0xFF38BDF8).withValues(alpha: 0.14)
+                                                                                                    : Colors.transparent,
+                                                                                                borderRadius: BorderRadius.circular(4),
+                                                                                                border: Border.all(
+                                                                                                  color: cpIdx == index
+                                                                                                      ? const Color(0xFF38BDF8).withValues(alpha: 0.42)
+                                                                                                      : Colors.transparent,
+                                                                                                ),
+                                                                                              ),
+                                                                                              child: Text(
+                                                                                                'CP${cpIdx + 1} · ${states[cpIdx].releaseVersion}${states[cpIdx].isCompleted ? ' ✓' : ''}',
+                                                                                                style: GoogleFonts.jetBrainsMono(
+                                                                                                  fontSize: 9.5,
+                                                                                                  fontWeight: cpIdx == index ? FontWeight.w700 : FontWeight.w500,
+                                                                                                  color: cpIdx == index
+                                                                                                      ? const Color(0xFF7DD3FC)
+                                                                                                      : (states[cpIdx].isCompleted
+                                                                                                          ? const Color(0xFF6EE7B7)
+                                                                                                          : const Color(0xFF94A3B8)),
+                                                                                                ),
+                                                                                              ),
+                                                                                            ),
+                                                                                          ),
+                                                                                        ],
+                                                                                      ],
+                                                                                    ),
+                                                                                  ),
+                                                                                if (resolvedSharedAssetLabel.isNotEmpty)
+                                                                                  Container(
+                                                                                    key: ValueKey(
+                                                                                      'desktop_shared_asset_badge_${node.id}',
+                                                                                    ),
+                                                                                    padding: const EdgeInsets.symmetric(
+                                                                                      horizontal: 7,
+                                                                                      vertical: 2.5,
+                                                                                    ),
+                                                                                    decoration: BoxDecoration(
+                                                                                      color: const Color(0xFF07090E),
+                                                                                      borderRadius: BorderRadius.circular(5),
+                                                                                      border: Border.all(
+                                                                                        color: const Color(0xFF1E293B),
+                                                                                      ),
+                                                                                    ),
+                                                                                    child: Text(
+                                                                                      '📄 $resolvedSharedAssetLabel',
+                                                                                      style: GoogleFonts.jetBrainsMono(
+                                                                                        fontSize: 9.5,
+                                                                                        fontWeight: FontWeight.w600,
+                                                                                        color: const Color(0xFF94A3B8),
+                                                                                      ),
+                                                                                    ),
+                                                                                  ),
+                                                                              ],
+                                                                            ),
+                                                                ),
+                                                                const SizedBox(
+                                                                  width: 8,
+                                                                ),
+                                                                Row(
+                                                                  mainAxisSize:
+                                                                      MainAxisSize
+                                                                          .min,
+                                                                  children: [
+                                                                    InkWell(
+                                                                      key: ValueKey(
+                                                                        'tailor_howto_btn_${node.id}_$selectedTaskIdx',
+                                                                      ),
+                                                                      borderRadius:
+                                                                          BorderRadius
+                                                                              .circular(
+                                                                        5,
+                                                                      ),
+                                                                      onTap: () =>
+                                                                          _promptTailorHowToDialog(
+                                                                        feat,
+                                                                        states,
+                                                                        index,
+                                                                        selectedTaskIdx,
+                                                                      ),
+                                                                      child:
+                                                                          Container(
+                                                                        padding:
+                                                                            const EdgeInsets.symmetric(
+                                                                          horizontal:
+                                                                              8,
+                                                                          vertical:
+                                                                              4,
+                                                                        ),
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color:
+                                                                              const Color(0xFF181E2C),
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(5),
+                                                                          border:
+                                                                              Border.all(
+                                                                            color:
+                                                                                const Color(0xFF262E40),
+                                                                          ),
+                                                                        ),
+                                                                        child:
+                                                                            Text(
+                                                                          '✦ Tailor',
+                                                                          style:
+                                                                              GoogleFonts.inter(
+                                                                            fontSize:
+                                                                                fontMicro,
+                                                                            fontWeight:
+                                                                                weightSemi,
+                                                                            color:
+                                                                                const Color(0xFFA5B4FC),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 6,
+                                                                    ),
+                                                                    InkWell(
+                                                                      key: ValueKey(
+                                                                        'sync_feature_from_code_btn_${node.id}',
+                                                                      ),
+                                                                      borderRadius:
+                                                                          BorderRadius
+                                                                              .circular(
+                                                                        5,
+                                                                      ),
+                                                                      onTap: () =>
+                                                                          _showSyncFeatureFromCodeDialog(
+                                                                        feat,
+                                                                        node,
+                                                                      ),
+                                                                      child:
+                                                                          Container(
+                                                                        padding:
+                                                                            const EdgeInsets.symmetric(
+                                                                          horizontal:
+                                                                              8,
+                                                                          vertical:
+                                                                              4,
+                                                                        ),
+                                                                        decoration:
+                                                                            BoxDecoration(
+                                                                          color:
+                                                                              const Color(0xFF181E2C),
+                                                                          borderRadius:
+                                                                              BorderRadius.circular(5),
+                                                                          border:
+                                                                              Border.all(
+                                                                            color:
+                                                                                const Color(0xFF262E40),
+                                                                          ),
+                                                                        ),
+                                                                        child:
+                                                                            Text(
+                                                                          '⇄ Sync Code',
+                                                                          style:
+                                                                              GoogleFonts.inter(
+                                                                            fontSize:
+                                                                                fontMicro,
+                                                                            fontWeight:
+                                                                                weightSemi,
+                                                                            color:
+                                                                                const Color(0xFF7DD3FC),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    const SizedBox(
+                                                                      width: 6,
+                                                                    ),
+                                                                    featureActionsPopupMenu,
+                                                                  ],
+                                                                ),
+                                                              ],
+                                                            ),
+                                                            if (index > 0 &&
+                                                                upgradeDeltaChips
+                                                                    .isNotEmpty) ...[
+                                                              const SizedBox(
+                                                                height: 7,
+                                                              ),
+                                                              Container(
+                                                                key: ValueKey(
+                                                                  'desktop_upgrade_delta_strip_${node.id}',
+                                                                ),
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal: 9,
+                                                                  vertical: 5,
+                                                                ),
+                                                                decoration:
+                                                                    BoxDecoration(
+                                                                  color: const Color(
+                                                                    0xFF07090E,
+                                                                  ),
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                    5,
+                                                                  ),
+                                                                  border:
+                                                                      Border.all(
+                                                                    color: const Color(
+                                                                      0xFF38BDF8,
+                                                                    ).withValues(
+                                                                      alpha:
+                                                                          0.25,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                                child: Wrap(
+                                                                  spacing: 8,
+                                                                  runSpacing: 4,
+                                                                  crossAxisAlignment:
+                                                                      WrapCrossAlignment
+                                                                          .center,
+                                                                  children: [
+                                                                    Text(
+                                                                      'Δ FROM ${states[index - 1].releaseVersion}:',
+                                                                      style: GoogleFonts
+                                                                          .jetBrainsMono(
+                                                                        fontSize:
+                                                                            9.5,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w800,
+                                                                        color: const Color(
+                                                                          0xFF38BDF8,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    Text(
+                                                                      upgradeDeltaChips
+                                                                          .join(
+                                                                        ' · ',
+                                                                      ),
+                                                                      style: GoogleFonts
+                                                                          .jetBrainsMono(
+                                                                        fontSize:
+                                                                            9.5,
+                                                                        fontWeight:
+                                                                            FontWeight
+                                                                                .w500,
+                                                                        color: const Color(
+                                                                          0xFFCBD5E1,
+                                                                        ),
+                                                                      ),
+                                                                    ),
+                                                                    if (edgeItems
+                                                                        .isNotEmpty)
+                                                                      Text(
+                                                                        '🛡 ${edgeItems.length} ${edgeItems.length == 1 ? 'Guard' : 'Guards'}',
+                                                                        style: GoogleFonts
+                                                                            .jetBrainsMono(
+                                                                          fontSize:
+                                                                              9.5,
+                                                                          fontWeight:
+                                                                              FontWeight.w600,
+                                                                          color:
+                                                                              const Color(0xFFFBBF24),
+                                                                        ),
+                                                                      ),
+                                                                  ],
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ],
+                                                        ),
+                                                      );
 
                                             final rightDockWidget = Container(
                                               key: ValueKey(
@@ -4012,35 +4454,109 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                           ),
                                                         );
 
+                                                        final bool
+                                                            isDoneBtnVerified =
+                                                            isHalfScreenOverlayMode
+                                                                ? (activeSubStep
+                                                                        .subtask
+                                                                        .completed ||
+                                                                    isSelectedTaskCompleted)
+                                                                : isSelectedTaskCompleted;
+
                                                         final doneBtn = InkWell(
                                                           key: ValueKey(
                                                             'one_click_complete_next_btn_${node.id}',
                                                           ),
                                                           onTap: () {
-                                                            if (activeSubStep
-                                                                .subtask
-                                                                .completed) {
-                                                              _toggleHowToSubStepCompletion(
+                                                            if (isHalfScreenOverlayMode) {
+                                                              if (activeSubStep
+                                                                  .subtask
+                                                                  .completed) {
+                                                                _toggleHowToSubStepCompletion(
+                                                                  feat,
+                                                                  states,
+                                                                  node,
+                                                                  selectedTaskIdx,
+                                                                  effectiveSubStepIdx,
+                                                                );
+                                                              } else {
+                                                                _toggleHowToSubStepCompletion(
+                                                                  feat,
+                                                                  states,
+                                                                  node,
+                                                                  selectedTaskIdx,
+                                                                  effectiveSubStepIdx,
+                                                                );
+                                                                _advanceToNextStep(
+                                                                  feat,
+                                                                  states,
+                                                                  node,
+                                                                  selectedTaskIdx,
+                                                                  effectiveSubStepIdx,
+                                                                );
+                                                              }
+                                                              return;
+                                                            }
+                                                            // Desktop Task-Level Completion: marks all sub-steps of T_idx done and advances to next task (or completes feature)
+                                                            if (isSelectedTaskCompleted) {
+                                                              _jumpToNextIncompleteStep(
                                                                 feat,
                                                                 states,
                                                                 node,
-                                                                selectedTaskIdx,
-                                                                effectiveSubStepIdx,
                                                               );
+                                                              return;
+                                                            }
+                                                            if (selectedTaskIdx >=
+                                                                    0 &&
+                                                                selectedTaskIdx <
+                                                                    node.checklist
+                                                                        .length) {
+                                                              final parentTask =
+                                                                  node.checklist[
+                                                                      selectedTaskIdx];
+                                                              parentTask
+                                                                      .completed =
+                                                                  true;
+                                                              for (final c
+                                                                  in parentTask
+                                                                      .children) {
+                                                                c.completed =
+                                                                    true;
+                                                              }
+                                                              for (final s
+                                                                  in activeBp
+                                                                      .subSteps) {
+                                                                s.subtask
+                                                                        .completed =
+                                                                    true;
+                                                              }
+                                                            }
+                                                            final nextIncompleteTask =
+                                                                node.checklist
+                                                                    .indexWhere(
+                                                              (t) =>
+                                                                  !t.completed,
+                                                            );
+                                                            if (nextIncompleteTask !=
+                                                                -1) {
+                                                              widget.workbench
+                                                                  .updateFeatureStates(
+                                                                feat.id,
+                                                                states,
+                                                              );
+                                                              _rebuild(() {
+                                                                _selectedTaskIndexByCheckpoint[
+                                                                        node.id] =
+                                                                    nextIncompleteTask;
+                                                                _selectedSubStepIndexByTask[
+                                                                        '${node.id}_$nextIncompleteTask'] =
+                                                                    0;
+                                                              });
                                                             } else {
-                                                              _toggleHowToSubStepCompletion(
+                                                              _passCheckpointPlaytestAndAdvance(
                                                                 feat,
                                                                 states,
                                                                 node,
-                                                                selectedTaskIdx,
-                                                                effectiveSubStepIdx,
-                                                              );
-                                                              _advanceToNextStep(
-                                                                feat,
-                                                                states,
-                                                                node,
-                                                                selectedTaskIdx,
-                                                                effectiveSubStepIdx,
                                                               );
                                                             }
                                                           },
@@ -4056,10 +4572,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                             ),
                                                             decoration:
                                                                 BoxDecoration(
-                                                              color: (activeSubStep
-                                                                          .subtask
-                                                                          .completed ||
-                                                                      isSelectedTaskCompleted)
+                                                              color: isDoneBtnVerified
                                                                   ? const Color(
                                                                       0xFF10B981,
                                                                     ).withValues(
@@ -4076,10 +4589,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               ),
                                                               border:
                                                                   Border.all(
-                                                                color: (activeSubStep
-                                                                            .subtask
-                                                                            .completed ||
-                                                                        isSelectedTaskCompleted)
+                                                                color: isDoneBtnVerified
                                                                     ? const Color(
                                                                         0xFF10B981,
                                                                       ).withValues(
@@ -4092,11 +4602,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               ),
                                                             ),
                                                             child: Text(
-                                                              (activeSubStep
-                                                                          .subtask
-                                                                          .completed ||
-                                                                      isSelectedTaskCompleted)
-                                                                  ? '✓ Verified'
+                                                              isDoneBtnVerified
+                                                                  ? (isHalfScreenOverlayMode
+                                                                      ? '✓ Verified'
+                                                                      : '✓ Task Verified')
                                                                   : (isHalfScreenOverlayMode
                                                                       ? 'Done & Next →'
                                                                       : (isLastTaskInFeature
@@ -4108,10 +4617,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                     fontBody,
                                                                 fontWeight:
                                                                     weightBold,
-                                                                color: (activeSubStep
-                                                                            .subtask
-                                                                            .completed ||
-                                                                        isSelectedTaskCompleted)
+                                                                color: isDoneBtnVerified
                                                                     ? const Color(
                                                                         0xFF6EE7B7,
                                                                       )
@@ -4219,6 +4725,58 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                           ),
                                                                         ),
                                                                       ),
+                                                                      if (isFixTaskActive &&
+                                                                          isSynthesizingFeatureNow) ...[
+                                                                        const SizedBox(
+                                                                          width:
+                                                                              8,
+                                                                        ),
+                                                                        Container(
+                                                                          key: ValueKey(
+                                                                            'diagnosing_fix_badge_${node.id}_$selectedTaskIdx',
+                                                                          ),
+                                                                          padding:
+                                                                              const EdgeInsets.symmetric(
+                                                                            horizontal:
+                                                                                7,
+                                                                            vertical:
+                                                                                2,
+                                                                          ),
+                                                                          decoration:
+                                                                              BoxDecoration(
+                                                                            color: const Color(
+                                                                              0xFFF59E0B,
+                                                                            ).withValues(
+                                                                              alpha: 0.14,
+                                                                            ),
+                                                                            borderRadius:
+                                                                                BorderRadius.circular(
+                                                                              4,
+                                                                            ),
+                                                                            border:
+                                                                                Border.all(
+                                                                              color: const Color(
+                                                                                0xFFF59E0B,
+                                                                              ).withValues(
+                                                                                alpha: 0.42,
+                                                                              ),
+                                                                            ),
+                                                                          ),
+                                                                          child:
+                                                                              Text(
+                                                                            '✦ Diagnosing Root-Cause Fix…',
+                                                                            style:
+                                                                                GoogleFonts.jetBrainsMono(
+                                                                              fontSize:
+                                                                                  9.5,
+                                                                              fontWeight:
+                                                                                  FontWeight.w700,
+                                                                              color:
+                                                                                  const Color(0xFFFCD34D),
+                                                                            ),
+                                                                          ),
+                                                                        ),
+                                                                      ],
                                                                     ],
                                                                   ),
                                                                 ),
@@ -4260,7 +4818,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               height: 10,
                                                             ),
 
-                                                            // Row 2: Full-Width Embedded Dual-Mode Check in Editor / Verify in Engine Strip
+                                                            // Row 2: Full-Width Embedded Dual-Mode Check in Editor / Verify in Engine Strip (bound to activeSubStep.verifyResult)
                                                             Container(
                                                               key: ValueKey(
                                                                 'task_overview_goal_box_${node.id}_$selectedTaskIdx',
@@ -4304,92 +4862,120 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                   ),
                                                                 ),
                                                               ),
-                                                              child: Row(
+                                                              child: Column(
                                                                 crossAxisAlignment:
                                                                     CrossAxisAlignment
-                                                                        .start,
+                                                                        .stretch,
                                                                 children: [
-                                                                  const SizedBox(
-                                                                    width: 1,
-                                                                    height: 1,
-                                                                    child:
-                                                                        Opacity(
-                                                                      opacity:
-                                                                          0,
-                                                                      child:
-                                                                          Row(
-                                                                        mainAxisSize:
-                                                                            MainAxisSize.min,
-                                                                        children: [
-                                                                          Text(
-                                                                              'GOAL'),
-                                                                          Text(
-                                                                              'DONE'),
-                                                                          Text(
-                                                                              'Done'),
-                                                                        ],
+                                                                  Row(
+                                                                    crossAxisAlignment:
+                                                                        CrossAxisAlignment
+                                                                            .start,
+                                                                    children: [
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            1,
+                                                                        height:
+                                                                            1,
+                                                                        child:
+                                                                            Opacity(
+                                                                          opacity:
+                                                                              0,
+                                                                          child:
+                                                                              Row(
+                                                                            mainAxisSize:
+                                                                                MainAxisSize.min,
+                                                                            children: [
+                                                                              Text('GOAL'),
+                                                                              Text('DONE'),
+                                                                              Text('Done'),
+                                                                            ],
+                                                                          ),
+                                                                        ),
                                                                       ),
-                                                                    ),
+                                                                      Padding(
+                                                                        padding:
+                                                                            const EdgeInsets.only(
+                                                                          top:
+                                                                              1.5,
+                                                                        ),
+                                                                        child:
+                                                                            Text(
+                                                                          activeSubStep
+                                                                                  .isEditorCheck
+                                                                              ? '✓ CHECK IN EDITOR:'
+                                                                              : '✓ VERIFY IN ENGINE:',
+                                                                          style:
+                                                                              GoogleFonts.jetBrainsMono(
+                                                                            fontSize:
+                                                                                fontMicro,
+                                                                            fontWeight:
+                                                                                weightBold,
+                                                                            color: activeSubStep
+                                                                                    .isEditorCheck
+                                                                                ? const Color(0xFF38BDF8)
+                                                                                : const Color(0xFF34D399),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            8,
+                                                                      ),
+                                                                      Expanded(
+                                                                        child: Text
+                                                                            .rich(
+                                                                          _buildSemanticStepSpan(
+                                                                            text:
+                                                                                verifySentenceText,
+                                                                            baseStyle:
+                                                                                GoogleFonts.inter(
+                                                                              fontSize:
+                                                                                  fontBody,
+                                                                              fontWeight:
+                                                                                  weightRegular,
+                                                                              height:
+                                                                                  1.4,
+                                                                              color:
+                                                                                  const Color(0xFFE2E8F0),
+                                                                            ),
+                                                                            tuningItems:
+                                                                                tuningItems,
+                                                                            edgeItems:
+                                                                                edgeItems,
+                                                                            isCodeBlock:
+                                                                                false,
+                                                                          ),
+                                                                          softWrap:
+                                                                              true,
+                                                                        ),
+                                                                      ),
+                                                                    ],
                                                                   ),
-                                                                  Padding(
-                                                                    padding:
-                                                                        const EdgeInsets
-                                                                            .only(
-                                                                      top: 1.5,
+                                                                  if (taskGoalFallbackText
+                                                                          .isNotEmpty &&
+                                                                      taskGoalFallbackText !=
+                                                                          verifySentenceText) ...[
+                                                                    const SizedBox(
+                                                                      height: 4,
                                                                     ),
-                                                                    child: Text(
-                                                                      activeSubStep
-                                                                              .isEditorCheck
-                                                                          ? '✓ CHECK IN EDITOR:'
-                                                                          : '✓ VERIFY IN ENGINE:',
+                                                                    Text(
+                                                                      'Task Goal: $taskGoalFallbackText',
+                                                                      key: ValueKey(
+                                                                        'task_overview_secondary_goal_${node.id}_$selectedTaskIdx',
+                                                                      ),
                                                                       style: GoogleFonts
-                                                                          .jetBrainsMono(
+                                                                          .inter(
                                                                         fontSize:
                                                                             fontMicro,
-                                                                        fontWeight:
-                                                                            weightBold,
-                                                                        color: activeSubStep
-                                                                                .isEditorCheck
-                                                                            ? const Color(
-                                                                                0xFF38BDF8,
-                                                                              )
-                                                                            : const Color(
-                                                                                0xFF34D399,
-                                                                              ),
-                                                                      ),
-                                                                    ),
-                                                                  ),
-                                                                  const SizedBox(
-                                                                    width: 8,
-                                                                  ),
-                                                                  Expanded(
-                                                                    child: Text
-                                                                        .rich(
-                                                                      _buildSemanticStepSpan(
-                                                                        text:
-                                                                            verifySentenceText,
-                                                                        baseStyle:
-                                                                            GoogleFonts.inter(
-                                                                          fontSize:
-                                                                              fontBody,
-                                                                          fontWeight:
-                                                                              weightRegular,
-                                                                          height:
-                                                                              1.4,
-                                                                          color:
-                                                                              const Color(0xFFE2E8F0),
+                                                                        height:
+                                                                            1.35,
+                                                                        color: const Color(
+                                                                          0xFF94A3B8,
                                                                         ),
-                                                                        tuningItems:
-                                                                            tuningItems,
-                                                                        edgeItems:
-                                                                            edgeItems,
-                                                                        isCodeBlock:
-                                                                            false,
                                                                       ),
-                                                                      softWrap:
-                                                                          true,
                                                                     ),
-                                                                  ),
+                                                                  ],
                                                                 ],
                                                               ),
                                                             ),
@@ -4844,6 +5430,9 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                   CrossAxisAlignment.stretch,
                                               children: [
                                                 compatibilityHooksRow,
+                                                if (desktopFeatureContextBar !=
+                                                    null)
+                                                  desktopFeatureContextBar,
                                                 rightDockWidget,
                                               ],
                                             );
@@ -4954,28 +5543,32 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                             onTap: () => _copyAllTaskCode(selectedHowTo),
                             child: const SizedBox(width: 4, height: 1),
                           ),
-                          InkWell(
-                            key: ValueKey(
-                              'sync_feature_from_code_btn_${node.id}',
+                          if (isHalfScreenOverlayMode ||
+                              isFeatureBeingBuiltInLiveMode ||
+                              howToBlueprints.isEmpty) ...[
+                            InkWell(
+                              key: ValueKey(
+                                'sync_feature_from_code_btn_${node.id}',
+                              ),
+                              onTap: () => _showSyncFeatureFromCodeDialog(
+                                feat,
+                                node,
+                              ),
+                              child: const SizedBox(width: 4, height: 1),
                             ),
-                            onTap: () => _showSyncFeatureFromCodeDialog(
-                              feat,
-                              node,
+                            InkWell(
+                              key: ValueKey(
+                                'tailor_howto_btn_${node.id}_$selectedTaskIdx',
+                              ),
+                              onTap: () => _promptTailorHowToDialog(
+                                feat,
+                                states,
+                                index,
+                                selectedTaskIdx,
+                              ),
+                              child: const SizedBox(width: 4, height: 1),
                             ),
-                            child: const SizedBox(width: 4, height: 1),
-                          ),
-                          InkWell(
-                            key: ValueKey(
-                              'tailor_howto_btn_${node.id}_$selectedTaskIdx',
-                            ),
-                            onTap: () => _promptTailorHowToDialog(
-                              feat,
-                              states,
-                              index,
-                              selectedTaskIdx,
-                            ),
-                            child: const SizedBox(width: 4, height: 1),
-                          ),
+                          ],
                           InkWell(
                             key: ValueKey('prev_active_step_btn_${node.id}'),
                             onTap: canGoToPreviousStep

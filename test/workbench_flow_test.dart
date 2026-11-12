@@ -6309,7 +6309,15 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(fixSub1.codeSnippet, contains('Debug.LogWarning'));
         expect(
           fixSub1.codeLanguage,
-          equals('Assets/Scripts/PlaytestFixController.cs'),
+          startsWith('Assets/Scripts/'),
+        );
+        expect(
+          fixSub1.codeLanguage,
+          endsWith('Controller.cs'),
+        );
+        expect(
+          fixSub1.codeLanguage,
+          isNot(contains('PlaytestFixController')),
         );
 
         // 8. Verify Multi-Project Vault Switching (Project #2 <-> Project #1)
@@ -10132,6 +10140,503 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             ),
           );
           expect(cppApiCalls, equals(1));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
+
+    testWidgets(
+      '42. 3-Area Step Card Visibility (DO + Hierarchy + Clickable Inspector Pill + Step Check Footer) & Truthful Row 2 Check Binding',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider();
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = _mockGeminiResponder;
+
+        try {
+          await tester.runAsync(
+            () => provider.startConceptInterview('Neon Dash Arena'),
+          );
+          provider.updateConceptDraft((d) {
+            d.techSpec = ['Engine: Godot 4 (GDScript)', 'Dimension: 2D'];
+          });
+          await tester.runAsync(
+            () => provider.approveConceptAndBuildRelease(),
+          );
+
+          final feat = provider
+              .featuresForBeat(provider.activeReleaseBeats.first.id)
+              .first;
+          provider.renameLiveFeature(feat.id, 'Player Dash');
+
+          final states = FeatureStateNode.getStatesForDocument(
+            provider.documents[feat.id]!,
+          );
+          final cp0 = states.first;
+          cp0.tuningParams = ['dashImpulse: 620.0'];
+          cp0.edgeCases = ['[STATE GUARD] Block dash while cooldown > 0'];
+          cp0.checklist = [
+            Subtask(
+              id: 't_dash_1',
+              text: 'Dash Raycast & Impulse',
+              verification:
+                  'Press Shift -> Player dashes cleanly across gap.',
+              children: [
+                Subtask(
+                  id: 's_dash_1_1',
+                  text: 'Add DashRay2D Node',
+                  codeTargetFile: 'custom_snippet',
+                  codeLanguage: 'res://scenes/player_dash.tscn',
+                  codeSnippet: 'target_position = Vector2(96, 0)',
+                  verification:
+                      'Inspect Scene Tree -> DashRay2D points 96px right.',
+                  specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
+                    instruction:
+                        'Add RayCast2D child named DashRay2D under CharacterBody2D.',
+                    area1Hierarchy: 'CharacterBody2D\n └─ DashRay2D',
+                    area2Inspector: 'dashImpulse: 620.0',
+                    verifyMode: 'editor',
+                  ),
+                ),
+                Subtask(
+                  id: 's_dash_1_2',
+                  text: 'Apply Dash Impulse & Clamp Cooldown',
+                  codeTargetFile: 'custom_snippet',
+                  codeLanguage: 'res://scripts/player_dash.gd',
+                  codeSnippet:
+                      'if cooldown <= 0.0:\n\tvelocity.x = dashImpulse',
+                  verification:
+                      'Press Shift -> Character bursts at 620 px/s once per cooldown.',
+                  specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
+                    instruction:
+                        'Clamp cooldown guard and apply dashImpulse on Shift press.',
+                    verifyMode: 'playtest',
+                  ),
+                ),
+              ],
+            ),
+          ];
+          provider.updateFeatureStates(feat.id, states);
+          provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: provider));
+          await tester.pumpAndSettle();
+
+          // 1. Step 1.1 is active: Row 2 displays `✓ CHECK IN EDITOR:` bound to Step 1.1's exact verifyResult, plus `Task Goal:` alongside
+          expect(find.text('✓ CHECK IN EDITOR:'), findsOneWidget);
+          expect(
+            find.textContaining('DashRay2D points 96px right'),
+            findsWidgets,
+          );
+          expect(
+            find.byKey(ValueKey('task_overview_secondary_goal_${cp0.id}_0')),
+            findsOneWidget,
+          );
+
+          // 2. Step 1.1 renders visible DO:, Scene Hierarchy pill, Clickable Inspector pill, and `↳ Editor Check:` footer (and NO guard pill since step 1.1 has no guard concept)
+          expect(
+            find.byKey(ValueKey('step_do_instruction_${cp0.id}_0_0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('step_hierarchy_pill_${cp0.id}_0_0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('step_guard_pill_${cp0.id}_0_0')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(ValueKey('step_guard_pill_${cp0.id}_0_1')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('step_check_footer_${cp0.id}_0_0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('step_check_footer_${cp0.id}_0_1')),
+            findsOneWidget,
+          );
+
+          // 3. Tap Step 1.1's visible Inspector pill `⚙ dashImpulse: 620.0 ✎` to inline-edit it to `780.0`
+          final stepInspPill = find.byKey(
+            ValueKey('step_inspector_pill_${cp0.id}_0_0_0'),
+          );
+          expect(stepInspPill, findsOneWidget);
+          await tester.ensureVisible(stepInspPill);
+          await tester.tap(stepInspPill);
+          await tester.pumpAndSettle();
+
+          final stepInspInput = find.byKey(
+            ValueKey('step_inspector_input_${cp0.id}_0_0_0'),
+          );
+          expect(stepInspInput, findsOneWidget);
+          await tester.enterText(stepInspInput, 'dashImpulse: 780.0');
+          await tester.tap(
+            find.byKey(ValueKey('step_inspector_save_${cp0.id}_0_0_0')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            FeatureStateNode.getStatesForDocument(provider.documents[feat.id]!)
+                .first
+                .tuningParams,
+            contains('dashImpulse: 780.0'),
+          );
+
+          // 4. Tap Step 1.2 header -> Row 2 updates dynamically from `✓ CHECK IN EDITOR:` to `✓ VERIFY IN ENGINE:` with Step 1.2's playtest check
+          final step2Header = find.byKey(
+            ValueKey('task_sheet_step_row_${cp0.id}_0_1'),
+          );
+          await tester.ensureVisible(step2Header);
+          await tester.tap(step2Header);
+          await tester.pumpAndSettle();
+          expect(find.text('✓ VERIFY IN ENGINE:'), findsOneWidget);
+          expect(
+            find.textContaining('Character bursts at 620 px/s'),
+            findsWidgets,
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
+
+    testWidgets(
+      '43. Desktop Feature Context Bar (CP1 -> CP2 Switcher + Tuning Delta Strip + Tailor/Sync), Multi-Step Copy Task Prompt & Task-Level Done CTA',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        String? lastCopiedClipboard;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final args = call.arguments as Map<dynamic, dynamic>?;
+            lastCopiedClipboard = args?['text']?.toString();
+          }
+          return null;
+        });
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null);
+        });
+
+        final provider = WorkbenchProvider();
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = _mockGeminiResponder;
+
+        try {
+          await tester.runAsync(
+            () => provider.startConceptInterview('Cyber Slice'),
+          );
+          provider.updateConceptDraft((d) {
+            d.techSpec = ['Engine: Godot 4 (GDScript)', 'Dimension: 2D'];
+          });
+          await tester.runAsync(
+            () => provider.approveConceptAndBuildRelease(),
+          );
+
+          final feat = provider
+              .featuresForBeat(provider.activeReleaseBeats.first.id)
+              .first;
+          provider.renameLiveFeature(feat.id, 'Katana Dash');
+
+          final cp1 = FeatureStateNode(
+            id: 'cp_v01',
+            name: '[v0.1] Core Dash',
+            order: 0,
+            tuningParams: ['dashSpeed: 500.0'],
+            checklist: [
+              Subtask(
+                id: 'cp1_t1',
+                text: 'Base Impulse',
+                completed: true,
+                children: [
+                  Subtask(
+                    id: 'cp1_s1',
+                    text: 'Apply Base Velocity',
+                    completed: true,
+                    codeTargetFile: 'custom_snippet',
+                    codeLanguage: 'res://scripts/katana_dash.gd',
+                    codeSnippet: 'velocity.x = dashSpeed',
+                  ),
+                ],
+              ),
+            ],
+          );
+          final cp2 = FeatureStateNode(
+            id: 'cp_v02',
+            name: '[v0.2] Ghost Dash Upgrade',
+            order: 1,
+            parameters: {
+              'primarySharedScriptOrScene': 'res://scripts/katana_dash.gd',
+            },
+            tuningParams: ['dashSpeed: 740.0', 'iFrameWindow: 0.22'],
+            edgeCases: ['[STATE GUARD] Cancel i-frames on melee attack'],
+            checklist: [
+              Subtask(
+                id: 'cp2_t1',
+                text: 'I-Frame Collision Mask',
+                children: [
+                  Subtask(
+                    id: 'cp2_s1',
+                    text: 'Disable Hurtbox Layer',
+                    codeTargetFile: 'custom_snippet',
+                    codeLanguage: 'res://scripts/katana_dash.gd',
+                    codeSnippet: 'hurtbox.monitoring = false',
+                    verification:
+                        'Inspect Hurtbox -> monitoring toggles cleanly.',
+                    specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
+                      instruction:
+                          'Disable Hurtbox monitoring when dash starts.',
+                      verifyMode: 'editor',
+                    ),
+                  ),
+                  Subtask(
+                    id: 'cp2_s2',
+                    text: 'Restore Hurtbox After Window',
+                    codeTargetFile: 'custom_snippet',
+                    codeLanguage: 'res://scripts/katana_dash.gd',
+                    codeSnippet:
+                        'await get_tree().create_timer(iFrameWindow).timeout\nhurtbox.monitoring = true',
+                    verification:
+                        'Dash through hazard -> zero damage during 0.22s window.',
+                    specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
+                      instruction:
+                          'Re-enable Hurtbox after iFrameWindow elapses.',
+                      verifyMode: 'playtest',
+                    ),
+                  ),
+                ],
+              ),
+              Subtask(
+                id: 'cp2_t2',
+                text: 'Afterimage Trail Spawner',
+                children: [
+                  Subtask(
+                    id: 'cp2_t2_s1',
+                    text: 'Spawn Ghost Sprite',
+                    codeTargetFile: 'custom_snippet',
+                    codeLanguage: 'res://scripts/katana_dash.gd',
+                    codeSnippet: 'spawn_ghost_frame()',
+                  ),
+                ],
+              ),
+            ],
+          );
+          provider.updateFeatureStates(feat.id, [cp1, cp2]);
+          provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: provider));
+          await tester.pumpAndSettle();
+
+          // 1. Desktop Feature Context Bar visibly renders CP1 -> CP2 switcher, shared script badge, tuning delta strip, Tailor & Sync Code buttons
+          expect(
+            find.byKey(const ValueKey('desktop_feature_context_bar_cp_v02')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('desktop_shared_asset_badge_cp_v02')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('desktop_upgrade_delta_strip_cp_v02')),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining('dashSpeed: 500.0 → 740.0'),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining('+iFrameWindow: 0.22'),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('tailor_howto_btn_cp_v02_0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('sync_feature_from_code_btn_cp_v02')),
+            findsOneWidget,
+          );
+
+          // 2. `✦ Copy Task Prompt` exports ALL sub-steps (Step 1.1 AND Step 1.2), not just Step 1.1
+          await tester.tap(
+            find.byKey(const ValueKey('copy_task_ai_prompt_btn_cp_v02_0')),
+          );
+          await tester.pumpAndSettle();
+          expect(lastCopiedClipboard, isNotNull);
+          expect(
+            lastCopiedClipboard,
+            contains('Step 1.1 · Disable Hurtbox Layer'),
+          );
+          expect(
+            lastCopiedClipboard,
+            contains('Step 1.2 · Restore Hurtbox After Window'),
+          );
+          expect(lastCopiedClipboard, contains('hurtbox.monitoring = false'));
+          expect(lastCopiedClipboard, contains('create_timer(iFrameWindow)'));
+
+          // 3. Checking only Step 1.1 does NOT flip Desktop CTA to `✓ Task Verified`; clicking `Done & Next Task →` completes ALL sub-steps of T1 and advances to T2!
+          await tester.tap(
+            find.byKey(const ValueKey('toggle_step_mark_cp_v02_0_0')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Done & Next Task →'), findsOneWidget);
+
+          await tester.tap(
+            find.byKey(const ValueKey('one_click_complete_next_btn_cp_v02')),
+          );
+          await tester.pumpAndSettle();
+
+          final updatedStates = FeatureStateNode.getStatesForDocument(
+            provider.documents[feat.id]!,
+          );
+          expect(updatedStates[1].checklist[0].completed, isTrue);
+          expect(
+            updatedStates[1].checklist[0].children.every((c) => c.completed),
+            isTrue,
+          );
+          // Active task advanced to T2 ("Afterimage Trail Spawner")
+          expect(
+            find.byKey(const ValueKey('task_overview_goal_box_cp_v02_1')),
+            findsOneWidget,
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
+
+    testWidgets(
+      '44. Canonical TARGET Asset Alignment (`primarySharedScriptOrScene`) & Engine-Accurate `[FIX]` Root-Cause Debugging (Zero `playtest_fix_controller.gd`)',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider();
+        final prevMock = GeminiAgentClient.testMockResponder;
+        String? capturedFixDebuggerPrompt;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains('Playtest Root-Cause Debugger')) {
+            capturedFixDebuggerPrompt = prompt;
+            return {
+              'fixTaskTitle': '[FIX] Clamp Grapple Reel Velocity (1h)',
+              'steps': [
+                {
+                  'title': 'Clamp Grapple Reel Velocity',
+                  'stepPath': 'res://scripts/grapple_hook_rig.gd',
+                  'instruction':
+                      'Clamp velocity length to maxReelSpeed inside _physics_process.',
+                  'codeFormula':
+                      'velocity = velocity.limit_length(maxReelSpeed)',
+                  'verifyMode': 'playtest',
+                  'verifyResult':
+                      'Reel into wall -> velocity stays capped at 900 px/s.',
+                },
+              ],
+            };
+          }
+          return _mockGeminiResponder(prompt, model);
+        };
+
+        try {
+          await tester.runAsync(
+            () => provider.startConceptInterview('Skyhook Bastion'),
+          );
+          provider.updateConceptDraft((d) {
+            d.techSpec = ['Engine: Godot 4 (GDScript)', 'Dimension: 2D'];
+          });
+          await tester.runAsync(
+            () => provider.approveConceptAndBuildRelease(),
+          );
+
+          final feat = provider
+              .featuresForBeat(provider.activeReleaseBeats.first.id)
+              .first;
+          provider.renameLiveFeature(feat.id, 'Grapple Hook');
+          provider.documents[feat.id]!.sections['primary_asset'] =
+              'res://scenes/weapons/grapple_hook_rig.tscn';
+
+          final states = FeatureStateNode.getStatesForDocument(
+            provider.documents[feat.id]!,
+          );
+          states.first.parameters['primarySharedScriptOrScene'] =
+              'res://scenes/weapons/grapple_hook_rig.tscn';
+          states.first.checklist = [
+            Subtask(
+              id: 'gh_t1',
+              text: 'Hook Raycast & Pull Force',
+              children: [
+                Subtask(
+                  id: 'gh_s1',
+                  text: 'Apply Pull Force Vector',
+                  codeTargetFile: 'custom_snippet',
+                  codeLanguage: 'res://scripts/grapple_hook_rig.gd',
+                  codeSnippet:
+                      'func apply_reel_pull(anchor_pos: Vector2) -> void:\n\tvelocity += (anchor_pos - global_position).normalized() * reelPullForce',
+                ),
+              ],
+            ),
+          ];
+          provider.updateFeatureStates(feat.id, states);
+          provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: provider));
+          await tester.pumpAndSettle();
+
+          // 1. Canonical TARGET & INITIAL SETUP display `grapple_hook_rig.tscn` instead of generic `player_character.tscn`
+          expect(find.textContaining('grapple_hook_rig.tscn'), findsWidgets);
+
+          // 2. Logging a Playtest Issue anchors the instant fallback `[FIX]` task to `res://scripts/grapple_hook_rig.gd` (NEVER `playtest_fix_controller.gd`) and passes the feature's existing code into the AI root-cause prompt!
+          await tester.runAsync(() async {
+            provider.logPlaytestIssueOnCheckpoint(
+              featureId: feat.id,
+              states: FeatureStateNode.getStatesForDocument(
+                provider.documents[feat.id]!,
+              ),
+              checkpointIndex: 0,
+              issueDescription:
+                  'Player overshoots anchor at extreme speed when reeling close',
+            );
+            await Future<void>.delayed(const Duration(milliseconds: 50));
+          });
+
+          final afterFixStates = FeatureStateNode.getStatesForDocument(
+            provider.documents[feat.id]!,
+          );
+          final fixTask = afterFixStates.first.checklist.last;
+          expect(fixTask.text, startsWith('[FIX]'));
+          expect(
+            fixTask.children.every(
+              (c) =>
+                  !(c.codeLanguage ?? '').contains('playtest_fix_controller'),
+            ),
+            isTrue,
+          );
+          expect(
+            fixTask.children.first.codeLanguage,
+            equals('res://scripts/grapple_hook_rig.gd'),
+          );
+          expect(capturedFixDebuggerPrompt, isNotNull);
+          expect(
+            capturedFixDebuggerPrompt,
+            contains('Current Feature Script / Graph Excerpt'),
+          );
+          expect(capturedFixDebuggerPrompt, contains('func apply_reel_pull'));
         } finally {
           GeminiAgentClient.testMockResponder = prevMock;
         }

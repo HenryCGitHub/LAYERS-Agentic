@@ -1233,19 +1233,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         child: Text('T${tIdx + 1}'),
                       ),
                   ],
-                  InkWell(
-                    key: ValueKey(
-                      'edit_howto_substep_${node.id}_${selectedTaskIdx}_$activeSubStepIdx',
-                    ),
-                    onTap: () => _promptEditHowToSubStepDialog(
-                      feat,
-                      states,
-                      node,
-                      selectedTaskIdx,
-                      activeSubStepIdx,
-                    ),
-                    child: const Text('Edit'),
-                  ),
                 ],
               ),
             ),
@@ -1481,6 +1468,61 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                       ),
+                      if (selectedHowTo.subSteps.length > 1)
+                        Builder(
+                          builder: (context) {
+                            final allCollapsed = List<int>.generate(
+                              selectedHowTo.subSteps.length,
+                              (i) => i,
+                            ).every(
+                              (i) => _collapsedSubStepKeys.contains(
+                                '${node.id}_${selectedTaskIdx}_$i',
+                              ),
+                            );
+                            return InkWell(
+                              key: ValueKey(
+                                'toggle_all_substeps_btn_${node.id}_$selectedTaskIdx',
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              onTap: () {
+                                _rebuild(() {
+                                  for (int i = 0;
+                                      i < selectedHowTo.subSteps.length;
+                                      i++) {
+                                    final k =
+                                        '${node.id}_${selectedTaskIdx}_$i';
+                                    if (allCollapsed) {
+                                      _collapsedSubStepKeys.remove(k);
+                                    } else {
+                                      _collapsedSubStepKeys.add(k);
+                                    }
+                                  }
+                                });
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 2.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF131926),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: const Color(0xFF262E40),
+                                  ),
+                                ),
+                                child: Text(
+                                  allCollapsed ? 'Expand all' : 'Collapse all',
+                                  style: GoogleFonts.inter(
+                                    fontSize: fontMicro,
+                                    fontWeight: weightSemi,
+                                    color: const Color(0xFF94A3B8),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
                     ],
                   ),
                   InkWell(
@@ -1501,19 +1543,57 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             i++)
                           '${i + 1}. ${assetSpec.levelHookupSteps[i]}',
                       ].join('\n');
+                      final allSubStepsPrompt = [
+                        for (int i = 0;
+                            i < selectedHowTo.subSteps.length;
+                            i++) ...[
+                          () {
+                            final st = selectedHowTo.subSteps[i];
+                            final stPath = st.stepPath.trim().isNotEmpty
+                                ? st.stepPath.trim()
+                                : effectiveHeaderPath;
+                            final stHier = (st.area1Hierarchy ?? '').trim();
+                            final stInsp = (st.area2Inspector ?? '').trim();
+                            final stCode = st.codeFormula.trim();
+                            final stCheck = st.verifyResult.trim();
+                            return [
+                              '### Step ${selectedTaskIdx + 1}.${i + 1} · ${st.shortTitle} ($stPath)',
+                              if (st.instruction.trim().isNotEmpty)
+                                'DO: ${st.instruction.trim()}',
+                              if (stHier.isNotEmpty) 'Hierarchy:\n$stHier',
+                              if (stInsp.isNotEmpty) 'Inspector: $stInsp',
+                              if (stCode.isNotEmpty) 'Script:\n$stCode',
+                              if (stCheck.isNotEmpty)
+                                '${st.isEditorCheck ? 'Check in Editor' : 'Verify in Engine'}: $stCheck',
+                            ].join('\n');
+                          }(),
+                        ],
+                      ].join('\n\n');
+                      final tuningSummary = tuningItems.isNotEmpty
+                          ? tuningItems.map((t) => '- $t').join('\n')
+                          : '';
+                      final guardsSummary = edgeItems.isNotEmpty
+                          ? edgeItems.map((g) => '- $g').join('\n')
+                          : (primaryGuardLabel.isNotEmpty
+                              ? '- $primaryGuardLabel'
+                              : '');
                       final promptText = [
                         'Task T${selectedTaskIdx + 1}: ${selectedHowTo.shortTaskTitle} (${feat.title})',
                         'Asset: ${assetSpec.assetName} (${assetSpec.parentClassLabel}) in ${assetSpec.folderPath}',
-                        'Setup Steps:\n$setupSummary',
+                        if (setupSummary.isNotEmpty)
+                          'Setup Steps:\n$setupSummary',
                         'Target Component: ${activeTargetComp.displayLabel}',
+                        if (tuningSummary.isNotEmpty)
+                          'Tuning Parameters:\n$tuningSummary',
                         if (inspSummary.isNotEmpty)
                           'Inspector Properties:\n$inspSummary',
-                        if (primaryGuardLabel.isNotEmpty)
-                          'Guardrail: $primaryGuardLabel',
-                        'Script ($effectiveHeaderPath):\n${activeSubStep.codeFormula.trim()}',
+                        if (guardsSummary.isNotEmpty)
+                          'Guardrails:\n$guardsSummary',
+                        if (allSubStepsPrompt.isNotEmpty)
+                          'Implementation Steps (${selectedHowTo.subSteps.length}):\n$allSubStepsPrompt',
                         if (levelSummary.isNotEmpty)
                           '${assetSpec.levelHookupTitle}:\n$levelSummary',
-                        'Verify in Engine: ${selectedHowTo.taskDoneCheck}',
+                        'Task Verify Goal: ${selectedHowTo.taskDoneCheck}',
                       ].join('\n\n');
                       Clipboard.setData(
                         ClipboardData(text: promptText),
@@ -1522,7 +1602,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              'Copied Task T${selectedTaskIdx + 1} AI Prompt (${selectedHowTo.shortTaskTitle})',
+                              'Copied Task T${selectedTaskIdx + 1} AI Prompt (${selectedHowTo.subSteps.length} steps)',
                             ),
                             duration: const Duration(seconds: 2),
                           ),
@@ -1577,6 +1657,130 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             stepRawCode.isNotEmpty
                                 ? stepRawCode.split('\n')
                                 : codeLines;
+                        final String stepDoInstruction =
+                            subStep.instruction.trim();
+                        final String stepHierarchyText =
+                            (subStep.area1Hierarchy ?? '').trim();
+                        final String stepPathBadgeText =
+                            subStep.stepPath.trim();
+                        final String stepVerifyText =
+                            subStep.verifyResult.trim();
+
+                        // Parse per-step Inspector values (`area2Inspector` + matching checkpoint `tuningItems`)
+                        final stepInspectorPills = <({
+                          String key,
+                          String value,
+                          int? tuningParamIndex,
+                        })>[];
+                        final seenStepInspKeys = <String>{};
+                        final rawStepInsp =
+                            (subStep.area2Inspector ?? '').trim();
+                        if (rawStepInsp.isNotEmpty) {
+                          for (final chunk
+                              in rawStepInsp.split(RegExp(r'[\n|;]+'))) {
+                            final cleanChunk = chunk.trim();
+                            if (cleanChunk.isEmpty) continue;
+                            final delim = _ReleaseWorkbenchScreenState
+                                ._tuningVarDelimiterRegex
+                                .firstMatch(cleanChunk);
+                            if (delim == null) continue;
+                            final k =
+                                cleanChunk.substring(0, delim.start).trim();
+                            final v = cleanChunk.substring(delim.end).trim();
+                            if (k.isEmpty || v.isEmpty) continue;
+                            final kLower = k.toLowerCase();
+                            if (!seenStepInspKeys.add(kLower)) continue;
+                            final matchedIdx = tuningItems.indexWhere(
+                              (tp) =>
+                                  tp
+                                      .split(
+                                        _ReleaseWorkbenchScreenState
+                                            ._tuningVarDelimiterRegex,
+                                      )
+                                      .first
+                                      .trim()
+                                      .toLowerCase() ==
+                                  kLower,
+                            );
+                            final overrideVal = _customComponentPropertyOverrides[
+                                '${node.id}::$k'];
+                            String effectiveVal = overrideVal ?? v;
+                            if (overrideVal == null && matchedIdx != -1) {
+                              final tpParts = tuningItems[matchedIdx].split(
+                                _ReleaseWorkbenchScreenState
+                                    ._tuningVarDelimiterRegex,
+                              );
+                              if (tpParts.length > 1) {
+                                effectiveVal =
+                                    tpParts.sublist(1).join(':').trim();
+                              }
+                            }
+                            stepInspectorPills.add((
+                              key: k,
+                              value: effectiveVal,
+                              tuningParamIndex:
+                                  matchedIdx != -1 ? matchedIdx : null,
+                            ));
+                          }
+                        }
+                        final stepLookupCorpus =
+                            '$stepDoInstruction\n$stepRawCode'.toLowerCase();
+                        for (int tIdx = 0; tIdx < tuningItems.length; tIdx++) {
+                          final tp = tuningItems[tIdx];
+                          final tpParts = tp.split(
+                            _ReleaseWorkbenchScreenState
+                                ._tuningVarDelimiterRegex,
+                          );
+                          final k = tpParts.first.trim();
+                          final v = tpParts.length > 1
+                              ? tpParts.sublist(1).join(':').trim()
+                              : '';
+                          if (k.isEmpty || v.isEmpty) continue;
+                          final kLower = k.toLowerCase();
+                          if (seenStepInspKeys.contains(kLower)) continue;
+                          if (stepLookupCorpus.contains(kLower)) {
+                            seenStepInspKeys.add(kLower);
+                            stepInspectorPills.add((
+                              key: k,
+                              value: v,
+                              tuningParamIndex: tIdx,
+                            ));
+                          }
+                        }
+
+                        // Resolve conditional Guard chip only when directly relevant to this step
+                        String stepGuardChipText = '';
+                        if (edgeItems.isNotEmpty) {
+                          final bool mentionsGuardConcept =
+                              subStep.isGuardStep ||
+                                  RegExp(
+                                    r'\b(?:guard|clamp|cooldown|null|is_valid|invalid|limit|prevent|cap)\b',
+                                    caseSensitive: false,
+                                  ).hasMatch(
+                                    '${subStep.shortTitle} $stepDoInstruction $stepRawCode',
+                                  );
+                          if (mentionsGuardConcept) {
+                            stepGuardChipText = edgeItems.first
+                                .replaceFirst(
+                                  RegExp(
+                                    r'^\[(?:STATE|PLAYTEST)?\s*GUARD\]\s*',
+                                    caseSensitive: false,
+                                  ),
+                                  '',
+                                )
+                                .trim();
+                          }
+                        }
+                        final bool hasStepEditorContext =
+                            stepHierarchyText.isNotEmpty ||
+                                stepInspectorPills.isNotEmpty ||
+                                stepGuardChipText.isNotEmpty;
+                        final bool hasExpandableDrawerContent =
+                            stepDoInstruction.isNotEmpty ||
+                                hasStepEditorContext ||
+                                (showCode && stepCodeLines.isNotEmpty) ||
+                                stepVerifyText.isNotEmpty;
+
                         return Padding(
                           padding: EdgeInsets.only(
                             bottom: sIdx == selectedHowTo.subSteps.length - 1
@@ -1600,7 +1804,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                // Step Header Row (Checkbox + 1.X + Short Title + [Copy code] + Fold Chevron)
+                                // Step Header Row (Checkbox + 1.X + Short Title + Step Path + [✎] + [Copy code] + Fold Chevron)
                                 InkWell(
                                   key: ValueKey(
                                     'task_sheet_step_row_${node.id}_${selectedTaskIdx}_$sIdx',
@@ -1701,20 +1905,108 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           ),
                                         ),
                                         Expanded(
-                                          child: Text(
-                                            subStep.shortTitle,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: GoogleFonts.inter(
-                                              fontSize: fontItem,
-                                              fontWeight: weightBold,
-                                              color: isSubActive
-                                                  ? const Color(0xFFF8FAFC)
-                                                  : const Color(0xFFE2E8F0),
+                                          child: Row(
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  subStep.shortTitle,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: GoogleFonts.inter(
+                                                    fontSize: fontItem,
+                                                    fontWeight: weightBold,
+                                                    color: isSubActive
+                                                        ? const Color(
+                                                            0xFFF8FAFC)
+                                                        : const Color(
+                                                            0xFFE2E8F0),
+                                                  ),
+                                                ),
+                                              ),
+                                              if (stepPathBadgeText
+                                                  .isNotEmpty) ...[
+                                                const SizedBox(width: 8),
+                                                Flexible(
+                                                  child: Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 1.5,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(
+                                                        0xFF090D16,
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        4,
+                                                      ),
+                                                      border: Border.all(
+                                                        color: const Color(
+                                                          0xFF1E293B,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      stepPathBadgeText,
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: 9.5,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                        color: const Color(
+                                                          0xFF64748B,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        InkWell(
+                                          key: ValueKey(
+                                            'edit_howto_substep_${node.id}_${selectedTaskIdx}_$sIdx',
+                                          ),
+                                          borderRadius:
+                                              BorderRadius.circular(5),
+                                          onTap: () =>
+                                              _promptEditHowToSubStepDialog(
+                                            feat,
+                                            states,
+                                            node,
+                                            selectedTaskIdx,
+                                            sIdx,
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 6,
+                                              vertical: 3.5,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF131B2A),
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: const Color(0xFF24324B),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '✎',
+                                              style: GoogleFonts.inter(
+                                                fontSize: fontMicro,
+                                                color: const Color(0xFF94A3B8),
+                                              ),
                                             ),
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
+                                        const SizedBox(width: 6),
                                         InkWell(
                                           key: ValueKey(
                                             'copy_howto_code_${node.id}_${selectedTaskIdx}_$sIdx',
@@ -1792,10 +2084,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                   ),
                                 ),
 
-                                // Expanded Implementation Drawer (Direct Numbered Code / Node Lines with Hanging Indent)
+                                // Expanded 3-Area Implementation Drawer (DO + Conditional Editor Context + Code + Per-Step Check)
                                 if (isStepExpanded &&
-                                    showCode &&
-                                    stepCodeLines.isNotEmpty)
+                                    hasExpandableDrawerContent)
                                   Container(
                                     padding: const EdgeInsets.fromLTRB(
                                       14,
@@ -1815,101 +2106,432 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        for (int lineIdx = 0;
-                                            lineIdx < stepCodeLines.length;
-                                            lineIdx++)
-                                          Builder(
-                                            builder: (context) {
-                                              final rawCodeLine =
-                                                  stepCodeLines[lineIdx];
-                                              final prefixMatch = RegExp(
-                                                r'^(\s*(?:[└├]──►\s+|──►\s+|•\s+)?)',
-                                              ).firstMatch(rawCodeLine);
-                                              final leadingPrefix =
-                                                  prefixMatch?.group(1) ?? '';
-                                              final bodyCodeLine =
-                                                  leadingPrefix.isNotEmpty &&
-                                                          leadingPrefix.length <
-                                                              rawCodeLine.length
-                                                      ? rawCodeLine.substring(
-                                                          leadingPrefix.length,
-                                                        )
-                                                      : rawCodeLine;
-                                              final effectivePrefix =
-                                                  leadingPrefix.isNotEmpty &&
-                                                          leadingPrefix.length <
-                                                              rawCodeLine.length
-                                                      ? leadingPrefix
-                                                      : '';
-                                              return Padding(
-                                                padding: EdgeInsets.only(
-                                                  bottom: lineIdx ==
-                                                          stepCodeLines.length -
-                                                              1
-                                                      ? 0
-                                                      : 4,
-                                                ),
-                                                child: Row(
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    SizedBox(
-                                                      width: 32,
-                                                      child: Text(
-                                                        (lineIdx + 1)
-                                                            .toString()
-                                                            .padLeft(2, '0'),
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: fontMicro,
-                                                          fontWeight:
-                                                              weightRegular,
-                                                          height: 1.75,
-                                                          color: const Color(
-                                                            0xFF475569,
-                                                          ),
+                                        // 1. Imperative DO Instruction Line
+                                        if (stepDoInstruction.isNotEmpty)
+                                          Padding(
+                                            padding: EdgeInsets.only(
+                                              bottom: (hasStepEditorContext ||
+                                                      (showCode &&
+                                                          stepCodeLines
+                                                              .isNotEmpty) ||
+                                                      stepVerifyText.isNotEmpty)
+                                                  ? 8
+                                                  : 0,
+                                            ),
+                                            child: Text.rich(
+                                              TextSpan(
+                                                children: [
+                                                  TextSpan(
+                                                    text: 'DO: ',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: fontMicro,
+                                                      fontWeight: weightBold,
+                                                      color: const Color(
+                                                        0xFF38BDF8,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  _buildSemanticStepSpan(
+                                                    text: stepDoInstruction,
+                                                    baseStyle:
+                                                        GoogleFonts.inter(
+                                                      fontSize: fontBody,
+                                                      fontWeight: weightRegular,
+                                                      height: 1.45,
+                                                      color: const Color(
+                                                        0xFFCBD5E1,
+                                                      ),
+                                                    ),
+                                                    tuningItems: tuningItems,
+                                                    edgeItems: edgeItems,
+                                                    isCodeBlock: false,
+                                                  ),
+                                                ],
+                                              ),
+                                              key: ValueKey(
+                                                'step_do_instruction_${node.id}_${selectedTaskIdx}_$sIdx',
+                                              ),
+                                              softWrap: true,
+                                            ),
+                                          ),
+
+                                        // 2. Conditional Editor Context Strip (Scene Tree + Clickable Inspector Tuning Pills + Guard Chip — zero empty boxes)
+                                        if (hasStepEditorContext)
+                                          Padding(
+                                            padding: EdgeInsets.only(
+                                              bottom: ((showCode &&
+                                                          stepCodeLines
+                                                              .isNotEmpty) ||
+                                                      stepVerifyText.isNotEmpty)
+                                                  ? 9
+                                                  : 0,
+                                            ),
+                                            child: Wrap(
+                                              spacing: 6,
+                                              runSpacing: 6,
+                                              crossAxisAlignment:
+                                                  WrapCrossAlignment.center,
+                                              children: [
+                                                if (stepHierarchyText
+                                                    .isNotEmpty)
+                                                  Container(
+                                                    key: ValueKey(
+                                                      'step_hierarchy_pill_${node.id}_${selectedTaskIdx}_$sIdx',
+                                                    ),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(
+                                                        0xFF0E1522,
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        5,
+                                                      ),
+                                                      border: Border.all(
+                                                        color: const Color(
+                                                          0xFF1E2D45,
                                                         ),
                                                       ),
                                                     ),
-                                                    if (effectivePrefix
-                                                        .isNotEmpty)
-                                                      Text(
-                                                        effectivePrefix,
-                                                        style: GoogleFonts
-                                                            .jetBrainsMono(
-                                                          fontSize: fontBody,
-                                                          fontWeight:
-                                                              weightRegular,
-                                                          height: 1.75,
-                                                          color: const Color(
-                                                            0xFF64748B,
+                                                    child: Text(
+                                                      '🌳 ${stepHierarchyText.replaceAll('\n', ' › ')}',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: fontMicro,
+                                                        fontWeight: weightSemi,
+                                                        color: const Color(
+                                                          0xFF93C5FD,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                for (int pIdx = 0;
+                                                    pIdx <
+                                                        stepInspectorPills
+                                                            .length;
+                                                    pIdx++)
+                                                  Builder(
+                                                    builder: (context) {
+                                                      final pill =
+                                                          stepInspectorPills[
+                                                              pIdx];
+                                                      final stepEditKey =
+                                                          'step_tuning_${node.id}_${selectedTaskIdx}_${sIdx}_$pIdx';
+                                                      if (_activeStage2InlineEditKey ==
+                                                          stepEditKey) {
+                                                        return SizedBox(
+                                                          width: 240,
+                                                          child:
+                                                              _buildStage2InlineEditor(
+                                                            editKey:
+                                                                stepEditKey,
+                                                            hintText:
+                                                                '${pill.key}: ${pill.value}',
+                                                            inputKey: ValueKey(
+                                                              'step_inspector_input_${node.id}_${selectedTaskIdx}_${sIdx}_$pIdx',
+                                                            ),
+                                                            saveBtnKey:
+                                                                ValueKey(
+                                                              'step_inspector_save_${node.id}_${selectedTaskIdx}_${sIdx}_$pIdx',
+                                                            ),
+                                                            onSave: (val) =>
+                                                                _saveInlineTuningParam(
+                                                              feat: feat,
+                                                              states: states,
+                                                              node: node,
+                                                              selectedTaskIdx:
+                                                                  selectedTaskIdx,
+                                                              rawValue: val,
+                                                              tuningParamIndex: pill
+                                                                  .tuningParamIndex,
+                                                              propertyKey:
+                                                                  pill.key,
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }
+                                                      return InkWell(
+                                                        key: ValueKey(
+                                                          'step_inspector_pill_${node.id}_${selectedTaskIdx}_${sIdx}_$pIdx',
+                                                        ),
+                                                        borderRadius:
+                                                            BorderRadius
+                                                                .circular(5),
+                                                        onTap: () {
+                                                          Clipboard.setData(
+                                                            ClipboardData(
+                                                              text: pill.value,
+                                                            ),
+                                                          );
+                                                          _startStage2InlineEdit(
+                                                            stepEditKey,
+                                                            '${pill.key}: ${pill.value}',
+                                                          );
+                                                        },
+                                                        child: Container(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                            horizontal: 8,
+                                                            vertical: 4,
+                                                          ),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: const Color(
+                                                              0xFF17132A,
+                                                            ),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              5,
+                                                            ),
+                                                            border: Border.all(
+                                                              color:
+                                                                  const Color(
+                                                                0xFF8B5CF6,
+                                                              ).withValues(
+                                                                alpha: 0.38,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          child: Text(
+                                                            '⚙ ${pill.key}: ${pill.value} ✎',
+                                                            style: GoogleFonts
+                                                                .jetBrainsMono(
+                                                              fontSize:
+                                                                  fontMicro,
+                                                              fontWeight:
+                                                                  weightSemi,
+                                                              color:
+                                                                  const Color(
+                                                                0xFFC4B5FD,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      );
+                                                    },
+                                                  ),
+                                                if (stepGuardChipText
+                                                    .isNotEmpty)
+                                                  Container(
+                                                    key: ValueKey(
+                                                      'step_guard_pill_${node.id}_${selectedTaskIdx}_$sIdx',
+                                                    ),
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 4,
+                                                    ),
+                                                    decoration: BoxDecoration(
+                                                      color: const Color(
+                                                        0xFF1D160B,
+                                                      ),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                        5,
+                                                      ),
+                                                      border: Border.all(
+                                                        color: const Color(
+                                                          0xFFF59E0B,
+                                                        ).withValues(
+                                                          alpha: 0.36,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    child: Text(
+                                                      '🛡 $stepGuardChipText',
+                                                      style: GoogleFonts
+                                                          .jetBrainsMono(
+                                                        fontSize: fontMicro,
+                                                        fontWeight: weightSemi,
+                                                        color: const Color(
+                                                          0xFFFCD34D,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
+                                            ),
+                                          ),
+
+                                        // 3. Numbered Code / Blueprint Graph Lines
+                                        if (showCode &&
+                                            stepCodeLines.isNotEmpty)
+                                          for (int lineIdx = 0;
+                                              lineIdx < stepCodeLines.length;
+                                              lineIdx++)
+                                            Builder(
+                                              builder: (context) {
+                                                final rawCodeLine =
+                                                    stepCodeLines[lineIdx];
+                                                final prefixMatch = RegExp(
+                                                  r'^(\s*(?:[└├]──►\s+|──►\s+|•\s+)?)',
+                                                ).firstMatch(rawCodeLine);
+                                                final leadingPrefix =
+                                                    prefixMatch?.group(1) ?? '';
+                                                final bodyCodeLine =
+                                                    leadingPrefix.isNotEmpty &&
+                                                            leadingPrefix
+                                                                    .length <
+                                                                rawCodeLine
+                                                                    .length
+                                                        ? rawCodeLine.substring(
+                                                            leadingPrefix
+                                                                .length,
+                                                          )
+                                                        : rawCodeLine;
+                                                final effectivePrefix =
+                                                    leadingPrefix.isNotEmpty &&
+                                                            leadingPrefix
+                                                                    .length <
+                                                                rawCodeLine
+                                                                    .length
+                                                        ? leadingPrefix
+                                                        : '';
+                                                return Padding(
+                                                  padding: EdgeInsets.only(
+                                                    bottom: lineIdx ==
+                                                            stepCodeLines
+                                                                    .length -
+                                                                1
+                                                        ? 0
+                                                        : 4,
+                                                  ),
+                                                  child: Row(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                      SizedBox(
+                                                        width: 32,
+                                                        child: Text(
+                                                          (lineIdx + 1)
+                                                              .toString()
+                                                              .padLeft(2, '0'),
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: fontMicro,
+                                                            fontWeight:
+                                                                weightRegular,
+                                                            height: 1.75,
+                                                            color: const Color(
+                                                              0xFF475569,
+                                                            ),
                                                           ),
                                                         ),
                                                       ),
-                                                    Expanded(
-                                                      child: Text.rich(
-                                                        _buildSemanticStepSpan(
-                                                          text: bodyCodeLine,
-                                                          baseStyle: GoogleFonts
+                                                      if (effectivePrefix
+                                                          .isNotEmpty)
+                                                        Text(
+                                                          effectivePrefix,
+                                                          style: GoogleFonts
                                                               .jetBrainsMono(
                                                             fontSize: fontBody,
                                                             fontWeight:
                                                                 weightRegular,
                                                             height: 1.75,
-                                                            color: textPrimary,
+                                                            color: const Color(
+                                                              0xFF64748B,
+                                                            ),
                                                           ),
-                                                          tuningItems:
-                                                              tuningItems,
-                                                          edgeItems: edgeItems,
-                                                          isCodeBlock: true,
                                                         ),
-                                                        softWrap: true,
+                                                      Expanded(
+                                                        child: Text.rich(
+                                                          _buildSemanticStepSpan(
+                                                            text: bodyCodeLine,
+                                                            baseStyle: GoogleFonts
+                                                                .jetBrainsMono(
+                                                              fontSize:
+                                                                  fontBody,
+                                                              fontWeight:
+                                                                  weightRegular,
+                                                              height: 1.75,
+                                                              color:
+                                                                  textPrimary,
+                                                            ),
+                                                            tuningItems:
+                                                                tuningItems,
+                                                            edgeItems:
+                                                                edgeItems,
+                                                            isCodeBlock: true,
+                                                          ),
+                                                          softWrap: true,
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              },
+                                            ),
+
+                                        // 4. Per-Step Check Footer (`↳ Editor Check:` / `↳ Playtest Check:`)
+                                        if (stepVerifyText.isNotEmpty)
+                                          Container(
+                                            key: ValueKey(
+                                              'step_check_footer_${node.id}_${selectedTaskIdx}_$sIdx',
+                                            ),
+                                            margin: EdgeInsets.only(
+                                              top: (showCode &&
+                                                      stepCodeLines.isNotEmpty)
+                                                  ? 9
+                                                  : 0,
+                                            ),
+                                            padding: const EdgeInsets.only(
+                                              top: 7,
+                                            ),
+                                            decoration: const BoxDecoration(
+                                              border: Border(
+                                                top: BorderSide(
+                                                  color: Color(0xFF141D2E),
+                                                ),
+                                              ),
+                                            ),
+                                            child: Text.rich(
+                                              TextSpan(
+                                                children: [
+                                                  TextSpan(
+                                                    text: subStep.isEditorCheck
+                                                        ? '↳ Editor Check: '
+                                                        : '↳ Playtest Check: ',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: fontMicro,
+                                                      fontWeight: weightBold,
+                                                      color: subStep
+                                                              .isEditorCheck
+                                                          ? const Color(
+                                                              0xFF38BDF8,
+                                                            )
+                                                          : const Color(
+                                                              0xFF34D399,
+                                                            ),
+                                                    ),
+                                                  ),
+                                                  _buildSemanticStepSpan(
+                                                    text: stepVerifyText,
+                                                    baseStyle:
+                                                        GoogleFonts.inter(
+                                                      fontSize: fontMicro,
+                                                      fontWeight: weightRegular,
+                                                      height: 1.4,
+                                                      color: const Color(
+                                                        0xFF94A3B8,
                                                       ),
                                                     ),
-                                                  ],
-                                                ),
-                                              );
-                                            },
+                                                    tuningItems: tuningItems,
+                                                    edgeItems: edgeItems,
+                                                    isCodeBlock: false,
+                                                  ),
+                                                ],
+                                              ),
+                                              softWrap: true,
+                                            ),
                                           ),
                                       ],
                                     ),

@@ -3923,15 +3923,51 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     final cpNode = states[checkpointIndex];
     final newTaskIndex = cpNode.checklist.length;
     final taskNum = newTaskIndex + 1;
+    final featDoc = documents[featureId];
+    final featTitle = featDoc?.title ?? cpNode.cleanStageTitle;
     final engineLabel = _activeEngineLabel;
     final engineUpper = engineLabel.toUpperCase();
     final isUnity = engineUpper.contains('UNITY');
     final isUnreal = engineUpper.contains('UNREAL');
-    final defaultScriptPath = isUnity
-        ? 'Assets/Scripts/PlaytestFixController.cs'
-        : (isUnreal
-            ? 'Source/PlaytestFixActor.cpp'
-            : 'res://scripts/playtest_fix_controller.gd');
+
+    String explicitScript = '';
+    for (final existingTask in cpNode.checklist) {
+      for (final sub in existingTask.children) {
+        final candidate = (sub.codeLanguage ?? '').trim();
+        if (candidate.isNotEmpty &&
+            candidate != 'custom_snippet' &&
+            (candidate.endsWith('.gd') ||
+                candidate.endsWith('.cs') ||
+                candidate.endsWith('.cpp') ||
+                candidate.endsWith('.h') ||
+                candidate.startsWith('/Game/') ||
+                candidate.startsWith('BP_'))) {
+          explicitScript = candidate;
+          break;
+        }
+      }
+      if (explicitScript.isNotEmpty) break;
+    }
+    if (explicitScript.isEmpty) {
+      explicitScript = (featDoc?.sections['primary_asset'] ??
+              cpNode.parameters['primarySharedScriptOrScene'] ??
+              '')
+          .trim();
+    }
+    final derivedAsset = TaskHowToBlueprint.deriveConcreteAssetName(featTitle);
+    final pascalName = derivedAsset.pascalName.isNotEmpty
+        ? derivedAsset.pascalName
+        : 'GameplayFeature';
+    final snakeName = derivedAsset.snakeName.isNotEmpty
+        ? derivedAsset.snakeName
+        : 'gameplay_feature';
+    final defaultScriptPath = explicitScript.isNotEmpty
+        ? explicitScript
+        : (isUnity
+            ? 'Assets/Scripts/${pascalName}Controller.cs'
+            : (isUnreal
+                ? 'Source/${pascalName}Actor.cpp'
+                : 'res://scripts/$snakeName.gd'));
     final primaryTune = cpNode.tuningParams.isNotEmpty
         ? cpNode.tuningParams.first
         : 'threshold: 1.0';
@@ -4051,11 +4087,30 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         states,
         checkpointIndex + 1,
       );
+      final codeExcerptLines = <String>[];
+      for (int i = 0; i < fixTaskIndex && codeExcerptLines.length < 24; i++) {
+        final t = cpNode.checklist[i];
+        for (final sub in t.children) {
+          final rawCode = (sub.codeSnippet ?? '').trim();
+          if (rawCode.isEmpty) continue;
+          for (final line in rawCode.split('\n')) {
+            final trimmedLine = line.trimRight();
+            if (trimmedLine.trim().isEmpty) continue;
+            codeExcerptLines.add(trimmedLine);
+            if (codeExcerptLines.length >= 24) break;
+          }
+          if (codeExcerptLines.length >= 24) break;
+        }
+      }
+      final existingCodeExcerptBlock = codeExcerptLines.isNotEmpty
+          ? 'Current Feature Script / Graph Excerpt (patch exact functions & variables below):\n${codeExcerptLines.join('\n')}\n'
+          : '';
 
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
 Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize the exact number of concrete engine fix steps needed to resolve and verify it:
-$specContext$primaryAssetLine${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}Reported Bug: "$issueDescription"
+$specContext$primaryAssetLine${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}$existingCodeExcerptBlock
+Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
