@@ -1659,27 +1659,41 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                             stepRawCode.isNotEmpty
                                 ? stepRawCode.split('\n')
                                 : const <String>[];
+                        final List<String> rawPipeTableLines = stepCodeLines
+                            .where(
+                              (l) =>
+                                  l.trim().startsWith('|') &&
+                                  l.trim().endsWith('|'),
+                            )
+                            .toList();
                         final String stepDoInstruction =
                             subStep.instruction.trim();
                         final String stepPathBadgeText =
                             subStep.stepPath.trim();
                         final String stepVerifyText =
                             subStep.verifyResult.trim();
-                        final windowCtx = _resolveWindowContextBadge(
-                          stepPath: stepPathBadgeText,
-                          instruction: stepDoInstruction,
-                          codeFormula: stepRawCode,
+                        final List<String> effectiveTableLines =
+                            rawPipeTableLines.length >= 2
+                                ? rawPipeTableLines
+                                : _tryConvertConfigGraphToTableLines(
+                                    stepRawCode,
+                                    stepDo: stepDoInstruction,
+                                    stepRole: subStep.stepRole ?? '',
+                                    defaultTarget: activeTargetComp.displayLabel,
+                                  );
+                        final bool isEffectiveBpGraph =
+                            isStepBpGraph && effectiveTableLines.isEmpty;
+                        final windowCtx = _resolveWindowContextForSubStep(
+                          subStep,
                           isUnrealCpp: effectiveCardUnrealCpp,
+                          activeTargetLabel: activeTargetComp.displayLabel,
                         );
                         final prevWindowCtx = sIdx > 0
-                            ? _resolveWindowContextBadge(
-                                stepPath:
-                                    selectedHowTo.subSteps[sIdx - 1].stepPath,
-                                instruction:
-                                    selectedHowTo.subSteps[sIdx - 1].instruction,
-                                codeFormula:
-                                    selectedHowTo.subSteps[sIdx - 1].codeFormula,
+                            ? _resolveWindowContextForSubStep(
+                                selectedHowTo.subSteps[sIdx - 1],
                                 isUnrealCpp: effectiveCardUnrealCpp,
+                                activeTargetLabel:
+                                    activeTargetComp.displayLabel,
                               )
                             : null;
                         final bool isWindowContextSwitch =
@@ -1714,7 +1728,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         final bool hasExpandableDrawerContent =
                             stepDoInstruction.isNotEmpty ||
                                 hasStepEditorContext ||
-                                (showCode && stepCodeLines.isNotEmpty) ||
+                                (showCode &&
+                                    (stepCodeLines.isNotEmpty ||
+                                        effectiveTableLines.isNotEmpty)) ||
                                 stepVerifyText.isNotEmpty;
 
                         return Padding(
@@ -2106,365 +2122,37 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               ),
                                             ),
                                           ),
-                                        // 1. Imperative DO Instruction Line
-                                        if (stepDoInstruction.isNotEmpty)
-                                          Padding(
-                                            padding: EdgeInsets.only(
-                                              bottom: (hasStepEditorContext ||
-                                                      (showCode &&
-                                                          stepCodeLines
-                                                              .isNotEmpty) ||
-                                                      stepVerifyText.isNotEmpty)
-                                                  ? 8
-                                                  : 0,
-                                            ),
-                                            child: Text.rich(
-                                              TextSpan(
-                                                children: [
-                                                  TextSpan(
-                                                    text: 'DO: ',
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: fontMicro,
-                                                      fontWeight: weightBold,
-                                                      color: const Color(
-                                                        0xFF38BDF8,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  _buildSemanticStepSpan(
-                                                    text: stepDoInstruction,
-                                                    baseStyle:
-                                                        GoogleFonts.inter(
-                                                      fontSize: fontBody,
-                                                      fontWeight: weightRegular,
-                                                      height: 1.45,
-                                                      color: const Color(
-                                                        0xFFCBD5E1,
-                                                      ),
-                                                    ),
-                                                    tuningItems: tuningItems,
-                                                    edgeItems: edgeItems,
-                                                    isCodeBlock: false,
-                                                  ),
-                                                ],
-                                              ),
-                                              key: ValueKey(
-                                                'step_do_instruction_${node.id}_${selectedTaskIdx}_$sIdx',
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
-
-                                        // 2. Conditional Guard Pill (Components & Specs hoisted to Blueprint Deck)
-                                        if (hasStepEditorContext)
-                                          Padding(
-                                            padding: EdgeInsets.only(
-                                              bottom: ((showCode &&
-                                                          stepCodeLines
-                                                              .isNotEmpty) ||
-                                                      stepVerifyText.isNotEmpty)
-                                                  ? 9
-                                                  : 0,
-                                            ),
-                                            child: Wrap(
-                                              spacing: 6,
-                                              runSpacing: 6,
-                                              crossAxisAlignment:
-                                                  WrapCrossAlignment.center,
-                                              children: [
-                                                if (stepGuardChipText
-                                                    .isNotEmpty)
-                                                  Container(
-                                                    key: ValueKey(
-                                                      'step_guard_pill_${node.id}_${selectedTaskIdx}_$sIdx',
-                                                    ),
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(
-                                                        0xFF1D160B,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        5,
-                                                      ),
-                                                      border: Border.all(
-                                                        color: const Color(
-                                                          0xFFF59E0B,
-                                                        ).withValues(
-                                                          alpha: 0.36,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      '🛡 $stepGuardChipText',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: fontMicro,
-                                                        fontWeight: weightSemi,
-                                                        color: const Color(
-                                                          0xFFFCD34D,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                              ],
-                                            ),
-                                          ),
-
-                                        // 3. Visual UE5 Blueprint Graph OR Numbered Code Lines
-                                        if (showCode &&
-                                            isStepBpGraph &&
-                                            stepRawCode.isNotEmpty) ...[
-                                          Builder(
-                                            builder: (context) {
-                                              final parsedGraph =
-                                                  UeBlueprintGraphCanvas
-                                                      .parseFromFormula(
-                                                stepRawCode,
-                                              );
-                                              if (parsedGraph.nodes.isEmpty) {
-                                                return const SizedBox.shrink();
-                                              }
-                                              return UeBlueprintGraphCanvas(
-                                                nodes: parsedGraph.nodes,
-                                                wires: parsedGraph.wires,
-                                              );
-                                            },
-                                          ),
-                                        ] else if (showCode &&
-                                            stepCodeLines.isNotEmpty &&
-                                            stepCodeLines
-                                                    .where((l) =>
-                                                        l.trim().startsWith('|') &&
-                                                        l.trim().endsWith('|'))
-                                                    .length >=
-                                                2) ...[
-                                          _buildLevelPlacementTable(
-                                            stepCodeLines,
-                                            isDark: isDark,
-                                          ),
-                                        ] else if (showCode &&
-                                            stepCodeLines.isNotEmpty)
-                                          for (int lineIdx = 0;
-                                              lineIdx < stepCodeLines.length;
-                                              lineIdx++)
-                                            Builder(
-                                              builder: (context) {
-                                                final rawCodeLine =
-                                                    stepCodeLines[lineIdx];
-                                                final isAddedDiffLine =
-                                                    rawCodeLine.startsWith('+') &&
-                                                        !rawCodeLine
-                                                            .startsWith('++');
-                                                final normalizedLine =
-                                                    isAddedDiffLine
-                                                        ? rawCodeLine
-                                                            .substring(1)
-                                                        : rawCodeLine;
-                                                final prefixMatch = RegExp(
-                                                  r'^(\s*(?:[└├]──►\s+|──►\s+|•\s+)?)',
-                                                ).firstMatch(normalizedLine);
-                                                final leadingPrefix =
-                                                    prefixMatch?.group(1) ?? '';
-                                                final bodyCodeLine =
-                                                    leadingPrefix.isNotEmpty &&
-                                                            leadingPrefix
-                                                                    .length <
-                                                                normalizedLine
-                                                                    .length
-                                                        ? normalizedLine
-                                                            .substring(
-                                                            leadingPrefix
-                                                                .length,
-                                                          )
-                                                        : normalizedLine;
-                                                final effectivePrefix =
-                                                    leadingPrefix.isNotEmpty &&
-                                                            leadingPrefix
-                                                                    .length <
-                                                                normalizedLine
-                                                                    .length
-                                                        ? leadingPrefix
-                                                        : '';
-                                                return Container(
-                                                  margin: EdgeInsets.only(
-                                                    bottom: lineIdx ==
-                                                            stepCodeLines
-                                                                    .length -
-                                                                1
-                                                        ? 0
-                                                        : 4,
-                                                  ),
-                                                  padding: isAddedDiffLine
-                                                      ? const EdgeInsets
-                                                          .symmetric(
-                                                          horizontal: 4,
-                                                          vertical: 1,
-                                                        )
-                                                      : EdgeInsets.zero,
-                                                  decoration: isAddedDiffLine
-                                                      ? BoxDecoration(
-                                                          color: const Color(
-                                                            0xFF22C55E,
-                                                          ).withValues(
-                                                            alpha: 0.12,
-                                                          ),
-                                                          border:
-                                                              const Border(
-                                                            left: BorderSide(
-                                                              color: Color(
-                                                                0xFF22C55E,
-                                                              ),
-                                                              width: 2.5,
-                                                            ),
-                                                          ),
-                                                        )
-                                                      : null,
-                                                  child: Row(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      SizedBox(
-                                                        width: 32,
-                                                        child: Text(
-                                                          isAddedDiffLine
-                                                              ? '+${(lineIdx + 1).toString().padLeft(2, '0')}'
-                                                              : (lineIdx + 1)
-                                                                  .toString()
-                                                                  .padLeft(
-                                                                      2, '0'),
-                                                          style: GoogleFonts
-                                                              .jetBrainsMono(
-                                                            fontSize: fontMicro,
-                                                            fontWeight:
-                                                                isAddedDiffLine
-                                                                    ? FontWeight
-                                                                        .w700
-                                                                    : weightRegular,
-                                                            height: 1.75,
-                                                            color: isAddedDiffLine
-                                                                ? const Color(
-                                                                    0xFF4ADE80,
-                                                                  )
-                                                                : const Color(
-                                                                    0xFF475569,
-                                                                  ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      if (effectivePrefix
-                                                          .isNotEmpty)
-                                                        Text(
-                                                          effectivePrefix,
-                                                          style: GoogleFonts
-                                                              .jetBrainsMono(
-                                                            fontSize: fontBody,
-                                                            fontWeight:
-                                                                weightRegular,
-                                                            height: 1.75,
-                                                            color: const Color(
-                                                              0xFF64748B,
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      Expanded(
-                                                        child: Text.rich(
-                                                          _buildSemanticStepSpan(
-                                                            text: bodyCodeLine,
-                                                            baseStyle: GoogleFonts
-                                                                .jetBrainsMono(
-                                                              fontSize:
-                                                                  fontBody,
-                                                              fontWeight:
-                                                                  weightRegular,
-                                                              height: 1.75,
-                                                              color:
-                                                                  textPrimary,
-                                                            ),
-                                                            tuningItems:
-                                                                tuningItems,
-                                                            edgeItems:
-                                                                edgeItems,
-                                                            isCodeBlock: true,
-                                                          ),
-                                                          softWrap: true,
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                            ),
-
-                                        // 4. Per-Step Check Footer (`↳ Editor Check:` / `↳ Playtest Check:`)
-                                        if (stepVerifyText.isNotEmpty)
-                                          Container(
-                                            key: ValueKey(
-                                              'step_check_footer_${node.id}_${selectedTaskIdx}_$sIdx',
-                                            ),
-                                            margin: EdgeInsets.only(
-                                              top: (showCode &&
-                                                      stepCodeLines.isNotEmpty)
-                                                  ? 9
-                                                  : 0,
-                                            ),
-                                            padding: const EdgeInsets.only(
-                                              top: 7,
-                                            ),
-                                            decoration: const BoxDecoration(
-                                              border: Border(
-                                                top: BorderSide(
-                                                  color: Color(0xFF141D2E),
-                                                ),
-                                              ),
-                                            ),
-                                            child: Text.rich(
-                                              TextSpan(
-                                                children: [
-                                                  TextSpan(
-                                                    text: subStep.isEditorCheck
-                                                        ? '↳ Editor Check: '
-                                                        : '↳ Playtest Check: ',
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: fontMicro,
-                                                      fontWeight: weightBold,
-                                                      color: subStep
-                                                              .isEditorCheck
-                                                          ? const Color(
-                                                              0xFF38BDF8,
-                                                            )
-                                                          : const Color(
-                                                              0xFF34D399,
-                                                            ),
-                                                    ),
-                                                  ),
-                                                  _buildSemanticStepSpan(
-                                                    text: stepVerifyText,
-                                                    baseStyle:
-                                                        GoogleFonts.inter(
-                                                      fontSize: fontMicro,
-                                                      fontWeight: weightRegular,
-                                                      height: 1.4,
-                                                      color: const Color(
-                                                        0xFF94A3B8,
-                                                      ),
-                                                    ),
-                                                    tuningItems: tuningItems,
-                                                    edgeItems: edgeItems,
-                                                    isCodeBlock: false,
-                                                  ),
-                                                ],
-                                              ),
-                                              softWrap: true,
-                                            ),
-                                          ),
+                                        // 1-4. Responsive 2-Column Workbook Spread (Left: DO + Guard + Check | Right: UE5 Panel)
+                                        _buildStepDrawerBody(
+                                          nodeId: node.id,
+                                          selectedTaskIdx: selectedTaskIdx,
+                                          sIdx: sIdx,
+                                          subStep: subStep,
+                                          windowCtx: windowCtx,
+                                          showCode: showCode,
+                                          isDark: isDark,
+                                          stepDoInstruction: stepDoInstruction,
+                                          stepGuardChipText: stepGuardChipText,
+                                          isEffectiveBpGraph:
+                                              isEffectiveBpGraph,
+                                          effectiveTableLines:
+                                              effectiveTableLines,
+                                          stepRawCode: stepRawCode,
+                                          stepCodeLines: stepCodeLines,
+                                          stepPathBadgeText: stepPathBadgeText,
+                                          stepVerifyText: stepVerifyText,
+                                          assetName: assetSpec.assetName,
+                                          parentClassLabel:
+                                              assetSpec.parentClassLabel,
+                                          tuningItems: tuningItems,
+                                          edgeItems: edgeItems,
+                                          fontMicro: fontMicro,
+                                          fontBody: fontBody,
+                                          weightRegular: weightRegular,
+                                          weightSemi: weightSemi,
+                                          weightBold: weightBold,
+                                          textPrimary: textPrimary,
+                                        ),
                                       ],
                                     ),
                                   ),
@@ -2660,11 +2348,739 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     );
   }
 
+  Widget _buildStepDrawerBody({
+    required String nodeId,
+    required int selectedTaskIdx,
+    required int sIdx,
+    required TaskHowToSubStep subStep,
+    required ({String icon, String label, Color accent}) windowCtx,
+    required bool showCode,
+    required bool isDark,
+    required String stepDoInstruction,
+    required String stepGuardChipText,
+    required bool isEffectiveBpGraph,
+    required List<String> effectiveTableLines,
+    required String stepRawCode,
+    required List<String> stepCodeLines,
+    required String stepPathBadgeText,
+    required String stepVerifyText,
+    required String assetName,
+    required String parentClassLabel,
+    required List<String> tuningItems,
+    required List<String> edgeItems,
+    required double fontMicro,
+    required double fontBody,
+    required FontWeight weightRegular,
+    required FontWeight weightSemi,
+    required FontWeight weightBold,
+    required Color textPrimary,
+  }) {
+    final doItems = _parseDoActionItems(stepDoInstruction);
+    final Widget? doWidget = doItems.isNotEmpty
+        ? _buildVerticalDoList(
+            nodeId: nodeId,
+            selectedTaskIdx: selectedTaskIdx,
+            sIdx: sIdx,
+            items: doItems,
+            tuningItems: tuningItems,
+            edgeItems: edgeItems,
+            fontMicro: fontMicro,
+            fontBody: fontBody,
+            weightRegular: weightRegular,
+            weightBold: weightBold,
+          )
+        : null;
+
+    final Widget? guardWidget = stepGuardChipText.isNotEmpty
+        ? Align(
+            alignment: Alignment.centerLeft,
+            child: Container(
+              key: ValueKey(
+                'step_guard_pill_${nodeId}_${selectedTaskIdx}_$sIdx',
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1D160B),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: const Color(0xFFF59E0B).withValues(alpha: 0.36),
+                ),
+              ),
+              child: Text(
+                '🛡 $stepGuardChipText',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: fontMicro,
+                  fontWeight: weightSemi,
+                  color: const Color(0xFFFCD34D),
+                ),
+              ),
+            ),
+          )
+        : null;
+
+    final Widget? checkFooter = stepVerifyText.isNotEmpty
+        ? _buildStepCheckFooter(
+            nodeId: nodeId,
+            selectedTaskIdx: selectedTaskIdx,
+            sIdx: sIdx,
+            subStep: subStep,
+            stepVerifyText: stepVerifyText,
+            tuningItems: tuningItems,
+            edgeItems: edgeItems,
+            fontMicro: fontMicro,
+            weightRegular: weightRegular,
+            weightBold: weightBold,
+          )
+        : null;
+
+    final Widget? rightVisual = showCode
+        ? _buildStepRightVisualPane(
+            isDark: isDark,
+            isEffectiveBpGraph: isEffectiveBpGraph,
+            effectiveTableLines: effectiveTableLines,
+            stepRawCode: stepRawCode,
+            stepCodeLines: stepCodeLines,
+            stepPathBadgeText: stepPathBadgeText,
+            windowCtx: windowCtx,
+            assetName: assetName,
+            parentClassLabel: parentClassLabel,
+            tuningItems: tuningItems,
+            edgeItems: edgeItems,
+            fontMicro: fontMicro,
+            fontBody: fontBody,
+            weightRegular: weightRegular,
+            textPrimary: textPrimary,
+          )
+        : null;
+
+    final bool hasLeftContent =
+        doWidget != null || guardWidget != null || checkFooter != null;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bool useTwoColumnSpread =
+            constraints.maxWidth >= 740 && rightVisual != null && hasLeftContent;
+
+        if (!useTwoColumnSpread) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (doWidget != null) doWidget,
+              if (guardWidget != null) ...[
+                if (doWidget != null) const SizedBox(height: 8),
+                guardWidget,
+              ],
+              if (rightVisual != null) ...[
+                if (doWidget != null || guardWidget != null)
+                  const SizedBox(height: 10),
+                rightVisual,
+              ],
+              if (checkFooter != null) ...[
+                if (doWidget != null ||
+                    guardWidget != null ||
+                    rightVisual != null)
+                  const SizedBox(height: 9),
+                checkFooter,
+              ],
+            ],
+          );
+        }
+
+        // Wide Workbook Spread (>= 740px): Left ~38% (DO + Guard + Check) | Right ~62% (UE5 Panel)
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 38,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (doWidget != null) doWidget,
+                  if (guardWidget != null) ...[
+                    if (doWidget != null) const SizedBox(height: 8),
+                    guardWidget,
+                  ],
+                  if (checkFooter != null) ...[
+                    if (doWidget != null || guardWidget != null)
+                      const SizedBox(height: 10),
+                    checkFooter,
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              flex: 62,
+              child: rightVisual,
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildVerticalDoList({
+    required String nodeId,
+    required int selectedTaskIdx,
+    required int sIdx,
+    required List<String> items,
+    required List<String> tuningItems,
+    required List<String> edgeItems,
+    required double fontMicro,
+    required double fontBody,
+    required FontWeight weightRegular,
+    required FontWeight weightBold,
+  }) {
+    return Container(
+      key: ValueKey('step_do_instruction_${nodeId}_${selectedTaskIdx}_$sIdx'),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A0F18),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFF1A2436)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(bottom: 7),
+            child: Text(
+              'DO',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: fontMicro,
+                fontWeight: weightBold,
+                letterSpacing: 0.7,
+                color: const Color(0xFF38BDF8),
+              ),
+            ),
+          ),
+          for (int i = 0; i < items.length; i++)
+            Padding(
+              padding: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 7),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 18,
+                    height: 18,
+                    margin: const EdgeInsets.only(top: 1.5, right: 8),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0E243D),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      '${i + 1}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: weightBold,
+                        color: const Color(0xFF7DD3FC),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text.rich(
+                      _buildSemanticStepSpan(
+                        text: items[i],
+                        baseStyle: GoogleFonts.inter(
+                          fontSize: fontBody,
+                          fontWeight: weightRegular,
+                          height: 1.45,
+                          color: const Color(0xFFCBD5E1),
+                        ),
+                        tuningItems: tuningItems,
+                        edgeItems: edgeItems,
+                        isCodeBlock: false,
+                      ),
+                      softWrap: true,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStepCheckFooter({
+    required String nodeId,
+    required int selectedTaskIdx,
+    required int sIdx,
+    required TaskHowToSubStep subStep,
+    required String stepVerifyText,
+    required List<String> tuningItems,
+    required List<String> edgeItems,
+    required double fontMicro,
+    required FontWeight weightRegular,
+    required FontWeight weightBold,
+  }) {
+    return Container(
+      key: ValueKey('step_check_footer_${nodeId}_${selectedTaskIdx}_$sIdx'),
+      padding: const EdgeInsets.only(top: 8),
+      decoration: const BoxDecoration(
+        border: Border(
+          top: BorderSide(color: Color(0xFF141D2E)),
+        ),
+      ),
+      child: Text.rich(
+        TextSpan(
+          children: [
+            TextSpan(
+              text: subStep.isEditorCheck
+                  ? '↳ Editor Check: '
+                  : '↳ Playtest Check: ',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: fontMicro,
+                fontWeight: weightBold,
+                color: subStep.isEditorCheck
+                    ? const Color(0xFF38BDF8)
+                    : const Color(0xFF34D399),
+              ),
+            ),
+            _buildSemanticStepSpan(
+              text: stepVerifyText,
+              baseStyle: GoogleFonts.inter(
+                fontSize: fontMicro,
+                fontWeight: weightRegular,
+                height: 1.4,
+                color: const Color(0xFF94A3B8),
+              ),
+              tuningItems: tuningItems,
+              edgeItems: edgeItems,
+              isCodeBlock: false,
+            ),
+          ],
+        ),
+        softWrap: true,
+      ),
+    );
+  }
+
+  Widget? _buildStepRightVisualPane({
+    required bool isDark,
+    required bool isEffectiveBpGraph,
+    required List<String> effectiveTableLines,
+    required String stepRawCode,
+    required List<String> stepCodeLines,
+    required String stepPathBadgeText,
+    required ({String icon, String label, Color accent}) windowCtx,
+    required String assetName,
+    required String parentClassLabel,
+    required List<String> tuningItems,
+    required List<String> edgeItems,
+    required double fontMicro,
+    required double fontBody,
+    required FontWeight weightRegular,
+    required Color textPrimary,
+  }) {
+    if (isEffectiveBpGraph && stepRawCode.isNotEmpty) {
+      final parsedGraph = UeBlueprintGraphCanvas.parseFromFormula(stepRawCode);
+      if (parsedGraph.nodes.isEmpty) return null;
+      return UeBlueprintGraphCanvas(
+        nodes: parsedGraph.nodes,
+        wires: parsedGraph.wires,
+      );
+    }
+    if (effectiveTableLines.length >= 2) {
+      return _buildLevelPlacementTable(
+        effectiveTableLines,
+        isDark: isDark,
+        stepPath: stepPathBadgeText,
+        assetName: assetName,
+        parentClassLabel: parentClassLabel,
+        isLevelOutliner: windowCtx.label == 'LEVEL EDITOR',
+        isInputMapping: windowCtx.label == 'INPUT MAPPING',
+      );
+    }
+    if (stepCodeLines.isNotEmpty) {
+      return _buildStepCodeLinesPane(
+        stepCodeLines: stepCodeLines,
+        stepPathBadgeText: stepPathBadgeText,
+        windowCtx: windowCtx,
+        tuningItems: tuningItems,
+        edgeItems: edgeItems,
+        fontMicro: fontMicro,
+        fontBody: fontBody,
+        weightRegular: weightRegular,
+        textPrimary: textPrimary,
+      );
+    }
+    return null;
+  }
+
+  Widget _buildStepCodeLinesPane({
+    required List<String> stepCodeLines,
+    required String stepPathBadgeText,
+    required ({String icon, String label, Color accent}) windowCtx,
+    required List<String> tuningItems,
+    required List<String> edgeItems,
+    required double fontMicro,
+    required double fontBody,
+    required FontWeight weightRegular,
+    required Color textPrimary,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF06090F),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF1F2B3E)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0D1422),
+              border: Border(bottom: BorderSide(color: Color(0xFF1F2B3E))),
+            ),
+            child: Row(
+              children: [
+                Text(
+                  '${windowCtx.icon} ${windowCtx.label}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: windowCtx.accent,
+                  ),
+                ),
+                if (stepPathBadgeText.isNotEmpty) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      stepPathBadgeText,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (int lineIdx = 0; lineIdx < stepCodeLines.length; lineIdx++)
+                  Builder(
+                    builder: (context) {
+                      final rawCodeLine = stepCodeLines[lineIdx];
+                      final isAddedDiffLine = rawCodeLine.startsWith('+') &&
+                          !rawCodeLine.startsWith('++');
+                      final normalizedLine = isAddedDiffLine
+                          ? rawCodeLine.substring(1)
+                          : rawCodeLine;
+                      final prefixMatch = RegExp(
+                        r'^(\s*(?:[└├]──►\s+|──►\s+|•\s+)?)',
+                      ).firstMatch(normalizedLine);
+                      final leadingPrefix = prefixMatch?.group(1) ?? '';
+                      final bodyCodeLine = leadingPrefix.isNotEmpty &&
+                              leadingPrefix.length < normalizedLine.length
+                          ? normalizedLine.substring(leadingPrefix.length)
+                          : normalizedLine;
+                      final effectivePrefix = leadingPrefix.isNotEmpty &&
+                              leadingPrefix.length < normalizedLine.length
+                          ? leadingPrefix
+                          : '';
+                      return Container(
+                        margin: EdgeInsets.only(
+                          bottom: lineIdx == stepCodeLines.length - 1 ? 0 : 4,
+                        ),
+                        padding: isAddedDiffLine
+                            ? const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 1,
+                              )
+                            : EdgeInsets.zero,
+                        decoration: isAddedDiffLine
+                            ? BoxDecoration(
+                                color: const Color(0xFF22C55E)
+                                    .withValues(alpha: 0.12),
+                                border: const Border(
+                                  left: BorderSide(
+                                    color: Color(0xFF22C55E),
+                                    width: 2.5,
+                                  ),
+                                ),
+                              )
+                            : null,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SizedBox(
+                              width: 32,
+                              child: Text(
+                                isAddedDiffLine
+                                    ? '+${(lineIdx + 1).toString().padLeft(2, '0')}'
+                                    : (lineIdx + 1)
+                                        .toString()
+                                        .padLeft(2, '0'),
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: fontMicro,
+                                  fontWeight: isAddedDiffLine
+                                      ? FontWeight.w700
+                                      : weightRegular,
+                                  height: 1.75,
+                                  color: isAddedDiffLine
+                                      ? const Color(0xFF4ADE80)
+                                      : const Color(0xFF475569),
+                                ),
+                              ),
+                            ),
+                            if (effectivePrefix.isNotEmpty)
+                              Text(
+                                effectivePrefix,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: fontBody,
+                                  fontWeight: weightRegular,
+                                  height: 1.75,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            Expanded(
+                              child: Text.rich(
+                                _buildSemanticStepSpan(
+                                  text: bodyCodeLine,
+                                  baseStyle: GoogleFonts.jetBrainsMono(
+                                    fontSize: fontBody,
+                                    fontWeight: weightRegular,
+                                    height: 1.75,
+                                    color: textPrimary,
+                                  ),
+                                  tuningItems: tuningItems,
+                                  edgeItems: edgeItems,
+                                  isCodeBlock: true,
+                                ),
+                                softWrap: true,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Splits single-line or bulleted `DO` text into numbered vertical micro-actions.
+  List<String> _parseDoActionItems(String rawDo) {
+    final trimmed = rawDo.trim();
+    if (trimmed.isEmpty) return const [];
+    final rawLines = trimmed
+        .split('\n')
+        .map(
+          (l) => l
+              .trim()
+              .replaceFirst(
+                RegExp(r'^(?:DO:\s*|[-*•]\s+|\d+[.)]\s+)'),
+                '',
+              )
+              .trim(),
+        )
+        .where((l) => l.isNotEmpty)
+        .toList();
+    if (rawLines.length >= 2) return rawLines;
+
+    final single = rawLines.isNotEmpty ? rawLines.first : trimmed;
+    final semiParts = single
+        .split(';')
+        .map((s) => s.trim())
+        .where((s) => s.length >= 5)
+        .toList();
+    if (semiParts.length >= 2) return semiParts;
+
+    final sentenceParts = single
+        .split(RegExp(r'\.\s+(?=[A-Z])'))
+        .map((s) => s.trim())
+        .where((s) => s.length >= 5)
+        .toList();
+    if (sentenceParts.length >= 2) return sentenceParts;
+
+    final actionSplit = single.split(
+      RegExp(
+        r',?\s+and\s+(?=(?:enable|set|assign|attach|drag|wire|connect|add|open|select|configure|create|rename|move|compile|save|check|verify)\b)',
+        caseSensitive: false,
+      ),
+    );
+    if (actionSplit.length >= 2) {
+      return actionSplit.map((part) {
+        final p = part.trim();
+        if (p.isEmpty) return p;
+        return p[0].toUpperCase() + p.substring(1);
+      }).where((s) => s.isNotEmpty).toList();
+    }
+    return [single];
+  }
+
+  bool _hasRuntimeGraphNodes(String rawCode) {
+    return RegExp(
+      r'\b(?:event|beginplay|tick|ia_|enhancedinput|inputaction|branch|delay|timer|timeline|oncomponent|onactor|spawnactor|destroy|apply\s*damage|take\s*damage|overlap|hit|pressed|released|triggered|print|cast\s+to|get\s+player|line\s*trace|sphere\s*trace|custom\s*event|return|for\s*each|foreach|switch\s+on|flip\s*flop|do\s+once|gate|sequence|add\s+movement|add\s+controller|launch\s*character|play\s*montage|play\s*sound|set\s*timer|bind)\b',
+      caseSensitive: false,
+    ).hasMatch(rawCode);
+  }
+
+  /// Safety guard for `editor_setup` or passive component setup steps that were
+  /// serialized as `[Comp] ──► [Set Prop (...)]` chains instead of a Markdown table.
+  List<String> _tryConvertConfigGraphToTableLines(
+    String rawCode, {
+    required String stepDo,
+    required String stepRole,
+    required String defaultTarget,
+  }) {
+    final trimmed = rawCode.trim();
+    if (!(trimmed.contains('──►') ||
+        trimmed.contains('├──►') ||
+        trimmed.contains('└──►'))) {
+      return const [];
+    }
+    if (_hasRuntimeGraphNodes(trimmed)) return const [];
+
+    final bool looksLikeSetupRole = stepRole == 'editor_setup';
+    final bool looksLikeSetupDo = stepRole.isEmpty &&
+        RegExp(
+          r'^(?:configure|set|enable|disable|adjust|assign|attach|tweak|open)\b',
+          caseSensitive: false,
+        ).hasMatch(stepDo.trim()) &&
+        !RegExp(
+          r'\b(?:wire|graph|event|on press|when pressed|on overlap|on hit)\b',
+          caseSensitive: false,
+        ).hasMatch(stepDo);
+
+    if (!looksLikeSetupRole && !looksLikeSetupDo) return const [];
+
+    final segments = trimmed
+        .split(RegExp(r'\s*(?:[└├]──►|──►)\s*'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (segments.isEmpty) return const [];
+
+    final tableRows = <String>[
+      '| Component / Actor | Property | Value |',
+      '| --- | --- | --- |',
+    ];
+    String currentTarget =
+        defaultTarget.trim().isNotEmpty ? defaultTarget.trim() : 'Actor Defaults';
+
+    for (final rawSeg in segments) {
+      var seg = rawSeg;
+      if (seg.startsWith('[')) seg = seg.substring(1);
+      if (seg.endsWith(']')) seg = seg.substring(0, seg.length - 1);
+      seg = seg.replaceAll(RegExp(r'\[\+\s*NEW\]', caseSensitive: false), '').trim();
+      if (seg.isEmpty) continue;
+
+      final parenIdx = seg.indexOf('(');
+      final hasArgs = parenIdx > 0 && seg.endsWith(')');
+      final baseName = hasArgs ? seg.substring(0, parenIdx).trim() : seg;
+      final bool isSetter = RegExp(
+        r'^(?:Set|Enable|Disable|Configure|Attach|Bind|Use)\s+',
+        caseSensitive: false,
+      ).hasMatch(baseName);
+
+      if (!hasArgs && !isSetter) {
+        currentTarget = baseName;
+        continue;
+      }
+
+      var propName = baseName
+          .replaceFirst(
+            RegExp(r'^(?:Set|Configure)\s+', caseSensitive: false),
+            '',
+          )
+          .trim();
+      var valueText = 'true';
+      if (hasArgs) {
+        final rawArgs = seg.substring(parenIdx + 1, seg.length - 1).trim();
+        final colonIdx = rawArgs.indexOf(':');
+        if (colonIdx > 0 && !rawArgs.startsWith('X:')) {
+          valueText = rawArgs.substring(colonIdx + 1).trim();
+        } else {
+          valueText = rawArgs;
+        }
+        final xyzMatch = RegExp(
+          r'X\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*Y\s*[:=]\s*(-?\d+(?:\.\d+)?)\s*[, ]\s*Z\s*[:=]\s*(-?\d+(?:\.\d+)?)',
+          caseSensitive: false,
+        ).firstMatch(valueText);
+        if (xyzMatch != null) {
+          valueText =
+              '(${xyzMatch.group(1)}, ${xyzMatch.group(2)}, ${xyzMatch.group(3)})';
+        }
+      }
+      if (RegExp(r'^Enable\s+', caseSensitive: false).hasMatch(propName)) {
+        propName = propName
+            .replaceFirst(RegExp(r'^Enable\s+', caseSensitive: false), '')
+            .trim();
+        valueText = 'true';
+      } else if (RegExp(r'^Disable\s+', caseSensitive: false).hasMatch(propName)) {
+        propName = propName
+            .replaceFirst(RegExp(r'^Disable\s+', caseSensitive: false), '')
+            .trim();
+        valueText = 'false';
+      }
+      tableRows.add('| $currentTarget | $propName | $valueText |');
+    }
+
+    return tableRows.length >= 3 ? tableRows : const [];
+  }
+
+  ({String icon, String label, Color accent}) _resolveWindowContextForSubStep(
+    TaskHowToSubStep subStep, {
+    required bool isUnrealCpp,
+    required String activeTargetLabel,
+  }) {
+    final rawCode = subStep.codeFormula.trim();
+    final lines = rawCode.isNotEmpty ? rawCode.split('\n') : const <String>[];
+    final pipeLines = lines
+        .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
+        .toList();
+    final isBpGraph = rawCode.contains('──►') ||
+        rawCode.contains('└──►') ||
+        rawCode.contains('├──►');
+    final tableLines = pipeLines.length >= 2
+        ? pipeLines
+        : _tryConvertConfigGraphToTableLines(
+            rawCode,
+            stepDo: subStep.instruction.trim(),
+            stepRole: subStep.stepRole ?? '',
+            defaultTarget: activeTargetLabel,
+          );
+    final isEffectiveGraph = isBpGraph && tableLines.isEmpty;
+    return _resolveWindowContextBadge(
+      stepPath: subStep.stepPath.trim(),
+      instruction: subStep.instruction.trim(),
+      codeFormula: rawCode,
+      isUnrealCpp: isUnrealCpp,
+      stepRole: subStep.stepRole ?? '',
+      isRenderedAsDetailsTable: tableLines.length >= 2,
+      isRenderedAsBpGraph: isEffectiveGraph,
+    );
+  }
+
   ({String icon, String label, Color accent}) _resolveWindowContextBadge({
     required String stepPath,
     required String instruction,
     required String codeFormula,
     required bool isUnrealCpp,
+    String stepRole = '',
+    bool isRenderedAsDetailsTable = false,
+    bool isRenderedAsBpGraph = false,
   }) {
     final lowerPath = stepPath.toLowerCase();
     final lowerInstr = instruction.toLowerCase();
@@ -2683,16 +3099,57 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
             .length >=
         2;
-    if (isPipeTable ||
-        lowerPath.contains('outliner') ||
-        lowerPath.contains('viewport') ||
+    final bool isBpOrDetailsSetup = lowerPath.contains('bp_') ||
+        lowerPath.contains('components') ||
+        lowerPath.contains('details') ||
+        lowerPath.contains('imc_') ||
+        lowerPath.contains('input mapping') ||
+        lowerCode.contains('firstperson') ||
+        lowerCode.contains('charmove') ||
+        lowerCode.contains('capsule') ||
+        lowerCode.contains('camera') ||
+        lowerCode.contains('pawn control');
+    if (lowerPath.contains('outliner') ||
         lowerPath.contains('level editor') ||
         lowerPath.contains('place actors') ||
-        lowerInstr.contains('playerstart')) {
+        lowerInstr.contains('playerstart') ||
+        (lowerPath.contains('viewport') &&
+            !lowerPath.contains('bp_') &&
+            !lowerPath.contains('blueprint') &&
+            !lowerPath.contains('components') &&
+            !lowerPath.contains('details')) ||
+        (isPipeTable && !isBpOrDetailsSetup)) {
       return (
         icon: '🌍',
         label: 'LEVEL EDITOR',
         accent: const Color(0xFF10B981),
+      );
+    }
+    if (!isRenderedAsBpGraph &&
+        (lowerPath.contains('imc_') ||
+            lowerPath.contains('input mapping') ||
+            (stepRole == 'editor_setup' &&
+                (lowerInstr.contains('imc_') ||
+                    lowerInstr.contains('ia_') ||
+                    lowerInstr.contains('mapping context'))))) {
+      return (
+        icon: '🎮',
+        label: 'INPUT MAPPING',
+        accent: const Color(0xFFA78BFA),
+      );
+    }
+    final bool looksLikeCppFile = lowerPath.endsWith('.h') ||
+        lowerPath.endsWith('.cpp') ||
+        lowerCode.contains('uproperty') ||
+        lowerCode.contains('createdefaultsubobject');
+    if (isRenderedAsDetailsTable ||
+        (stepRole == 'editor_setup' && !looksLikeCppFile) ||
+        lowerPath.contains('details') ||
+        lowerPath.contains('components')) {
+      return (
+        icon: '📐',
+        label: 'DETAILS PANEL',
+        accent: const Color(0xFF38BDF8),
       );
     }
     if (isUnrealCpp ||
@@ -2707,6 +3164,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         accent: const Color(0xFFA78BFA),
       );
     }
+    if (isRenderedAsBpGraph) {
+      return (
+        icon: '⑂',
+        label: 'EVENT GRAPH',
+        accent: const Color(0xFF38BDF8),
+      );
+    }
     return (
       icon: '📘',
       label: 'BLUEPRINT EDITOR',
@@ -2717,152 +3181,20 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
   Widget _buildLevelPlacementTable(
     List<String> lines, {
     required bool isDark,
+    String stepPath = '',
+    String assetName = '',
+    String parentClassLabel = '',
+    bool isLevelOutliner = false,
+    bool isInputMapping = false,
   }) {
-    final rows = <List<String>>[];
-    for (final line in lines) {
-      final trimmed = line.trim();
-      if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) continue;
-      final cells = trimmed
-          .substring(1, trimmed.length - 1)
-          .split('|')
-          .map((c) => c.trim())
-          .toList();
-      final isSeparator = cells.every(
-        (c) => RegExp(r'^:?-{2,}:?$').hasMatch(c),
-      );
-      if (!isSeparator && cells.isNotEmpty) {
-        rows.add(cells);
-      }
-    }
-    if (rows.isEmpty) return const SizedBox.shrink();
-    final colCount = rows.first.length;
-    final headerBg = isDark
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.black.withValues(alpha: 0.05);
-    final borderCol = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : Colors.black.withValues(alpha: 0.12);
-    return Container(
-      key: const ValueKey('level_placement_table'),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: borderCol),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Table(
-        border: TableBorder.symmetric(
-          inside: BorderSide(color: borderCol, width: 0.8),
-        ),
-        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-        children: [
-          for (int r = 0; r < rows.length; r++)
-            TableRow(
-              decoration: BoxDecoration(
-                color: r == 0
-                    ? headerBg
-                    : (r.isOdd
-                        ? Colors.transparent
-                        : Colors.white.withValues(alpha: 0.02)),
-              ),
-              children: [
-                for (int c = 0; c < colCount; c++)
-                  Builder(
-                    builder: (context) {
-                      final cellText = c < rows[r].length ? rows[r][c] : '';
-                      final isTransformCell = r > 0 &&
-                          c == colCount - 1 &&
-                          (cellText.contains('(') ||
-                              cellText.contains('X=') ||
-                              RegExp(r'-?\d+(?:\.\d+)?\s*,\s*-?\d+')
-                                  .hasMatch(cellText));
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                        child: isTransformCell
-                            ? Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      cellText,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 11,
-                                        fontWeight: FontWeight.w500,
-                                        color: isDark
-                                            ? const Color(0xFFCBD5E1)
-                                            : const Color(0xFF334155),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  InkWell(
-                                    key: ValueKey('copy_transform_btn_$r'),
-                                    borderRadius: BorderRadius.circular(4),
-                                    onTap: () {
-                                      Clipboard.setData(
-                                        ClipboardData(text: cellText),
-                                      );
-                                      ScaffoldMessenger.of(context)
-                                          .showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            'Copied Transform: $cellText',
-                                          ),
-                                          duration:
-                                              const Duration(seconds: 2),
-                                        ),
-                                      );
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 6,
-                                        vertical: 2,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF10B981)
-                                            .withValues(alpha: 0.14),
-                                        borderRadius: BorderRadius.circular(4),
-                                        border: Border.all(
-                                          color: const Color(0xFF10B981)
-                                              .withValues(alpha: 0.35),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '⧉ Copy Transform',
-                                        style: GoogleFonts.jetBrainsMono(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.w600,
-                                          color: const Color(0xFF6EE7B7),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              )
-                            : Text(
-                                cellText,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 11,
-                                  fontWeight: r == 0
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: r == 0
-                                      ? (isDark
-                                          ? const Color(0xFFE2E8F0)
-                                          : const Color(0xFF0F172A))
-                                      : (isDark
-                                          ? const Color(0xFFCBD5E1)
-                                          : const Color(0xFF334155)),
-                                ),
-                              ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-        ],
-      ),
+    return UeDetailsInspectorPanel(
+      tableLines: lines,
+      isDark: isDark,
+      stepPath: stepPath,
+      assetName: assetName,
+      parentClassLabel: parentClassLabel,
+      isLevelOutliner: isLevelOutliner,
+      isInputMapping: isInputMapping,
     );
   }
 }

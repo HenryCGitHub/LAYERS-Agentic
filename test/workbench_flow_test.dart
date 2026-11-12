@@ -10846,5 +10846,294 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
       },
     );
+
+    test(
+      'LayersTextStyleGuide & UE5 synthesis prompt enforce vertical DO items and forbid Event Graph arrows on editor_setup',
+      () async {
+        expect(
+          LayersTextStyleGuide.runbookInstructionSchemaDesc,
+          contains('newline-separated'),
+        );
+        final prevMock = GeminiAgentClient.testMockResponder;
+        String capturedPrompt = '';
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains('3-Area Engine How-To steps')) {
+            if (capturedPrompt.isEmpty) capturedPrompt = prompt;
+            return <String, dynamic>{
+              'primarySharedScriptOrScene': 'BP_PlayerCharacter',
+              'tasks': [
+                {
+                  'taskIndex': 0,
+                  'taskTitle': 'Configure Camera Rig',
+                  'subSteps': [
+                    {
+                      'stepRole': 'editor_setup',
+                      'title': 'Rig Camera Height',
+                      'stepPath': 'BP_PlayerCharacter → Components > FirstPersonCamera',
+                      'instruction':
+                          '- Components → Select FirstPersonCamera\n- Details > Transform → Set Location (0, 0, 64)',
+                      'area1Hierarchy': 'BP_PlayerCharacter\n └─ FirstPersonCamera',
+                      'area2Inspector': 'Location: (0, 0, 64)',
+                      'codeFormula':
+                          '| Component / Actor | Property | Value |\n'
+                          '| --- | --- | --- |\n'
+                          '| FirstPersonCamera | Transform > Relative Location | (0, 0, 64) |',
+                      'verifyMode': 'editor',
+                      'verifyResult':
+                          'Inspect Viewport -> Camera sits at Z=64.',
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+          return _mockGeminiResponder(prompt, model);
+        };
+        try {
+          final provider = WorkbenchProvider();
+          await provider.startConceptInterview('UE5 Prompt Test');
+          provider.updateConceptDraft((d) {
+            d.title = 'UE5 Prompt Test';
+            d.techSpec = [
+              'Unreal Engine 5 (Blueprint)',
+              'PC Desktop',
+              'UE5 Greybox',
+              'SaveGame Slot (.sav)',
+            ];
+          });
+          await provider.approveConceptAndBuildRelease();
+          final beat = provider.activeReleaseBeats.first;
+          final feat = provider.featuresForBeat(beat.id).first;
+          await Future<void>.delayed(Duration.zero);
+          capturedPrompt = '';
+          provider.renameLiveFeature(feat.id, 'Player Camera & Movement');
+          await provider.synthesizeFeatureHowToStepsWithAi(
+            feat.id,
+            forceRefresh: true,
+            unrealCppMode: false,
+          );
+          expect(capturedPrompt, contains('stepRole == "editor_setup"'));
+          expect(
+            capturedPrompt,
+            contains('NEVER emit `[Node] ──► [Node]` Event Graph arrows'),
+          );
+          expect(
+            capturedPrompt,
+            contains('2-4 short newline-separated imperative micro-actions'),
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
+
+    test(
+      'UeBlueprintGraphCanvas classifies component getter without Exec pins and wires Object data pin to Target',
+      () {
+        const formula =
+            '[FirstPersonCamera] ──► [Set Relative Location (New Location: X=0, Y=0, Z=64)]';
+        final parsed = UeBlueprintGraphCanvas.parseFromFormula(formula);
+        expect(parsed.nodes.length, 2);
+        final getter = parsed.nodes.firstWhere(
+          (n) => n.kind == UeNodeKind.variableGet,
+        );
+        expect(getter.title, contains('FirstPersonCamera'));
+        expect(
+          getter.leftPins.any((p) => p.type == UePinType.exec),
+          isFalse,
+        );
+        expect(
+          getter.rightPins.any((p) => p.type == UePinType.exec),
+          isFalse,
+        );
+        final setter = parsed.nodes.firstWhere(
+          (n) => n.kind == UeNodeKind.functionCall,
+        );
+        expect(
+          setter.leftPins.any((p) => p.type == UePinType.exec),
+          isTrue,
+        );
+        expect(
+          parsed.wires.any(
+            (w) =>
+                w.fromNodeId == getter.id &&
+                w.toNodeId == setter.id &&
+                w.type == UePinType.objectPin,
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      '47. UE5 Guide Book Workbench: 2-Column Workbook Spread, Components Hierarchy, RGB XYZ Details & Legacy Config Guard',
+      (tester) async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains('3-Area Engine How-To steps')) {
+            return <String, dynamic>{
+              'primarySharedScriptOrScene': 'BP_PlayerCharacter',
+              'tasks': [
+                {
+                  'taskIndex': 0,
+                  'taskTitle': 'Rig Commando Camera View',
+                  'subSteps': [
+                    {
+                      'stepRole': 'editor_setup',
+                      'title': 'Rig Commando Camera View',
+                      'stepPath':
+                          'BP_PlayerCharacter → Components > FirstPersonCamera',
+                      'instruction':
+                          '- Components → Select FirstPersonCamera\n'
+                          '- Details > Transform → Set Relative Location to (0, 0, 64)\n'
+                          '- Details > Camera Options → Enable Use Pawn Control Rotation',
+                      'area1Hierarchy':
+                          'BP_PlayerCharacter\n └─ CapsuleComponent\n    └─ FirstPersonCamera',
+                      'area2Inspector': 'Z=64; UsePawnControlRotation=true',
+                      'codeFormula':
+                          '| Component / Actor | Property | Value |\n'
+                          '| --- | --- | --- |\n'
+                          '| FirstPersonCamera | Transform > Relative Location | (0, 0, 64) |\n'
+                          '| FirstPersonCamera | Camera Options > Use Pawn Control Rotation | true |\n'
+                          '| CharMove | Character Movement: Walking > Max Walk Speed | 650.0 |',
+                      'verifyMode': 'editor',
+                      'verifyResult':
+                          'Open BP_PlayerCharacter viewport -> FirstPersonCamera sits at eye level.',
+                    },
+                    {
+                      'stepRole': 'script_logic',
+                      'title': 'Wire Move Input Axis',
+                      'stepPath': 'BP_PlayerCharacter → EventGraph',
+                      'instruction':
+                          '- EventGraph → Right-click and add IA_Move event node\n'
+                          '- Wire Triggered exec into Add Movement Input',
+                      'area1Hierarchy': '',
+                      'area2Inspector': '',
+                      'codeFormula':
+                          '[IA_Move] ──► [Add Movement Input (Scale Value: 1.0)]',
+                      'verifyMode': 'playtest',
+                      'verifyResult':
+                          'Press WASD in PIE -> Character moves smoothly.',
+                    },
+                    {
+                      'stepRole': 'editor_setup',
+                      'title': 'Legacy Cached Camera Defaults',
+                      'stepPath': 'BP_PlayerCharacter → Viewport',
+                      'instruction':
+                          'Configure FirstPersonCamera eye height and enable pawn control rotation on FirstPersonCamera.',
+                      'area1Hierarchy': '',
+                      'area2Inspector': '',
+                      'codeFormula':
+                          '[FirstPersonCamera] ──► [Set Relative Location (New Location: X=0, Y=0, Z=64)]',
+                      'verifyMode': 'editor',
+                      'verifyResult':
+                          'Inspect FirstPersonCamera -> Z is 64.',
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+          return _mockGeminiResponder(prompt, model);
+        };
+        try {
+          tester.view.physicalSize = const Size(1440, 900);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
+
+          final provider = WorkbenchProvider();
+          await tester.runAsync(
+            () => provider.startConceptInterview('UE5 Guidebook FPS'),
+          );
+          provider.updateConceptDraft((d) {
+            d.title = 'UE5 Guidebook FPS';
+            d.techSpec = [
+              'Unreal Engine 5 (Blueprint)',
+              'PC Desktop',
+              'UE5 Greybox + Lumen',
+              'SaveGame Slot (.sav)',
+            ];
+          });
+          await tester.runAsync(
+            () => provider.approveConceptAndBuildRelease(),
+          );
+          final beat = provider.activeReleaseBeats.first;
+          final feat = provider.featuresForBeat(beat.id).first;
+          provider.renameLiveFeature(feat.id, 'Player Camera & Movement');
+          final states = FeatureStateNode.getStatesForDocument(
+            provider.documents[feat.id]!,
+          );
+          final cp0 = states.first;
+          cp0.checklist = [
+            Subtask(
+              id: '${cp0.id}_t0',
+              text: 'Rig Commando Camera View (1h)',
+              children: const [],
+            ),
+          ];
+          provider.updateFeatureStates(feat.id, states);
+          provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              feat.id,
+              forceRefresh: true,
+              unrealCppMode: false,
+            ),
+          );
+
+          await tester.pumpWidget(LayersAgenticApp(provider: provider));
+          await tester.pumpAndSettle();
+
+          // 1. Step 1.1 renders Details Panel (NOT Event Graph), vertical numbered DO items, Components hierarchy & RGB XYZ controls
+          expect(find.textContaining('DETAILS PANEL'), findsWidgets);
+          expect(find.textContaining('EVENT GRAPH'), findsWidgets);
+          expect(
+            find.byKey(ValueKey('step_do_instruction_${cp0.id}_0_0')),
+            findsOneWidget,
+          );
+          expect(find.text('1'), findsWidgets);
+          expect(find.text('2'), findsWidgets);
+          expect(find.text('3'), findsWidgets);
+          expect(find.textContaining('Components'), findsWidgets);
+          expect(find.text('+ Add'), findsWidgets);
+          expect(find.textContaining('CapsuleComponent'), findsWidgets);
+          expect(find.text('X'), findsWidgets);
+          expect(find.text('Y'), findsWidgets);
+          expect(find.text('Z'), findsWidgets);
+          expect(find.text('64'), findsWidgets);
+          expect(find.text('650.0'), findsWidgets);
+          expect(
+            find.byKey(const ValueKey('level_placement_table')),
+            findsWidgets,
+          );
+          expect(
+            find.byKey(const ValueKey('copy_transform_btn_1')),
+            findsWidgets,
+          );
+
+          // 2. Step 1.2 renders genuine Event Graph + Fit toggle + Context Switch Callout
+          expect(
+            find.byKey(ValueKey('window_context_switch_${cp0.id}_0_1')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('ue_graph_fit_toggle')),
+            findsOneWidget,
+          );
+
+          // 3. Step 1.3 legacy config-graph step is auto-converted to Details Panel instead of Event Graph
+          expect(
+            find.byKey(ValueKey('window_context_badge_${cp0.id}_0_2')),
+            findsOneWidget,
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
   });
 }

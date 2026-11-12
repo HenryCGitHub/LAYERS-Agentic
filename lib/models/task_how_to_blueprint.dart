@@ -19,6 +19,7 @@ class TaskHowToSubStep {
   final String etaLabel;        // Formatted step ETA (e.g., "15m", "25m", "1.1h")
   final bool isGuardStep;
   final bool isEditorCheck;     // True when step checks Scene Tree / Inspector / Compiler without Play mode
+  final String? stepRole;       // Optional 'editor_setup' | 'script_logic' | 'wire_and_verify'
   final String? area1Hierarchy; // Optional AI-synthesized Area 1 (Scene / Component Hierarchy)
   final String? area2Inspector; // Optional AI-synthesized Area 2 (Inspector / Details Bindings)
 
@@ -37,6 +38,7 @@ class TaskHowToSubStep {
     this.etaLabel = '15m',
     this.isGuardStep = false,
     this.isEditorCheck = false,
+    this.stepRole,
     this.area1Hierarchy,
     this.area2Inspector,
   });
@@ -490,22 +492,35 @@ class TaskHowToBlueprint {
   static const String _area1Marker = '\n[[AREA1]]\n';
   static const String _area2Marker = '\n[[AREA2]]\n';
   static const String _verifyModeMarker = '\n[[VERIFY_MODE]]\n';
+  static const String _stepRoleMarker = '\n[[STEP_ROLE]]\n';
 
   /// Encodes optional AI-synthesized `area1Hierarchy` (Scene/Component tree),
-  /// `area2Inspector` (Inspector/Details bindings), and `verifyMode` (`'editor'` | `'playtest'`)
+  /// `area2Inspector` (Inspector/Details bindings), `verifyMode` (`'editor'` | `'playtest'`),
+  /// and `stepRole` (`'editor_setup'` | `'script_logic'` | `'wire_and_verify'`)
   /// inside `Subtask.specNotes` without altering existing Hive/JSON serialization schemas.
   static String encodeThreeAreaNotes({
     required String instruction,
     String? area1Hierarchy,
     String? area2Inspector,
     String? verifyMode,
+    String? stepRole,
   }) {
     final base = instruction.trim();
     final a1 = (area1Hierarchy ?? '').trim();
     final a2 = (area2Inspector ?? '').trim();
     final vm = (verifyMode ?? '').trim().toLowerCase();
     final effectiveVm = (vm == 'editor' || vm == 'playtest') ? vm : '';
-    if (a1.isEmpty && a2.isEmpty && effectiveVm.isEmpty) return base;
+    final sr = (stepRole ?? '').trim().toLowerCase();
+    final effectiveSr =
+        (sr == 'editor_setup' || sr == 'script_logic' || sr == 'wire_and_verify')
+            ? sr
+            : '';
+    if (a1.isEmpty &&
+        a2.isEmpty &&
+        effectiveVm.isEmpty &&
+        effectiveSr.isEmpty) {
+      return base;
+    }
     final sb = StringBuffer(base);
     if (a1.isNotEmpty) {
       sb.write(_area1Marker);
@@ -519,17 +534,22 @@ class TaskHowToBlueprint {
       sb.write(_verifyModeMarker);
       sb.write(effectiveVm);
     }
+    if (effectiveSr.isNotEmpty) {
+      sb.write(_stepRoleMarker);
+      sb.write(effectiveSr);
+    }
     return sb.toString();
   }
 
   /// Decodes `Subtask.specNotes` into clean natural instruction prose plus optional
-  /// AI-synthesized `area1Hierarchy`, `area2Inspector`, and `verifyMode` (`'editor'` | `'playtest'`).
-  /// Strips `_verifyModeMarker` FIRST from the tail so raw marker text never leaks into `area2Inspector`.
+  /// AI-synthesized `area1Hierarchy`, `area2Inspector`, `verifyMode`, and `stepRole`.
+  /// Strips tail markers in reverse append order so raw marker text never leaks.
   static ({
     String cleanInstruction,
     String? area1Hierarchy,
     String? area2Inspector,
     String? verifyMode,
+    String? stepRole,
   }) decodeThreeAreaNotes(String? rawSpecNotes) {
     if (rawSpecNotes == null || rawSpecNotes.trim().isEmpty) {
       return (
@@ -537,9 +557,16 @@ class TaskHowToBlueprint {
         area1Hierarchy: null,
         area2Inspector: null,
         verifyMode: null,
+        stepRole: null,
       );
     }
     String working = rawSpecNotes;
+    String? sr;
+    final idxSr = working.indexOf(_stepRoleMarker);
+    if (idxSr >= 0) {
+      sr = working.substring(idxSr + _stepRoleMarker.length).trim().toLowerCase();
+      working = working.substring(0, idxSr);
+    }
     String? vm;
     final idxVm = working.indexOf(_verifyModeMarker);
     if (idxVm >= 0) {
@@ -558,11 +585,16 @@ class TaskHowToBlueprint {
       a1 = working.substring(idx1 + _area1Marker.length).trim();
       working = working.substring(0, idx1);
     }
+    final validSr =
+        (sr == 'editor_setup' || sr == 'script_logic' || sr == 'wire_and_verify')
+            ? sr
+            : null;
     return (
       cleanInstruction: working.trim(),
       area1Hierarchy: (a1 != null && a1.isNotEmpty) ? a1 : null,
       area2Inspector: (a2 != null && a2.isNotEmpty) ? a2 : null,
       verifyMode: (vm == 'editor' || vm == 'playtest') ? vm : null,
+      stepRole: validSr,
     );
   }
 
@@ -2374,6 +2406,7 @@ class TaskHowToBlueprint {
           etaLabel: stepEta,
           isGuardStep: isLastStep || stepLabel.toUpperCase().contains('GUARD'),
           isEditorCheck: decodedNotes.verifyMode == 'editor',
+          stepRole: decodedNotes.stepRole,
           area1Hierarchy: decodedNotes.area1Hierarchy,
           area2Inspector: decodedNotes.area2Inspector,
         ),
@@ -2417,6 +2450,13 @@ class TaskHowToBlueprint {
   }) {
     final trimmed = rawCode.trim();
     if (trimmed.isEmpty) return fallbackSpecCode;
+    final pipeRows = trimmed
+        .split('\n')
+        .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
+        .length;
+    if (pipeRows >= 2) {
+      return trimmed;
+    }
 
     final hasBpArrows = trimmed.contains('──►') ||
         trimmed.contains('└──►') ||

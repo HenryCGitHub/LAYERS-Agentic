@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import '../utils/section_text_utils.dart';
 import 'project_pitch_screen.dart';
 import 'widgets/ue_blueprint_graph_canvas.dart';
+import 'widgets/ue_details_inspector_panel.dart';
 
 part 'workbench_engine_areas_card.dart';
 part 'workbench_modals_part.dart';

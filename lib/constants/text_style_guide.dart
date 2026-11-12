@@ -439,7 +439,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
       'Telegraphic editor panel/menu/inspector/script breadcrumb separated by " > "';
 
   static const String runbookInstructionSchemaDesc =
-      '1 Imperative Runbook sentence (<= 18 words) starting with a command verb (Create, Bind, Spawn, Clamp, Set) + exact node/script and tuning value.';
+      '2-4 short newline-separated imperative micro-actions (max 10 words per line, each starting with "- <Panel/Component> → <Command Verb + Value>" or "- <Command Verb + Exact Node/Value>"). Never write a paragraph.';
 
   static const List<String> engineBuildTierEnum = <String>[
     'tier_1_world_space',

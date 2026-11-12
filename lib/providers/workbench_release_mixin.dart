@@ -4155,6 +4155,7 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
           final code = item['codeFormula']?.toString().trim() ?? '';
           final verify = item['verifyResult']?.toString().trim() ?? '';
           final verifyMode = item['verifyMode']?.toString().trim();
+          final stepRole = item['stepRole']?.toString().trim();
           final prevDone = i < fixTask.children.length
               ? fixTask.children[i].completed
               : false;
@@ -4163,6 +4164,7 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
             area1Hierarchy: area1,
             area2Inspector: area2,
             verifyMode: verifyMode,
+            stepRole: stepRole,
           );
           updatedSubs.add(
             Subtask(
@@ -4366,6 +4368,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
           final code = (item['codeFormula'] ?? '').toString().trim();
           final verify = (item['verifyResult'] ?? '').toString().trim();
           final verifyMode = item['verifyMode']?.toString().trim();
+          final stepRole = item['stepRole']?.toString().trim();
           final prevDone = i < parentTask.children.length
               ? parentTask.children[i].completed
               : parentTask.completed;
@@ -4374,6 +4377,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
             area1Hierarchy: area1,
             area2Inspector: area2,
             verifyMode: verifyMode,
+            stepRole: stepRole,
           );
           newChildren.add(
             Subtask(
@@ -4813,7 +4817,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
                     'codeFormula': {
                       'type': 'STRING',
                       'description':
-                          'Polymorphic step payload: for Level/Outliner/World Settings steps emit a pipe table ("| Actor / Component | Property / Transform | Value |"); for UE5 Blueprints emit bracket node wiring ("[Event Node] ──► [Function Node (Pin: Val)]"); for UE5 C++ emit .h/.cpp lines with "+ " on lines added/changed in this step.',
+                          'Polymorphic step payload by stepRole: (1) On stepRole="editor_setup" (Level Outliner, Blueprint Components/Details defaults, World Settings, Input Mappings IA_*/IMC_*), ALWAYS emit a Markdown pipe table ("| Component / Category | Property | Value |", e.g. "| FirstPersonCamera > Transform | Location | (0, 0, 64) |") and NEVER emit "[Node] ──► [Node]" Event Graph wiring. (2) On stepRole="script_logic" or "wire_and_verify": in Blueprint mode emit "[Event / Function] ──► [Branch / Action (Target: ..., Pin: Value)]"; in C++ mode emit .h/.cpp lines with "+ " on lines added/changed in this step.',
                     },
                     'verifyMode': {
                       'type': 'STRING',
@@ -5937,8 +5941,8 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               : '2-5 lines of Scene Hierarchy / Scene Tree placement & Inspector setup with literal numeric Position/Scale values derived from Active Tuning Parameters (do NOT write runtime Start()/_ready() code just to place static blockout floors/walls, and keep spawn at `(0, 2, 0)` without conflicting coordinates)')
           : (engineLabel == 'UNREAL 5'
               ? (unrealCppMode
-                  ? '3-8 lines of Unreal 5 C++ (.h / .cpp) as a Unified Living Script: keep existing class/function lines plain for context and prefix EVERY line added or modified in THIS step with `+ ` (e.g. `+ UPROPERTY(EditAnywhere, Category="Dash")\n+ float DashSpeed = 1200.f;`). Use native UE5 types (`CreateDefaultSubobject`, `FVector`, `TObjectPtr<>`, `UPROPERTY`), `uu` units, and `Ctrl+Alt+F11` Live Coding—NEVER Blueprint node arrows'
-                  : '2-6 lines of Unreal 5 Blueprint Event Graph wiring using bracket nodes and arrows: `[Event / Enhanced Input Node] ──► [Function Node (Target: ..., Pin: Value)]` (`──►` / `└──►`) with exact My Blueprint variables and guard branches (NEVER C++ `->` syntax)')
+                  ? 'on `stepRole: "editor_setup"` (Asset/Component Details, Input Mapping, World Settings) emit a clean Markdown Details table (`| Component / Category | Property | Value |`—NEVER runtime setters for static defaults); on `stepRole: "script_logic"` / `"wire_and_verify"` emit 3-8 lines of Unreal 5 C++ (.h / .cpp) as a Unified Living Script keeping existing class/function lines plain for context and prefixing EVERY line added or modified in THIS step with `+ ` (e.g. `+ UPROPERTY(EditAnywhere, Category="Dash")\n+ float DashSpeed = 1200.f;`) using `CreateDefaultSubobject`, `FVector`, `TObjectPtr<>`, `uu` units, and `Ctrl+Alt+F11`—NEVER Blueprint node arrows'
+                  : 'STRICT CONFIG vs. GRAPH SPLIT BY `stepRole`: (A) When `stepRole == "editor_setup"` (creating assets, adding Components, setting Details Panel defaults like `Location`, `Use Pawn Control Rotation`, `Max Walk Speed`, Collision, or `IMC_Default` key bindings), ALWAYS emit a clean Markdown Details / Mapping table (`| Component / Category | Property | Value |`, e.g. `| FirstPersonCamera > Transform | Location | (0, 0, 64) |` or `| FirstPersonCamera > Camera Options | Use Pawn Control Rotation | true |` or `| CharacterMovement > Walking | Max Walk Speed | 650.0 cm/s |`) and NEVER emit `[Node] ──► [Node]` Event Graph arrows or runtime `Set Relative Location`/`Set Max Walk Speed` wiring! (B) ONLY when `stepRole == "script_logic"` or `"wire_and_verify"` emit 2-6 lines of Unreal 5 Blueprint Event Graph wiring (`[Event / Enhanced Input Node] ──► [Function Node (Target: ..., Pin: Value)]`, keeping pure getters like `[Get FirstPersonCamera]` separate from Exec flow—NEVER C++ `->` syntax)')
               : '2-6 lines of concrete $targetEngineMode code using the exact tuning variables and guard checks');
 
       final prompt = '''
@@ -5974,6 +5978,7 @@ CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
 
 For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI widget, data resource, or gameplay calculation—never generic phrases like "Body & Collision", "Action & Math", "Cue & Boundary Clamp", or passive "Verification" titles) and return the sequential 3-Area sub-steps needed to implement and verify that task (zero artificial step count limits; in 01 · PROTOTYPE prefer 2-3 cohesive sub-steps per task so greybox features stay around 6-9 total steps):
 - In `area2Inspector`, list ONLY the 1-3 properties modified in THIS specific task's component (never dump CharacterMovement properties onto a Capsule/Collider task).
+- In `instruction` (DO), ALWAYS emit 2-4 short newline-separated imperative micro-actions (`- <Panel/Component> → <Command Verb + Exact Value>`) for a scannable Unreal Editor Guide Book, never a prose sentence or paragraph.
 - In `codeFormula`, emit $codeFormulaModeGuide.
 
 Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each task.''';
@@ -6151,6 +6156,7 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
             }
             final verify = item['verifyResult']?.toString().trim() ?? '';
             final verifyMode = item['verifyMode']?.toString().trim();
+            final stepRole = item['stepRole']?.toString().trim();
             if (instr.isEmpty && code.isEmpty) continue;
             final prevDone = sIdx < parentTask.children.length
                 ? parentTask.children[sIdx].completed
@@ -6160,6 +6166,7 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
               area1Hierarchy: area1,
               area2Inspector: area2,
               verifyMode: verifyMode,
+              stepRole: stepRole,
             );
             newChildren.add(
               Subtask(
