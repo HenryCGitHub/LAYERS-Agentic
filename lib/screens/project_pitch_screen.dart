@@ -229,9 +229,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       shortTitle: 'Tech Spec',
       title: 'Tech Spec',
       options: [
-        'Godot 4 Fast 2D Stack: Godot 4 (GDScript) · PC Desktop · 2D Sprites + Particles · Offline Local Save',
-        'Unity 6 3D Action Stack: Unity 6 (C#) · PC & Steam Deck · 3D Greybox Meshes · Steam Cloud Save',
-        'Unreal Engine 5 3D Stack: Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Offline Local Save',
+        'UE5 Blueprint-First Stack: Unreal Engine 5 (Blueprints) · PC Desktop · UE5 Greybox + Lumen · SaveGame Slot (.sav)',
+        'UE5 Hybrid Stack: Unreal Engine 5 (Blueprints / C++) · PC & Steam Deck · 3D Meshes + Niagara VFX · Steam Cloud Save',
+        'UE5 C++ Core Stack: Unreal Engine 5 (C++) · Console + PC · 3D Meshes + Niagara VFX · SaveGame Slot (.sav)',
       ],
     ),
     _SectionConfig(
@@ -656,10 +656,19 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       3: ['Single-Screen Arena', 'Continuous Overworld', 'Multi-Room Course', 'Procedural Room Grid'],
     };
     const techSpecPresets = <int, List<String>>{
-      0: ['Godot 4 (GDScript)', 'Unity 6 (C#)', 'Unreal Engine 5 (Blueprints / C++)', 'Custom / Raylib'],
-      1: ['PC Desktop', 'PC & Steam Deck', 'Web + Desktop'],
-      2: ['2D Sprites + Particles', '3D Greybox Meshes', '2D/3D Hybrid Pipeline', 'Low-Poly Stylized'],
-      3: ['Local Save', 'Steam Cloud Save', 'Stateless Arcade Session'],
+      0: [
+        'Unreal Engine 5 (Blueprints / C++)',
+        'Unreal Engine 5 (Blueprints)',
+        'Unreal Engine 5 (C++)',
+      ],
+      1: ['PC Desktop', 'PC & Steam Deck', 'Console + PC'],
+      2: [
+        'UE5 Greybox + Lumen',
+        '3D Meshes + Niagara VFX',
+        'Paper2D / 2.5D Hybrid',
+        'Stylized Low-Poly UE5',
+      ],
+      3: ['SaveGame Slot (.sav)', 'Steam Cloud Save', 'Stateless Arcade Session'],
     };
     return (isGameSpec ? gameSpecPresets[cellIndex] : techSpecPresets[cellIndex]) ?? const <String>[];
   }

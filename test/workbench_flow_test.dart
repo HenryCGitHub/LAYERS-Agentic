@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layers_agentic/screens/widgets/ue_blueprint_graph_canvas.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
@@ -919,8 +920,7 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
     };
   }
 
-  if (prompt.contains(
-      'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps')) {
+  if (prompt.contains('3-Area Engine How-To steps')) {
     return null;
   }
 
@@ -3457,8 +3457,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         String? capturedPrompt;
         final prevResponder = GeminiAgentClient.testMockResponder;
         GeminiAgentClient.testMockResponder = (prompt, preferredModel) async {
-          if (prompt.contains(
-              'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps')) {
+          if (prompt.contains('Synthesize') &&
+              prompt.contains('3-Area Engine How-To steps')) {
             capturedModel = preferredModel;
             capturedPrompt = prompt;
             return <String, dynamic>{
@@ -4402,9 +4402,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         // ── 2. AI Step Synthesis: 1-Based taskIndex (1, 2, 3) Maps Cleanly to checklist[0], [1], [2] with Zero Shift ──
         final prevResponder = GeminiAgentClient.testMockResponder;
         GeminiAgentClient.testMockResponder = (prompt, preferredModel) async {
-          if (prompt.contains(
-            'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps',
-          )) {
+          if (prompt.contains('3-Area Engine How-To steps')) {
             expect(prompt, contains('ONE SHARED ASSET ACROSS ALL TASKS'));
             expect(prompt, contains('STRICT TASK-ROLE ALIGNMENT'));
             return <String, dynamic>{
@@ -4686,11 +4684,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final capturedPromptsByFeatTitle = <String, String>{};
         final prevResponder = GeminiAgentClient.testMockResponder;
         GeminiAgentClient.testMockResponder = (prompt, preferredModel) async {
-          if (prompt.contains(
-            'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps',
-          )) {
+          if (prompt.contains('3-Area Engine How-To steps')) {
             if (prompt.contains('for Feature "${feat1.title}"')) {
-              capturedPromptsByFeatTitle[feat1.title] = prompt;
+              if (!prompt.contains('Complete OMITTED')) {
+                capturedPromptsByFeatTitle[feat1.title] = prompt;
+              }
               return <String, dynamic>{
                 'tasks': [
                   {
@@ -4714,7 +4712,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               };
             }
             if (prompt.contains('for Feature "${feat2.title}"')) {
-              capturedPromptsByFeatTitle[feat2.title] = prompt;
+              if (!prompt.contains('Complete OMITTED')) {
+                capturedPromptsByFeatTitle[feat2.title] = prompt;
+              }
               return <String, dynamic>{
                 'tasks': [
                   {
@@ -5524,9 +5524,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             };
           }
 
-          if (prompt.contains(
-            'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps',
-          )) {
+          if (prompt.contains('3-Area Engine How-To steps')) {
             capturedStepPrompts.add(prompt);
             return null; // Let deterministic fallback or eager seeding verify
           }
@@ -5884,15 +5882,21 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           'A 2D top-down arena shooter where you farm crops by day for shotgun ammo by night',
         );
 
-        // Verify Fix 1: "2D Game Engine" normalized to "Godot 4 (GDScript)" and initial releaseTrainTitles capped to 1
-        expect(provider.conceptDraft!.techSpec.first, 'Godot 4 (GDScript)');
+        // Verify Fix 1: Generic "2D Game Engine" normalized to Unreal Engine 5 workflow and initial releaseTrainTitles capped to 1
+        expect(
+          provider.conceptDraft!.techSpec.first,
+          'Unreal Engine 5 (Blueprints / C++)',
+        );
         expect(provider.conceptDraft!.releaseTrainTitles.length, 1);
 
-        // Verify Fix 1 on chat turn as well ("2D Engine" -> "Godot 4 (GDScript)")
+        // Verify Fix 1 on chat turn as well ("2D Engine" -> Unreal Engine 5)
         await provider.sendConceptChatMessage(
           'Add dash-through-enemy reload mechanic',
         );
-        expect(provider.conceptDraft!.techSpec.first, 'Godot 4 (GDScript)');
+        expect(
+          provider.conceptDraft!.techSpec.first,
+          'Unreal Engine 5 (Blueprints / C++)',
+        );
 
         // Build v0.1 Release
         await provider.openReleasePlanGate();
@@ -5937,7 +5941,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(capturedInboxPrompts.last, contains('Game Spec: 2D Top-Down'));
         expect(
           capturedInboxPrompts.last,
-          contains('Tech Spec: Godot 4 (GDScript)'),
+          contains('Tech Spec: Unreal Engine 5 (Blueprints / C++)'),
         );
         final nowFeatId = await provider.acceptFeatureInboxTriage(nowInbox!.id);
         expect(nowFeatId, isNotNull);
@@ -6350,9 +6354,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             capturedRelChatPrompt = prompt;
             return _mockGeminiResponder(prompt, model);
           }
-          if (prompt.contains(
-            'Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature',
-          )) {
+          if (prompt.contains('3-Area Engine How-To steps') &&
+              prompt.contains('for Feature')) {
             capturedStepSynthPrompt = prompt;
             if (prompt.contains('"Hull Breach Welder"')) {
               sonarStepSynthCalls++;
@@ -6404,11 +6407,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(
           WorkbenchProvider.availableConversationModels,
-          equals(const ['gemini-flash-latest']),
+          equals(const ['gemini-4-hydrogen', 'gemini-flash-latest']),
         );
         expect(
           WorkbenchProvider.availablePlanningModels,
-          equals(const ['gemini-flash-latest']),
+          equals(const ['gemini-4-hydrogen', 'gemini-flash-latest']),
         );
         expect(capturedStepSynthPrompt, isNotNull);
         expect(capturedStepSynthPrompt, contains('Design Pillars:'));
@@ -8654,7 +8657,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         // 1. Simulate multiple API calls accumulating tokens
         // Call 1: 100,000 in, 20,000 out
-        // Cost: (100000 * 0.75 + 20000 * 3.75) / 1,000,000 = (75,000 + 75,000) / 1M = 0.15
+        // Cost: (100000 * 1.50 + 20000 * 3.75) / 1,000,000 = (150,000 + 75,000) / 1M = 0.225
         provider.recordTokenUsage(
           inputTokens: 100000,
           outputTokens: 20000,
@@ -8663,12 +8666,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.totalInputTokens, equals(100000));
         expect(provider.totalOutputTokens, equals(20000));
         expect(provider.totalThinkingTokens, equals(5000));
-        expect(provider.totalEstimatedCostUsd, closeTo(0.15, 0.0001));
-        expect(provider.tokenUsageCompactLabel, equals('100k in · 20k out · \$0.150'));
+        expect(provider.totalEstimatedCostUsd, closeTo(0.225, 0.0001));
+        expect(provider.tokenUsageCompactLabel, equals('100k in · 20k out · \$0.225'));
 
         // Call 2: Add 50,000 in, 10,000 out
         // Total In: 150,000, Total Out: 30,000
-        // Cost: (150000 * 0.75 + 30000 * 3.75) / 1M = (112,500 + 112,500) / 1M = 0.225
+        // Cost: (150000 * 1.50 + 30000 * 3.75) / 1M = (225,000 + 112,500) / 1M = 0.3375
         provider.recordTokenUsage(
           inputTokens: 50000,
           outputTokens: 10000,
@@ -8677,8 +8680,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.totalInputTokens, equals(150000));
         expect(provider.totalOutputTokens, equals(30000));
         expect(provider.totalThinkingTokens, equals(7000));
-        expect(provider.totalEstimatedCostUsd, closeTo(0.225, 0.0001));
-        expect(provider.tokenUsageCompactLabel, equals('150k in · 30k out · \$0.225'));
+        expect(provider.totalEstimatedCostUsd, closeTo(0.3375, 0.0001));
+        expect(provider.tokenUsageCompactLabel, equals('150k in · 30k out · \$0.338'));
 
         // 2. Pump the app UI and verify top bar token tracker pill displays
         tester.view.physicalSize = const Size(1280, 800);
@@ -8693,7 +8696,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         final pillFinder = find.byKey(const ValueKey('token_usage_tracker_pill'));
         expect(pillFinder, findsOneWidget);
-        expect(find.text('150k in · 30k out · \$0.225'), findsOneWidget);
+        expect(find.text('150k in · 30k out · \$0.338'), findsOneWidget);
 
         // 3. Click the pill to reset token counters
         await tester.tap(pillFinder);
@@ -8712,7 +8715,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             matching: find.byType(Tooltip),
           ),
         );
-        expect(tooltipWidget.message, contains('\$0.75 / 1M'));
+        expect(tooltipWidget.message, contains('\$1.50 / 1M'));
         expect(tooltipWidget.message, contains('\$3.75 / 1M'));
       },
     );
@@ -9016,7 +9019,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
       (WidgetTester tester) async {
         expect(
           GeminiAgentClient.pinnedLiveFlashModel,
-          equals('gemini-3.8-flash'),
+          equals('gemini-4-hydrogen'),
         );
 
         await tester.binding.setSurfaceSize(const Size(1440, 900));
@@ -9211,7 +9214,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
             callCount++;
             capturedUris.add(uri);
-            if (uri.path.contains('gemini-3.8-flash')) {
+            if (uri.path.contains('gemini-4-hydrogen')) {
               return http.Response('{"error":{"code":503}}', 503);
             }
             return http.Response(
@@ -9313,7 +9316,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           expect(
             capturedUris.last.toString(),
             equals(
-              'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy/v1beta/models/gemini-3.8-flash:generateContent',
+              'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy/v1beta/models/gemini-4-hydrogen:generateContent',
             ),
           );
           expect(
@@ -10240,14 +10243,26 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             findsOneWidget,
           );
 
-          // 2. Step 1.1 renders visible DO:, Scene Hierarchy pill, Clickable Inspector pill, and `↳ Editor Check:` footer (and NO guard pill since step 1.1 has no guard concept)
+          // 2. Step 1.1 renders visible DO:, Window Context Badge, and `↳ Editor Check:` footer (and NO repetitive per-step hierarchy/inspector pills or guard pill since hierarchy/specs are hoisted to Adaptive Feature Blueprint Deck)
           expect(
             find.byKey(ValueKey('step_do_instruction_${cp0.id}_0_0')),
             findsOneWidget,
           );
           expect(
-            find.byKey(ValueKey('step_hierarchy_pill_${cp0.id}_0_0')),
+            find.byKey(ValueKey('adaptive_feature_blueprint_deck_${cp0.id}')),
             findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('window_context_badge_${cp0.id}_0_0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('step_hierarchy_pill_${cp0.id}_0_0')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(ValueKey('step_inspector_pill_${cp0.id}_0_0_0')),
+            findsNothing,
           );
           expect(
             find.byKey(ValueKey('step_guard_pill_${cp0.id}_0_0')),
@@ -10266,22 +10281,22 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             findsOneWidget,
           );
 
-          // 3. Tap Step 1.1's visible Inspector pill `⚙ dashImpulse: 620.0 ✎` to inline-edit it to `780.0`
-          final stepInspPill = find.byKey(
-            ValueKey('step_inspector_pill_${cp0.id}_0_0_0'),
+          // 3. Tap Blueprint Deck's variable pill `⚙ dashImpulse: 620.0 ✎` to inline-edit it to `780.0`
+          final deckVarPill = find.byKey(
+            ValueKey('blueprint_deck_var_pill_${cp0.id}_0'),
           );
-          expect(stepInspPill, findsOneWidget);
-          await tester.ensureVisible(stepInspPill);
-          await tester.tap(stepInspPill);
+          expect(deckVarPill, findsOneWidget);
+          await tester.ensureVisible(deckVarPill);
+          await tester.tap(deckVarPill);
           await tester.pumpAndSettle();
 
-          final stepInspInput = find.byKey(
-            ValueKey('step_inspector_input_${cp0.id}_0_0_0'),
+          final deckVarInput = find.byKey(
+            ValueKey('blueprint_deck_var_input_${cp0.id}_0'),
           );
-          expect(stepInspInput, findsOneWidget);
-          await tester.enterText(stepInspInput, 'dashImpulse: 780.0');
+          expect(deckVarInput, findsOneWidget);
+          await tester.enterText(deckVarInput, 'dashImpulse: 780.0');
           await tester.tap(
-            find.byKey(ValueKey('step_inspector_save_${cp0.id}_0_0_0')),
+            find.byKey(ValueKey('blueprint_deck_var_save_${cp0.id}_0')),
           );
           await tester.pumpAndSettle();
           expect(
@@ -10637,6 +10652,195 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             contains('Current Feature Script / Graph Excerpt'),
           );
           expect(capturedFixDebuggerPrompt, contains('func apply_reel_pull'));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
+    test('UeBlueprintGraphCanvas parses UE5 Blueprint node chain', () {
+      const formula =
+          '[Event BeginPlay] ──► [Set Timer by Event (Time: 0.25s)] ──► [Spawn Actor from Class (Class: BP_EnemyDrone)]';
+      final parsed = UeBlueprintGraphCanvas.parseFromFormula(formula);
+      expect(parsed.nodes.length, greaterThanOrEqualTo(3));
+      expect(parsed.wires.length, greaterThanOrEqualTo(2));
+      expect(parsed.nodes.first.title, contains('BeginPlay'));
+    });
+
+    test('WorkbenchProvider activeModelIndicatorLabel defaults to Hydrogen', () {
+      final provider = WorkbenchProvider();
+      expect(provider.activeModelIndicatorLabel, equals('⚡ Hydrogen'));
+    });
+
+    testWidgets(
+      '46. Zero-Repetition UE5 Workbench: Blueprint Deck toggle, Window Context Switch Callout, Level Placement Table + Copy Transform & C++ Incremental Diff',
+      (tester) async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains('3-Area Engine How-To steps')) {
+            return <String, dynamic>{
+              'primarySharedScriptOrScene': 'PlayerCharacter.h / PlayerCharacter.cpp',
+              'tasks': [
+                {
+                  'taskIndex': 0,
+                  'taskTitle': 'Arena & Character Dash',
+                  'subSteps': [
+                    {
+                      'stepRole': 'editor_setup',
+                      'title': 'Place Arena Floor',
+                      'stepPath': 'Level Editor → Outliner',
+                      'instruction': 'Place a Cylinder named Floor_Arena and PlayerStart in the level.',
+                      'area1Hierarchy': '',
+                      'area2Inspector': '',
+                      'codeFormula':
+                          '| Actor / Component | Property / Transform | Value |\n'
+                          '| --- | --- | --- |\n'
+                          '| Floor_Arena | Location | (0, 0, 0) |\n'
+                          '| PlayerStart | Location | (0, 0, 120) |',
+                      'verifyMode': 'editor',
+                      'verifyResult': 'Check Outliner -> Floor_Arena and PlayerStart exist.',
+                    },
+                    {
+                      'stepRole': 'script_logic',
+                      'title': 'Declare DashSpeed Property',
+                      'stepPath': 'PlayerCharacter.h',
+                      'instruction': 'Declare DashSpeed as UPROPERTY in PlayerCharacter.h.',
+                      'area1Hierarchy': '',
+                      'area2Inspector': '',
+                      'codeFormula':
+                          'class APlayerCharacter : public ACharacter {\n'
+                          '    UPROPERTY(EditAnywhere, Category="Dash")\n'
+                          '    float DashSpeed = 1200.f;\n'
+                          '};',
+                      'verifyMode': 'editor',
+                      'verifyResult': 'Inspect PlayerCharacter.h -> DashSpeed compiles.',
+                    },
+                    {
+                      'stepRole': 'script_logic',
+                      'title': 'Add DashCooldown Guard',
+                      'stepPath': 'PlayerCharacter.h',
+                      'instruction': 'Add DashCooldown UPROPERTY beneath DashSpeed.',
+                      'area1Hierarchy': '',
+                      'area2Inspector': '',
+                      'codeFormula':
+                          'class APlayerCharacter : public ACharacter {\n'
+                          '    UPROPERTY(EditAnywhere, Category="Dash")\n'
+                          '    float DashSpeed = 1200.f;\n'
+                          '    float DashCooldown = 0.6f;\n'
+                          '};',
+                      'verifyMode': 'playtest',
+                      'verifyResult': 'Press Shift -> Player dashes at 1200 uu/s with 0.6s cooldown.',
+                    },
+                  ],
+                },
+              ],
+            };
+          }
+          return _mockGeminiResponder(prompt, model);
+        };
+        try {
+          tester.view.physicalSize = const Size(1440, 900);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
+
+          final provider = WorkbenchProvider();
+          await tester.runAsync(
+            () => provider.startConceptInterview('UE5 Arena Test'),
+          );
+          provider.updateConceptDraft((d) {
+            d.title = 'UE5 Arena Test';
+            d.techSpec = [
+              'Unreal Engine 5 (C++)',
+              'PC Desktop',
+              'UE5 Greybox + Lumen',
+              'SaveGame Slot (.sav)',
+            ];
+          });
+          await tester.runAsync(
+            () => provider.approveConceptAndBuildRelease(),
+          );
+          final beat = provider.activeReleaseBeats.first;
+          final feat = provider.featuresForBeat(beat.id).first;
+          provider.renameLiveFeature(feat.id, 'Arena & Character Dash');
+          final states = FeatureStateNode.getStatesForDocument(
+            provider.documents[feat.id]!,
+          );
+          final cp0 = states.first;
+          cp0.tuningParams = ['DashSpeed: 1200 uu/s'];
+          cp0.edgeCases = ['[STATE GUARD] Clamp DashCooldown >= 0.6s'];
+          cp0.checklist = [
+            Subtask(
+              id: '${cp0.id}_t0',
+              text: 'Arena & Character Dash (2h)',
+              children: const [],
+            ),
+          ];
+          provider.updateFeatureStates(feat.id, states);
+          provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              feat.id,
+              forceRefresh: true,
+              unrealCppMode: true,
+            ),
+          );
+
+          // Verify Dart automatically computed `+` inline diff markers on Step 1.3 vs Step 1.2
+          final updatedCp =
+              FeatureStateNode.getStatesForDocument(provider.documents[feat.id]!)
+                  .first;
+          expect(
+            updatedCp.checklist.first.children[2].codeSnippet,
+            contains('+    float DashCooldown = 0.6f;'),
+          );
+
+          await tester.pumpWidget(LayersAgenticApp(provider: provider));
+          await tester.pumpAndSettle();
+
+          // 1. Level Placement Table + Copy Transform rendered cleanly on Step 1.1
+          expect(
+            find.byKey(const ValueKey('level_placement_table')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('copy_transform_btn_1')),
+            findsOneWidget,
+          );
+
+          // 2. Window Context Badges + Context-Switch Callout when transitioning LEVEL EDITOR -> C++ (.h / .cpp)
+          expect(
+            find.byKey(ValueKey('window_context_badge_${cp0.id}_0_0')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('window_context_badge_${cp0.id}_0_1')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('window_context_switch_${cp0.id}_0_1')),
+            findsOneWidget,
+          );
+          expect(find.textContaining('LEVEL EDITOR'), findsWidgets);
+          expect(find.textContaining('C++ (.h / .cpp)'), findsWidgets);
+
+          // 3. Adaptive Feature Blueprint Deck collapses and expands cleanly
+          final deckToggle = find.byKey(
+            ValueKey('adaptive_blueprint_deck_toggle_${cp0.id}'),
+          );
+          expect(deckToggle, findsOneWidget);
+          expect(
+            find.byKey(ValueKey('blueprint_deck_var_pill_${cp0.id}_0')),
+            findsOneWidget,
+          );
+          await tester.tap(deckToggle);
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(ValueKey('blueprint_deck_var_pill_${cp0.id}_0')),
+            findsNothing,
+          );
         } finally {
           GeminiAgentClient.testMockResponder = prevMock;
         }

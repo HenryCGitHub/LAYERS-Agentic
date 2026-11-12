@@ -5433,6 +5433,20 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                 if (desktopFeatureContextBar !=
                                                     null)
                                                   desktopFeatureContextBar,
+                                                _buildAdaptiveFeatureBlueprintDeck(
+                                                  feat: feat,
+                                                  states: states,
+                                                  checkpointIndex: index,
+                                                  node: node,
+                                                  howToBlueprints:
+                                                      howToBlueprints,
+                                                  selectedHowTo: selectedHowTo,
+                                                  activeSubStep: activeSubStep,
+                                                  selectedTaskIdx:
+                                                      selectedTaskIdx,
+                                                  tuningItems: tuningItems,
+                                                  edgeItems: edgeItems,
+                                                ),
                                                 rightDockWidget,
                                               ],
                                             );
@@ -5633,4 +5647,379 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     );
   }
 
+  Widget _buildAdaptiveFeatureBlueprintDeck({
+    required TierDocument feat,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required FeatureStateNode node,
+    required List<TaskHowToBlueprint> howToBlueprints,
+    required TaskHowToBlueprint selectedHowTo,
+    required TaskHowToSubStep activeSubStep,
+    required int selectedTaskIdx,
+    required List<String> tuningItems,
+    required List<String> edgeItems,
+  }) {
+    final bool isDeckCollapsed =
+        _collapsedBlueprintDeckNodeIds.contains(node.id);
+    final effectiveCardUnrealCpp =
+        _unrealCppMode && _classifyFeatureArchetype(feat.title) != 'level';
+    final activeTargetComp = _resolveTaskTargetComponent(
+      selectedHowTo,
+      unrealCppMode: effectiveCardUnrealCpp,
+    );
+    final assetSpec = _resolveFeatureAssetSpec(
+      feat: feat,
+      checkpointIndex: checkpointIndex,
+      selectedTaskIdx: selectedTaskIdx,
+      selectedHowTo: selectedHowTo,
+      activeSubStep: activeSubStep,
+      unrealCppMode: effectiveCardUnrealCpp,
+      activeTargetComp: activeTargetComp,
+    );
+    final rawComponents = _buildPersistentSceneTreeComponents(
+      howToBlueprints,
+      unrealCppMode: effectiveCardUnrealCpp,
+    );
+    final components = <({
+      String icon,
+      String componentKey,
+      String displayLabel,
+      List<int> taskIndices,
+    })>[
+      if (assetSpec.archetype == 'character' &&
+          selectedHowTo.engineLabel == 'UNREAL 5' &&
+          !rawComponents
+              .any((c) => c.componentKey.toLowerCase().contains('capsule')))
+        (
+          icon: '📦',
+          componentKey: 'CapsuleComponent',
+          displayLabel: effectiveCardUnrealCpp
+              ? 'GetCapsuleComponent() (UCapsuleComponent)'
+              : 'CapsuleComponent',
+          taskIndices: const <int>[0],
+        ),
+      ...rawComponents,
+    ];
+    final activeTaskCorpus = [
+      selectedHowTo.shortTaskTitle,
+      selectedHowTo.taskGoalSentence,
+      for (final s in selectedHowTo.subSteps)
+        '${s.shortTitle} ${s.instruction} ${s.codeFormula}',
+    ].join(' ').toLowerCase();
+
+    if (components.isEmpty && tuningItems.isEmpty && edgeItems.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      key: ValueKey('adaptive_feature_blueprint_deck_${node.id}'),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D1119),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF1E293B)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      '🧱 FEATURE BLUEPRINT · ${assetSpec.assetName}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    Text(
+                      '${components.length} Components · ${tuningItems.length} Specs${edgeItems.isNotEmpty ? ' · ${edgeItems.length} Guards' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF38BDF8).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: const Color(0xFF38BDF8).withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Text(
+                  'T${selectedTaskIdx + 1} FOCUS',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF7DD3FC),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              InkWell(
+                key: ValueKey('adaptive_blueprint_deck_toggle_${node.id}'),
+                borderRadius: BorderRadius.circular(4),
+                onTap: () => _rebuild(() {
+                  if (isDeckCollapsed) {
+                    _collapsedBlueprintDeckNodeIds.remove(node.id);
+                  } else {
+                    _collapsedBlueprintDeckNodeIds.add(node.id);
+                  }
+                }),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  child: Text(
+                    isDeckCollapsed ? 'Show Deck ▾' : 'Hide Deck ▴',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (!isDeckCollapsed) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                if (components.isNotEmpty)
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'OUTLINER:',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      for (final comp in components)
+                        Builder(
+                          builder: (context) {
+                            final isCompActive =
+                                comp.taskIndices.contains(selectedTaskIdx);
+                            return InkWell(
+                              key: ValueKey(
+                                'blueprint_deck_component_pill_${node.id}_${comp.componentKey}',
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              onTap: comp.taskIndices.isEmpty
+                                  ? null
+                                  : () {
+                                      final targetTaskIdx =
+                                          comp.taskIndices.first;
+                                      _rebuild(() {
+                                        _selectedTaskIndexByCheckpoint[
+                                            node.id] = targetTaskIdx;
+                                        _selectedSubStepIndexByTask[
+                                            '${node.id}_$targetTaskIdx'] = 0;
+                                      });
+                                    },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isCompActive
+                                      ? const Color(0xFF0E1D2F)
+                                      : const Color(0xFF090D14),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: isCompActive
+                                        ? const Color(0xFF38BDF8)
+                                        : const Color(0xFF1E293B),
+                                  ),
+                                ),
+                                child: Text(
+                                  '${comp.icon} ${comp.displayLabel}',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    fontWeight: isCompActive
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isCompActive
+                                        ? const Color(0xFF7DD3FC)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                if (tuningItems.isNotEmpty)
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'SPECS:',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      for (int tIdx = 0; tIdx < tuningItems.length; tIdx++)
+                        Builder(
+                          builder: (context) {
+                            final rawTp = tuningItems[tIdx];
+                            final tpKey = rawTp
+                                .split(
+                                  _ReleaseWorkbenchScreenState
+                                      ._tuningVarDelimiterRegex,
+                                )
+                                .first
+                                .trim();
+                            final isVarActive = tpKey.isNotEmpty &&
+                                activeTaskCorpus.contains(tpKey.toLowerCase());
+                            final deckEditKey =
+                                'deck_tuning_${node.id}_$tIdx';
+                            if (_activeStage2InlineEditKey == deckEditKey) {
+                              return SizedBox(
+                                width: 240,
+                                child: _buildStage2InlineEditor(
+                                  editKey: deckEditKey,
+                                  hintText: rawTp,
+                                  inputKey: ValueKey(
+                                    'blueprint_deck_var_input_${node.id}_$tIdx',
+                                  ),
+                                  saveBtnKey: ValueKey(
+                                    'blueprint_deck_var_save_${node.id}_$tIdx',
+                                  ),
+                                  onSave: (val) => _saveInlineTuningParam(
+                                    feat: feat,
+                                    states: states,
+                                    node: node,
+                                    selectedTaskIdx: selectedTaskIdx,
+                                    rawValue: val,
+                                    tuningParamIndex: tIdx,
+                                    propertyKey: tpKey,
+                                  ),
+                                ),
+                              );
+                            }
+                            return InkWell(
+                              key: ValueKey(
+                                'blueprint_deck_var_pill_${node.id}_$tIdx',
+                              ),
+                              borderRadius: BorderRadius.circular(5),
+                              onTap: () {
+                                Clipboard.setData(ClipboardData(text: rawTp));
+                                _startStage2InlineEdit(deckEditKey, rawTp);
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 7,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: isVarActive
+                                      ? const Color(0xFF1A1432)
+                                      : const Color(0xFF0A0D16),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: isVarActive
+                                        ? const Color(0xFF8B5CF6)
+                                            .withValues(alpha: 0.7)
+                                        : const Color(0xFF1E293B),
+                                  ),
+                                ),
+                                child: Text(
+                                  '⚙ $rawTp ✎',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10,
+                                    fontWeight: isVarActive
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isVarActive
+                                        ? const Color(0xFFC4B5FD)
+                                        : const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                if (edgeItems.isNotEmpty)
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'GUARDS:',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF64748B),
+                        ),
+                      ),
+                      for (int gIdx = 0; gIdx < edgeItems.length; gIdx++)
+                        Container(
+                          key: ValueKey(
+                            'blueprint_deck_guard_pill_${node.id}_$gIdx',
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1D160B),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: const Color(0xFFF59E0B)
+                                  .withValues(alpha: 0.35),
+                            ),
+                          ),
+                          child: Text(
+                            '🛡 ${TaskHowToBlueprint.formatTelegraphicGuardChip(edgeItems[gIdx])}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: const Color(0xFFFCD34D),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }

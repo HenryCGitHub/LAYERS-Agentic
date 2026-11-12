@@ -758,8 +758,42 @@ class WorkbenchShell extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Tooltip(
-                        message: 'Gemini 3.8 Flash Session Token Usage:\n'
-                            '• Input: ${workbench.totalInputTokens} tokens (\$0.75 / 1M)\n'
+                        message:
+                            'Active AI Model: ${workbench.activeModelIndicatorLabel} (${workbench.conversationModel})',
+                        child: Container(
+                          key: const ValueKey('active_model_indicator_pill'),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bgSurface,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: workbench.activeModelIndicatorLabel
+                                      .contains('Fallback')
+                                  ? AppTheme.accentAmberFor(isDark)
+                                      .withValues(alpha: 0.45)
+                                  : borderColor,
+                            ),
+                          ),
+                          child: Text(
+                            workbench.activeModelIndicatorLabel,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              color: workbench.activeModelIndicatorLabel
+                                      .contains('Fallback')
+                                  ? AppTheme.accentAmberFor(isDark)
+                                  : textSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Tooltip(
+                        message: 'Gemini 4 Hydrogen Session Token Usage:\n'
+                            '• Input: ${workbench.totalInputTokens} tokens (\$1.50 / 1M)\n'
                             '• Output: ${workbench.totalOutputTokens} tokens (\$3.75 / 1M inc. reasoning)\n'
                             '• Est. Cost: \$${workbench.totalEstimatedCostUsd.toStringAsFixed(4)}\n\n'
                             'Click to reset session token counter.',

@@ -631,13 +631,16 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     }
 
     final presets = _kvPresetsForCell(isGameSpec, cellIndex);
+    final bool isLockedUe5EngineCell = !isGameSpec && cellIndex == 0;
     return Material(
       color: Colors.transparent,
       child: PopupMenuButton<String>(
         key: ValueKey(
           'kv_cell_dropdown_${isGameSpec ? "game" : "tech"}_$cellIndex',
         ),
-        tooltip: 'Click to pick $k preset or type custom value',
+        tooltip: isLockedUe5EngineCell
+            ? 'Locked to Unreal Engine 5 — pick Blueprints, C++, or Hybrid workflow'
+            : 'Click to pick $k preset or type custom value',
         color: bgSurface,
         onSelected: (val) {
           if (val == '__custom__') {
@@ -663,18 +666,20 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 ),
               ),
             ),
-          const PopupMenuDivider(),
-          PopupMenuItem<String>(
-            value: '__custom__',
-            child: Text(
-              '✎ Custom Edit...',
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                color: _secT1Primary,
+          if (!isLockedUe5EngineCell) ...[
+            const PopupMenuDivider(),
+            PopupMenuItem<String>(
+              value: '__custom__',
+              child: Text(
+                '✎ Custom Edit...',
+                style: GoogleFonts.inter(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: _secT1Primary,
+                ),
               ),
             ),
-          ),
+          ],
         ],
         child: Container(
           padding: EdgeInsets.only(

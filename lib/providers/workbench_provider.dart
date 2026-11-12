@@ -114,10 +114,10 @@ class WorkbenchProvider extends ChangeNotifier {
       GeminiAgentClient.lastErrorStatus == null;
   String? get aiLastErrorStatus => GeminiAgentClient.lastErrorStatus;
 
-  String _conversationModel = 'gemini-flash-latest';
+  String _conversationModel = 'gemini-4-hydrogen';
   String get conversationModel => _conversationModel;
 
-  String _planningModel = 'gemini-flash-latest';
+  String _planningModel = 'gemini-4-hydrogen';
   String get planningModel => _planningModel;
 
   /// True while the Act 2 Full Production Blueprint draft is being generated.
@@ -173,11 +173,24 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Compact live model indicator ("⚡ Hydrogen" vs "⚡ Flash (Fallback)") for the top bar.
+  String get activeModelIndicatorLabel {
+    final used = (GeminiAgentClient.lastResolvedModel ??
+            GeminiAgentClient.lastModelVersion ??
+            _conversationModel)
+        .toLowerCase();
+    if (used.contains('hydrogen')) return '⚡ Hydrogen';
+    if (used.contains('flash')) return '⚡ Flash (Fallback)';
+    return '⚡ Hydrogen';
+  }
+
   static const List<String> availableConversationModels = [
+    'gemini-4-hydrogen',
     'gemini-flash-latest',
   ];
 
   static const List<String> availablePlanningModels = [
+    'gemini-4-hydrogen',
     'gemini-flash-latest',
   ];
 

@@ -14,7 +14,8 @@ class GeminiAgentClient {
       String.fromEnvironment('GEMINI_PROXY_URL');
   static const String defaultProxyBaseUrl =
       'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy';
-  static const String pinnedLiveFlashModel = 'gemini-3.8-flash';
+  static const String pinnedLiveFlashModel = 'gemini-4-hydrogen';
+  static const String fallbackFlashModel = 'gemini-flash-latest';
   static String? _cachedDefaultKey;
 
   /// Optional override for the Firebase Cloud Function proxy URL (used in tests or custom deployments).
@@ -45,10 +46,14 @@ class GeminiAgentClient {
   /// Records the last non-200 status hint (e.g., HTTP 402 prepayment credits depleted) for diagnostics.
   static String? lastErrorStatus;
 
-  /// Pricing rates for Gemini 3.8 Flash (`gemini-flash-latest`):
-  /// $0.75 per 1 million input tokens.
+  /// Records which model endpoint actually served the most recent response (`gemini-4-hydrogen` vs `gemini-flash-latest`).
+  static String? lastResolvedModel;
+  static String? lastModelVersion;
+
+  /// Pricing rates for Gemini 4 Hydrogen (`gemini-4-hydrogen`):
+  /// $1.50 per 1 million input tokens.
   /// $3.75 per 1 million output tokens (includes candidate text and thinking/reasoning tokens).
-  static const double flashInputCostPerMillion = 0.75;
+  static const double flashInputCostPerMillion = 1.50;
   static const double flashOutputCostPerMillion = 3.75;
 
   /// Accumulative token counters and estimated cost across all Gemini calls in the session.
@@ -563,6 +568,14 @@ class GeminiAgentClient {
         modelLastStatus = response.statusCode;
         if (response.statusCode == 200) {
           lastErrorStatus = null;
+          lastResolvedModel = model;
+          try {
+            final decoded = jsonDecode(response.body);
+            if (decoded is Map<String, dynamic>) {
+              final mv = (decoded['modelVersion'] ?? '').toString().trim();
+              if (mv.isNotEmpty) lastModelVersion = mv;
+            }
+          } catch (_) {}
           final parsed = _parseCandidateResponseJson(response.body);
           if (parsed != null) return parsed;
         } else if (response.statusCode == 401 ||

@@ -8,6 +8,7 @@ import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/section_text_utils.dart';
 import 'project_pitch_screen.dart';
+import 'widgets/ue_blueprint_graph_canvas.dart';
 
 part 'workbench_engine_areas_card.dart';
 part 'workbench_modals_part.dart';
@@ -52,6 +53,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
   final Set<String> _collapsedSubStepKeys = {};
+  final Set<String> _collapsedBlueprintDeckNodeIds = {};
   bool _unrealCppMode = false;
   double _outlinerWidth = 320.0;
   final int _engineAreaFilter = 0;

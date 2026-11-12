@@ -959,8 +959,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         hasInsp && (_engineAreaFilter == 0 || _engineAreaFilter == 2);
     final showCode =
         hasCode && (_engineAreaFilter == 0 || _engineAreaFilter == 3);
-
-    final codeLines = showCode ? effectiveCodeLines : const <String>[];
     final effectiveHeaderPath = (codeWhere != null && codeWhere.trim().isNotEmpty)
         ? codeWhere.trim()
         : stepPath;
@@ -1653,100 +1651,40 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         final bool isStepExpanded =
                             !_collapsedSubStepKeys.contains(stepCollapseKey);
                         final String stepRawCode = subStep.codeFormula.trim();
+                        final bool isStepBpGraph =
+                            stepRawCode.contains('──►') ||
+                                stepRawCode.contains('└──►') ||
+                                stepRawCode.contains('├──►');
                         final List<String> stepCodeLines =
                             stepRawCode.isNotEmpty
                                 ? stepRawCode.split('\n')
-                                : codeLines;
+                                : const <String>[];
                         final String stepDoInstruction =
                             subStep.instruction.trim();
-                        final String stepHierarchyText =
-                            (subStep.area1Hierarchy ?? '').trim();
                         final String stepPathBadgeText =
                             subStep.stepPath.trim();
                         final String stepVerifyText =
                             subStep.verifyResult.trim();
-
-                        // Parse per-step Inspector values (`area2Inspector` + matching checkpoint `tuningItems`)
-                        final stepInspectorPills = <({
-                          String key,
-                          String value,
-                          int? tuningParamIndex,
-                        })>[];
-                        final seenStepInspKeys = <String>{};
-                        final rawStepInsp =
-                            (subStep.area2Inspector ?? '').trim();
-                        if (rawStepInsp.isNotEmpty) {
-                          for (final chunk
-                              in rawStepInsp.split(RegExp(r'[\n|;]+'))) {
-                            final cleanChunk = chunk.trim();
-                            if (cleanChunk.isEmpty) continue;
-                            final delim = _ReleaseWorkbenchScreenState
-                                ._tuningVarDelimiterRegex
-                                .firstMatch(cleanChunk);
-                            if (delim == null) continue;
-                            final k =
-                                cleanChunk.substring(0, delim.start).trim();
-                            final v = cleanChunk.substring(delim.end).trim();
-                            if (k.isEmpty || v.isEmpty) continue;
-                            final kLower = k.toLowerCase();
-                            if (!seenStepInspKeys.add(kLower)) continue;
-                            final matchedIdx = tuningItems.indexWhere(
-                              (tp) =>
-                                  tp
-                                      .split(
-                                        _ReleaseWorkbenchScreenState
-                                            ._tuningVarDelimiterRegex,
-                                      )
-                                      .first
-                                      .trim()
-                                      .toLowerCase() ==
-                                  kLower,
-                            );
-                            final overrideVal = _customComponentPropertyOverrides[
-                                '${node.id}::$k'];
-                            String effectiveVal = overrideVal ?? v;
-                            if (overrideVal == null && matchedIdx != -1) {
-                              final tpParts = tuningItems[matchedIdx].split(
-                                _ReleaseWorkbenchScreenState
-                                    ._tuningVarDelimiterRegex,
-                              );
-                              if (tpParts.length > 1) {
-                                effectiveVal =
-                                    tpParts.sublist(1).join(':').trim();
-                              }
-                            }
-                            stepInspectorPills.add((
-                              key: k,
-                              value: effectiveVal,
-                              tuningParamIndex:
-                                  matchedIdx != -1 ? matchedIdx : null,
-                            ));
-                          }
-                        }
-                        final stepLookupCorpus =
-                            '$stepDoInstruction\n$stepRawCode'.toLowerCase();
-                        for (int tIdx = 0; tIdx < tuningItems.length; tIdx++) {
-                          final tp = tuningItems[tIdx];
-                          final tpParts = tp.split(
-                            _ReleaseWorkbenchScreenState
-                                ._tuningVarDelimiterRegex,
-                          );
-                          final k = tpParts.first.trim();
-                          final v = tpParts.length > 1
-                              ? tpParts.sublist(1).join(':').trim()
-                              : '';
-                          if (k.isEmpty || v.isEmpty) continue;
-                          final kLower = k.toLowerCase();
-                          if (seenStepInspKeys.contains(kLower)) continue;
-                          if (stepLookupCorpus.contains(kLower)) {
-                            seenStepInspKeys.add(kLower);
-                            stepInspectorPills.add((
-                              key: k,
-                              value: v,
-                              tuningParamIndex: tIdx,
-                            ));
-                          }
-                        }
+                        final windowCtx = _resolveWindowContextBadge(
+                          stepPath: stepPathBadgeText,
+                          instruction: stepDoInstruction,
+                          codeFormula: stepRawCode,
+                          isUnrealCpp: effectiveCardUnrealCpp,
+                        );
+                        final prevWindowCtx = sIdx > 0
+                            ? _resolveWindowContextBadge(
+                                stepPath:
+                                    selectedHowTo.subSteps[sIdx - 1].stepPath,
+                                instruction:
+                                    selectedHowTo.subSteps[sIdx - 1].instruction,
+                                codeFormula:
+                                    selectedHowTo.subSteps[sIdx - 1].codeFormula,
+                                isUnrealCpp: effectiveCardUnrealCpp,
+                              )
+                            : null;
+                        final bool isWindowContextSwitch =
+                            prevWindowCtx != null &&
+                                prevWindowCtx.label != windowCtx.label;
 
                         // Resolve conditional Guard chip only when directly relevant to this step
                         String stepGuardChipText = '';
@@ -1772,9 +1710,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           }
                         }
                         final bool hasStepEditorContext =
-                            stepHierarchyText.isNotEmpty ||
-                                stepInspectorPills.isNotEmpty ||
-                                stepGuardChipText.isNotEmpty;
+                            stepGuardChipText.isNotEmpty;
                         final bool hasExpandableDrawerContent =
                             stepDoInstruction.isNotEmpty ||
                                 hasStepEditorContext ||
@@ -1921,6 +1857,38 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                             0xFFF8FAFC)
                                                         : const Color(
                                                             0xFFE2E8F0),
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Container(
+                                                key: ValueKey(
+                                                  'window_context_badge_${node.id}_${selectedTaskIdx}_$sIdx',
+                                                ),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 6,
+                                                  vertical: 1.5,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: windowCtx.accent
+                                                      .withValues(alpha: 0.12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                  border: Border.all(
+                                                    color: windowCtx.accent
+                                                        .withValues(
+                                                      alpha: 0.36,
+                                                    ),
+                                                  ),
+                                                ),
+                                                child: Text(
+                                                  '${windowCtx.icon} ${windowCtx.label}',
+                                                  style: GoogleFonts
+                                                      .jetBrainsMono(
+                                                    fontSize: 9,
+                                                    fontWeight: FontWeight.w700,
+                                                    color: windowCtx.accent,
                                                   ),
                                                 ),
                                               ),
@@ -2106,6 +2074,38 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
+                                        // 0. Context-Switch Callout (only when moving to a different UE5 Editor window)
+                                        if (isWindowContextSwitch)
+                                          Container(
+                                            key: ValueKey(
+                                              'window_context_switch_${node.id}_${selectedTaskIdx}_$sIdx',
+                                            ),
+                                            margin: const EdgeInsets.only(
+                                              bottom: 8,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: windowCtx.accent
+                                                  .withValues(alpha: 0.08),
+                                              borderRadius:
+                                                  BorderRadius.circular(5),
+                                              border: Border.all(
+                                                color: windowCtx.accent
+                                                    .withValues(alpha: 0.25),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              '↳ Switch to ${windowCtx.icon} ${windowCtx.label}',
+                                              style: GoogleFonts.jetBrainsMono(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: windowCtx.accent,
+                                              ),
+                                            ),
+                                          ),
                                         // 1. Imperative DO Instruction Line
                                         if (stepDoInstruction.isNotEmpty)
                                           Padding(
@@ -2156,7 +2156,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             ),
                                           ),
 
-                                        // 2. Conditional Editor Context Strip (Scene Tree + Clickable Inspector Tuning Pills + Guard Chip — zero empty boxes)
+                                        // 2. Conditional Guard Pill (Components & Specs hoisted to Blueprint Deck)
                                         if (hasStepEditorContext)
                                           Padding(
                                             padding: EdgeInsets.only(
@@ -2173,150 +2173,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               crossAxisAlignment:
                                                   WrapCrossAlignment.center,
                                               children: [
-                                                if (stepHierarchyText
-                                                    .isNotEmpty)
-                                                  Container(
-                                                    key: ValueKey(
-                                                      'step_hierarchy_pill_${node.id}_${selectedTaskIdx}_$sIdx',
-                                                    ),
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 8,
-                                                      vertical: 4,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(
-                                                        0xFF0E1522,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        5,
-                                                      ),
-                                                      border: Border.all(
-                                                        color: const Color(
-                                                          0xFF1E2D45,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      '🌳 ${stepHierarchyText.replaceAll('\n', ' › ')}',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: fontMicro,
-                                                        fontWeight: weightSemi,
-                                                        color: const Color(
-                                                          0xFF93C5FD,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                for (int pIdx = 0;
-                                                    pIdx <
-                                                        stepInspectorPills
-                                                            .length;
-                                                    pIdx++)
-                                                  Builder(
-                                                    builder: (context) {
-                                                      final pill =
-                                                          stepInspectorPills[
-                                                              pIdx];
-                                                      final stepEditKey =
-                                                          'step_tuning_${node.id}_${selectedTaskIdx}_${sIdx}_$pIdx';
-                                                      if (_activeStage2InlineEditKey ==
-                                                          stepEditKey) {
-                                                        return SizedBox(
-                                                          width: 240,
-                                                          child:
-                                                              _buildStage2InlineEditor(
-                                                            editKey:
-                                                                stepEditKey,
-                                                            hintText:
-                                                                '${pill.key}: ${pill.value}',
-                                                            inputKey: ValueKey(
-                                                              'step_inspector_input_${node.id}_${selectedTaskIdx}_${sIdx}_$pIdx',
-                                                            ),
-                                                            saveBtnKey:
-                                                                ValueKey(
-                                                              'step_inspector_save_${node.id}_${selectedTaskIdx}_${sIdx}_$pIdx',
-                                                            ),
-                                                            onSave: (val) =>
-                                                                _saveInlineTuningParam(
-                                                              feat: feat,
-                                                              states: states,
-                                                              node: node,
-                                                              selectedTaskIdx:
-                                                                  selectedTaskIdx,
-                                                              rawValue: val,
-                                                              tuningParamIndex: pill
-                                                                  .tuningParamIndex,
-                                                              propertyKey:
-                                                                  pill.key,
-                                                            ),
-                                                          ),
-                                                        );
-                                                      }
-                                                      return InkWell(
-                                                        key: ValueKey(
-                                                          'step_inspector_pill_${node.id}_${selectedTaskIdx}_${sIdx}_$pIdx',
-                                                        ),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(5),
-                                                        onTap: () {
-                                                          Clipboard.setData(
-                                                            ClipboardData(
-                                                              text: pill.value,
-                                                            ),
-                                                          );
-                                                          _startStage2InlineEdit(
-                                                            stepEditKey,
-                                                            '${pill.key}: ${pill.value}',
-                                                          );
-                                                        },
-                                                        child: Container(
-                                                          padding:
-                                                              const EdgeInsets
-                                                                  .symmetric(
-                                                            horizontal: 8,
-                                                            vertical: 4,
-                                                          ),
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color: const Color(
-                                                              0xFF17132A,
-                                                            ),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                              5,
-                                                            ),
-                                                            border: Border.all(
-                                                              color:
-                                                                  const Color(
-                                                                0xFF8B5CF6,
-                                                              ).withValues(
-                                                                alpha: 0.38,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                          child: Text(
-                                                            '⚙ ${pill.key}: ${pill.value} ✎',
-                                                            style: GoogleFonts
-                                                                .jetBrainsMono(
-                                                              fontSize:
-                                                                  fontMicro,
-                                                              fontWeight:
-                                                                  weightSemi,
-                                                              color:
-                                                                  const Color(
-                                                                0xFFC4B5FD,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      );
-                                                    },
-                                                  ),
                                                 if (stepGuardChipText
                                                     .isNotEmpty)
                                                   Container(
@@ -2360,8 +2216,39 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                             ),
                                           ),
 
-                                        // 3. Numbered Code / Blueprint Graph Lines
+                                        // 3. Visual UE5 Blueprint Graph OR Numbered Code Lines
                                         if (showCode &&
+                                            isStepBpGraph &&
+                                            stepRawCode.isNotEmpty) ...[
+                                          Builder(
+                                            builder: (context) {
+                                              final parsedGraph =
+                                                  UeBlueprintGraphCanvas
+                                                      .parseFromFormula(
+                                                stepRawCode,
+                                              );
+                                              if (parsedGraph.nodes.isEmpty) {
+                                                return const SizedBox.shrink();
+                                              }
+                                              return UeBlueprintGraphCanvas(
+                                                nodes: parsedGraph.nodes,
+                                                wires: parsedGraph.wires,
+                                              );
+                                            },
+                                          ),
+                                        ] else if (showCode &&
+                                            stepCodeLines.isNotEmpty &&
+                                            stepCodeLines
+                                                    .where((l) =>
+                                                        l.trim().startsWith('|') &&
+                                                        l.trim().endsWith('|'))
+                                                    .length >=
+                                                2) ...[
+                                          _buildLevelPlacementTable(
+                                            stepCodeLines,
+                                            isDark: isDark,
+                                          ),
+                                        ] else if (showCode &&
                                             stepCodeLines.isNotEmpty)
                                           for (int lineIdx = 0;
                                               lineIdx < stepCodeLines.length;
@@ -2370,32 +2257,42 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               builder: (context) {
                                                 final rawCodeLine =
                                                     stepCodeLines[lineIdx];
+                                                final isAddedDiffLine =
+                                                    rawCodeLine.startsWith('+') &&
+                                                        !rawCodeLine
+                                                            .startsWith('++');
+                                                final normalizedLine =
+                                                    isAddedDiffLine
+                                                        ? rawCodeLine
+                                                            .substring(1)
+                                                        : rawCodeLine;
                                                 final prefixMatch = RegExp(
                                                   r'^(\s*(?:[└├]──►\s+|──►\s+|•\s+)?)',
-                                                ).firstMatch(rawCodeLine);
+                                                ).firstMatch(normalizedLine);
                                                 final leadingPrefix =
                                                     prefixMatch?.group(1) ?? '';
                                                 final bodyCodeLine =
                                                     leadingPrefix.isNotEmpty &&
                                                             leadingPrefix
                                                                     .length <
-                                                                rawCodeLine
+                                                                normalizedLine
                                                                     .length
-                                                        ? rawCodeLine.substring(
+                                                        ? normalizedLine
+                                                            .substring(
                                                             leadingPrefix
                                                                 .length,
                                                           )
-                                                        : rawCodeLine;
+                                                        : normalizedLine;
                                                 final effectivePrefix =
                                                     leadingPrefix.isNotEmpty &&
                                                             leadingPrefix
                                                                     .length <
-                                                                rawCodeLine
+                                                                normalizedLine
                                                                     .length
                                                         ? leadingPrefix
                                                         : '';
-                                                return Padding(
-                                                  padding: EdgeInsets.only(
+                                                return Container(
+                                                  margin: EdgeInsets.only(
                                                     bottom: lineIdx ==
                                                             stepCodeLines
                                                                     .length -
@@ -2403,6 +2300,31 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                         ? 0
                                                         : 4,
                                                   ),
+                                                  padding: isAddedDiffLine
+                                                      ? const EdgeInsets
+                                                          .symmetric(
+                                                          horizontal: 4,
+                                                          vertical: 1,
+                                                        )
+                                                      : EdgeInsets.zero,
+                                                  decoration: isAddedDiffLine
+                                                      ? BoxDecoration(
+                                                          color: const Color(
+                                                            0xFF22C55E,
+                                                          ).withValues(
+                                                            alpha: 0.12,
+                                                          ),
+                                                          border:
+                                                              const Border(
+                                                            left: BorderSide(
+                                                              color: Color(
+                                                                0xFF22C55E,
+                                                              ),
+                                                              width: 2.5,
+                                                            ),
+                                                          ),
+                                                        )
+                                                      : null,
                                                   child: Row(
                                                     crossAxisAlignment:
                                                         CrossAxisAlignment
@@ -2411,18 +2333,28 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                       SizedBox(
                                                         width: 32,
                                                         child: Text(
-                                                          (lineIdx + 1)
-                                                              .toString()
-                                                              .padLeft(2, '0'),
+                                                          isAddedDiffLine
+                                                              ? '+${(lineIdx + 1).toString().padLeft(2, '0')}'
+                                                              : (lineIdx + 1)
+                                                                  .toString()
+                                                                  .padLeft(
+                                                                      2, '0'),
                                                           style: GoogleFonts
                                                               .jetBrainsMono(
                                                             fontSize: fontMicro,
                                                             fontWeight:
-                                                                weightRegular,
+                                                                isAddedDiffLine
+                                                                    ? FontWeight
+                                                                        .w700
+                                                                    : weightRegular,
                                                             height: 1.75,
-                                                            color: const Color(
-                                                              0xFF475569,
-                                                            ),
+                                                            color: isAddedDiffLine
+                                                                ? const Color(
+                                                                    0xFF4ADE80,
+                                                                  )
+                                                                : const Color(
+                                                                    0xFF475569,
+                                                                  ),
                                                           ),
                                                         ),
                                                       ),
@@ -2725,6 +2657,212 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     return TextSpan(
       style: baseStyle,
       children: spans,
+    );
+  }
+
+  ({String icon, String label, Color accent}) _resolveWindowContextBadge({
+    required String stepPath,
+    required String instruction,
+    required String codeFormula,
+    required bool isUnrealCpp,
+  }) {
+    final lowerPath = stepPath.toLowerCase();
+    final lowerInstr = instruction.toLowerCase();
+    final lowerCode = codeFormula.toLowerCase();
+    if (lowerPath.contains('world settings') ||
+        lowerInstr.contains('world settings') ||
+        lowerInstr.contains('gamemode override')) {
+      return (
+        icon: '⚙',
+        label: 'WORLD SETTINGS',
+        accent: const Color(0xFFF59E0B),
+      );
+    }
+    final isPipeTable = codeFormula
+            .split('\n')
+            .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
+            .length >=
+        2;
+    if (isPipeTable ||
+        lowerPath.contains('outliner') ||
+        lowerPath.contains('viewport') ||
+        lowerPath.contains('level editor') ||
+        lowerPath.contains('place actors') ||
+        lowerInstr.contains('playerstart')) {
+      return (
+        icon: '🌍',
+        label: 'LEVEL EDITOR',
+        accent: const Color(0xFF10B981),
+      );
+    }
+    if (isUnrealCpp ||
+        lowerPath.contains('.h') ||
+        lowerPath.contains('.cpp') ||
+        lowerCode.contains('uproperty') ||
+        lowerCode.contains('createdefaultsubobject') ||
+        lowerCode.contains('->')) {
+      return (
+        icon: '📜',
+        label: 'C++ (.h / .cpp)',
+        accent: const Color(0xFFA78BFA),
+      );
+    }
+    return (
+      icon: '📘',
+      label: 'BLUEPRINT EDITOR',
+      accent: const Color(0xFF38BDF8),
+    );
+  }
+
+  Widget _buildLevelPlacementTable(
+    List<String> lines, {
+    required bool isDark,
+  }) {
+    final rows = <List<String>>[];
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (!trimmed.startsWith('|') || !trimmed.endsWith('|')) continue;
+      final cells = trimmed
+          .substring(1, trimmed.length - 1)
+          .split('|')
+          .map((c) => c.trim())
+          .toList();
+      final isSeparator = cells.every(
+        (c) => RegExp(r'^:?-{2,}:?$').hasMatch(c),
+      );
+      if (!isSeparator && cells.isNotEmpty) {
+        rows.add(cells);
+      }
+    }
+    if (rows.isEmpty) return const SizedBox.shrink();
+    final colCount = rows.first.length;
+    final headerBg = isDark
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.black.withValues(alpha: 0.05);
+    final borderCol = isDark
+        ? Colors.white.withValues(alpha: 0.12)
+        : Colors.black.withValues(alpha: 0.12);
+    return Container(
+      key: const ValueKey('level_placement_table'),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: borderCol),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Table(
+        border: TableBorder.symmetric(
+          inside: BorderSide(color: borderCol, width: 0.8),
+        ),
+        defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        children: [
+          for (int r = 0; r < rows.length; r++)
+            TableRow(
+              decoration: BoxDecoration(
+                color: r == 0
+                    ? headerBg
+                    : (r.isOdd
+                        ? Colors.transparent
+                        : Colors.white.withValues(alpha: 0.02)),
+              ),
+              children: [
+                for (int c = 0; c < colCount; c++)
+                  Builder(
+                    builder: (context) {
+                      final cellText = c < rows[r].length ? rows[r][c] : '';
+                      final isTransformCell = r > 0 &&
+                          c == colCount - 1 &&
+                          (cellText.contains('(') ||
+                              cellText.contains('X=') ||
+                              RegExp(r'-?\d+(?:\.\d+)?\s*,\s*-?\d+')
+                                  .hasMatch(cellText));
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        child: isTransformCell
+                            ? Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      cellText,
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500,
+                                        color: isDark
+                                            ? const Color(0xFFCBD5E1)
+                                            : const Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  InkWell(
+                                    key: ValueKey('copy_transform_btn_$r'),
+                                    borderRadius: BorderRadius.circular(4),
+                                    onTap: () {
+                                      Clipboard.setData(
+                                        ClipboardData(text: cellText),
+                                      );
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            'Copied Transform: $cellText',
+                                          ),
+                                          duration:
+                                              const Duration(seconds: 2),
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981)
+                                            .withValues(alpha: 0.14),
+                                        borderRadius: BorderRadius.circular(4),
+                                        border: Border.all(
+                                          color: const Color(0xFF10B981)
+                                              .withValues(alpha: 0.35),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '⧉ Copy Transform',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: const Color(0xFF6EE7B7),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : Text(
+                                cellText,
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 11,
+                                  fontWeight: r == 0
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: r == 0
+                                      ? (isDark
+                                          ? const Color(0xFFE2E8F0)
+                                          : const Color(0xFF0F172A))
+                                      : (isDark
+                                          ? const Color(0xFFCBD5E1)
+                                          : const Color(0xFF334155)),
+                                ),
+                              ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }

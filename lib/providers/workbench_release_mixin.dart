@@ -4740,11 +4740,11 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
   }
 
   /// Native Gemini Tool (`functionDeclarations`) for Stage 2 3-Area How-To synthesis (`synthesizeFeatureHowToStepsWithAi`).
-  /// Enforces a single shared `primarySharedScriptOrScene` across all tasks and typed 3-Area sub-steps.
+  /// Enforces a single shared `primarySharedScriptOrScene` across all tasks and polymorphic UE5 step payloads.
   static const Map<String, dynamic> commitFeatureHowToStepsTool = {
     'name': 'commit_feature_howto_steps',
     'description':
-        'Commits the concrete, engine-specific 3-Area How-To sub-steps (Hierarchy, Inspector, Code, Verify) for every task in the active Feature checkpoint on one shared asset.',
+        'Commits concrete, Unreal Engine 5 How-To sub-steps (Level Placement Tables, Blueprint Event Graph nodes, or C++ .h/.cpp scripts) for every task in the active Feature checkpoint on one shared asset.',
     'parameters': {
       'type': 'OBJECT',
       'required': ['primarySharedScriptOrScene', 'tasks'],
@@ -4752,7 +4752,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         'primarySharedScriptOrScene': {
           'type': 'STRING',
           'description':
-              'The single shared Actor Blueprint, Prefab/MonoBehaviour, or Godot Scene/Script used across Task 1..N (e.g., "BP_PlayerCharacter", "PlayerController.cs", or "player.tscn / player.gd").',
+              'The single shared UE5 Actor Blueprint, C++ Class (.h/.cpp), Widget Blueprint, or Level Map used across Task 1..N (e.g., "BP_PlayerCharacter", "PlayerCharacter.h / PlayerCharacter.cpp", "WBP_Hud", or "L_ArenaMap").',
         },
         'tasks': {
           'type': 'ARRAY',
@@ -4803,17 +4803,17 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
                     'area1Hierarchy': {
                       'type': 'STRING',
                       'description':
-                          'Optional Scene/Component hierarchy tree using ├─ / └─ when adding or modifying nodes/components (or "" if pure code step)',
+                          'Optional Component/Outliner hierarchy tree using ├─ / └─ ONLY when adding a new component/actor in this step ("" when reusing the Blueprint Deck tree).',
                     },
                     'area2Inspector': {
                       'type': 'STRING',
                       'description':
-                          'Inspector/Details bindings formatted as "Property: Value | Property2: Value2" using exact tuning parameter names',
+                          'Details Panel property delta ONLY when modifying values in this step ("Property: Value | Property2: Value2"; "" when already in a Level Placement Table or Blueprint Deck).',
                     },
                     'codeFormula': {
                       'type': 'STRING',
                       'description':
-                          '2-6 lines of concrete engine code or node graph wiring using exact tuning variables and guard checks',
+                          'Polymorphic step payload: for Level/Outliner/World Settings steps emit a pipe table ("| Actor / Component | Property / Transform | Value |"); for UE5 Blueprints emit bracket node wiring ("[Event Node] ──► [Function Node (Pin: Val)]"); for UE5 C++ emit .h/.cpp lines with "+ " on lines added/changed in this step.',
                     },
                     'verifyMode': {
                       'type': 'STRING',
@@ -5933,17 +5933,17 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
 
       final codeFormulaModeGuide = currentArchetype == 'level'
           ? (engineLabel == 'UNREAL 5'
-              ? '2-5 lines of World Outliner placement & Details Panel setup (e.g. `Place Actors → Cylinder ("Floor_Greenhouse")\\nStatic Mesh: /Engine/BasicShapes/Cylinder\\nTransform: Location = (0, 0, 0), Scale = (20.0, 20.0, 0.2)\\nCollision Preset: BlockAll`). NEVER wire `[Event BeginPlay] ──► [Set Actor Location / Set Actor Relative Scale3D]` to place static blockout floors/walls, NEVER prefix placed World Outliner Actor names with `SM_` (reserve `SM_` strictly for Static Mesh assets), pre-calculate literal numeric Location/Scale values from Active Tuning Parameters instead of undefined math expressions (`radius / 50.0`), and keep `PlayerStart` at `(0, 0, 120)` without conflicting coordinates'
+              ? 'a clean Markdown Level Placement & Details Table (e.g.\n| Actor / Component | Property / Transform | Value |\n| --- | --- | --- |\n| Floor_Arena (Cylinder) | Location / Scale | (0, 0, 0) / (20.0, 20.0, 0.2) |\n| PlayerStart | Location | (0, 0, 120) |\n). Do NOT write runtime BeginPlay/C++ code to place static blockout actors, NEVER prefix World Outliner Actors with `SM_`, use UE5 centimeters (`uu`), and pre-calculate literal numeric Location/Scale values from Active Tuning Parameters'
               : '2-5 lines of Scene Hierarchy / Scene Tree placement & Inspector setup with literal numeric Position/Scale values derived from Active Tuning Parameters (do NOT write runtime Start()/_ready() code just to place static blockout floors/walls, and keep spawn at `(0, 2, 0)` without conflicting coordinates)')
           : (engineLabel == 'UNREAL 5'
               ? (unrealCppMode
-                  ? '2-6 lines of concrete Unreal 5 C++ (.h / .cpp) code using `->`, `FTransform`, `FVector`, `CreateDefaultSubobject`, or `UPROPERTY` with the exact tuning variables and guard checks (NEVER Blueprint node arrows)'
-                  : '2-6 lines of concrete Unreal 5 Blueprint Event Graph node wiring formatted as `[Event / Input Node] ──► [Function Node (Target: ..., Pin: Value)]` using `──►` / `└──►` arrows and exact tuning variables (NEVER C++ `->` pointer syntax or `FTransform`/`FVector` C++ constructors)')
+                  ? '3-8 lines of Unreal 5 C++ (.h / .cpp) as a Unified Living Script: keep existing class/function lines plain for context and prefix EVERY line added or modified in THIS step with `+ ` (e.g. `+ UPROPERTY(EditAnywhere, Category="Dash")\n+ float DashSpeed = 1200.f;`). Use native UE5 types (`CreateDefaultSubobject`, `FVector`, `TObjectPtr<>`, `UPROPERTY`), `uu` units, and `Ctrl+Alt+F11` Live Coding—NEVER Blueprint node arrows'
+                  : '2-6 lines of Unreal 5 Blueprint Event Graph wiring using bracket nodes and arrows: `[Event / Enhanced Input Node] ──► [Function Node (Target: ..., Pin: Value)]` (`──►` / `└──►`) with exact My Blueprint variables and guard branches (NEVER C++ `->` syntax)')
               : '2-6 lines of concrete $targetEngineMode code using the exact tuning variables and guard checks');
 
       final prompt = '''
-You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
-Synthesize concrete, beginner-friendly 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+You are the Principal Unreal Engine 5 Architect ($targetEngineMode) for "$projTitle".
+Synthesize concise, zero-repetition 3-Area Engine How-To steps using native UE5 terminology (`Content Drawer`, `Outliner`, `Details Panel`, `My Blueprint`, `Event Graph`, `World Settings`, `Enhanced Input`, `uu`, `Alt+P`, `Ctrl+Alt+F11`) for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
 ${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$phaseInstructionBlock
 $projectBuildStateContext
 ${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Epic-Scoped & Root Project Anchors — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
@@ -6021,6 +6021,7 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
             incomingTasks.length == cpNode.checklist.length;
 
         bool appliedAny = false;
+        final seenCppLines = <String>{};
         for (int listIdx = 0; listIdx < incomingTasks.length; listIdx++) {
           final rawTask = incomingTasks[listIdx];
           if (rawTask is! Map) continue;
@@ -6093,7 +6094,61 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
                 '';
             final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
             final area2 = item['area2Inspector']?.toString().trim() ?? '';
-            final code = item['codeFormula']?.toString().trim() ?? '';
+            var code = (item['codeFormula'] ?? item['codeSnapshot'] ?? '')
+                .toString()
+                .trim();
+            final rawPlacementRows = item['placementRows'];
+            if (code.isEmpty && rawPlacementRows is List && rawPlacementRows.isNotEmpty) {
+              final tbl = <String>[
+                '| Actor / Component | Property / Transform | Value |',
+                '| --- | --- | --- |',
+              ];
+              for (final row in rawPlacementRows.whereType<Map>()) {
+                final actor = (row['actor'] ?? row['target'] ?? '').toString().trim();
+                final prop = (row['property'] ?? row['key'] ?? '').toString().trim();
+                final val = (row['value'] ?? '').toString().trim();
+                if (actor.isNotEmpty || prop.isNotEmpty || val.isNotEmpty) {
+                  tbl.add('| $actor | $prop | $val |');
+                }
+              }
+              if (tbl.length > 2) code = tbl.join('\n');
+            }
+            if (unrealCppMode &&
+                code.isNotEmpty &&
+                !code.startsWith('|') &&
+                !code.contains('──►')) {
+              final rawLines = code.split('\n');
+              final alreadyHasDiff = rawLines.any(
+                (l) => l.startsWith('+') && !l.startsWith('++'),
+              );
+              if (!alreadyHasDiff) {
+                final diffedLines = <String>[];
+                final hadPriorLines = seenCppLines.isNotEmpty;
+                for (final l in rawLines) {
+                  final trimmedLine = l.trim();
+                  if (trimmedLine.isEmpty ||
+                      trimmedLine == '{' ||
+                      trimmedLine == '}' ||
+                      trimmedLine == '};' ||
+                      trimmedLine.startsWith('//')) {
+                    diffedLines.add(l);
+                    continue;
+                  }
+                  if (hadPriorLines && !seenCppLines.contains(trimmedLine)) {
+                    diffedLines.add('+$l');
+                  } else {
+                    diffedLines.add(l);
+                  }
+                  seenCppLines.add(trimmedLine);
+                }
+                code = diffedLines.join('\n');
+              } else {
+                for (final l in rawLines) {
+                  final clean = l.startsWith('+') ? l.substring(1).trim() : l.trim();
+                  if (clean.isNotEmpty) seenCppLines.add(clean);
+                }
+              }
+            }
             final verify = item['verifyResult']?.toString().trim() ?? '';
             final verifyMode = item['verifyMode']?.toString().trim();
             if (instr.isEmpty && code.isEmpty) continue;

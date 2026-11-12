@@ -115,29 +115,33 @@ class ProjectConceptAgent {
     if (techSpec.isEmpty) return techSpec;
     final result = List<String>.from(techSpec);
     final e0 = result.first.toLowerCase();
-    final hasConcreteEngine = e0.contains('godot') ||
-        e0.contains('unity') ||
-        e0.contains('unreal') ||
-        e0.contains('gamemaker') ||
-        e0.contains('phaser') ||
-        e0.contains('bevy') ||
-        e0.contains('defold') ||
-        e0.contains('flutter') ||
-        e0.contains('flame');
-    if (hasConcreteEngine) return result;
+    final hasBp = e0.contains('blueprint') || e0.contains('bp');
+    final hasCpp = e0.contains('c++') || e0.contains('cpp');
+    final hasHybrid = e0.contains('hybrid') || (hasBp && hasCpp);
 
+    if (e0.contains('unreal') || e0.contains('ue5')) {
+      if (hasHybrid) {
+        result[0] = 'Unreal Engine 5 (Blueprints / C++)';
+      } else if (hasBp) {
+        result[0] = 'Unreal Engine 5 (Blueprints)';
+      } else if (hasCpp) {
+        result[0] = 'Unreal Engine 5 (C++)';
+      } else {
+        result[0] = 'Unreal Engine 5 (Blueprints / C++)';
+      }
+      return result;
+    }
+
+    // Standardize all new Stage 1 projects onto Unreal Engine 5 workflows.
     final corpus =
-        '${gameSpec.join(' ')} ${techSpec.join(' ')} $sparkText'.toLowerCase();
-    if (corpus.contains('unreal')) {
-      result[0] = 'Unreal Engine 5 (Blueprints / C++)';
-    } else if (corpus.contains('unity') || corpus.contains('c#')) {
-      result[0] = 'Unity 6 (C#)';
-    } else if (corpus.contains('2d') ||
-        corpus.contains('sprite') ||
-        corpus.contains('pixel') ||
-        corpus.contains('tilemap') ||
-        corpus.contains('top-down')) {
-      result[0] = 'Godot 4 (GDScript)';
+        '${techSpec.join(' ')} $sparkText'.toLowerCase();
+    if ((corpus.contains('blueprint') && !corpus.contains('c++')) &&
+        !corpus.contains('hybrid')) {
+      result[0] = 'Unreal Engine 5 (Blueprints)';
+    } else if ((corpus.contains('c++') || corpus.contains('cpp')) &&
+        !corpus.contains('blueprint') &&
+        !corpus.contains('hybrid')) {
+      result[0] = 'Unreal Engine 5 (C++)';
     } else {
       result[0] = 'Unreal Engine 5 (Blueprints / C++)';
     }
@@ -243,8 +247,8 @@ class ProjectConceptAgent {
             'engine': {
               'type': 'STRING',
               'enum': [
-                'Godot 4 (GDScript)',
-                'Unity 6 (C#)',
+                'Unreal Engine 5 (Blueprints)',
+                'Unreal Engine 5 (C++)',
                 'Unreal Engine 5 (Blueprints / C++)',
               ],
             },
@@ -534,8 +538,8 @@ class ProjectConceptAgent {
             'engine': {
               'type': 'STRING',
               'enum': [
-                'Godot 4 (GDScript)',
-                'Unity 6 (C#)',
+                'Unreal Engine 5 (Blueprints)',
+                'Unreal Engine 5 (C++)',
                 'Unreal Engine 5 (Blueprints / C++)',
               ],
             },
@@ -671,8 +675,8 @@ class ProjectConceptAgent {
                 'engine': {
                   'type': 'STRING',
                   'enum': [
-                    'Godot 4 (GDScript)',
-                    'Unity 6 (C#)',
+                    'Unreal Engine 5 (Blueprints)',
+                    'Unreal Engine 5 (C++)',
                     'Unreal Engine 5 (Blueprints / C++)',
                   ],
                 },
@@ -958,8 +962,8 @@ class ProjectConceptAgent {
                     'engine': {
                       'type': 'STRING',
                       'enum': [
-                        'Godot 4 (GDScript)',
-                        'Unity 6 (C#)',
+                        'Unreal Engine 5 (Blueprints)',
+                        'Unreal Engine 5 (C++)',
                         'Unreal Engine 5 (Blueprints / C++)',
                       ],
                     },
@@ -1176,7 +1180,7 @@ $cleanSpark
 $promptLead
 
 ${GeminiAgentClient.compactStyleRules}
-- Draft the 4 cells of `gameSpec` (`cameraView`, `controls`, `playerMode`, `arenaStructure`) and `techSpec` (`engine`, `platform`, `assetPipeline`, `saveMode`) strictly as 2–4 Title-Case words each. In `techSpec`, ALWAYS name a concrete game engine (`"Godot 4 (GDScript)"`, `"Unity 6 (C#)"`, or `"Unreal Engine 5 (Blueprints / C++)"`) — NEVER output a generic label like `"2D Game Engine"` or `"3D Engine"`.
+- Draft the 4 cells of `gameSpec` (`cameraView`, `controls`, `playerMode`, `arenaStructure`) and `techSpec` (`engine`, `platform`, `assetPipeline`, `saveMode`) strictly as 2–4 Title-Case words each. In `techSpec`, ALWAYS lock `engine` to Unreal Engine 5 (`"Unreal Engine 5 (Blueprints)"`, `"Unreal Engine 5 (C++)"`, or `"Unreal Engine 5 (Blueprints / C++)"`).
 - Draft `designPillars` naming the core player feelings and emotional experiences the game must create (never features or genres), and `tradeOffs` as practical `priorityX` over `overAlternativeY` engineering and design boundaries.
 - Decompose `coreLoopBeats` into sequential playable Beats (`Beat Name: Observable player action and system response`) in chronological player-loop order:
   1. Beat 1 MUST be the immediate in-game player control & primary action (e.g. Walking & Tank Inspection, Grapple/Dash Traversal, Vehicle Handling, or Grid Placement—never a pre-match menu).
@@ -1427,7 +1431,7 @@ Call `$activeToolName` with the delta update.
       tag: '[Section 03 · Tech Spec]',
       label: '03 · Tech Spec',
       directive:
-          'Draft the 4 cells of `techSpec` (`engine` must be "Godot 4 (GDScript)", "Unity 6 (C#)", or "Unreal Engine 5 (Blueprints / C++)", plus `platform`, `assetPipeline`, `saveMode`) strictly as 2-4 Title-Case words each (e.g. "PC Desktop", "2D Sprites + Particles", "Offline Local Save").',
+          'Draft the 4 cells of `techSpec` (`engine` must be "Unreal Engine 5 (Blueprints)", "Unreal Engine 5 (C++)", or "Unreal Engine 5 (Blueprints / C++)", plus `platform`, `assetPipeline`, `saveMode`) strictly as 2-4 Title-Case words each (e.g. "PC Desktop", "UE5 Greybox + Lumen", "SaveGame Slot (.sav)").',
     ),
     (
       tag: '[Section 04 · Design Pillars]',
@@ -1692,7 +1696,7 @@ Call `propose_spark_expansion_cards` with 3 fresh expansion cards.
       'gameSpec' =>
         '- Format each option with 4 `·`-separated cells after the colon: `"Spec Label: Camera View · Controls · Player Mode · Arena Structure"` (e.g., `"Tight Arena Spec: 2D Top-Down · Twin-Stick WASD+Mouse · Singleplayer · Single-Screen Arena"`).',
       'techSpec' =>
-        '- Format each option with 4 `·`-separated cells after the colon: `"Stack Label: Concrete Engine · Platform · Asset Pipeline · Save Mode"` (e.g., `"Godot 4 2D Stack: Godot 4 (GDScript) · PC Desktop · 2D Sprites + Particles · Offline Local Save"`).',
+        '- Format each option with 4 `·`-separated cells after the colon: `"Stack Label: Unreal Engine 5 Workflow · Platform · Asset Pipeline · Save Mode"` (e.g., `"UE5 Hybrid Stack: Unreal Engine 5 (Blueprints / C++) · PC Desktop · UE5 Greybox + Lumen · SaveGame Slot (.sav)"`).',
       'designPillars' =>
         '- Format each option as: `"2-3 Word Pillar Name: 1-sentence core player feeling or emotional tension (never a feature or genre)"`.',
       'tradeOffs' =>
