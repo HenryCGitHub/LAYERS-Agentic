@@ -557,6 +557,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         _persistDocument(r);
       }
       _aiSynthesizedFeatureSteps.clear();
+      _failedStepSynthesisFeatureIds.clear();
       TaskHowToBlueprint.clearCache();
 
       final projectFeatureIds = <String>{};
@@ -578,6 +579,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         final states = FeatureStateNode.getStatesForDocument(featDoc);
         for (final cp in states) {
           cp.parameters.remove('primarySharedScriptOrScene');
+          cp.parameters.remove('synthesized_unreal_mode');
+          cp.parameters.remove('unreal_bp_steps_json');
+          cp.parameters.remove('unreal_cpp_steps_json');
           for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
             final task = cp.checklist[tIdx];
             task.children = [];

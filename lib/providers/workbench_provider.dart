@@ -248,6 +248,9 @@ class WorkbenchProvider extends ChangeNotifier {
 
   final Set<String> _aiSynthesizedFeatureSteps = <String>{};
   final Set<String> _synthesizingFeatureIds = <String>{};
+  final Set<String> _failedStepSynthesisFeatureIds = <String>{};
+  bool hasFailedStepSynthesis(String featureId) =>
+      _failedStepSynthesisFeatureIds.contains(featureId);
   final List<String> _pendingFeatureStepQueue = <String>[];
   int _stepQueueGeneration = 0;
   bool _isDrainingStepQueue = false;

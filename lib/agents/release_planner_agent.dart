@@ -163,6 +163,11 @@ class ReleasePlannerAgent {
               'title': {'type': 'STRING'},
               'goal': {'type': 'STRING'},
               'doneWhen': {'type': 'STRING'},
+              'buildTier': {
+                'type': 'STRING',
+                'enum': LayersTextStyleGuide.engineBuildTierEnum,
+                'description': LayersTextStyleGuide.buildTierSchemaDesc,
+              },
               'features': {
                 'type': 'ARRAY',
                 'description':
@@ -196,6 +201,11 @@ class ReleasePlannerAgent {
                       'type': 'STRING',
                       'enum': ['new', 'upgrade', 'stable', 'superseded'],
                     },
+                    'buildTier': {
+                      'type': 'STRING',
+                      'enum': LayersTextStyleGuide.engineBuildTierEnum,
+                      'description': LayersTextStyleGuide.buildTierSchemaDesc,
+                    },
                     'supersedesFeatureTitle': {
                       'type': 'STRING',
                       'description':
@@ -204,7 +214,7 @@ class ReleasePlannerAgent {
                     'primarySharedScriptOrScene': {
                       'type': 'STRING',
                       'description':
-                          'Optional shared script, scene, prefab, or Blueprint asset for this feature.',
+                          'Shared script, scene, prefab, or Blueprint asset owned or extended by this feature.',
                     },
                     'inScope': {
                       'type': 'ARRAY',
@@ -322,6 +332,11 @@ class ReleasePlannerAgent {
                 'description':
                     LayersTextStyleGuide.causalTriggerResultSchemaDesc,
               },
+              'buildTier': {
+                'type': 'STRING',
+                'enum': LayersTextStyleGuide.engineBuildTierEnum,
+                'description': LayersTextStyleGuide.buildTierSchemaDesc,
+              },
             },
           },
         },
@@ -334,7 +349,7 @@ class ReleasePlannerAgent {
   static const Map<String, dynamic> commitEpicFeaturesTool = {
     'name': 'commit_epic_features',
     'description':
-        'Commits the ordered playable Features (1..M) needed to build a single System Epic in engineering build-dependency order.',
+        'Commits the ordered playable Features (1..M) needed to build a single System Epic in 5-tier engineering build-dependency order.',
     'parameters': {
       'type': 'OBJECT',
       'required': ['features'],
@@ -348,6 +363,8 @@ class ReleasePlannerAgent {
               'goal',
               'doneWhen',
               'estimatedHours',
+              'buildTier',
+              'primarySharedScriptOrScene',
               'inScope',
               'tuningParams',
               'edgeCases',
@@ -371,7 +388,16 @@ class ReleasePlannerAgent {
                     LayersTextStyleGuide.causalTriggerResultSchemaDesc,
               },
               'estimatedHours': {'type': 'INTEGER'},
-              'primarySharedScriptOrScene': {'type': 'STRING'},
+              'buildTier': {
+                'type': 'STRING',
+                'enum': LayersTextStyleGuide.engineBuildTierEnum,
+                'description': LayersTextStyleGuide.buildTierSchemaDesc,
+              },
+              'primarySharedScriptOrScene': {
+                'type': 'STRING',
+                'description':
+                    'Canonical scene, prefab, script, or Actor Blueprint owned or extended by this feature (e.g. "player_character.tscn / player_character.gd", "EnemyChaser.cs", or "BP_Shotgun").',
+              },
               'inScope': {
                 'type': 'ARRAY',
                 'description':
@@ -480,6 +506,11 @@ class ReleasePlannerAgent {
                     LayersTextStyleGuide.causalTriggerResultSchemaDesc,
               },
               'estimatedHours': {'type': 'INTEGER'},
+              'buildTier': {
+                'type': 'STRING',
+                'enum': LayersTextStyleGuide.engineBuildTierEnum,
+                'description': LayersTextStyleGuide.buildTierSchemaDesc,
+              },
               'primarySharedScriptOrScene': {'type': 'STRING'},
               'inScope': {
                 'type': 'ARRAY',
@@ -1167,10 +1198,10 @@ ${GeminiAgentClient.compactStyleRules}
   * **MANY-TO-MANY SYSTEM CONSOLIDATION**: Multiple chronological Loop Beats that share an underlying engine system (e.g., *Route Departure* + *Transit Risk* -> `"Highway Route & Transit"`; *Settlement Barter* + *Gear Resupply* -> `"Settlement Merchant & Resupply"`) MUST be grouped into a single cohesive System Epic! Cross-cutting systems used across multiple beats (e.g. `"Cargo Loot & Inventory"`, `"Player Locomotion"`) are each 1 System Epic.
   * When `06 Core Loop` has 5+ chronological beats, consolidate them into `3–5` cohesive System Epics (never a 1:1 translation of Loop Beat count).
   * NEVER copy the `06 Core Loop` step headers (${loopBeatTitlesLower.map((t) => '"$t"').join(', ')}) word-for-word as Epic titles.
-  * Instead, name the concrete engineering/gameplay systems (`2–4` plain game-dev words each, e.g., `"Arena Grid & Traversal"`, `"Hydroponic Pipe Network"`, `"Crop Growth & Harvest"`, `"Cargo Market & Upgrades"`) ordered by engineering build dependency:
-    1. `E01` MUST be the Greybox Space/Level/Grid & Primary Player/Tool Control system so the player can move and interact in the world first.
-    2. Middle Epics (`E02`..`E_{N-1}`) cover the core simulation, target/hazard entities, resource processing, or combat mechanics needed to drive the loop.
-    3. Final Epic (`EN`) covers the loop payoff, economy/upgrade terminal, and next-cycle reset so the loop connects end-to-end.
+  * Instead, name the concrete engineering/gameplay systems (`2–4` plain game-dev words each, e.g., `"Arena Grid & Traversal"`, `"Hydroponic Pipe Network"`, `"Crop Growth & Harvest"`, `"Cargo Market & Upgrades"`) ordered by the **5-Tier Engine Build Dependency Model**:
+    1. `E01` (`tier_1_world_space` / `tier_2_actor_locomotion`) MUST be the Greybox Space/Level/Grid & Primary Player/Tool Control system so the player can move and interact in the world first.
+    2. Earlier Middle Epics (`tier_3_targets_hazards`) build world target entities, spawners, props, or simulation substrates BEFORE Later Middle Epics (`tier_4_verbs_tools_combat`) that fire weapons, cast tools, or process harvested outputs against them.
+    3. Final Epic (`EN`, `tier_5_loop_economy_hud`) covers the loop payoff, economy/upgrade terminal, HUD readouts, and next-cycle reset so UI/loop systems never bind to missing gameplay state.
 
 Call `commit_release_system_epics` with the structured system epics.
 ''';
@@ -1198,6 +1229,7 @@ Call `commit_release_system_epics` with the structured system epics.
       );
       final bGoal = (item['goal'] ?? '').toString().trim();
       final bDone = (item['doneWhen'] ?? '').toString().trim();
+      final bTier = (item['buildTier'] ?? '').toString().trim();
       beats.add(
         ProposedBeatBlueprint(
           id: 'beat_${i + 1}',
@@ -1208,6 +1240,7 @@ Call `commit_release_system_epics` with the structured system epics.
           doneWhen: bDone.isNotEmpty
               ? bDone
               : 'Playtester verifies $bTitle in Play mode.',
+          buildTier: bTier.isNotEmpty ? bTier : null,
           features: <ProposedFeatureBlueprint>[],
         ),
       );
@@ -1215,6 +1248,9 @@ Call `commit_release_system_epics` with the structured system epics.
     if (beats.isEmpty) return null;
     if (coreLoopItems.length >= 5 && beats.length >= coreLoopItems.length) {
       beats = consolidateSystemEpicsFromLoopBeats(beats);
+    }
+    if (versionTag == 'v0.1') {
+      beats = sortEpicsByBuildDependency(beats);
     }
 
     return ReleaseBlueprint(
@@ -1539,7 +1575,7 @@ Out of Scope (DO NOT BUILD): ${projectExclusions.join(' | ')}
 
 All Release System Epics (Stay strictly inside E$epicNum's responsibility):
 $allEpicsOverview
-${alreadyPlannedFeatures.isNotEmpty ? 'Already Planned in Earlier Epics (DO NOT DUPLICATE): ${alreadyPlannedFeatures.join(', ')}' : ''}
+${alreadyPlannedFeatures.isNotEmpty ? 'Already Planned in Earlier Epics (Reuse shared scripts & variables; DO NOT DUPLICATE):\n${alreadyPlannedFeatures.map((c) => '- $c').join('\n')}' : ''}
 
 TARGET EPIC TO BREAK DOWN INTO PLAYABLE FEATURES:
 - Epic E$epicNum: "${epicBlueprint.title}"
@@ -1547,13 +1583,14 @@ TARGET EPIC TO BREAK DOWN INTO PLAYABLE FEATURES:
 - System Done When: "${epicBlueprint.doneWhen}"
 
 ${GeminiAgentClient.compactStyleRules}
-- DETERMINE THE PLAYABLE FEATURES NEEDED FOR E$epicNum:
+- DETERMINE THE PLAYABLE FEATURES NEEDED FOR E$epicNum (5-TIER ENGINE BUILD DEPENDENCY ORDER):
   * Break E$epicNum ("${epicBlueprint.title}") into the exact number of cohesive, singular-focused Playable Features (`1..M`) needed to build this system end-to-end.
   * NEVER name a Feature identical to the Epic title ("${epicBlueprint.title}"). Each Feature must name a specific playable mechanic, tool, or interactive object inside E$epicNum (`2–3` plain game-dev words, e.g., `"Greybox Dome Floor"`, `"Player Walk & Aim"`, `"Laser Debris Cutter"`).
-  * Order Features by strict **Engineering Build Dependency**:
-    ${epicIndex == 0 ? '1. Feature #1 in E01 MUST be the Greybox Level/Arena/Grid Blockout & Collision surface BEFORE Player/Tool movement at Feature #2.' : '1. Place any target entity, container, or spawner BEFORE the tool, tether, projectile, or UI that acts on it.'}
-    2. Place the base playable action BEFORE any cooldown, pressure lock, or boundary gate that restricts it.
-- MANDATORY TUNING, GUARDS & MECHANIC-SPECIFIC TASKS ON EVERY FEATURE:
+  * Assign `buildTier` and `primarySharedScriptOrScene` on EVERY feature and order Features strictly from Tier 1 to Tier 5:
+    ${epicIndex == 0 ? '1. `tier_1_world_space` FIRST: Feature #1 in E01 MUST be the Greybox Level/Arena/Grid Blockout & Collision surface BEFORE `tier_2_actor_locomotion` (Player/Vehicle/Tool movement) at Feature #2.' : '1. `tier_3_targets_hazards` BEFORE `tier_4_verbs_tools_combat`: Place any target entity, enemy, container, prop, or spawner BEFORE the weapon, projectile, tool, tether, or harvester that acts on it.'}
+    2. `tier_5_loop_economy_hud` LAST: Place any HUD widget, counter, shop panel, round reset, or pressure/seal lock gate AFTER the base gameplay mechanics and state variables it reads or restricts.
+- MANDATORY SHARED ASSET, TUNING, GUARDS & MECHANIC-SPECIFIC TASKS ON EVERY FEATURE:
+  * Set `primarySharedScriptOrScene` to the exact engine scene/script/prefab/Blueprint filename for that feature (reusing an earlier feature's player/actor script when adding a player-attached ability, or naming a dedicated target/weapon/UI asset).
   * Include 2–3 concrete `"paramName: numericValue unit"` entries in `tuningParams` and 1–2 `[TAG]` guard rules in `edgeCases`.
   * Include non-overlapping, foundation-first `tasks` (`stage_1_scene_or_data_foundation` -> `stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`) whose `title` names the specific scene node, UI widget, data resource, or gameplay calculation for that feature (NEVER use generic template phrases like `"Body & Collision"`, `"Prop & Collision"`, `"Action & Math"`, `"Cue & Clamp"`, `"Cue & Boundary Clamp"`, or passive `"Verification"` / `"Testing"` task titles).
 
@@ -1573,7 +1610,8 @@ Call `commit_epic_features` with the ordered playable features.
       final parsedFeatures = <ProposedFeatureBlueprint>[];
       final usedTitlesLower = <String>{
         epicBlueprint.title.trim().toLowerCase(),
-        for (final prev in alreadyPlannedFeatures) prev.trim().toLowerCase(),
+        for (final prev in alreadyPlannedFeatures)
+          extractCleanTitleFromPlannedContract(prev).toLowerCase(),
       };
       for (int fIdx = 0; fIdx < rawFeatures.length; fIdx++) {
         final fMap = rawFeatures[fIdx];
@@ -1598,6 +1636,7 @@ Call `commit_epic_features` with the ordered playable features.
                 .clamp(2, 16);
         final primaryAsset =
             (fMap['primarySharedScriptOrScene'] ?? '').toString().trim();
+        final rawBuildTier = (fMap['buildTier'] ?? '').toString().trim();
         final inScope = (fMap['inScope'] is List)
             ? (fMap['inScope'] as List)
                 .map((e) => e.toString().trim())
@@ -1664,6 +1703,7 @@ Call `commit_epic_features` with the ordered playable features.
             originVersion: versionTag,
             primarySharedScriptOrScene:
                 primaryAsset.isNotEmpty ? primaryAsset : null,
+            buildTier: rawBuildTier.isNotEmpty ? rawBuildTier : null,
             inScope: inScope,
             outOfScope: const <String>[],
             tuningParams: tuning,
@@ -2090,6 +2130,10 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       );
     }
 
+    final orderedBaseFeatures = enforceIntraEpicBuildDependencies(
+      baseFeatures,
+      epicIndex: 1,
+    );
     return ProposedBeatBlueprint(
       id: epicDoc.id,
       title: beatBp?.title.isNotEmpty == true ? beatBp!.title : epicDoc.title,
@@ -2099,7 +2143,8 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
       doneWhen: beatBp?.doneWhen.isNotEmpty == true
           ? beatBp!.doneWhen
           : SectionTextUtils.resolveDoneWhen(epicDoc.sections),
-      features: baseFeatures,
+      buildTier: beatBp?.buildTier,
+      features: orderedBaseFeatures,
     );
   }
 
@@ -2249,91 +2294,234 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
     ];
   }
 
-  /// Enforces the 3 Engineering Build Dependency Rules inside an Epic so Feature `N`
-  /// only depends on scene geometry, target bodies, or base actions created in Features `1..N-1`:
-  /// 1. Surface / Space Before Actor (Epic 1 blockout/layout precedes character locomotion).
-  /// 2. Target Entity Before Tool / Tether / Resolver (`Scrap Core Physics` precedes `Harpoon Tow Cable`).
-  /// 3. Base Mechanic Before Lock / Gate / Constraint (`Mature Crop Harvest` precedes `Tank Seal Depressurize`).
+  /// Extracts the bare feature title from either a plain feature title or a
+  /// cross-Epic contract line (`"E01 · Player Walk [asset: player.gd | vars: moveSpeed]"`).
+  static String extractCleanTitleFromPlannedContract(String raw) {
+    var s = raw.trim();
+    final epicSep = s.indexOf(' · ');
+    if (epicSep > 0 && epicSep <= 6 && s.startsWith('E')) {
+      s = s.substring(epicSep + 3).trim();
+    }
+    final bracketIdx = s.indexOf(' [');
+    if (bracketIdx > 0) {
+      s = s.substring(0, bracketIdx).trim();
+    }
+    return s;
+  }
+
+  /// Formats a planned feature into a compact 1-line cross-Epic contract so subsequent
+  /// Epics see existing shared scripts/scenes and variable names during feature planning.
+  static String formatFeatureContractForEpicPlanning(
+    ProposedFeatureBlueprint feat, {
+    required int epicIndex,
+  }) {
+    final epicCode = 'E${(epicIndex + 1).toString().padLeft(2, '0')}';
+    final asset = (feat.primarySharedScriptOrScene ?? '').trim();
+    final vars = feat.tuningParams
+        .map((p) => p.split(':').first.trim())
+        .where((v) => v.isNotEmpty)
+        .take(3)
+        .join(', ');
+    final metaParts = <String>[
+      if (asset.isNotEmpty) 'asset: $asset',
+      if (vars.isNotEmpty) 'vars: $vars',
+    ];
+    return metaParts.isEmpty
+        ? '$epicCode · ${feat.title}'
+        : '$epicCode · ${feat.title} [${metaParts.join(' | ')}]';
+  }
+
+  static int _explicitBuildTierRank(String? rawTier) {
+    final norm = (rawTier ?? '').trim().toLowerCase();
+    return switch (norm) {
+      'tier_1_world_space' => 1,
+      'tier_2_actor_locomotion' => 2,
+      'tier_3_targets_hazards' => 3,
+      'tier_4_verbs_tools_combat' => 4,
+      'tier_5_loop_economy_hud' => 5,
+      _ => 0,
+    };
+  }
+
+  /// Infers the 5-Tier Engine Build-Dependency rank (`1..5`) for [feat].
+  /// Trusts an explicit [ProposedFeatureBlueprint.buildTier] first; otherwise classifies
+  /// strictly from [feat.title] head nouns (never scanning `goal` text so weapon features
+  /// whose goal mentions `"damages enemy chasers"` never misclassify as Tier 3 targets).
+  static int inferFeatureBuildTier(
+    ProposedFeatureBlueprint feat, {
+    required bool isFirstEpic,
+  }) {
+    final explicit = _explicitBuildTierRank(feat.buildTier);
+    if (explicit > 0) {
+      if (!isFirstEpic && explicit == 1) return 3;
+      return explicit;
+    }
+
+    final t = feat.title.trim().toLowerCase();
+    // Tier 1: World, Level, Arena, Grid & Blockout Geometry
+    if (RegExp(
+      r'\b(?:blockout|greybox|graybox|arena\s+layout|corridor\s+layout|station\s+layout|room\s+layout|level\s+layout|greybox\s+arena|station\s+corridor|dome\s+floor|arena\s+floor|grid\s+board|floor\s+grid|sector\s+map|level\s+map|terrain)\b',
+    ).hasMatch(t)) {
+      return isFirstEpic ? 1 : 3;
+    }
+
+    // Tier 5: HUD / UI Widgets, Economy Terminals, Loop Resets & Pressure/Seal Gates
+    if (RegExp(
+      r'\b(?:hud|ui|widget|counter|health\s*bar|stamina\s*bar|ammo\s*bar|overlay|scoreboard|leaderboard|minimap|radar|menu|shop|merchant|market|barter|resupply|upgrade\s+terminal|wave\s+reset|round\s+reset|loop\s+reset|run\s+reset|game\s+over|victory|depressuriz\w*|seal\s+lock|hatch\s+lock|pressure\s+lock)\b',
+    ).hasMatch(t)) {
+      return 5;
+    }
+
+    // Tier 3 (checked BEFORE Tier 4 for passive anchor/pylon/target/hazard world props so "Grapple Anchor Pylon" -> Tier 3 before "Grapple Hook Launcher" -> Tier 4):
+    final isPassiveWorldPropOrTarget = RegExp(
+      r'\b(?:enemy|enemies|chaser|drone|dummy|target|pylon|anchor|beacon|pad|spawner|wave\s+spawn\w*|scrap\s+core|core\s+physics|crate|container|crop|seed\s+plant\w*|plant\w*|ore\s+vein|ore\s+node|shard|debris|hazard|spike|mine|obstacle|prop|turret\s+base)\b',
+    ).hasMatch(t);
+    final hasActiveWeaponOrToolHead = RegExp(
+      r'\b(?:shotgun|rifle|pistol|revolver|cannon|blaster|gun|weapon|launcher|hook\s+launcher|hitscan|raycast|projectile|pellet|bullet|recoil|reload|firing|fire|shoot|slash|melee|parry|harpoon|tow\s+cable|winch|cutter|drill|laser|welder|scanner|harvest\w*|pickup|extract\w*|magnet|turret\s+fire|impact|hit\s+detection)\b',
+    ).hasMatch(t);
+    if (hasActiveWeaponOrToolHead) {
+      return 4;
+    }
+    if (isPassiveWorldPropOrTarget) {
+      return 3;
+    }
+    if (RegExp(r'\b(?:tether|grapple)\b').hasMatch(t)) {
+      return 4;
+    }
+
+    // Tier 2: Base Player / Vehicle / Cursor / Camera Locomotion
+    if (RegExp(
+      r'\b(?:first\s+person|third\s+person|player\s+walk|player\s+move\w*|player\s+strafe|character\s+move\w*|locomotion|movement|walk|strafe|sprint|dash|jump|crouch|slide|camera\s+rig|vehicle\s+steer\w*|truck\s+steer\w*|cursor\s+aim)\b',
+    ).hasMatch(t)) {
+      return 2;
+    }
+
+    return isFirstEpic ? 2 : 4;
+  }
+
+  /// Sorts initial `v0.1` System Epics (`E01..EN`) by the 5-Tier Engine Build-Dependency Model
+  /// while preserving relative AI order within the same tier (`World/Traversal` first,
+  /// `Targets/Substrates` before `Verbs/Combat` when explicitly tiered, and `Economy/HUD/Reset` last).
+  /// In `v0.2+` progressive releases, preserves the existing Live-Tree Epic order unchanged.
+  static List<ProposedBeatBlueprint> sortEpicsByBuildDependency(
+    List<ProposedBeatBlueprint> rawEpics, {
+    String versionTag = 'v0.1',
+  }) {
+    if (rawEpics.length < 2) return rawEpics;
+    if (versionTag.trim().toLowerCase() != 'v0.1') {
+      return List<ProposedBeatBlueprint>.from(rawEpics);
+    }
+    int inferEpicRank(ProposedBeatBlueprint b) {
+      final explicit = _explicitBuildTierRank(b.buildTier);
+      if (explicit > 0) return explicit;
+      final t = b.title.trim().toLowerCase();
+      if (RegExp(
+        r'\b(?:arena|grid|level|world|traversal|movement|locomotion|route|highway|transit|corridor|dome|navigation|vehicle|skiff)\b',
+      ).hasMatch(t)) {
+        return 1;
+      }
+      if (RegExp(
+        r'\b(?:merchant|resupply|market|shop|barter|economy|upgrade|hud|scoreboard|reset|extraction\s+terminal|payoff)\b',
+      ).hasMatch(t)) {
+        return 5;
+      }
+      return 3;
+    }
+
+    final indexed = <({int rank, int origIdx, ProposedBeatBlueprint beat})>[
+      for (int i = 0; i < rawEpics.length; i++)
+        (rank: inferEpicRank(rawEpics[i]), origIdx: i, beat: rawEpics[i]),
+    ];
+    indexed.sort((a, b) {
+      final cmp = a.rank.compareTo(b.rank);
+      return cmp != 0 ? cmp : a.origIdx.compareTo(b.origIdx);
+    });
+    final sorted = <ProposedBeatBlueprint>[];
+    for (int i = 0; i < indexed.length; i++) {
+      final beat = indexed[i].beat;
+      if (beat.id.startsWith('beat_')) {
+        beat.id = 'beat_${i + 1}';
+      }
+      sorted.add(beat);
+    }
+    return sorted;
+  }
+
+  /// Alias for [enforceIntraEpicBuildDependencies] used by Stage 2 build-dependency callers and tests.
+  static List<ProposedFeatureBlueprint> sortFeaturesByBuildDependency(
+    List<ProposedFeatureBlueprint> rawFeatures, {
+    bool isFirstEpic = true,
+    String versionTag = 'v0.1',
+  }) =>
+      enforceIntraEpicBuildDependencies(
+        rawFeatures,
+        epicIndex: isFirstEpic ? 0 : 1,
+        versionTag: versionTag,
+      );
+
+  /// Enforces the 5-Tier Engine Build-Dependency Order inside an Epic (`1..5`:
+  /// `World/Space -> Actor/Locomotion -> Targets/Hazards -> Verbs/Tools/Combat -> Loop/Economy/HUD`),
+  /// preserving relative AI order within each tier.
+  ///
+  /// Live-Tree Stability (`v0.2+`): Any existing `STABLE`, `UPGRADE`, or `SUPERSEDED` features stay
+  /// anchored in their established order at the front of the Epic; only `NEW` features are sorted.
   static List<ProposedFeatureBlueprint> enforceIntraEpicBuildDependencies(
     List<ProposedFeatureBlueprint> rawFeatures, {
     required int epicIndex,
+    String versionTag = 'v0.1',
   }) {
     if (rawFeatures.length < 2) return rawFeatures;
-    final list = List<ProposedFeatureBlueprint>.from(rawFeatures);
+    final isFirstEpic = epicIndex == 0;
 
-    bool isEnvironmentBlockout(ProposedFeatureBlueprint f) {
-      final t = f.title.toLowerCase();
-      return t.contains('blockout') ||
-          t.contains('arena layout') ||
-          t.contains('corridor layout') ||
-          t.contains('station layout') ||
-          t.contains('room layout') ||
-          t.contains('level layout') ||
-          t.contains('greybox arena') ||
-          t.contains('station corridor');
+    final hasAnchoredExisting = rawFeatures.any(
+      (f) => f.lifecycle != FeatureLifecycleStatus.newFeature,
+    );
+    if (hasAnchoredExisting) {
+      final anchored = rawFeatures
+          .where((f) => f.lifecycle != FeatureLifecycleStatus.newFeature)
+          .toList();
+      final newFeats = rawFeatures
+          .where((f) => f.lifecycle == FeatureLifecycleStatus.newFeature)
+          .toList();
+      if (newFeats.length < 2) {
+        return <ProposedFeatureBlueprint>[...anchored, ...newFeats];
+      }
+      final sortedNew = _stableSortNewFeaturesByTier(
+        newFeats,
+        isFirstEpic: false,
+      );
+      return <ProposedFeatureBlueprint>[...anchored, ...sortedNew];
     }
 
-    // Rule 1: In Epic 1 (epicIndex == 0), move Greybox Level / Arena Blockout to index 0
-    if (epicIndex == 0) {
-      final blockoutIdx = list.indexWhere(isEnvironmentBlockout);
-      if (blockoutIdx > 0) {
-        final blockoutFeat = list.removeAt(blockoutIdx);
-        list.insert(0, blockoutFeat);
+    final sorted = _stableSortNewFeaturesByTier(
+      rawFeatures,
+      isFirstEpic: isFirstEpic,
+    );
+    for (int i = 0; i < sorted.length; i++) {
+      if (RegExp(r'^feat_\d+_\d+$').hasMatch(sorted[i].id)) {
+        sorted[i].id = 'feat_${epicIndex + 1}_${i + 1}';
       }
     }
+    return sorted;
+  }
 
-    // Rule 2: Target Entity / Spawner must precede Tether / Harpoon / Projectile Impact
-    bool isTetherOrImpactTool(ProposedFeatureBlueprint f) {
-      final t = f.title.toLowerCase();
-      return t.contains('tow cable') ||
-          t.contains('harpoon') ||
-          t.contains('tether') ||
-          t.contains('projectile impact') ||
-          t.contains('hit detection');
-    }
-
-    bool isTargetEntityOrSpawner(ProposedFeatureBlueprint f) {
-      final t = f.title.toLowerCase();
-      return (t.contains('scrap core') ||
-              t.contains('core physics') ||
-              t.contains('drone spawner') ||
-              t.contains('enemy spawner') ||
-              t.contains('target spawner')) &&
-          !isTetherOrImpactTool(f);
-    }
-
-    final toolIdx = list.indexWhere(isTetherOrImpactTool);
-    final targetIdx = list.indexWhere(isTargetEntityOrSpawner);
-    if (toolIdx != -1 && targetIdx > toolIdx) {
-      final targetFeat = list.removeAt(targetIdx);
-      list.insert(toolIdx, targetFeat);
-    }
-
-    // Rule 3: Base Harvest / Pickup Action must precede Lock / Seal / Depressurize Gate
-    bool isPressureOrSealGate(ProposedFeatureBlueprint f) {
-      final t = f.title.toLowerCase();
-      return t.contains('depressuriz') ||
-          t.contains('seal lock') ||
-          t.contains('hatch lock') ||
-          t.contains('pressure lock');
-    }
-
-    bool isBaseHarvestAction(ProposedFeatureBlueprint f) {
-      final t = f.title.toLowerCase();
-      return (t.contains('harvest') ||
-              t.contains('crop pickup') ||
-              t.contains('crop extract')) &&
-          !isPressureOrSealGate(f);
-    }
-
-    final gateIdx = list.indexWhere(isPressureOrSealGate);
-    final harvestIdx = list.indexWhere(isBaseHarvestAction);
-    if (gateIdx != -1 && harvestIdx > gateIdx) {
-      final gateFeat = list.removeAt(gateIdx);
-      list.insert(harvestIdx, gateFeat);
-    }
-
-    return list;
+  static List<ProposedFeatureBlueprint> _stableSortNewFeaturesByTier(
+    List<ProposedFeatureBlueprint> features, {
+    required bool isFirstEpic,
+  }) {
+    final indexed = <({int rank, int origIdx, ProposedFeatureBlueprint feat})>[
+      for (int i = 0; i < features.length; i++)
+        (
+          rank: inferFeatureBuildTier(features[i], isFirstEpic: isFirstEpic),
+          origIdx: i,
+          feat: features[i],
+        ),
+    ];
+    indexed.sort((a, b) {
+      final cmp = a.rank.compareTo(b.rank);
+      return cmp != 0 ? cmp : a.origIdx.compareTo(b.origIdx);
+    });
+    return <ProposedFeatureBlueprint>[for (final entry in indexed) entry.feat];
   }
 
   static ReleaseBlueprint? _parseDynamicReleaseBlueprint({
@@ -2421,6 +2609,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
             fMap['supersedesFeatureTitle']?.toString().trim();
         final primaryAsset =
             fMap['primarySharedScriptOrScene']?.toString().trim();
+        final rawBuildTier = fMap['buildTier']?.toString().trim();
 
         final inScope = _parseStringList(fMap['inScope']);
         final outOfScope = _parseStringList(fMap['outOfScope']);
@@ -2489,6 +2678,9 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
                 (primaryAsset != null && primaryAsset.isNotEmpty)
                     ? primaryAsset
                     : null,
+            buildTier: (rawBuildTier != null && rawBuildTier.isNotEmpty)
+                ? rawBuildTier
+                : null,
             inScope: inScope,
             outOfScope: outOfScope,
             tuningParams: tuning,

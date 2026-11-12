@@ -9501,5 +9501,641 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(find.text('PENDING INVITES (3)'), findsOneWidget);
       },
     );
+
+    test(
+      'Pillar 1: 5-Tier Engine Build-Dependency Sorting (Epics + Title Head-Noun Features + v0.2+ Live-Tree Stability + Cross-Epic Contracts)',
+      () {
+        // 1. v0.1 Epics sort deterministically from World/Space -> Locomotion -> Targets -> Verbs/Combat -> Economy/HUD
+        final scrambledEpics = <ProposedBeatBlueprint>[
+          ProposedBeatBlueprint(
+            id: 'e_hud',
+            title: 'Score & Wave HUD',
+            goal: 'Show wave score and ore counter.',
+            doneWhen: 'Kill enemy -> score updates.',
+            buildTier: 'tier_5_loop_economy_hud',
+            features: const [],
+          ),
+          ProposedBeatBlueprint(
+            id: 'e_combat',
+            title: 'Shotgun & Turret Combat',
+            goal: 'Fire pellets at targets.',
+            doneWhen: 'Click -> pellets hit drone.',
+            buildTier: 'tier_4_verbs_tools_combat',
+            features: const [],
+          ),
+          ProposedBeatBlueprint(
+            id: 'e_enemy',
+            title: 'Drone Wave Spawner',
+            goal: 'Spawn target drones.',
+            doneWhen: 'Wave starts -> 3 drones spawn.',
+            buildTier: 'tier_3_targets_hazards',
+            features: const [],
+          ),
+          ProposedBeatBlueprint(
+            id: 'e_move',
+            title: 'Player Strafe & Dash',
+            goal: 'Move and dash across arena.',
+            doneWhen: 'Press Shift -> player dashes.',
+            buildTier: 'tier_2_actor_locomotion',
+            features: const [],
+          ),
+          ProposedBeatBlueprint(
+            id: 'e_world',
+            title: 'Greybox Courtyard Arena',
+            goal: 'Walkable courtyard floor and walls.',
+            doneWhen: 'Press Play -> stand on floor.',
+            buildTier: 'tier_1_world_space',
+            features: const [],
+          ),
+        ];
+
+        final sortedV01 = ReleasePlannerAgent.sortEpicsByBuildDependency(
+          scrambledEpics,
+          versionTag: 'v0.1',
+        );
+        expect(
+          sortedV01.map((e) => e.id).toList(),
+          equals(['e_world', 'e_move', 'e_enemy', 'e_combat', 'e_hud']),
+        );
+
+        // 2. v0.2+ Progressive Releases NEVER re-sort existing E01..EN Live-Tree Epic order
+        final preservedV02 = ReleasePlannerAgent.sortEpicsByBuildDependency(
+          scrambledEpics,
+          versionTag: 'v0.2',
+        );
+        expect(
+          preservedV02.map((e) => e.id).toList(),
+          equals(scrambledEpics.map((e) => e.id).toList()),
+        );
+
+        // 3. Title Head-Noun Classifier: "Shotgun Firing" (goal mentions enemy drone) -> Rank 4 AFTER "Enemy Drone Spawner" (Rank 3)
+        final combatAndTargetFeats = <ProposedFeatureBlueprint>[
+          ProposedFeatureBlueprint(
+            id: 'f_hud',
+            title: 'Wave Counter HUD',
+            goal: '+wave label, +ammo counter',
+            doneWhen: 'Kill drone -> counter increments',
+          ),
+          ProposedFeatureBlueprint(
+            id: 'f_shotgun',
+            title: 'Shotgun Pellet Firing',
+            goal: '+hitscan pellets damaging enemy drone targets in arena',
+            doneWhen: 'Left-click -> enemy drone flashes and loses HP',
+          ),
+          ProposedFeatureBlueprint(
+            id: 'f_drone',
+            title: 'Enemy Drone Spawner',
+            goal: '+spawn 3 drones on arena markers',
+            doneWhen: 'Start wave -> 3 drones spawn',
+          ),
+          ProposedFeatureBlueprint(
+            id: 'f_move',
+            title: 'Player Movement & Aim',
+            goal: '+WASD movement, +mouse look',
+            doneWhen: 'Press WASD -> player moves smoothly',
+          ),
+          ProposedFeatureBlueprint(
+            id: 'f_arena',
+            title: 'Courtyard Floor Blockout',
+            goal: '+greybox floor, +perimeter walls',
+            doneWhen: 'Press Play -> player stands on floor',
+          ),
+        ];
+
+        final orderedFeats = ReleasePlannerAgent.sortFeaturesByBuildDependency(
+          combatAndTargetFeats,
+          versionTag: 'v0.1',
+        );
+        expect(
+          orderedFeats.map((f) => f.id).toList(),
+          equals(['f_arena', 'f_move', 'f_drone', 'f_shotgun', 'f_hud']),
+        );
+
+        // 4. v0.2+ Progressive Intra-Epic Sorting keeps STABLE & UPGRADE features anchored at exact indices
+        final v02MixedFeats = <ProposedFeatureBlueprint>[
+          ProposedFeatureBlueprint(
+            id: 'f_stable_hud',
+            title: 'Score Counter HUD',
+            goal: 'Existing stable HUD',
+            doneWhen: 'Visible',
+            lifecycle: FeatureLifecycleStatus.stable,
+          ),
+          ProposedFeatureBlueprint(
+            id: 'f_new_verb',
+            title: 'Grapple Hook Launcher',
+            goal: '+fire tether at anchor',
+            doneWhen: 'Press E -> pulls player',
+            lifecycle: FeatureLifecycleStatus.newFeature,
+          ),
+          ProposedFeatureBlueprint(
+            id: 'f_upgrade_move',
+            title: 'Player Dash Impulse',
+            goal: '+iframe window',
+            doneWhen: 'Press Shift -> dodges projectile',
+            lifecycle: FeatureLifecycleStatus.upgrade,
+          ),
+          ProposedFeatureBlueprint(
+            id: 'f_new_target',
+            title: 'Grapple Anchor Pylon',
+            goal: '+target pylon collision',
+            doneWhen: 'Placed in arena -> raycast hits pylon',
+            lifecycle: FeatureLifecycleStatus.newFeature,
+          ),
+        ];
+
+        final orderedV02Feats =
+            ReleasePlannerAgent.sortFeaturesByBuildDependency(
+          v02MixedFeats,
+          versionTag: 'v0.2',
+        );
+        // Existing STABLE & UPGRADE features stay anchored at the front in exact relative order; NEW features sort cleanly after them (Target Pylon before Grapple Launcher)
+        expect(orderedV02Feats[0].id, equals('f_stable_hud'));
+        expect(orderedV02Feats[1].id, equals('f_upgrade_move'));
+        expect(orderedV02Feats[2].id, equals('f_new_target'));
+        expect(orderedV02Feats[3].id, equals('f_new_verb'));
+
+        // 5. Cross-Epic Feature Contract formatting & clean title extraction
+        final contractLine =
+            ReleasePlannerAgent.formatFeatureContractForEpicPlanning(
+          ProposedFeatureBlueprint(
+            id: 'f_player',
+            title: 'Player Dash',
+            goal: '+dash',
+            doneWhen: 'Shift -> dash',
+            primarySharedScriptOrScene: 'res://scripts/player_controller.gd',
+            tuningParams: const ['dashSpeed: 900.0', 'dashCooldown: 0.6'],
+          ),
+          epicIndex: 0,
+        );
+        expect(contractLine, contains('E01 · Player Dash'));
+        expect(contractLine, contains('res://scripts/player_controller.gd'));
+        expect(contractLine, contains('dashSpeed, dashCooldown'));
+        expect(
+          ReleasePlannerAgent.extractCleanTitleFromPlannedContract(
+            contractLine,
+          ),
+          equals('Player Dash'),
+        );
+      },
+    );
+
+    testWidgets(
+      'Pillar 2: Cross-Epic Asset & Symbol Registry, Intra-Task Editor-Before-Script Hoisting & Dual-Mode Check in Editor vs Verify in Engine Badge',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        // 1. Unit-check intra-task hoisting when pure-code step references a child node created in a later setup step
+        final outOfOrderSteps = <Map<String, dynamic>>[
+          {
+            'stepRole': 'script_logic',
+            'shortTitle': 'Start Cooldown Timer Script',
+            'stepPath': 'res://scripts/player_dash.gd',
+            'doInstruction':
+                'Call \$DashCooldownTimer.start(dashCooldown) when Shift is pressed.',
+            'area1Hierarchy': '',
+            'area2Inspector': '',
+            'codeFormula': '\$DashCooldownTimer.start(dashCooldown)',
+            'verifyMode': 'playtest',
+            'verifyResult': 'Press Shift -> dash triggers once per cooldown.',
+          },
+          {
+            'stepRole': 'editor_setup',
+            'shortTitle': 'Attach Dash Cooldown Timer',
+            'stepPath': 'res://scenes/player.tscn',
+            'doInstruction':
+                'Add a Timer child node named DashCooldownTimer under Player.',
+            'area1Hierarchy':
+                'Player (CharacterBody2D)\n └─ DashCooldownTimer (Timer)',
+            'area2Inspector': 'one_shot: true | wait_time: 0.6',
+            'codeFormula': '# Scene Tree setup',
+            'verifyMode': 'editor',
+            'verifyResult':
+                'Inspect Scene Tree -> DashCooldownTimer appears under Player with One Shot enabled.',
+          },
+        ];
+        final hoisted =
+            WorkbenchReleaseMixin.enforceIntraTaskEditorBeforeScriptOrder(
+          outOfOrderSteps,
+        );
+        expect(hoisted.first['shortTitle'], equals('Attach Dash Cooldown Timer'));
+        expect(hoisted.last['shortTitle'], equals('Start Cooldown Timer Script'));
+
+        // 2. Verify decodeThreeAreaNotes strips [[VERIFY_MODE]] cleanly without leaking into area2Inspector
+        final encodedEditorNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
+          instruction: 'Add DashCooldownTimer under Player.',
+          area1Hierarchy: 'Player\n └─ DashCooldownTimer (Timer)',
+          area2Inspector: 'one_shot: true | wait_time: 0.6',
+          verifyMode: 'editor',
+        );
+        final decodedEditorNotes =
+            TaskHowToBlueprint.decodeThreeAreaNotes(encodedEditorNotes);
+        expect(decodedEditorNotes.verifyMode, equals('editor'));
+        expect(
+          decodedEditorNotes.area2Inspector,
+          equals('one_shot: true | wait_time: 0.6'),
+        );
+        expect(
+          decodedEditorNotes.area2Inspector,
+          isNot(contains('VERIFY_MODE')),
+        );
+
+        // 3. End-to-End Cross-Epic Registry + Dual-Mode UI Badge in Stage 2 Workbench
+        final provider = WorkbenchProvider();
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = _mockGeminiResponder;
+        String? capturedEpic2FeaturePrompt;
+        String epic1FirstFeatTitle = '';
+        String epic2FirstFeatTitle = '';
+
+        try {
+          await tester.runAsync(
+            () => provider.startConceptInterview('Starlight Arena'),
+          );
+          provider.updateConceptDraft((d) {
+            d.techSpec = ['Engine: Godot 4 (GDScript)', 'Dimension: 2D Top-Down'];
+          });
+          await tester.runAsync(
+            () => provider.approveConceptAndBuildRelease(),
+          );
+
+          final allBeats = provider.activeReleaseBeats;
+          expect(allBeats.length, greaterThanOrEqualTo(2));
+          final epic1Feat = provider.featuresForBeat(allBeats[0].id).first;
+          final epic2Feat = provider.featuresForBeat(allBeats[1].id).first;
+          epic1FirstFeatTitle = epic1Feat.title;
+          epic2FirstFeatTitle = epic2Feat.title;
+
+          GeminiAgentClient.testMockResponder = (prompt, model) async {
+            if (prompt.contains('for Feature "$epic1FirstFeatTitle"')) {
+              return {
+                'primarySharedScriptOrScene':
+                    'res://scripts/player_controller.gd',
+                'tasks': [
+                  for (int idx = 0; idx < 3; idx++)
+                    {
+                      'taskIndex': idx,
+                      'taskTitle': 'Collision & Timer Nodes',
+                      'subSteps': [
+                        {
+                          'stepRole': 'editor_setup',
+                          'shortTitle': 'Attach Dash Timer Node',
+                          'stepPath': 'res://scenes/player.tscn',
+                          'doInstruction':
+                              'Add DashCooldownTimer under Player root.',
+                          'area1Hierarchy':
+                              'Player (CharacterBody2D)\n └─ DashCooldownTimer (Timer)',
+                          'area2Inspector': 'wait_time: 0.6 | one_shot: true',
+                          'codeFormula':
+                              'func apply_dash_impulse(dir: Vector2) -> void:\n\tvelocity = dir * dashSpeed',
+                          'verifyMode': 'editor',
+                          'verifyResult':
+                              'Inspect Scene Tree -> DashCooldownTimer appears under Player.',
+                        },
+                      ],
+                    },
+                ],
+              };
+            }
+            if (prompt.contains('for Feature "$epic2FirstFeatTitle"')) {
+              capturedEpic2FeaturePrompt = prompt;
+              // Intentionally return script_logic BEFORE editor_setup to test live hoisting + dual verifyMode UI!
+              return {
+                'primarySharedScriptOrScene': 'res://scripts/pulse_blaster.gd',
+                'tasks': [
+                  for (int idx = 0; idx < 3; idx++)
+                    {
+                      'taskIndex': idx,
+                      'taskTitle': 'Muzzle & Cooldown Setup',
+                      'subSteps': [
+                        {
+                          'stepRole': 'script_logic',
+                          'shortTitle': 'Spawn Bolt From MuzzleMarker',
+                          'stepPath': 'res://scripts/pulse_blaster.gd',
+                          'doInstruction':
+                              'Spawn bolt at \$MuzzleMarker.global_position on fire.',
+                          'area1Hierarchy': '',
+                          'area2Inspector': 'fireRate: 0.25',
+                          'codeFormula':
+                              'bolt.global_position = \$MuzzleMarker.global_position',
+                          'verifyMode': 'playtest',
+                          'verifyResult':
+                              'Left-click in Play Mode -> bolt spawns from MuzzleMarker.',
+                        },
+                        {
+                          'stepRole': 'editor_setup',
+                          'shortTitle': 'Add MuzzleMarker Node',
+                          'stepPath': 'res://scenes/pulse_blaster.tscn',
+                          'doInstruction':
+                              'Add Marker2D named MuzzleMarker to PulseBlaster.',
+                          'area1Hierarchy':
+                              'PulseBlaster (Node2D)\n └─ MuzzleMarker (Marker2D)',
+                          'area2Inspector': 'position: Vector2(24, 0)',
+                          'codeFormula': '# Scene Tree node setup',
+                          'verifyMode': 'editor',
+                          'verifyResult':
+                              'Inspect Scene Tree -> MuzzleMarker sits 24px ahead of barrel.',
+                        },
+                      ],
+                    },
+                ],
+              };
+            }
+            return _mockGeminiResponder(prompt, model);
+          };
+
+          // Synthesize Epic 1 Feature 1 first with custom script/function/tuning, then synthesize Epic 2 Feature 1!
+          final e1States = FeatureStateNode.getStatesForDocument(epic1Feat);
+          e1States.first.tuningParams = ['dashSpeed: 920.0'];
+          provider.updateFeatureStates(epic1Feat.id, e1States);
+
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              epic1Feat.id,
+              forceRefresh: true,
+            ),
+          );
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              epic2Feat.id,
+              forceRefresh: true,
+            ),
+          );
+
+          // Cross-Epic Registry: Epic 2 ("Pulse Blaster Firing") sees Epic 1's script, function symbol, and tuning var!
+          expect(capturedEpic2FeaturePrompt, isNotNull);
+          expect(
+            capturedEpic2FeaturePrompt,
+            contains('CUMULATIVE PROJECT LEDGER'),
+          );
+          expect(
+            capturedEpic2FeaturePrompt,
+            contains('player_controller.gd'),
+          );
+          expect(
+            capturedEpic2FeaturePrompt,
+            contains('apply_dash_impulse'),
+          );
+          expect(capturedEpic2FeaturePrompt, contains('dashSpeed'));
+
+          // Select Epic 2 feature in UI and verify Step 1 was hoisted to `editor` check ("✓ CHECK IN EDITOR:")
+          provider.selectFeature(epic2Feat.id);
+          await tester.pumpWidget(LayersAgenticApp(provider: provider));
+          await tester.pumpAndSettle();
+
+          expect(find.text('✓ CHECK IN EDITOR:'), findsOneWidget);
+          expect(find.textContaining('Add MuzzleMarker Node'), findsWidgets);
+
+          // AGENTS.md markdown export labels Step 1 as `*Check in Editor*:` and Step 2 as `*Verify*:`
+          final agentsMd = provider.buildActiveReleaseCodingAgentMarkdown();
+          expect(agentsMd, contains('*Check in Editor*:'));
+          expect(agentsMd, contains('*Verify*:'));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
+
+    testWidgets(
+      'Pillar 3: Omitted-Task Auto-Fill (Zero Generic Fallback Leaks), Dual-Cached Unreal BP <-> C++ Toggle & 1-Click Timeout Retry Banner',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider();
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = _mockGeminiResponder;
+
+        try {
+          await tester.runAsync(
+            () => provider.startConceptInterview('Ironclad Bastion'),
+          );
+          provider.updateConceptDraft((d) {
+            d.techSpec = [
+              'Engine: Unreal Engine 5 (Blueprints / C++)',
+              'Dimension: 3D Third-Person',
+            ];
+          });
+          await tester.runAsync(
+            () => provider.approveConceptAndBuildRelease(),
+          );
+
+          // Pick a non-level Actor/Character feature so Unreal Blueprint | C++ toggle is active
+          final allFeats = <TierDocument>[
+            for (final b in provider.activeReleaseBeats)
+              ...provider.featuresForBeat(b.id),
+          ];
+          final targetFeat = allFeats.first;
+          provider.renameLiveFeature(targetFeat.id, 'Grapple Hook Launcher');
+
+          // Ensure targetFeat has 3 tasks on its active checkpoint
+          final initStates = FeatureStateNode.getStatesForDocument(targetFeat);
+          initStates.first.checklist = [
+            Subtask(id: 't1', text: 'Cable Component Setup'),
+            Subtask(id: 't2', text: 'Reel Force Impulse'),
+            Subtask(id: 't3', text: 'Detach Distance Guard'),
+          ];
+          provider.updateFeatureStates(targetFeat.id, initStates);
+
+          // A) Simulate a live synthesis timeout/empty response -> marks hasFailedStepSynthesis and shows 1-click Retry banner
+          GeminiAgentClient.testMockResponder = (prompt, model) async => null;
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              targetFeat.id,
+              forceRefresh: true,
+            ),
+          );
+          expect(provider.hasFailedStepSynthesis(targetFeat.id), isTrue);
+          expect(
+            provider.hasSynthesizedFeatureStepsForActiveRelease(targetFeat.id),
+            isFalse,
+          );
+
+          provider.selectFeature(targetFeat.id, triggerAiSynthesis: false);
+          await tester.pumpWidget(LayersAgenticApp(provider: provider));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(ValueKey('retry_ai_steps_banner_${targetFeat.id}')),
+            findsOneWidget,
+          );
+
+          // B) Omitted-Task Auto-Fill: First call returns only Task 0 & Task 1 (omitting Task 2); follow-up call fills Task 2!
+          int bpApiCalls = 0;
+          int cppApiCalls = 0;
+          GeminiAgentClient.testMockResponder = (prompt, model) async {
+            final isCpp = prompt.contains('UNREAL 5 C++');
+            if (isCpp) {
+              cppApiCalls++;
+              return {
+                'primarySharedScriptOrScene': 'AGrappleLauncher',
+                'tasks': [
+                  for (int idx = 0; idx < 3; idx++)
+                    {
+                      'taskIndex': idx,
+                      'subSteps': [
+                        {
+                          'shortTitle': 'Bind Cpp Grapple Task ${idx + 1}',
+                          'stepPath': 'Source/Game/GrappleLauncher.cpp',
+                          'doInstruction':
+                              'Implement C++ grapple logic for task ${idx + 1}.',
+                          'area1Hierarchy':
+                              'AGrappleLauncher\n └─ CableComp (UCableComponent)',
+                          'area2Inspector': 'ReelSpeed: 1800.0',
+                          'codeFormula':
+                              'CableComp = CreateDefaultSubobject<UCableComponent>(TEXT("CableComp"));',
+                          'verifyMode': 'playtest',
+                          'verifyResult':
+                              'Press E -> C++ CableComp reels player cleanly.',
+                        },
+                      ],
+                    },
+                ],
+              };
+            }
+            bpApiCalls++;
+            if (prompt.contains('Complete OMITTED 3-Area Engine How-To steps')) {
+              return {
+                'primarySharedScriptOrScene': 'BP_GrappleLauncher',
+                'tasks': [
+                  {
+                    'taskIndex': 2,
+                    'subSteps': [
+                      {
+                        'shortTitle': 'Clamp Max Detach Distance',
+                        'stepPath': '/Game/Blueprints/BP_GrappleLauncher',
+                        'doInstruction':
+                            'Break tether when distance exceeds MaxGrappleRange.',
+                        'area1Hierarchy': '',
+                        'area2Inspector': 'MaxGrappleRange: 2200.0',
+                        'codeFormula':
+                            '[Event Tick] ──► [Branch (Distance > MaxGrappleRange)] ──► [DetachFromActor]',
+                        'verifyMode': 'playtest',
+                        'verifyResult':
+                            'Exceed 2200 cm -> tether detaches cleanly.',
+                      },
+                    ],
+                  },
+                ],
+              };
+            }
+            // Initial BP response omits Task 2!
+            return {
+              'primarySharedScriptOrScene': 'BP_GrappleLauncher',
+              'tasks': [
+                for (int idx = 0; idx < 2; idx++)
+                  {
+                    'taskIndex': idx,
+                    'subSteps': [
+                      {
+                        'shortTitle': 'Wire Blueprint Grapple ${idx + 1}',
+                        'stepPath': '/Game/Blueprints/BP_GrappleLauncher',
+                        'doInstruction':
+                            'Wire Blueprint node graph for task ${idx + 1}.',
+                        'area1Hierarchy':
+                            'BP_GrappleLauncher\n └─ CableComp (CableComponent)',
+                        'area2Inspector': 'ReelSpeed: 1800.0',
+                        'codeFormula':
+                            '[IA_Grapple] ──► [LaunchCharacter (LaunchVelocity: ReelDir * 1800.0)]',
+                        'verifyMode': 'playtest',
+                        'verifyResult':
+                            'Press E -> Blueprint grapple launches player.',
+                      },
+                    ],
+                  },
+              ],
+            };
+          };
+
+          // Tap the 1-click Retry banner -> synthesizes Task 0..1 AND auto-fills omitted Task 2!
+          final retryBanner = find.byKey(
+            ValueKey('retry_ai_steps_banner_${targetFeat.id}'),
+          );
+          await tester.ensureVisible(retryBanner);
+          await tester.tap(retryBanner);
+          await tester.pumpAndSettle();
+
+          expect(bpApiCalls, equals(2));
+          expect(provider.hasFailedStepSynthesis(targetFeat.id), isFalse);
+          expect(
+            provider.hasSynthesizedFeatureStepsForActiveRelease(targetFeat.id),
+            isTrue,
+          );
+          expect(
+            find.byKey(ValueKey('retry_ai_steps_banner_${targetFeat.id}')),
+            findsNothing,
+          );
+
+          final bpStates = FeatureStateNode.getStatesForDocument(
+            provider.documents[targetFeat.id]!,
+          );
+          expect(
+            bpStates.first.checklist.every(
+              (t) =>
+                  t.children.isNotEmpty &&
+                  t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
+            ),
+            isTrue,
+            reason:
+                'All 3 tasks (including omitted Task 3) must have custom_snippet AI steps with zero generic fallback leaks',
+          );
+          expect(
+            bpStates.first.checklist[2].children.first.text,
+            contains('Clamp Max Detach Distance'),
+          );
+
+          // C) Dual-Cached Unreal Blueprint <-> C++ Toggle:
+          // Switch to C++ -> synthesizes C++ once (`cppApiCalls == 1`)
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              targetFeat.id,
+              unrealCppMode: true,
+            ),
+          );
+          expect(cppApiCalls, equals(1));
+          final afterCppStates = FeatureStateNode.getStatesForDocument(
+            provider.documents[targetFeat.id]!,
+          );
+          expect(
+            afterCppStates.first.checklist.first.children.first.codeSnippet,
+            contains('CreateDefaultSubobject<UCableComponent>'),
+          );
+
+          // Toggle back to Blueprint -> restores cached Blueprint steps in 0ms with ZERO extra API calls (`bpApiCalls` stays 2)!
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              targetFeat.id,
+              unrealCppMode: false,
+            ),
+          );
+          expect(bpApiCalls, equals(2));
+          final restoredBpStates = FeatureStateNode.getStatesForDocument(
+            provider.documents[targetFeat.id]!,
+          );
+          expect(
+            restoredBpStates.first.checklist.first.children.first.codeSnippet,
+            contains('[IA_Grapple] ──► [LaunchCharacter'),
+          );
+
+          // Toggle back to C++ again -> restores cached C++ steps in 0ms with ZERO extra API calls (`cppApiCalls` stays 1)!
+          await tester.runAsync(
+            () => provider.synthesizeFeatureHowToStepsWithAi(
+              targetFeat.id,
+              unrealCppMode: true,
+            ),
+          );
+          expect(cppApiCalls, equals(1));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
   });
 }

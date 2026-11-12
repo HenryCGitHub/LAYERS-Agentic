@@ -545,6 +545,7 @@ class ProposedFeatureBlueprint {
   String originVersion;
   String? supersedesFeatureTitle;
   String? primarySharedScriptOrScene;
+  String? buildTier;
   List<String> inScope;
   List<String> outOfScope;
   List<String> tuningParams;
@@ -562,6 +563,7 @@ class ProposedFeatureBlueprint {
     this.originVersion = 'v0.1',
     this.supersedesFeatureTitle,
     this.primarySharedScriptOrScene,
+    this.buildTier,
     this.inScope = const [],
     this.outOfScope = const [],
     this.tuningParams = const [],
@@ -588,6 +590,8 @@ class ProposedFeatureBlueprint {
         if (primarySharedScriptOrScene != null &&
             primarySharedScriptOrScene!.trim().isNotEmpty)
           'primarySharedScriptOrScene': primarySharedScriptOrScene,
+        if (buildTier != null && buildTier!.trim().isNotEmpty)
+          'buildTier': buildTier,
         'inScope': inScope,
         'outOfScope': outOfScope,
         'tuningParams': tuningParams,
@@ -608,6 +612,7 @@ class ProposedFeatureBlueprint {
       supersedesFeatureTitle: json['supersedesFeatureTitle']?.toString(),
       primarySharedScriptOrScene:
           json['primarySharedScriptOrScene']?.toString(),
+      buildTier: json['buildTier']?.toString(),
       inScope: _parseStringList(json['inScope']),
       outOfScope: _parseStringList(json['outOfScope']),
       tuningParams: _parseStringList(json['tuningParams']),
@@ -670,6 +675,7 @@ class ProposedBeatBlueprint {
   String title;
   String goal;
   String doneWhen;
+  String? buildTier;
   List<ProposedFeatureBlueprint> features;
 
   ProposedBeatBlueprint({
@@ -677,6 +683,7 @@ class ProposedBeatBlueprint {
     required this.title,
     required this.goal,
     required this.doneWhen,
+    this.buildTier,
     required this.features,
   });
 
@@ -697,6 +704,8 @@ class ProposedBeatBlueprint {
         'title': title,
         'goal': goal,
         'doneWhen': doneWhen,
+        if (buildTier != null && buildTier!.trim().isNotEmpty)
+          'buildTier': buildTier,
         'features': features.map((f) => f.toJson()).toList(),
       };
 
@@ -706,6 +715,7 @@ class ProposedBeatBlueprint {
       title: json['title']?.toString() ?? '',
       goal: json['goal']?.toString() ?? '',
       doneWhen: json['doneWhen']?.toString() ?? '',
+      buildTier: json['buildTier']?.toString(),
       features: (json['features'] as List?)
               ?.whereType<Map<String, dynamic>>()
               .map(ProposedFeatureBlueprint.fromJson)

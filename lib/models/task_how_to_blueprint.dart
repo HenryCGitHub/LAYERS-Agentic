@@ -18,6 +18,7 @@ class TaskHowToSubStep {
   final int estimatedMinutes;   // Weighted minutes for this specific step (e.g., 15, 25, 65, 35)
   final String etaLabel;        // Formatted step ETA (e.g., "15m", "25m", "1.1h")
   final bool isGuardStep;
+  final bool isEditorCheck;     // True when step checks Scene Tree / Inspector / Compiler without Play mode
   final String? area1Hierarchy; // Optional AI-synthesized Area 1 (Scene / Component Hierarchy)
   final String? area2Inspector; // Optional AI-synthesized Area 2 (Inspector / Details Bindings)
 
@@ -35,6 +36,7 @@ class TaskHowToSubStep {
     this.estimatedMinutes = 15,
     this.etaLabel = '15m',
     this.isGuardStep = false,
+    this.isEditorCheck = false,
     this.area1Hierarchy,
     this.area2Inspector,
   });
@@ -487,19 +489,23 @@ class TaskHowToBlueprint {
 
   static const String _area1Marker = '\n[[AREA1]]\n';
   static const String _area2Marker = '\n[[AREA2]]\n';
+  static const String _verifyModeMarker = '\n[[VERIFY_MODE]]\n';
 
-  /// Encodes optional AI-synthesized `area1Hierarchy` (Scene/Component tree) and
-  /// `area2Inspector` (Inspector/Details bindings) inside `Subtask.specNotes` without
-  /// altering existing Hive/JSON serialization schemas.
+  /// Encodes optional AI-synthesized `area1Hierarchy` (Scene/Component tree),
+  /// `area2Inspector` (Inspector/Details bindings), and `verifyMode` (`'editor'` | `'playtest'`)
+  /// inside `Subtask.specNotes` without altering existing Hive/JSON serialization schemas.
   static String encodeThreeAreaNotes({
     required String instruction,
     String? area1Hierarchy,
     String? area2Inspector,
+    String? verifyMode,
   }) {
     final base = instruction.trim();
     final a1 = (area1Hierarchy ?? '').trim();
     final a2 = (area2Inspector ?? '').trim();
-    if (a1.isEmpty && a2.isEmpty) return base;
+    final vm = (verifyMode ?? '').trim().toLowerCase();
+    final effectiveVm = (vm == 'editor' || vm == 'playtest') ? vm : '';
+    if (a1.isEmpty && a2.isEmpty && effectiveVm.isEmpty) return base;
     final sb = StringBuffer(base);
     if (a1.isNotEmpty) {
       sb.write(_area1Marker);
@@ -509,24 +515,37 @@ class TaskHowToBlueprint {
       sb.write(_area2Marker);
       sb.write(a2);
     }
+    if (effectiveVm.isNotEmpty) {
+      sb.write(_verifyModeMarker);
+      sb.write(effectiveVm);
+    }
     return sb.toString();
   }
 
   /// Decodes `Subtask.specNotes` into clean natural instruction prose plus optional
-  /// AI-synthesized `area1Hierarchy` and `area2Inspector` blocks.
+  /// AI-synthesized `area1Hierarchy`, `area2Inspector`, and `verifyMode` (`'editor'` | `'playtest'`).
+  /// Strips `_verifyModeMarker` FIRST from the tail so raw marker text never leaks into `area2Inspector`.
   static ({
     String cleanInstruction,
     String? area1Hierarchy,
     String? area2Inspector,
+    String? verifyMode,
   }) decodeThreeAreaNotes(String? rawSpecNotes) {
     if (rawSpecNotes == null || rawSpecNotes.trim().isEmpty) {
       return (
         cleanInstruction: '',
         area1Hierarchy: null,
         area2Inspector: null,
+        verifyMode: null,
       );
     }
     String working = rawSpecNotes;
+    String? vm;
+    final idxVm = working.indexOf(_verifyModeMarker);
+    if (idxVm >= 0) {
+      vm = working.substring(idxVm + _verifyModeMarker.length).trim().toLowerCase();
+      working = working.substring(0, idxVm);
+    }
     String? a2;
     final idx2 = working.indexOf(_area2Marker);
     if (idx2 >= 0) {
@@ -543,6 +562,7 @@ class TaskHowToBlueprint {
       cleanInstruction: working.trim(),
       area1Hierarchy: (a1 != null && a1.isNotEmpty) ? a1 : null,
       area2Inspector: (a2 != null && a2.isNotEmpty) ? a2 : null,
+      verifyMode: (vm == 'editor' || vm == 'playtest') ? vm : null,
     );
   }
 
@@ -2353,6 +2373,7 @@ class TaskHowToBlueprint {
           estimatedMinutes: stepMins,
           etaLabel: stepEta,
           isGuardStep: isLastStep || stepLabel.toUpperCase().contains('GUARD'),
+          isEditorCheck: decodedNotes.verifyMode == 'editor',
           area1Hierarchy: decodedNotes.area1Hierarchy,
           area2Inspector: decodedNotes.area2Inspector,
         ),

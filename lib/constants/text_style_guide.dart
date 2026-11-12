@@ -440,4 +440,35 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 
   static const String runbookInstructionSchemaDesc =
       '1 Imperative Runbook sentence (<= 18 words) starting with a command verb (Create, Bind, Spawn, Clamp, Set) + exact node/script and tuning value.';
+
+  static const List<String> engineBuildTierEnum = <String>[
+    'tier_1_world_space',
+    'tier_2_actor_locomotion',
+    'tier_3_targets_hazards',
+    'tier_4_verbs_tools_combat',
+    'tier_5_loop_economy_hud',
+  ];
+
+  static const String buildTierSchemaDesc =
+      'Engine build-dependency tier: tier_1_world_space (Arena/Level/Grid/Camera blockout), tier_2_actor_locomotion (Player/Vehicle/Cursor controller), tier_3_targets_hazards (Enemies, Props, Spawners, Hazards — world nouns), tier_4_verbs_tools_combat (Weapons, Tools, Projectiles, Interactions — verbs acting on Tier 2-3), or tier_5_loop_economy_hud (Wave/Score/Shop state, Reset, HUD widgets).';
+
+  static const List<String> stepPhaseRoleEnum = <String>[
+    'editor_setup',
+    'script_logic',
+    'wire_and_verify',
+  ];
+
+  static const String stepPhaseRoleSchemaDesc =
+      'Intra-task runbook beat: editor_setup (create Scene/Hierarchy nodes, Colliders, Collision Layers, or exported Inspector properties FIRST), script_logic (add/extend functions & math on primarySharedScriptOrScene SECOND), or wire_and_verify (connect signals/events/Inspector refs & verify THIRD).';
+
+  static const List<String> verifyModeEnum = <String>[
+    'editor',
+    'playtest',
+  ];
+
+  static const String verifyModeSchemaDesc =
+      'Verification mode: "editor" for pure setup steps whose runtime wiring does not exist yet (inspect Scene Tree / Inspector / 0 compile errors without pressing Play), or "playtest" for runnable steps (mandatory on final step of playable tasks & checkpoints).';
+
+  static const String stepVerifyResultSchemaDesc =
+      'If verifyMode=="editor": concise Hierarchy/Inspector/Compiler check (<= 14 words, NO "Press Play ->", e.g. "PlayerCharacter shows DashTimer child node + 0 script errors"). If verifyMode=="playtest": Causal Trigger -> Result ("<Player Action> -> <Observable Screen Result>", <= 14 words).';
 }

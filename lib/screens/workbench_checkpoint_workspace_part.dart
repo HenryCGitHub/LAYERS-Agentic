@@ -2810,14 +2810,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     _rebuild(() {
                                                       _unrealCppMode = false;
                                                     });
-                                                    if (widget.workbench
-                                                        .hasLiveAiKey) {
-                                                      widget.workbench
-                                                          .synthesizeFeatureHowToStepsWithAi(
-                                                        feat.id,
-                                                        unrealCppMode: false,
-                                                      );
-                                                    }
+                                                    widget.workbench
+                                                        .synthesizeFeatureHowToStepsWithAi(
+                                                      feat.id,
+                                                      unrealCppMode: false,
+                                                    );
                                                   },
                                                   borderRadius:
                                                       BorderRadius.circular(4),
@@ -2863,14 +2860,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                     _rebuild(() {
                                                       _unrealCppMode = true;
                                                     });
-                                                    if (widget.workbench
-                                                        .hasLiveAiKey) {
-                                                      widget.workbench
-                                                          .synthesizeFeatureHowToStepsWithAi(
-                                                        feat.id,
-                                                        unrealCppMode: true,
-                                                      );
-                                                    }
+                                                    widget.workbench
+                                                        .synthesizeFeatureHowToStepsWithAi(
+                                                      feat.id,
+                                                      unrealCppMode: true,
+                                                    );
                                                   },
                                                   borderRadius:
                                                       BorderRadius.circular(4),
@@ -4266,7 +4260,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               height: 10,
                                                             ),
 
-                                                            // Row 2: Full-Width Embedded Emerald Verify in Engine Strip
+                                                            // Row 2: Full-Width Embedded Dual-Mode Check in Editor / Verify in Engine Strip
                                                             Container(
                                                               key: ValueKey(
                                                                 'task_overview_goal_box_${node.id}_$selectedTaskIdx',
@@ -4279,9 +4273,15 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                               ),
                                                               decoration:
                                                                   BoxDecoration(
-                                                                color: const Color(
-                                                                  0xFF10B981,
-                                                                ).withValues(
+                                                                color: (activeSubStep
+                                                                            .isEditorCheck
+                                                                        ? const Color(
+                                                                            0xFF0EA5E9,
+                                                                          )
+                                                                        : const Color(
+                                                                            0xFF10B981,
+                                                                          ))
+                                                                    .withValues(
                                                                   alpha: 0.08,
                                                                 ),
                                                                 borderRadius:
@@ -4291,9 +4291,15 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 ),
                                                                 border:
                                                                     Border.all(
-                                                                  color: const Color(
-                                                                    0xFF10B981,
-                                                                  ).withValues(
+                                                                  color: (activeSubStep
+                                                                              .isEditorCheck
+                                                                          ? const Color(
+                                                                              0xFF0EA5E9,
+                                                                            )
+                                                                          : const Color(
+                                                                              0xFF10B981,
+                                                                            ))
+                                                                      .withValues(
                                                                     alpha: 0.26,
                                                                   ),
                                                                 ),
@@ -4332,16 +4338,24 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                       top: 1.5,
                                                                     ),
                                                                     child: Text(
-                                                                      '✓ VERIFY IN ENGINE:',
+                                                                      activeSubStep
+                                                                              .isEditorCheck
+                                                                          ? '✓ CHECK IN EDITOR:'
+                                                                          : '✓ VERIFY IN ENGINE:',
                                                                       style: GoogleFonts
                                                                           .jetBrainsMono(
                                                                         fontSize:
                                                                             fontMicro,
                                                                         fontWeight:
                                                                             weightBold,
-                                                                        color: const Color(
-                                                                          0xFF34D399,
-                                                                        ),
+                                                                        color: activeSubStep
+                                                                                .isEditorCheck
+                                                                            ? const Color(
+                                                                                0xFF38BDF8,
+                                                                              )
+                                                                            : const Color(
+                                                                                0xFF34D399,
+                                                                              ),
                                                                       ),
                                                                     ),
                                                                   ),
@@ -4379,6 +4393,110 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                                                 ],
                                                               ),
                                                             ),
+                                                            if (widget.workbench
+                                                                    .hasFailedStepSynthesis(
+                                                                  feat.id,
+                                                                ) &&
+                                                                !isSynthesizingFeatureNow) ...[
+                                                              const SizedBox(
+                                                                height: 8,
+                                                              ),
+                                                              InkWell(
+                                                                key: ValueKey(
+                                                                  'retry_ai_steps_banner_${feat.id}',
+                                                                ),
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                  6,
+                                                                ),
+                                                                onTap: () => widget
+                                                                    .workbench
+                                                                    .synthesizeFeatureHowToStepsWithAi(
+                                                                  feat.id,
+                                                                  forceRefresh:
+                                                                      true,
+                                                                  unrealCppMode:
+                                                                      _unrealCppMode,
+                                                                ),
+                                                                child:
+                                                                    Container(
+                                                                  padding:
+                                                                      const EdgeInsets
+                                                                          .symmetric(
+                                                                    horizontal:
+                                                                        10,
+                                                                    vertical: 6,
+                                                                  ),
+                                                                  decoration:
+                                                                      BoxDecoration(
+                                                                    color: const Color(
+                                                                      0xFFF59E0B,
+                                                                    ).withValues(
+                                                                      alpha:
+                                                                          0.10,
+                                                                    ),
+                                                                    borderRadius:
+                                                                        BorderRadius
+                                                                            .circular(
+                                                                      6,
+                                                                    ),
+                                                                    border:
+                                                                        Border
+                                                                            .all(
+                                                                      color: const Color(
+                                                                        0xFFF59E0B,
+                                                                      ).withValues(
+                                                                        alpha:
+                                                                            0.35,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                  child: Row(
+                                                                    mainAxisAlignment:
+                                                                        MainAxisAlignment
+                                                                            .spaceBetween,
+                                                                    children: [
+                                                                      Flexible(
+                                                                        child:
+                                                                            Text(
+                                                                          '✦ Engine Steps Timed Out — Showing preview steps',
+                                                                          maxLines:
+                                                                              1,
+                                                                          overflow:
+                                                                              TextOverflow.ellipsis,
+                                                                          style:
+                                                                              GoogleFonts.inter(
+                                                                            fontSize:
+                                                                                fontMicro,
+                                                                            fontWeight:
+                                                                                weightSemi,
+                                                                            color:
+                                                                                const Color(0xFFFCD34D),
+                                                                          ),
+                                                                        ),
+                                                                      ),
+                                                                      const SizedBox(
+                                                                        width:
+                                                                            8,
+                                                                      ),
+                                                                      Text(
+                                                                        'Retry ↻',
+                                                                        style: GoogleFonts
+                                                                            .jetBrainsMono(
+                                                                          fontSize:
+                                                                              fontMicro,
+                                                                          fontWeight:
+                                                                              weightBold,
+                                                                          color:
+                                                                              const Color(0xFFF59E0B),
+                                                                        ),
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
                                                           ],
                                                         );
                                                       },

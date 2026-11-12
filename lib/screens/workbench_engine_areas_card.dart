@@ -1226,7 +1226,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     ),
                     for (final tIdx in comp.taskIndices)
                       InkWell(
-                        key: ValueKey('scene_tree_task_pill_${node.id}_$tIdx'),
+                        key: ValueKey(
+                          'scene_tree_task_pill_${node.id}_${comp.componentKey}_$tIdx',
+                        ),
                         onTap: () {},
                         child: Text('T${tIdx + 1}'),
                       ),

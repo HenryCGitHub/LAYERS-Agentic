@@ -190,6 +190,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final currentGen = _stepQueueGeneration;
     _pendingFeatureStepQueue.clear();
     _aiSynthesizedFeatureSteps.clear();
+    _failedStepSynthesisFeatureIds.clear();
     _isAgentBusy = true;
     _agentProgressStep =
         'Determining Systems & Mechanics for $verTag ($_conversationModel)...';
@@ -358,8 +359,26 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     }
 
     // Step 4A: Populate E02..EN Features top-down one Epic at a time in the Outliner
+    // Carry each planned feature's shared script/scene & key tuning vars so later Epics wire directly into them.
+    final firstEpicGeneratedAsset = (firstFeatureId != null
+            ? (documents[firstFeatureId]?.sections['primary_asset'] ?? '')
+            : '')
+        .trim();
+    if (firstEpicGeneratedAsset.isNotEmpty &&
+        blueprint.beats.isNotEmpty &&
+        blueprint.beats.first.features.isNotEmpty &&
+        (blueprint.beats.first.features.first.primarySharedScriptOrScene ?? '')
+            .trim()
+            .isEmpty) {
+      blueprint.beats.first.features.first.primarySharedScriptOrScene =
+          firstEpicGeneratedAsset;
+    }
     final plannedFeatureTitles = <String>[
-      for (final f in blueprint.beats.first.features) f.title,
+      for (final f in blueprint.beats.first.features)
+        ReleasePlannerAgent.formatFeatureContractForEpicPlanning(
+          f,
+          epicIndex: 0,
+        ),
     ];
 
     for (int bIdx = 1; bIdx < blueprint.beats.length; bIdx++) {
@@ -385,7 +404,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         if (isCancelled()) break;
         epicBp.features = epicFeats;
         for (final ef in epicFeats) {
-          plannedFeatureTitles.add(ef.title);
+          plannedFeatureTitles.add(
+            ReleasePlannerAgent.formatFeatureContractForEpicPlanning(
+              ef,
+              epicIndex: bIdx,
+            ),
+          );
         }
 
         final createdEpicFeatures =
@@ -4057,42 +4081,50 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
       }
       final rawSteps = json['steps'];
       if (rawSteps is List && rawSteps.isNotEmpty) {
+        final orderedFixSteps =
+            WorkbenchReleaseMixin.enforceIntraTaskEditorBeforeScriptOrder(
+          rawSteps,
+        );
         final updatedSubs = <Subtask>[];
-        for (int i = 0; i < rawSteps.length; i++) {
-          final item = rawSteps[i];
-          if (item is Map) {
-            final title = item['title']?.toString().trim() ?? '';
-            final path = item['stepPath']?.toString().trim() ?? '';
-            final instr = item['instruction']?.toString().trim() ?? '';
-            final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
-            final area2 = item['area2Inspector']?.toString().trim() ?? '';
-            final code = item['codeFormula']?.toString().trim() ?? '';
-            final verify = item['verifyResult']?.toString().trim() ?? '';
-            final prevDone = i < fixTask.children.length
-                ? fixTask.children[i].completed
-                : false;
-            final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
-              instruction: instr,
-              area1Hierarchy: area1,
-              area2Inspector: area2,
-            );
-            updatedSubs.add(
-              Subtask(
-                id: i < fixTask.children.length
-                    ? fixTask.children[i].id
-                    : generateUniqueId('fix_ai_sub_${i + 1}'),
-                text: title.isNotEmpty
-                    ? title
-                    : 'STEP $taskNum.${i + 1} · APPLY ROOT-CAUSE FIX ${i + 1}',
-                specNotes: encodedNotes,
-                codeSnippet: code,
-                codeLanguage: path,
-                verification: verify,
-                codeTargetFile: 'custom_snippet',
-                completed: prevDone,
-              ),
-            );
-          }
+        for (int i = 0; i < orderedFixSteps.length; i++) {
+          final item = orderedFixSteps[i];
+          final title =
+              (item['title'] ?? item['shortTitle'])?.toString().trim() ?? '';
+          final path = item['stepPath']?.toString().trim() ?? '';
+          final instr = (item['instruction'] ?? item['doInstruction'])
+                  ?.toString()
+                  .trim() ??
+              '';
+          final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
+          final area2 = item['area2Inspector']?.toString().trim() ?? '';
+          final code = item['codeFormula']?.toString().trim() ?? '';
+          final verify = item['verifyResult']?.toString().trim() ?? '';
+          final verifyMode = item['verifyMode']?.toString().trim();
+          final prevDone = i < fixTask.children.length
+              ? fixTask.children[i].completed
+              : false;
+          final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
+            instruction: instr,
+            area1Hierarchy: area1,
+            area2Inspector: area2,
+            verifyMode: verifyMode,
+          );
+          updatedSubs.add(
+            Subtask(
+              id: i < fixTask.children.length
+                  ? fixTask.children[i].id
+                  : generateUniqueId('fix_ai_sub_${i + 1}'),
+              text: title.isNotEmpty
+                  ? title
+                  : 'STEP $taskNum.${i + 1} · APPLY ROOT-CAUSE FIX ${i + 1}',
+              specNotes: encodedNotes,
+              codeSnippet: code,
+              codeLanguage: path,
+              verification: verify,
+              codeTargetFile: 'custom_snippet',
+              completed: prevDone,
+            ),
+          );
         }
         if (updatedSubs.isNotEmpty) {
           fixTask.children = updatedSubs;
@@ -4261,40 +4293,47 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
       }
       final rawSubs = json?['subSteps'];
       if (rawSubs is List && rawSubs.isNotEmpty) {
+        final orderedSubs =
+            WorkbenchReleaseMixin.enforceIntraTaskEditorBeforeScriptOrder(
+          rawSubs,
+        );
         final newChildren = <Subtask>[];
-        for (int i = 0; i < rawSubs.length; i++) {
-          final item = rawSubs[i];
-          if (item is Map) {
-            final t = (item['title'] ?? '').toString().trim();
-            final path = (item['stepPath'] ?? '').toString().trim();
-            final instr = (item['instruction'] ?? '').toString().trim();
-            final area1 = (item['area1Hierarchy'] ?? '').toString().trim();
-            final area2 = (item['area2Inspector'] ?? '').toString().trim();
-            final code = (item['codeFormula'] ?? '').toString().trim();
-            final verify = (item['verifyResult'] ?? '').toString().trim();
-            final prevDone = i < parentTask.children.length
-                ? parentTask.children[i].completed
-                : parentTask.completed;
-            final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
-              instruction: instr,
-              area1Hierarchy: area1,
-              area2Inspector: area2,
-            );
-            newChildren.add(
-              Subtask(
-                id: '${parentTask.id}_sub_${i + 1}',
-                text: t.isNotEmpty
-                    ? t
-                    : 'STEP $taskNum.${i + 1} · IMPLEMENT STEP ${i + 1}',
-                specNotes: encodedNotes,
-                codeSnippet: code,
-                codeLanguage: path,
-                verification: verify,
-                codeTargetFile: 'custom_snippet',
-                completed: prevDone,
-              ),
-            );
-          }
+        for (int i = 0; i < orderedSubs.length; i++) {
+          final item = orderedSubs[i];
+          final t =
+              (item['title'] ?? item['shortTitle'] ?? '').toString().trim();
+          final path = (item['stepPath'] ?? '').toString().trim();
+          final instr = (item['instruction'] ?? item['doInstruction'] ?? '')
+              .toString()
+              .trim();
+          final area1 = (item['area1Hierarchy'] ?? '').toString().trim();
+          final area2 = (item['area2Inspector'] ?? '').toString().trim();
+          final code = (item['codeFormula'] ?? '').toString().trim();
+          final verify = (item['verifyResult'] ?? '').toString().trim();
+          final verifyMode = item['verifyMode']?.toString().trim();
+          final prevDone = i < parentTask.children.length
+              ? parentTask.children[i].completed
+              : parentTask.completed;
+          final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
+            instruction: instr,
+            area1Hierarchy: area1,
+            area2Inspector: area2,
+            verifyMode: verifyMode,
+          );
+          newChildren.add(
+            Subtask(
+              id: '${parentTask.id}_sub_${i + 1}',
+              text: t.isNotEmpty
+                  ? t
+                  : 'STEP $taskNum.${i + 1} · IMPLEMENT STEP ${i + 1}',
+              specNotes: encodedNotes,
+              codeSnippet: code,
+              codeLanguage: path,
+              verification: verify,
+              codeTargetFile: 'custom_snippet',
+              completed: prevDone,
+            ),
+          );
         }
         if (newChildren.isNotEmpty) {
           _offlineErrorMessage = null;
@@ -4346,6 +4385,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
           : const <String>{};
       if (isInitialV01Rebuild) {
         _aiSynthesizedFeatureSteps.clear();
+        _failedStepSynthesisFeatureIds.clear();
       }
 
       final createdDocs = await ReleaseExecutorAgent.executeBlueprint(
@@ -4574,6 +4614,75 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
   static final RegExp _scriptSymbolRegex = RegExp(
     r'\b(?:func|signal|void|IEnumerator)\s+([A-Za-z_][A-Za-z0-9_]*)\b',
   );
+  static final RegExp _childTreeLeafNameRegex = RegExp(
+    r'(?:├─|└─)\s*([A-Za-z_][A-Za-z0-9_]{2,})\b',
+  );
+
+  /// Enforces intra-task `editor_setup -> script_logic -> wire_and_verify` ordering:
+  /// if within a single task an earlier pure-code step (`area1Hierarchy` empty) references
+  /// a child node/component created in a later `area1Hierarchy` setup step of that same task,
+  /// hoists the `area1Hierarchy` setup step ahead of the pure-code step before `STEP X.1..X.N` numbering.
+  static List<Map<String, dynamic>> enforceIntraTaskEditorBeforeScriptOrder(
+    List<dynamic> rawSubs,
+  ) {
+    final normalized = <Map<String, dynamic>>[
+      for (final item in rawSubs)
+        if (item is Map) Map<String, dynamic>.from(item),
+    ];
+    if (normalized.length <= 1) return normalized;
+
+    Set<String> extractCreatedChildNodes(Map<String, dynamic> step) {
+      final area1 = (step['area1Hierarchy'] ?? '').toString().trim();
+      if (area1.isEmpty) return const <String>{};
+      final names = <String>{};
+      for (final m in _childTreeLeafNameRegex.allMatches(area1)) {
+        final name = (m.group(1) ?? '').trim();
+        if (name.length >= 3) names.add(name);
+      }
+      return names;
+    }
+
+    final result = List<Map<String, dynamic>>.from(normalized);
+    int idx = 0;
+    int guard = 0;
+    while (idx < result.length && guard < result.length * result.length) {
+      guard++;
+      final current = result[idx];
+      final currentArea1 = (current['area1Hierarchy'] ?? '').toString().trim();
+      final currentRole = (current['stepRole'] ?? '').toString().trim();
+      final isPureCodeOrWireStep =
+          currentArea1.isEmpty || currentRole == 'script_logic';
+      if (!isPureCodeOrWireStep) {
+        idx++;
+        continue;
+      }
+      final codeAndInstr =
+          '${current['codeFormula'] ?? ''} ${current['instruction'] ?? current['doInstruction'] ?? ''}';
+      int hoistFromIdx = -1;
+      for (int laterIdx = idx + 1; laterIdx < result.length; laterIdx++) {
+        final later = result[laterIdx];
+        final createdNodes = extractCreatedChildNodes(later);
+        if (createdNodes.isEmpty) continue;
+        final referencesLaterNode = createdNodes.any(
+          (nodeName) => RegExp(
+            '(?:\\\$${RegExp.escape(nodeName)}\\b|GetNode[^\\n"\']*["\'][^"\']*${RegExp.escape(nodeName)}|\\b${RegExp.escape(nodeName)}\\b)',
+          ).hasMatch(codeAndInstr),
+        );
+        if (referencesLaterNode) {
+          hoistFromIdx = laterIdx;
+          break;
+        }
+      }
+      if (hoistFromIdx > idx) {
+        final setupStep = result.removeAt(hoistFromIdx);
+        result.insert(idx, setupStep);
+        idx++;
+      } else {
+        idx++;
+      }
+    }
+    return result;
+  }
 
   /// Native Gemini Tool (`functionDeclarations`) for Stage 2 3-Area How-To synthesis (`synthesizeFeatureHowToStepsWithAi`).
   /// Enforces a single shared `primarySharedScriptOrScene` across all tasks and typed 3-Area sub-steps.
@@ -4615,6 +4724,12 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
                     'verifyResult',
                   ],
                   'properties': {
+                    'stepRole': {
+                      'type': 'STRING',
+                      'enum': LayersTextStyleGuide.stepPhaseRoleEnum,
+                      'description':
+                          LayersTextStyleGuide.stepPhaseRoleSchemaDesc,
+                    },
                     'title': {
                       'type': 'STRING',
                       'description':
@@ -4645,10 +4760,15 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
                       'description':
                           '2-6 lines of concrete engine code or node graph wiring using exact tuning variables and guard checks',
                     },
+                    'verifyMode': {
+                      'type': 'STRING',
+                      'enum': LayersTextStyleGuide.verifyModeEnum,
+                      'description': LayersTextStyleGuide.verifyModeSchemaDesc,
+                    },
                     'verifyResult': {
                       'type': 'STRING',
                       'description':
-                          LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+                          LayersTextStyleGuide.stepVerifyResultSchemaDesc,
                     },
                   },
                 },
@@ -4688,6 +4808,11 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               'verifyResult',
             ],
             'properties': {
+              'stepRole': {
+                'type': 'STRING',
+                'enum': LayersTextStyleGuide.stepPhaseRoleEnum,
+                'description': LayersTextStyleGuide.stepPhaseRoleSchemaDesc,
+              },
               'title': {
                 'type': 'STRING',
                 'description': LayersTextStyleGuide.runbookStepTitleSchemaDesc,
@@ -4704,10 +4829,15 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               'area1Hierarchy': {'type': 'STRING'},
               'area2Inspector': {'type': 'STRING'},
               'codeFormula': {'type': 'STRING'},
+              'verifyMode': {
+                'type': 'STRING',
+                'enum': LayersTextStyleGuide.verifyModeEnum,
+                'description': LayersTextStyleGuide.verifyModeSchemaDesc,
+              },
               'verifyResult': {
                 'type': 'STRING',
                 'description':
-                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+                    LayersTextStyleGuide.stepVerifyResultSchemaDesc,
               },
             },
           },
@@ -4761,6 +4891,11 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               'verifyResult',
             ],
             'properties': {
+              'stepRole': {
+                'type': 'STRING',
+                'enum': LayersTextStyleGuide.stepPhaseRoleEnum,
+                'description': LayersTextStyleGuide.stepPhaseRoleSchemaDesc,
+              },
               'title': {
                 'type': 'STRING',
                 'description': LayersTextStyleGuide.runbookStepTitleSchemaDesc,
@@ -4777,10 +4912,15 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               'area1Hierarchy': {'type': 'STRING'},
               'area2Inspector': {'type': 'STRING'},
               'codeFormula': {'type': 'STRING'},
+              'verifyMode': {
+                'type': 'STRING',
+                'enum': LayersTextStyleGuide.verifyModeEnum,
+                'description': LayersTextStyleGuide.verifyModeSchemaDesc,
+              },
               'verifyResult': {
                 'type': 'STRING',
                 'description':
-                    LayersTextStyleGuide.causalTriggerResultSchemaDesc,
+                    LayersTextStyleGuide.stepVerifyResultSchemaDesc,
               },
             },
           },
@@ -5167,18 +5307,25 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
     return lines.join('\n');
   }
 
-  /// Extracts a compact Cumulative Project Ledger entry for an already-synthesized feature
-  /// so subsequent features reuse exact Actor/Scene/Script names and tuning variables without prose bloat.
+  /// Extracts a compact Project-Wide Cross-Epic Asset & Symbol Registry entry (`< 220 tokens` across up to 12 features)
+  /// so subsequent features in same or later Epics (`E01..EN`) reuse exact Actor/Scene/Script names, functions/signals, and tuning variables.
   String _summarizeFeatureForProjectLedger(
     TierDocument featDoc,
     int orderNumber, {
     bool includeTuningVars = true,
     bool includePlannedScopeFallback = false,
+    bool isCrossEpicAnchor = false,
   }) {
     final states = FeatureStateNode.getStatesForDocument(featDoc);
     final assetTokens = <String>{};
     final hierarchyNodes = <String>{};
-    final primaryAsset = (featDoc.sections['primary_asset'] ?? '').trim();
+    final scriptSymbols = <String>{};
+    final primaryAsset = (featDoc.sections['primary_asset'] ??
+            (states.isNotEmpty
+                ? states.last.parameters['primarySharedScriptOrScene']
+                : null) ??
+            '')
+        .trim();
     if (primaryAsset.isNotEmpty) {
       assetTokens.add(primaryAsset);
     }
@@ -5221,8 +5368,15 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               }
             }
           }
+          final snippet = sub.codeSnippet ?? '';
+          if (snippet.isNotEmpty) {
+            for (final m in _scriptSymbolRegex.allMatches(snippet)) {
+              final sym = (m.group(1) ?? '').trim();
+              if (sym.isNotEmpty) scriptSymbols.add(sym);
+            }
+          }
           final combinedText =
-              '${sub.text} ${decoded.cleanInstruction} ${sub.codeSnippet ?? ''}';
+              '${sub.text} ${decoded.cleanInstruction} $snippet';
           for (final m in _ledgerAssetTokenRegex.allMatches(combinedText)) {
             assetTokens.add(m.group(0)!);
           }
@@ -5243,15 +5397,23 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
     }
 
     final parts = <String>[];
+    final assetLimit = isCrossEpicAnchor ? 2 : 5;
     if (assetTokens.isNotEmpty) {
-      parts.add('assets=[${assetTokens.take(5).join(', ')}]');
+      parts.add('assets=[${assetTokens.take(assetLimit).join(', ')}]');
     } else if (pathTokens.isNotEmpty) {
       parts.add('paths=[${pathTokens.take(2).join(', ')}]');
     }
-    if (includePlannedScopeFallback && hierarchyNodes.length > 1) {
-      final nodePreview = hierarchyNodes.take(4).toList();
+    if ((includePlannedScopeFallback || isCrossEpicAnchor) &&
+        hierarchyNodes.length > 1) {
+      final nodePreview =
+          hierarchyNodes.take(isCrossEpicAnchor ? 3 : 4).toList();
       parts.add(
         'nodes=[${nodePreview.first} > ${nodePreview.skip(1).join(', ')}]',
+      );
+    }
+    if (scriptSymbols.isNotEmpty) {
+      parts.add(
+        'funcs=[${scriptSymbols.take(isCrossEpicAnchor ? 3 : 5).join(', ')}]',
       );
     }
     if (includePlannedScopeFallback) {
@@ -5263,11 +5425,67 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
       }
     }
     if (includeTuningVars && tuningTokens.isNotEmpty) {
-      parts.add('vars=[${tuningTokens.take(5).join(', ')}]');
+      final varList = isCrossEpicAnchor
+          ? tuningTokens
+              .map((tp) => tp.split(':').first.trim())
+              .where((v) => v.isNotEmpty)
+              .take(3)
+          : tuningTokens.take(5);
+      if (varList.isNotEmpty) {
+        parts.add('vars=[${varList.join(', ')}]');
+      }
     }
     final summaryTail =
         parts.isNotEmpty ? parts.join(' | ') : 'foundation initialized';
     return '- Feature #$orderNumber "${featDoc.title}": $summaryTail';
+  }
+
+  String _serializeChecklistSnapshot(List<Subtask> checklist) {
+    return jsonEncode([
+      for (final task in checklist)
+        [
+          for (final child in task.children) child.toJson(),
+        ],
+    ]);
+  }
+
+  bool _restoreChecklistSnapshot(
+    List<Subtask> checklist,
+    String rawSnapshotJson,
+  ) {
+    if (rawSnapshotJson.trim().isEmpty) return false;
+    try {
+      final decoded = jsonDecode(rawSnapshotJson);
+      if (decoded is! List || decoded.length != checklist.length) {
+        return false;
+      }
+      final restoredPerTask = <List<Subtask>>[];
+      for (int tIdx = 0; tIdx < checklist.length; tIdx++) {
+        final rawChildren = decoded[tIdx];
+        if (rawChildren is! List || rawChildren.isEmpty) return false;
+        final prevChildren = checklist[tIdx].children;
+        final children = <Subtask>[];
+        for (int sIdx = 0; sIdx < rawChildren.length; sIdx++) {
+          final rawChild = rawChildren[sIdx];
+          if (rawChild is! Map) continue;
+          final parsed = Subtask.fromJson(Map<String, dynamic>.from(rawChild));
+          if (sIdx < prevChildren.length) {
+            parsed.completed = prevChildren[sIdx].completed;
+          } else {
+            parsed.completed = checklist[tIdx].completed;
+          }
+          children.add(parsed);
+        }
+        if (children.isEmpty) return false;
+        restoredPerTask.add(children);
+      }
+      for (int tIdx = 0; tIdx < checklist.length; tIdx++) {
+        checklist[tIdx].children = restoredPerTask[tIdx];
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Synthesizes bespoke, engine-specific 3-Area How-To Sub-Steps (`Hierarchy` -> `Inspector` -> `Code` -> `Verify`)
@@ -5292,9 +5510,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         ? (unrealCppMode ? '_CPP' : '_BP')
         : '';
     final synthKey = '${featureId}_${activeVer}_$engineLabel$modeSuffix';
-    if (!forceRefresh &&
-        (_aiSynthesizedFeatureSteps.contains(synthKey) ||
-            _synthesizingFeatureIds.contains(featureId))) {
+    if (!forceRefresh && _synthesizingFeatureIds.contains(featureId)) {
       return;
     }
 
@@ -5310,15 +5526,59 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
     final cpNode = states[effectiveCpIndex];
     if (cpNode.checklist.isEmpty) return;
 
-    // Skip if already customized with custom_snippet across tasks (unless forceRefresh)
+    final isUnreal = engineLabel == 'UNREAL 5';
+    final targetUnrealMode = unrealCppMode ? 'cpp' : 'bp';
+    final storedUnrealMode =
+        (cpNode.parameters['synthesized_unreal_mode'] ?? '').trim();
+    if (!forceRefresh &&
+        _aiSynthesizedFeatureSteps.contains(synthKey) &&
+        (!isUnreal ||
+            storedUnrealMode.isEmpty ||
+            storedUnrealMode == targetUnrealMode)) {
+      return;
+    }
+
+    // Skip if already customized with custom_snippet across ALL tasks in the matching engine mode (unless forceRefresh)
     final alreadyCustom = cpNode.checklist.every(
       (t) =>
           t.children.isNotEmpty &&
           t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
     );
     if (!forceRefresh && alreadyCustom) {
-      _aiSynthesizedFeatureSteps.add(synthKey);
-      return;
+      if (!isUnreal ||
+          storedUnrealMode.isEmpty ||
+          storedUnrealMode == targetUnrealMode) {
+        if (isUnreal && storedUnrealMode.isEmpty) {
+          cpNode.parameters['synthesized_unreal_mode'] = targetUnrealMode;
+          final initCacheKey = targetUnrealMode == 'cpp'
+              ? 'unreal_cpp_steps_json'
+              : 'unreal_bp_steps_json';
+          cpNode.parameters[initCacheKey] =
+              _serializeChecklistSnapshot(cpNode.checklist);
+        }
+        _failedStepSynthesisFeatureIds.remove(featureId);
+        _aiSynthesizedFeatureSteps.add(synthKey);
+        return;
+      }
+
+      // Unreal BP <-> C++ mode switch: save outgoing mode snapshot, then swap in cached target mode in 0ms if available!
+      final outgoingCacheKey = storedUnrealMode == 'cpp'
+          ? 'unreal_cpp_steps_json'
+          : 'unreal_bp_steps_json';
+      cpNode.parameters[outgoingCacheKey] =
+          _serializeChecklistSnapshot(cpNode.checklist);
+      final targetCacheKey = targetUnrealMode == 'cpp'
+          ? 'unreal_cpp_steps_json'
+          : 'unreal_bp_steps_json';
+      final cachedTargetJson = cpNode.parameters[targetCacheKey] ?? '';
+      if (_restoreChecklistSnapshot(cpNode.checklist, cachedTargetJson)) {
+        cpNode.parameters['synthesized_unreal_mode'] = targetUnrealMode;
+        _failedStepSynthesisFeatureIds.remove(featureId);
+        _aiSynthesizedFeatureSteps.add(synthKey);
+        TaskHowToBlueprint.clearCache();
+        updateFeatureStates(featureId, states);
+        return;
+      }
     }
 
     for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
@@ -5446,42 +5706,58 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
           ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Setup). On Task 1, explicitly instruct how to set up ${currentArchetype == 'level' ? 'the Level Map & World Outliner geometry' : (currentArchetype == 'character' ? 'the Character Blueprint / Prefab / Scene' : (currentArchetype == 'ui' ? 'the UI Widget / Canvas / Control Scene' : 'the Actor Blueprint / Prefab / Scene'))} ($engineAssetHint), specify its exact folder path, and ${needsFirstFeaturePlayerBootstrap ? 'include placing a $playerBootstrapLabel so pressing Play spawns the player landing on the floor.' : 'explain how to place or spawn it in the active level.'}'
           : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
 
-      // Build Epic-Scoped Cumulative Project Ledger:
-      // 1) Root Project Anchor (`E01` foundational #1-#2 assets only, omitting cross-epic tuning vars)
-      // 2) Same-Epic earlier siblings (with assets, scene nodes, planned scope fallback, and tuning vars)
-      // Notice `featOrderIdx - 1` is NOT included when it belongs to a different Epic!
+      // Build Project-Wide Cross-Epic Asset & Symbol Registry (`< 220 tokens`, max 12 entries):
+      // 1) All same-Epic earlier siblings (full assets, scene nodes, functions/signals, planned scope fallback, and tuning vars)
+      // 2) Cross-Epic earlier foundational features (`E01..E_{current-1}`: shared scripts/scenes, functions/signals, and tuning var names)
+      //    so `E03` Weapons/Tools and `E04` Economy/HUD wire directly into `E01`/`E02` scripts instead of inventing duplicates!
       final cumulativeLedgerLines = <String>[];
       if (featOrderIdx > 0) {
-        final firstEpicParentId = allReleaseFeatures.first.parentId;
-        final selectedPrecedingIndices = <int>{
-          0,
-          if (featOrderIdx > 1 &&
-              allReleaseFeatures[1].parentId == firstEpicParentId)
-            1,
+        final sameEpicEarlier = <int>[
           for (int pIdx = 0; pIdx < featOrderIdx; pIdx++)
             if (feat.parentId != null &&
                 allReleaseFeatures[pIdx].parentId == feat.parentId)
               pIdx,
+        ];
+        final crossEpicEarlier = <int>[
+          for (int pIdx = 0; pIdx < featOrderIdx; pIdx++)
+            if (feat.parentId == null ||
+                allReleaseFeatures[pIdx].parentId != feat.parentId)
+              pIdx,
+        ];
+        final maxTotalLedger = 12;
+        final keptSameEpic = sameEpicEarlier.length <= 6
+            ? sameEpicEarlier
+            : sameEpicEarlier.sublist(sameEpicEarlier.length - 6);
+        final remainingSlots = maxTotalLedger - keptSameEpic.length;
+        final keptCrossEpic = crossEpicEarlier.length <= remainingSlots
+            ? crossEpicEarlier
+            : <int>[
+                crossEpicEarlier.first,
+                if (crossEpicEarlier.length > 1 && remainingSlots > 2)
+                  crossEpicEarlier[1],
+                ...crossEpicEarlier.sublist(
+                  crossEpicEarlier.length -
+                      (remainingSlots -
+                          (crossEpicEarlier.length > 1 && remainingSlots > 2
+                              ? 2
+                              : 1)),
+                ),
+              ];
+        final selectedPrecedingIndices = <int>{
+          ...keptSameEpic,
+          ...keptCrossEpic,
         }.toList()
           ..sort();
-        final cappedIndices = selectedPrecedingIndices.length <= 5
-            ? selectedPrecedingIndices
-            : <int>[
-                selectedPrecedingIndices[0],
-                if (selectedPrecedingIndices.length > 1)
-                  selectedPrecedingIndices[1],
-                ...selectedPrecedingIndices
-                    .sublist(selectedPrecedingIndices.length - 3),
-              ];
-        for (final pIdx in cappedIndices) {
+        for (final pIdx in selectedPrecedingIndices) {
           final isSameEpic = feat.parentId != null &&
               allReleaseFeatures[pIdx].parentId == feat.parentId;
           cumulativeLedgerLines.add(
             _summarizeFeatureForProjectLedger(
               allReleaseFeatures[pIdx],
               pIdx + 1,
-              includeTuningVars: isSameEpic,
+              includeTuningVars: true,
               includePlannedScopeFallback: isSameEpic,
+              isCrossEpicAnchor: !isSameEpic,
             ),
           );
         }
@@ -5626,7 +5902,16 @@ ${priorCheckpointSnapshot.isNotEmpty ? 'Previous Checkpoints Structural Snapshot
 
 CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
 - ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway input/test actor in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
+- INTRA-TASK ENGINE CAUSAL ORDERING (`editor_setup` -> `script_logic` -> `wire_and_verify`):
+  * Inside EVERY task, set `stepRole` so engine prerequisites come strictly BEFORE code that references them:
+    1) `editor_setup` FIRST: Create/attach Scene Tree / Hierarchy / Component nodes (`area1Hierarchy`), Input Actions, Collision Layers, or Inspector bindings (`area2Inspector`) BEFORE any script step calls `\$NodeName`, `GetComponent`, `CreateDefaultSubobject`, or `Input.is_action_*`.
+    2) `script_logic` SECOND: Declare `@export` / `[SerializeField]` / `UPROPERTY` tuning variables and write the handler/physics method incrementally on the shared script (Task 2..N MUST extend the variables and functions created in Task 1—never paste conflicting duplicate class definitions).
+    3) `wire_and_verify` LAST: Connect signals/UnityEvents/Blueprint pins or place the prefab in the active level and check the result.
+- HONEST DUAL-MODE CHECKS (`verifyMode: "editor"` vs `"playtest"`):
+  * Set `verifyMode: "editor"` on intermediate structural/declaration steps where pressing Play cannot yet test runtime behavior (e.g. creating a collision layer, attaching a child node, declaring variables)—write an honest Editor check (`"Inspect Scene Tree → DashTimer appears under Player"`).
+  * Set `verifyMode: "playtest"` ONLY once runtime wiring is runnable in Play Mode (`"Press Shift → Player dashes 4m forward"`). The final step of a runnable task should use `"playtest"`.
 - STRICT TASK-ROLE ALIGNMENT & NON-OVERLAPPING SLICES (ACROSS ALL ${cpNode.checklist.length} TASKS):
+  * Return ALL ${cpNode.checklist.length} tasks (`taskIndex: 0..${cpNode.checklist.length - 1}`)—never omit a task.
   * Each task MUST own a strictly non-overlapping slice of the feature—NEVER implement Task 2's perimeter walls or logic inside Task 1.
   * First Task (Task 1) builds ONLY the primary floor/scene/node/actor/prefab foundation in the level.
   * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) add secondary structural bounds or wire the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
@@ -5646,122 +5931,228 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
         temperature: 0.25,
         functionDeclarations: const [commitFeatureHowToStepsTool],
       );
-      final primaryAsset =
+      var primaryAsset =
           (json?['primarySharedScriptOrScene'] ?? '').toString().trim();
       if (primaryAsset.isNotEmpty) {
         feat.sections['primary_asset'] = primaryAsset;
         cpNode.parameters['primarySharedScriptOrScene'] = primaryAsset;
       } else if (existingPrimaryAsset.isNotEmpty) {
+        primaryAsset = existingPrimaryAsset;
         cpNode.parameters['primarySharedScriptOrScene'] = existingPrimaryAsset;
       }
       final rawTasks = json?['tasks'];
-      if (rawTasks is! List || rawTasks.isEmpty) return;
+      if (rawTasks is! List || rawTasks.isEmpty) {
+        _failedStepSynthesisFeatureIds.add(featureId);
+        return;
+      }
 
-      final parsedTaskIndices = rawTasks
-          .whereType<Map>()
-          .map((t) => int.tryParse(t['taskIndex']?.toString() ?? '') ?? -1)
-          .where((idx) => idx >= 0)
-          .toList();
-      final isOneBasedTaskIndexing = parsedTaskIndices.isNotEmpty &&
-          !parsedTaskIndices.contains(0) &&
-          parsedTaskIndices.every(
-            (idx) => idx >= 1 && idx <= cpNode.checklist.length,
-          );
-      final useDirectPositionalMapping =
-          rawTasks.length == cpNode.checklist.length;
+      bool applyParsedTasksList(
+        List<dynamic> incomingTasks, {
+        Set<int>? allowedIndices,
+        List<int>? fallbackTargetIndices,
+      }) {
+        final parsedIndices = incomingTasks
+            .whereType<Map>()
+            .map((t) => int.tryParse(t['taskIndex']?.toString() ?? '') ?? -1)
+            .where((idx) => idx >= 0)
+            .toList();
+        final isOneBased = fallbackTargetIndices == null &&
+            parsedIndices.isNotEmpty &&
+            !parsedIndices.contains(0) &&
+            parsedIndices.every(
+              (idx) => idx >= 1 && idx <= cpNode.checklist.length,
+            );
+        final useDirectPositional = fallbackTargetIndices == null &&
+            incomingTasks.length == cpNode.checklist.length;
 
-      bool mutated = false;
-      for (int listIdx = 0; listIdx < rawTasks.length; listIdx++) {
-        final rawTask = rawTasks[listIdx];
-        if (rawTask is! Map) continue;
-        final rawIdx =
-            int.tryParse(rawTask['taskIndex']?.toString() ?? '') ?? -1;
-        final tIdx = useDirectPositionalMapping
-            ? listIdx
-            : (rawIdx < 0
-                ? listIdx
-                : (isOneBasedTaskIndexing ? rawIdx - 1 : rawIdx));
-        if (tIdx < 0 || tIdx >= cpNode.checklist.length) continue;
-        final parentTask = cpNode.checklist[tIdx];
-        if (LayersTextStyleGuide.isLegacyTemplateTaskTitle(parentTask.text)) {
-          final aiTaskTitle = LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
-            (rawTask['taskTitle'] ?? '').toString().trim(),
+        bool appliedAny = false;
+        for (int listIdx = 0; listIdx < incomingTasks.length; listIdx++) {
+          final rawTask = incomingTasks[listIdx];
+          if (rawTask is! Map) continue;
+          final rawIdx =
+              int.tryParse(rawTask['taskIndex']?.toString() ?? '') ?? -1;
+          int tIdx;
+          if (useDirectPositional) {
+            tIdx = listIdx;
+          } else if (rawIdx >= 0) {
+            tIdx = isOneBased ? rawIdx - 1 : rawIdx;
+          } else if (fallbackTargetIndices != null &&
+              listIdx < fallbackTargetIndices.length) {
+            tIdx = fallbackTargetIndices[listIdx];
+          } else {
+            tIdx = listIdx;
+          }
+          if (tIdx < 0 || tIdx >= cpNode.checklist.length) continue;
+          if (allowedIndices != null && !allowedIndices.contains(tIdx)) {
+            continue;
+          }
+          final parentTask = cpNode.checklist[tIdx];
+          if (LayersTextStyleGuide.isLegacyTemplateTaskTitle(parentTask.text)) {
+            final aiTaskTitle =
+                LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
+              (rawTask['taskTitle'] ?? '').toString().trim(),
+            );
+            final durMatch =
+                RegExp(r'\(\d+h\)\s*$').firstMatch(parentTask.text);
+            final durSuffix =
+                durMatch != null ? ' ${durMatch.group(0)!.trim()}' : '';
+            final withoutDur = durMatch != null
+                ? parentTask.text.substring(0, durMatch.start).trim()
+                : parentTask.text.trim();
+            final dashIdx = withoutDur.indexOf(' — ');
+            final existingGoalPart =
+                dashIdx > 0 ? withoutDur.substring(dashIdx) : '';
+            final cleanNewHead = aiTaskTitle.isNotEmpty
+                ? aiTaskTitle
+                : LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
+                    dashIdx > 0
+                        ? withoutDur.substring(0, dashIdx).trim()
+                        : withoutDur,
+                  );
+            parentTask.text = '$cleanNewHead$existingGoalPart$durSuffix';
+            appliedAny = true;
+          }
+          final taskNum = tIdx + 1;
+          final rawSubs = rawTask['subSteps'];
+          if (rawSubs is! List || rawSubs.isEmpty) continue;
+
+          final orderedSubs =
+              WorkbenchReleaseMixin.enforceIntraTaskEditorBeforeScriptOrder(
+            rawSubs,
           );
-          final durMatch = RegExp(r'\(\d+h\)\s*$').firstMatch(parentTask.text);
-          final durSuffix =
-              durMatch != null ? ' ${durMatch.group(0)!.trim()}' : '';
-          final withoutDur = durMatch != null
-              ? parentTask.text.substring(0, durMatch.start).trim()
-              : parentTask.text.trim();
-          final dashIdx = withoutDur.indexOf(' — ');
-          final existingGoalPart =
-              dashIdx > 0 ? withoutDur.substring(dashIdx) : '';
-          final cleanNewHead = aiTaskTitle.isNotEmpty
-              ? aiTaskTitle
-              : LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
-                  dashIdx > 0
-                      ? withoutDur.substring(0, dashIdx).trim()
-                      : withoutDur,
-                );
-          parentTask.text = '$cleanNewHead$existingGoalPart$durSuffix';
-          mutated = true;
+          final newChildren = <Subtask>[];
+          for (int sIdx = 0; sIdx < orderedSubs.length; sIdx++) {
+            final item = orderedSubs[sIdx];
+            final rawTitle =
+                (item['title'] ?? item['shortTitle'])?.toString().trim() ?? '';
+            final strippedTitle = rawTitle
+                .replaceFirst(_stepHeaderPrefixRegex, '')
+                .trim();
+            final title = strippedTitle.isNotEmpty
+                ? 'STEP $taskNum.${sIdx + 1} · $strippedTitle'
+                : '';
+            final path = item['stepPath']?.toString().trim() ?? '';
+            final instr = (item['instruction'] ?? item['doInstruction'])
+                    ?.toString()
+                    .trim() ??
+                '';
+            final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
+            final area2 = item['area2Inspector']?.toString().trim() ?? '';
+            final code = item['codeFormula']?.toString().trim() ?? '';
+            final verify = item['verifyResult']?.toString().trim() ?? '';
+            final verifyMode = item['verifyMode']?.toString().trim();
+            if (instr.isEmpty && code.isEmpty) continue;
+            final prevDone = sIdx < parentTask.children.length
+                ? parentTask.children[sIdx].completed
+                : parentTask.completed;
+            final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
+              instruction: instr,
+              area1Hierarchy: area1,
+              area2Inspector: area2,
+              verifyMode: verifyMode,
+            );
+            newChildren.add(
+              Subtask(
+                id: '${parentTask.id}_sub_${sIdx + 1}',
+                text: title.isNotEmpty
+                    ? title
+                    : 'STEP $taskNum.${sIdx + 1} · IMPLEMENT STEP ${sIdx + 1}',
+                specNotes: encodedNotes,
+                codeSnippet: code,
+                codeLanguage: path,
+                verification: verify,
+                codeTargetFile: 'custom_snippet',
+                completed: prevDone,
+              ),
+            );
+          }
+          if (newChildren.isNotEmpty) {
+            parentTask.children = newChildren;
+            appliedAny = true;
+          }
         }
-        final taskNum = tIdx + 1;
-        final rawSubs = rawTask['subSteps'];
-        if (rawSubs is! List || rawSubs.isEmpty) continue;
+        return appliedAny;
+      }
 
-        final newChildren = <Subtask>[];
-        for (int sIdx = 0; sIdx < rawSubs.length; sIdx++) {
-          final item = rawSubs[sIdx];
-          if (item is! Map) continue;
-          final rawTitle = item['title']?.toString().trim() ?? '';
-          final strippedTitle = rawTitle
-              .replaceFirst(_stepHeaderPrefixRegex, '')
-              .trim();
-          final title = strippedTitle.isNotEmpty
-              ? 'STEP $taskNum.${sIdx + 1} · $strippedTitle'
-              : '';
-          final path = item['stepPath']?.toString().trim() ?? '';
-          final instr = item['instruction']?.toString().trim() ?? '';
-          final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
-          final area2 = item['area2Inspector']?.toString().trim() ?? '';
-          final code = item['codeFormula']?.toString().trim() ?? '';
-          final verify = item['verifyResult']?.toString().trim() ?? '';
-          if (instr.isEmpty && code.isEmpty) continue;
-          final prevDone = sIdx < parentTask.children.length
-              ? parentTask.children[sIdx].completed
-              : parentTask.completed;
-          final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
-            instruction: instr,
-            area1Hierarchy: area1,
-            area2Inspector: area2,
-          );
-          newChildren.add(
-            Subtask(
-              id: '${parentTask.id}_sub_${sIdx + 1}',
-              text: title.isNotEmpty
-                  ? title
-                  : 'STEP $taskNum.${sIdx + 1} · IMPLEMENT STEP ${sIdx + 1}',
-              specNotes: encodedNotes,
-              codeSnippet: code,
-              codeLanguage: path,
-              verification: verify,
-              codeTargetFile: 'custom_snippet',
-              completed: prevDone,
-            ),
-          );
-        }
-        if (newChildren.isNotEmpty) {
-          parentTask.children = newChildren;
-          mutated = true;
+      final completedTaskIndices = <int>{};
+      bool mutated = applyParsedTasksList(rawTasks);
+      for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
+        final t = cpNode.checklist[tIdx];
+        if (t.children.isNotEmpty &&
+            t.children.every((c) => c.codeTargetFile == 'custom_snippet')) {
+          completedTaskIndices.add(tIdx);
         }
       }
+
+      // Pillar 3 Guarantee: If Gemini truncated/omitted any task in `cpNode.checklist`,
+      // synthesize the missing task(s) immediately so generic fallback boilerplate NEVER leaks alongside AI steps!
+      final missingTaskIndices = <int>[
+        for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++)
+          if (!completedTaskIndices.contains(tIdx)) tIdx,
+      ];
+      if (missingTaskIndices.isNotEmpty) {
+        final missingSummaries = [
+          for (final mIdx in missingTaskIndices)
+            'Task ${mIdx + 1} (taskIndex: $mIdx): "${cpNode.checklist[mIdx].text}"',
+        ].join('\n');
+        final followUpPrompt = '''
+You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
+Complete OMITTED 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}$projectBuildStateContext
+Shared Asset (extend in-place): ${primaryAsset.isNotEmpty ? primaryAsset : engineAssetHint}
+Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+Active Guards: ${cleanEdgeCases.join(', ')}
+${ engineLabel == 'UNREAL 5' && currentArchetype == 'level' ? 'Rule: NEVER prefix placed World Outliner Actor names with `SM_` (reserve `SM_` strictly for Static Mesh assets), and keep `PlayerStart` at `(0, 0, 120)` with `DefaultPawn` if before Character setup.\n' : ''}Missing Tasks ONLY (return exact `taskIndex` for each):
+$missingSummaries
+
+Follow `editor_setup` -> `script_logic` -> `wire_and_verify` ordering and `verifyMode: "editor" | "playtest"`.
+In `codeFormula`, emit $codeFormulaModeGuide.
+Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
+        final followUpJson = await GeminiAgentClient.generateJson(
+          prompt: followUpPrompt,
+          apiKey: _apiKey,
+          preferredModel: _conversationModel,
+          thinkingLevel: _thinkingLevel,
+          temperature: 0.25,
+          functionDeclarations: const [commitFeatureHowToStepsTool],
+        );
+        final followUpTasks = followUpJson?['tasks'];
+        if (followUpTasks is List && followUpTasks.isNotEmpty) {
+          final filled = applyParsedTasksList(
+            followUpTasks,
+            allowedIndices: missingTaskIndices.toSet(),
+            fallbackTargetIndices: missingTaskIndices,
+          );
+          if (filled) mutated = true;
+        }
+      }
+
+      final allTasksSynthesized = cpNode.checklist.every(
+        (t) =>
+            t.children.isNotEmpty &&
+            t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
+      );
 
       if (mutated) {
-        _aiSynthesizedFeatureSteps.add(synthKey);
+        if (isUnreal && allTasksSynthesized) {
+          cpNode.parameters['synthesized_unreal_mode'] = targetUnrealMode;
+          final cacheKey = targetUnrealMode == 'cpp'
+              ? 'unreal_cpp_steps_json'
+              : 'unreal_bp_steps_json';
+          cpNode.parameters[cacheKey] =
+              _serializeChecklistSnapshot(cpNode.checklist);
+        }
+        if (allTasksSynthesized) {
+          _failedStepSynthesisFeatureIds.remove(featureId);
+          _aiSynthesizedFeatureSteps.add(synthKey);
+        }
         TaskHowToBlueprint.clearCache();
         updateFeatureStates(featureId, states);
+      } else {
+        _failedStepSynthesisFeatureIds.add(featureId);
       }
+    } catch (_) {
+      _failedStepSynthesisFeatureIds.add(featureId);
     } finally {
       _synthesizingFeatureIds.remove(featureId);
       notifyListeners();
@@ -6014,7 +6405,11 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
                 sb.writeln('    ```');
               }
               if (sub.verifyResult.trim().isNotEmpty) {
-                sb.writeln('    - *Verify*: ${sub.verifyResult.trim()}');
+                final verifyHeading =
+                    sub.isEditorCheck ? 'Check in Editor' : 'Verify';
+                sb.writeln(
+                  '    - *$verifyHeading*: ${sub.verifyResult.trim()}',
+                );
               }
             }
           }
