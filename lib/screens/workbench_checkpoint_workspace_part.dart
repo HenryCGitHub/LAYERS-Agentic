@@ -2868,10 +2868,12 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     }
 
     Future<void> saveInlineCodeEdits({required bool alsoSyncSpecs}) async {
-      if (selectedFile == null) return;
+      final fileToSave = selectedFile;
+      if (fileToSave == null) return;
+      final savedResPath = fileToSave.resPath;
       final editedText = _codeFileEditorCtrl.text.replaceAll('\r\n', '\n');
       widget.workbench.upsertGodotVirtualFile(
-        resPath: selectedFile.resPath,
+        resPath: savedResPath,
         content: editedText,
         featureIds: [feat.id],
       );
@@ -2887,7 +2889,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Saved ${selectedFile.resPath} & synced ${res.updatedVars} var(s), ${res.addedGuards} guard(s) ✓',
+              'Saved $savedResPath & synced ${res.updatedVars} var(s), ${res.addedGuards} guard(s) ✓',
             ),
             duration: const Duration(seconds: 2),
           ),
@@ -2895,7 +2897,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Saved ${selectedFile.resPath} to Cloud ✓'),
+            content: Text('Saved $savedResPath to Cloud ✓'),
             duration: const Duration(seconds: 2),
           ),
         );

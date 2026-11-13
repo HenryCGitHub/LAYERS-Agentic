@@ -88,7 +88,7 @@ class GodotFolderSyncWebImpl implements GodotFolderSyncBackend {
 
       _rootHandle = handle;
       _previousDiskContentByResPath.clear();
-      return refreshLinkedFolder();
+      return await refreshLinkedFolder();
     } catch (e) {
       return GodotFolderSnapshot(
         folderLabel: '',
