@@ -1,7 +1,6 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
-  static final RegExp _trailingDotRegex = RegExp(r'\.$');
   static final RegExp _recommendedPrefixRegex =
       RegExp(r'^\(recommended\)\s*', caseSensitive: false);
   static final RegExp _goalPrefixRegex =
@@ -160,23 +159,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    SizedBox(
-                      height: 1,
-                      child: Opacity(
-                        opacity: 0,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              'PROGRESSIVE RELEASE CO-PILOT · ${nextVer.toUpperCase()}',
-                            ),
-                            Text('·  $prevVer 100% SHIPPED ✓'),
-                            if (bp?.releaseTitle.isNotEmpty == true)
-                              Text(bp!.releaseTitle),
-                          ],
-                        ),
-                      ),
-                    ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -869,25 +851,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                   color: textMuted,
                                                 ),
                                               ),
-                                              SizedBox(
-                                                width: 1,
-                                                height: 1,
-                                                child: Opacity(
-                                                  opacity: 0,
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Text(
-                                                        '1. CHOOSE ${nextVer.toUpperCase()} FOCUS',
-                                                      ),
-                                                      Text(
-                                                        'AGENT ARCHITECTURAL RECOMMENDATION · ${widget.workbench.activePhaseBadgeLabel}',
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
                                             ],
                                           ),
                                         ],
@@ -1136,17 +1099,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                           accentEmerald,
                                                                     ),
                                                                   ),
-                                                                  SizedBox(
-                                                                    width: 1,
-                                                                    height: 1,
-                                                                    child:
-                                                                        Opacity(
-                                                                      opacity: 0,
-                                                                      child: Text(
-                                                                        '★ RECOMMENDED',
-                                                                      ),
-                                                                    ),
-                                                                  ),
                                                                 ],
                                                               ],
                                                             ),
@@ -1345,21 +1297,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                     ),
                                                   ),
                                                 ],
-                                              ),
-                                              SizedBox(
-                                                height: 1,
-                                                child: Opacity(
-                                                  opacity: 0,
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Text(heroGoal),
-                                                      const Text('✓ DONE WHEN: '),
-                                                      Text(bp.doneWhen.trim()),
-                                                    ],
-                                                  ),
-                                                ),
                                               ),
                                             ],
                                           ),
@@ -1757,13 +1694,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                       .upgrade;
                                                               final isInc =
                                                                   f.included;
-                                                              final cleanGoal =
-                                                                  f.goal
-                                                                      .trim()
-                                                                      .replaceAll(
-                                                                        _trailingDotRegex,
-                                                                        '',
-                                                                      );
                                                               return Padding(
                                                                 padding: EdgeInsets.only(
                                                                   bottom: fIdx +
@@ -1924,33 +1854,6 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                                                                                   : (isUpg
                                                                                       ? accentAmber
                                                                                       : accentEmerald),
-                                                                            ),
-                                                                          ),
-                                                                        ),
-                                                                        SizedBox(
-                                                                          width:
-                                                                              1,
-                                                                          height:
-                                                                              1,
-                                                                          child:
-                                                                              Opacity(
-                                                                            opacity:
-                                                                                0,
-                                                                            child:
-                                                                                Row(
-                                                                              mainAxisSize: MainAxisSize.min,
-                                                                              children: [
-                                                                                if (cleanGoal.isNotEmpty)
-                                                                                  Text(cleanGoal),
-                                                                                Text(
-                                                                                  !isInc
-                                                                                      ? 'Skipped'
-                                                                                      : (isUpg ? 'Upgrade' : 'New'),
-                                                                                ),
-                                                                                Text(
-                                                                                  '${isInc ? f.estimatedHours : 0}h',
-                                                                                ),
-                                                                              ],
                                                                             ),
                                                                           ),
                                                                         ),

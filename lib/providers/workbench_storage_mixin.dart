@@ -398,12 +398,21 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       }
       // API keys are no longer loaded from browser localStorage; all live calls authenticate via Google Sign-In + geminiProxy.
       _apiKey = GeminiAgentClient.resolveDefaultApiKey();
+      String normalizeSavedModel(String raw) {
+        final trimmed = raw.trim();
+        if (trimmed == GeminiAgentClient.pinnedLiveFlashModel ||
+            trimmed == GeminiAgentClient.fallbackFlashModel) {
+          return trimmed;
+        }
+        return GeminiAgentClient.pinnedLiveFlashModel;
+      }
+
       if (loaded.modelName != null && loaded.modelName!.trim().isNotEmpty) {
-        _conversationModel = 'gemini-flash-latest';
+        _conversationModel = normalizeSavedModel(loaded.modelName!);
       }
       if (loaded.planningModel != null &&
           loaded.planningModel!.trim().isNotEmpty) {
-        _planningModel = 'gemini-flash-latest';
+        _planningModel = normalizeSavedModel(loaded.planningModel!);
       }
       if (loaded.thinkingLevel != null &&
           loaded.thinkingLevel!.trim().isNotEmpty) {

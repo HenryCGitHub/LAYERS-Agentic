@@ -27,11 +27,11 @@ class _ComponentInspectorVarRow {
 }
 
 extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
-  /// Builds the component-scoped persistent variable list for `activeTargetComp`.
-  /// - Only collects variables belonging to `activeTargetComp` (tasks targeting this component).
-  /// - Variables belonging to other components in `components` are excluded so selecting a different
-  ///   component in the Outliner switches the Details Panel to that component's own variables.
-  /// - Within the selected component, variables remain in a stable list and focus/dim per step (`1.1`, `1.2`, etc.).
+  /// Builds the node-scoped persistent variable list for `activeTargetComp`.
+  /// - Only collects variables belonging to `activeTargetComp` (tasks targeting this node).
+  /// - Variables belonging to other nodes in `components` are excluded so selecting a different
+  ///   node in the Scene Tree switches the Inspector Dock to that node's own variables.
+  /// - Within the selected node, variables remain in a stable list and focus/dim per step (`1.1`, `1.2`, etc.).
   List<_ComponentInspectorVarRow> _buildComponentInspectorRows({
     required FeatureStateNode node,
     required List<TaskHowToBlueprint> howToBlueprints,
@@ -76,24 +76,23 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         activeCompLower.contains('rigidbody') ||
         activeCompLower.contains('characterbody');
 
-    bool belongsToOtherComponent(String rawKey, String rawVal, String engineLabel) {
+    bool belongsToOtherComponent(String rawKey, String rawVal) {
       final keyLower = rawKey.toLowerCase();
       final valLower = rawVal.toLowerCase();
       if (isActiveCapsuleComp &&
           (keyLower == 'asset name' ||
               keyLower == 'parent class' ||
               keyLower.contains('walkspeed') ||
-              keyLower.contains('maxwalk') ||
-              keyLower.contains('jumpz') ||
-              keyLower.contains('aircontrol') ||
-              valLower.contains('walkspeed') ||
-              valLower.contains('maxwalk'))) {
+              keyLower.contains('move_speed') ||
+              keyLower.contains('jump_velocity') ||
+              keyLower.contains('air_control') ||
+              valLower.contains('move_speed') ||
+              valLower.contains('walkspeed'))) {
         return true;
       }
       final inferred = _inferOwningComponentForProperty(
         rawKey: rawKey,
         defaultComponentKey: activeTargetComp.componentKey,
-        engineLabel: engineLabel,
         is2D: is2D,
       );
       final inferredCompLower = inferred.componentLabel.toLowerCase();
@@ -130,18 +129,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       required String rawVal,
       required int tIdx,
       required int sIdx,
-      required String engineLabel,
       int? explicitTuningIdx,
     }) {
       final cleanKey = rawKey.trim();
       final cleanVal = rawVal.trim();
       if (cleanKey.isEmpty || cleanVal.isEmpty) return;
-      if (belongsToOtherComponent(cleanKey, cleanVal, engineLabel)) return;
+      if (belongsToOtherComponent(cleanKey, cleanVal)) return;
 
       final resolved = _inferOwningComponentForProperty(
         rawKey: cleanKey,
         defaultComponentKey: activeTargetComp.componentKey,
-        engineLabel: engineLabel,
         is2D: is2D,
       );
       final propLabel = resolved.propertyLabel.trim().isNotEmpty
@@ -218,9 +215,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     for (final tIdx in compTaskIndices) {
       if (tIdx < 0 || tIdx >= howToBlueprints.length) continue;
       final bp = howToBlueprints[tIdx];
-      final engineLabel = bp.engineLabel;
-      final isUnreal = engineLabel == 'UNREAL 5';
-      final isUnity = engineLabel == 'UNITY C#';
 
       for (int sIdx = 0; sIdx < bp.subSteps.length; sIdx++) {
         final sub = bp.subSteps[sIdx];
@@ -243,7 +237,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 rawVal: cleanEntry.substring(delimIdx + 1).trim(),
                 tIdx: tIdx,
                 sIdx: sIdx,
-                engineLabel: engineLabel,
               );
               addedAnyForSubStep = true;
             }
@@ -268,7 +261,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               rawVal: v,
               tIdx: tIdx,
               sIdx: sIdx,
-              engineLabel: engineLabel,
               explicitTuningIdx: ti,
             );
             addedAnyForSubStep = true;
@@ -276,65 +268,29 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         }
 
         if (!addedAnyForSubStep && sIdx == 0 && isActiveCapsuleComp) {
-          if (isUnreal) {
-            recordProperty(
-              rawKey: 'CapsuleHalfHeight',
-              rawVal: '88.0',
-              tIdx: tIdx,
-              sIdx: sIdx,
-              engineLabel: engineLabel,
-            );
-            recordProperty(
-              rawKey: 'CapsuleRadius',
-              rawVal: '35.0',
-              tIdx: tIdx,
-              sIdx: sIdx,
-              engineLabel: engineLabel,
-            );
-          } else if (isUnity) {
-            recordProperty(
-              rawKey: is2D ? 'Size' : 'Height',
-              rawVal: is2D ? '(0.7, 1.76)' : '1.76',
-              tIdx: tIdx,
-              sIdx: sIdx,
-              engineLabel: engineLabel,
-            );
-            recordProperty(
-              rawKey: is2D ? 'Direction' : 'Radius',
-              rawVal: is2D ? 'Vertical' : '0.35',
-              tIdx: tIdx,
-              sIdx: sIdx,
-              engineLabel: engineLabel,
-            );
-          } else {
-            recordProperty(
-              rawKey: 'Height',
-              rawVal: is2D ? '70.0 px' : '1.76 m',
-              tIdx: tIdx,
-              sIdx: sIdx,
-              engineLabel: engineLabel,
-            );
-            recordProperty(
-              rawKey: 'Radius',
-              rawVal: is2D ? '16.0 px' : '0.35 m',
-              tIdx: tIdx,
-              sIdx: sIdx,
-              engineLabel: engineLabel,
-            );
-          }
+          recordProperty(
+            rawKey: 'Height',
+            rawVal: is2D ? '70.0 px' : '1.76 m',
+            tIdx: tIdx,
+            sIdx: sIdx,
+          );
+          recordProperty(
+            rawKey: 'Radius',
+            rawVal: is2D ? '16.0 px' : '0.35 m',
+            tIdx: tIdx,
+            sIdx: sIdx,
+          );
         }
       }
     }
 
     // 2. Ensure all active-step fallback rows (for the selected component) are included
-    final selectedEngineLabel = howToBlueprints[selectedTaskIdx].engineLabel;
     for (final row in activeStepFallbackRows) {
       recordProperty(
         rawKey: row.key,
         rawVal: row.value,
         tIdx: selectedTaskIdx,
         sIdx: activeSubStepIdx,
-        engineLabel: selectedEngineLabel,
       );
     }
 
@@ -347,14 +303,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             slotTp.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
         final k = parts.first.trim();
         final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
-        if (k.isNotEmpty &&
-            !belongsToOtherComponent(k, v, selectedEngineLabel)) {
+        if (k.isNotEmpty && !belongsToOtherComponent(k, v)) {
           recordProperty(
             rawKey: k,
             rawVal: v,
             tIdx: selectedTaskIdx,
             sIdx: 0,
-            engineLabel: selectedEngineLabel,
             explicitTuningIdx: slotIdx,
           );
         }
@@ -393,10 +347,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     return result;
   }
 
-  /// Renders the Engine-Specific 3-Area Step Card (`COMPONENTS & OUTLINER` / `HIERARCHY & COMPONENTS` /
-  /// `SCENE TREE DOCK (.tscn)`, `DETAILS PANEL` / `INSPECTOR WINDOW` / `INSPECTOR DOCK`, and
-  /// `EVENT GRAPH` / `C++ SOURCE` / `C# MONOBEHAVIOUR` / `GDSCRIPT`), showing only the sections
-  /// genuinely used by the active step so Component/Inspector setup is never mislabeled as Event Graph or Code.
+  /// Renders the Godot 4 3-Area Step Card (`SCENE TREE DOCK (.tscn)`, `INSPECTOR DOCK`,
+  /// `NODE SIGNALS`, and `GDSCRIPT`), showing only the sections
+  /// genuinely used by the active step so Inspector setup is never mislabeled as GDScript.
   Widget _buildEngineStepAreasBox({
     required TierDocument feat,
     required List<FeatureStateNode> states,
@@ -412,30 +365,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required List<String> tuningItems,
     required List<String> edgeItems,
   }) {
-    final engine = selectedHowTo.engineLabel;
-    final isUnreal = engine == 'UNREAL 5';
-    final isUnrealBp = isUnreal && !_unrealCppMode;
-    final isUnrealCpp = isUnreal && _unrealCppMode;
-    final isUnity = engine == 'UNITY C#';
-
-    final String area1Title = isUnrealBp
-        ? 'COMPONENTS & OUTLINER'
-        : (isUnrealCpp
-            ? 'SUBOBJECT HIERARCHY'
-            : (isUnity
-                ? 'HIERARCHY & COMPONENTS'
-                : 'SCENE TREE DOCK (.tscn)'));
-    final String area2Title = isUnrealBp
-        ? 'DETAILS PANEL'
-        : (isUnrealCpp
-            ? 'DETAILS & UPROPERTY'
-            : (isUnity ? 'INSPECTOR WINDOW' : 'INSPECTOR DOCK'));
-    final String area3Title = isUnrealBp
-        ? 'EVENT GRAPH'
-        : (isUnrealCpp
-            ? 'C++ SOURCE (.h / .cpp)'
-            : (isUnity ? 'C# MONOBEHAVIOUR (.cs)' : 'GDSCRIPT (.gd)'));
-
     final rawCode = activeSubStep.codeFormula.trim();
     final stepPath = activeSubStep.stepPath.isNotEmpty
         ? activeSubStep.stepPath
@@ -445,7 +374,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         .first
         .trim();
 
-    // Strip any leading C++/C# comment line ("// ...") when displaying a pure hierarchy/setup block
+    // Strip any leading single-line comment when displaying a pure hierarchy/setup block
     final rawLines = rawCode.split('\n');
     final cleanSetupLines = <String>[];
     for (int i = 0; i < rawLines.length; i++) {
@@ -459,48 +388,27 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
     // Classify the active step based on its actual content & step context
     final lowerPath = stepPath.toLowerCase();
-    final hasBpGraphArrows = rawCode.contains('──►') ||
+    final hasSignalArrows = rawCode.contains('──►') ||
         rawCode.contains('└──►') ||
         rawCode.contains('├──►') ||
         RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(rawCode);
     final hasHierarchyTreeChars =
-        RegExp(r'[└├]─(?!─►)').hasMatch(rawCode) && !hasBpGraphArrows;
-    final isTreeHierarchyStep = !hasBpGraphArrows &&
+        RegExp(r'[└├]─(?!─►)').hasMatch(rawCode) && !hasSignalArrows;
+    final isTreeHierarchyStep = !hasSignalArrows &&
         (hasHierarchyTreeChars ||
             lowerPath.contains('scene dock') ||
-            lowerPath.contains('hierarchy') ||
-            lowerPath.contains('add child node') ||
-            lowerPath.contains('create empty') ||
-            lowerPath.contains('components panel'));
-    final isCppConstructorSubobjectsStep = isUnrealCpp &&
-        rawCode.contains('CreateDefaultSubobject<');
+            lowerPath.contains('scene tree') ||
+            lowerPath.contains('add child node'));
     final isLevelPlacementStep = !isTreeHierarchyStep &&
         (rawCode.contains('Instance:') ||
-            rawCode.contains('Transform.position = new Vector3') ||
             rawCode.contains('Instanced Node:') ||
-            lowerPath.contains('world outliner') ||
             lowerPath.contains('instantiate child scene') ||
+            lowerPath.contains('main scene') ||
             (selectedTaskIdx == 0 && activeSubStepIdx == 2));
-    final isBlueprintAssetCreationStep = isUnrealBp &&
-        !isTreeHierarchyStep &&
-        !isLevelPlacementStep &&
-        (rawCode.contains('Asset Name:') ||
-            rawCode.contains('Parent Class:') ||
-            lowerPath.contains('blueprint class'));
-    final isBlueprintVariableStep = isUnrealBp &&
-        !isTreeHierarchyStep &&
-        !isLevelPlacementStep &&
-        !isBlueprintAssetCreationStep &&
-        (rawCode.contains('Instance Editable') ||
-            lowerPath.contains('variables'));
-    final isCodeVariableStep = !isUnrealBp &&
-        (rawCode.contains('UPROPERTY(') ||
-            rawCode.contains('[SerializeField]') ||
-            rawCode.contains('@export var') ||
-            lowerPath.contains('inspector') ||
-            lowerPath.contains('details panel'));
-    final isScriptCreationStep = !isUnrealBp &&
-        selectedTaskIdx == 0 &&
+    final isCodeVariableStep = rawCode.contains('@export var') ||
+        rawCode.contains('@export_range') ||
+        lowerPath.contains('inspector');
+    final isScriptCreationStep = selectedTaskIdx == 0 &&
         activeSubStepIdx == 0 &&
         !isTreeHierarchyStep &&
         !isCodeVariableStep;
@@ -526,39 +434,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     String? codeWhere;
     String? codeBody;
 
-    if (isBlueprintAssetCreationStep) {
+    if (isTreeHierarchyStep) {
       compWhere = stepPath;
       compBody = cleanSetupText;
-      inspWhere = 'Class Defaults (Details Panel)';
-      inspRows.addAll([
-        (key: 'Parent Class', value: 'Actor (AActor)'),
-        (key: 'Start with Tick Enabled', value: 'True'),
-        (key: 'Initial Mechanic State', value: 'EMechanicState::Idle'),
-      ]);
-    } else if (isTreeHierarchyStep || isCppConstructorSubobjectsStep) {
-      compWhere = isCppConstructorSubobjectsStep
-          ? 'Default Subobject Hierarchy'
-          : stepPath;
-      if (isCppConstructorSubobjectsStep) {
-        final hasCamera = rawCode.contains('CameraBoom');
-        compBody = hasCamera
-            ? 'RootComponent (USceneComponent)\n ├─ CameraBoom   (USpringArmComponent)\n └─ FollowCamera (UCameraComponent)'
-            : 'RootComponent (USceneComponent)\n ├─ VisualMesh  (UStaticMeshComponent)\n └─ InteractBox (UBoxComponent)';
-      } else {
-        compBody = cleanSetupText;
-      }
-
-      inspWhere = isUnreal
-          ? 'Details Panel (Component Properties)'
-          : (isUnity
-              ? 'Inspector Window (Component Settings)'
-              : 'Inspector Dock (Node Properties)');
+      inspWhere = 'Inspector Dock (Node Properties)';
       for (final line in compBody.split('\n')) {
         final match = _ReleaseWorkbenchScreenState._treeChildRegex.firstMatch(line);
         if (match != null) {
           final nodeName = match.group(1)!.trim();
           final nodeDesc = (match.group(2) ?? '').trim();
-          if (nodeName == 'DefaultSceneRoot') continue;
+          if (nodeName.isEmpty) continue;
           if (nodeDesc.isNotEmpty) {
             final colonIdx = nodeDesc.indexOf(':');
             if (colonIdx > 0 && colonIdx < nodeDesc.length - 1) {
@@ -589,105 +474,63 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       if (inspRows.isEmpty) {
         inspRows.add((key: 'Primary Tuning Binding', value: effectiveTuningLabel));
       }
-      if (isCppConstructorSubobjectsStep) {
-        codeWhere = stepPath;
-        codeBody = rawCode;
-      }
     } else if (isLevelPlacementStep) {
       compWhere = stepPath;
       compBody = cleanSetupText;
-      inspWhere = isUnreal
-          ? 'Details Panel → Transform & Auto Receive Input'
-          : (isUnity
-              ? 'Inspector Window → Transform & Prefab'
-              : 'Inspector Dock → Node2D Transform');
-      inspRows.addAll([
+      inspWhere = 'Inspector Dock → Node Transform';
+      inspRows.addAll(const [
         (
-          key: 'Transform → Location / Position',
-          value: (!isUnreal && !isUnity)
-              ? 'Vector2(0, 0)'
-              : 'X = 0.0,  Y = 0.0,  Z = 0.0',
+          key: 'Transform → Position',
+          value: 'Vector2(0, 0) / Vector3(0, 0, 0)',
         ),
         (
-          key: isUnreal ? 'Auto Activate for Player' : 'Scene Instance Mode',
-          value: isUnreal ? 'Player 0' : 'Active Level Instance',
-        ),
-      ]);
-    } else if (isBlueprintVariableStep) {
-      compWhere = stepPath;
-      compBody = cleanSetupText;
-      inspWhere = 'Details Panel → Variable Defaults';
-      inspRows.addAll([
-        (key: 'Variable Name & Type', value: '$primaryVarName : Float'),
-        (
-          key: 'Instance Editable (Eye Icon)',
-          value: 'True (Checked)  ·  Category = "Tuning"',
-        ),
-        (
-          key: 'Default Value',
-          value: '$primaryTuningLabel  ·  bIsActive = false',
+          key: 'Scene Instance Mode',
+          value: 'Active Level Instance',
         ),
       ]);
     } else if (isCodeVariableStep) {
-      inspWhere = isUnrealCpp
-          ? 'Details Panel → Category: "Tuning"'
-          : (isUnity
-              ? 'Inspector Window → Tuning Parameters'
-              : 'Inspector Dock → Script Variables');
+      inspWhere = 'Inspector Dock → Script Variables';
       inspRows.addAll([
         (
           key: 'Inspector Specifier',
-          value: isUnrealCpp
-              ? 'UPROPERTY(EditAnywhere, BlueprintReadWrite)'
-              : (isUnity ? '[SerializeField] private float' : '@export var'),
+          value: '@export var',
         ),
         (key: 'Default Tuning Value', value: effectiveTuningLabel),
       ]);
       codeWhere = stepPath;
       codeBody = rawCode;
     } else if (isScriptCreationStep) {
-      if (!isUnreal && !isUnity) {
-        compWhere = 'Scene Dock (Top-Left)';
-        compBody = 'Root Node (Node2D / CharacterBody2D)  [📜 Attached .gd]';
-      }
-      inspWhere = isUnrealCpp
-          ? 'C++ Class Wizard'
-          : (isUnity ? 'Script Asset Setup' : 'Script Attach Dialog');
+      compWhere = 'Scene Dock (Top-Left)';
+      compBody = 'Root Node (Node2D / CharacterBody2D/3D)  [📜 Attached .gd]';
+      inspWhere = 'Script Attach Dialog';
       inspRows.addAll([
-        (
+        const (
           key: 'Base Class',
-          value: isUnrealCpp
-              ? 'AActor'
-              : (isUnity ? 'MonoBehaviour' : 'Node2D'),
+          value: 'Node2D / Node3D',
         ),
         (key: 'File Path', value: stepPath),
       ]);
       codeWhere = stepPath;
       codeBody = rawCode;
     } else {
-      // Runtime Logic / Event Graph / Guard Step:
+      // Runtime GDScript / Node Signals / Guard Step:
       if (activeSubStepIdx == 0) {
         inspWhere = activeSubStep.isGuardStep
             ? 'Guard Condition & Safety Check'
-            : (isUnrealBp
-                ? 'Event Graph Node Pins & Details'
-                : 'Runtime Tuning & Inspector Binding');
+            : 'Runtime Tuning & Inspector Binding';
         inspRows.add((key: 'Tuning Parameter', value: effectiveTuningLabel));
       }
       codeWhere = stepPath;
       codeBody = rawCode;
     }
 
-    final isPureRuntimeCodeStep = !isBlueprintAssetCreationStep &&
-        !isTreeHierarchyStep &&
-        !isCppConstructorSubobjectsStep &&
+    final isPureRuntimeCodeStep = !isTreeHierarchyStep &&
         !isLevelPlacementStep &&
-        !isBlueprintVariableStep &&
         !isCodeVariableStep &&
         !isScriptCreationStep &&
         activeSubStepIdx > 0;
 
-    // Apply on-demand gemini-flash-latest 3-Area Hierarchy & Inspector overrides when present
+    // Apply on-demand hierarchy & Inspector overrides when present
     final aiArea1 = activeSubStep.area1Hierarchy?.trim() ?? '';
     if (aiArea1.isNotEmpty) {
       compWhere ??= stepPath;
@@ -696,16 +539,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         codeWhere ??= stepPath;
         codeBody ??= rawCode;
       }
-    } else if (hasBpGraphArrows && rawCode.isNotEmpty) {
+    } else if (hasSignalArrows && rawCode.isNotEmpty) {
       codeWhere ??= stepPath;
       codeBody ??= rawCode;
     }
     final aiArea2 = activeSubStep.area2Inspector?.trim() ?? '';
     if (aiArea2.isNotEmpty) {
       if (inspWhere.isEmpty) {
-        inspWhere = isUnreal
-            ? 'Details Panel'
-            : (isUnity ? 'Inspector Window' : 'Inspector Dock');
+        inspWhere = 'Inspector Dock';
       }
       final parsedAiRows = <({String key, String value})>[];
       final rawEntries = aiArea2.contains('\n')
@@ -733,8 +574,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               primaryVarName.toLowerCase();
       if (parsedAiRows.isNotEmpty && !isSingleDuplicatePrimaryTuning) {
         inspRows
-            ..clear()
-            ..addAll(parsedAiRows);
+          ..clear()
+          ..addAll(parsedAiRows);
       }
     }
 
@@ -745,15 +586,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       for (final rawLine in compBody.split('\n')) {
         final cleanLine = rawLine.trim();
         if (cleanLine.isEmpty) continue;
-        inspRows.add((key: 'Component', value: cleanLine));
+        inspRows.add((key: 'Node', value: cleanLine));
       }
     }
 
-    final effectiveCardUnrealCpp =
-        _unrealCppMode && _classifyFeatureArchetype(feat.title) != 'level';
     final activeTargetComp = _resolveTaskTargetComponent(
       selectedHowTo,
-      unrealCppMode: effectiveCardUnrealCpp,
     );
     final assetSpec = _resolveFeatureAssetSpec(
       feat: feat,
@@ -761,7 +599,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       selectedTaskIdx: selectedTaskIdx,
       selectedHowTo: selectedHowTo,
       activeSubStep: activeSubStep,
-      unrealCppMode: effectiveCardUnrealCpp,
       activeTargetComp: activeTargetComp,
     );
 
@@ -790,7 +627,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         if (tIdx != selectedTaskIdx)
           _resolveTaskTargetComponent(
             howToBlueprints[tIdx],
-            unrealCppMode: effectiveCardUnrealCpp,
           ).componentKey.toLowerCase(),
     }..remove(activeCompLower);
 
@@ -812,17 +648,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           (keyLower == 'asset name' ||
               keyLower == 'parent class' ||
               keyLower.contains('walkspeed') ||
-              keyLower.contains('maxwalk') ||
-              keyLower.contains('jumpz') ||
-              keyLower.contains('aircontrol') ||
-              valLower.contains('walkspeed') ||
-              valLower.contains('maxwalk'))) {
+              keyLower.contains('move_speed') ||
+              keyLower.contains('jump_velocity') ||
+              keyLower.contains('air_control') ||
+              valLower.contains('move_speed') ||
+              valLower.contains('walkspeed'))) {
         return true;
       }
       final inferred = _inferOwningComponentForProperty(
         rawKey: row.key,
         defaultComponentKey: activeTargetComp.componentKey,
-        engineLabel: selectedHowTo.engineLabel,
         is2D: assetSpec.is2D,
       );
       final inferredCompLower = inferred.componentLabel.toLowerCase();
@@ -848,35 +683,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
     if (inspRows.isEmpty) {
       if (isActiveCapsuleTask) {
-        if (isUnreal) {
-          inspRows.addAll(const [
-            (key: 'CapsuleHalfHeight', value: '88.0'),
-            (key: 'CapsuleRadius', value: '35.0'),
-          ]);
-        } else if (isUnity) {
-          inspRows.addAll(
-            assetSpec.is2D
-                ? const [
-                    (key: 'Size', value: '(0.7, 1.76)'),
-                    (key: 'Direction', value: 'Vertical'),
-                  ]
-                : const [
-                    (key: 'Height', value: '1.76'),
-                    (key: 'Radius', value: '0.35'),
-                  ],
-          );
-        } else {
-          inspRows.addAll([
-            (
-              key: 'Height',
-              value: assetSpec.is2D ? '70.0 px' : '1.76 m',
-            ),
-            (
-              key: 'Radius',
-              value: assetSpec.is2D ? '16.0 px' : '0.35 m',
-            ),
-          ]);
-        }
+        inspRows.addAll([
+          (
+            key: 'Height',
+            value: assetSpec.is2D ? '70.0 px' : '1.76 m',
+          ),
+          (
+            key: 'Radius',
+            value: assetSpec.is2D ? '16.0 px' : '0.35 m',
+          ),
+        ]);
       } else if (matchedTunings.isNotEmpty) {
         for (final t in matchedTunings.take(2)) {
           final parts =
@@ -893,41 +709,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       }
     }
 
-    final String taskScopedTuningDisplay = matchedTunings.isNotEmpty
-        ? matchedTunings.first
-        : (isActiveCapsuleTask && inspRows.isNotEmpty
-            ? '${inspRows.first.key}: ${inspRows.first.value}'
-            : (primaryTuningLabel.isNotEmpty
-                ? primaryTuningLabel
-                : (inspRows.isNotEmpty
-                    ? '${inspRows.first.key}: ${inspRows.first.value}'
-                    : '')));
-
-    final rawComponents = _buildPersistentSceneTreeComponents(
+    final components = _buildPersistentSceneTreeComponents(
       howToBlueprints,
-      unrealCppMode: effectiveCardUnrealCpp,
     );
-    final components = <({
-      String icon,
-      String componentKey,
-      String displayLabel,
-      List<int> taskIndices,
-    })>[
-      if (assetSpec.archetype == 'character' &&
-          isUnreal &&
-          !rawComponents
-              .any((c) => c.componentKey.toLowerCase().contains('capsule')))
-        (
-          icon: '📦',
-          componentKey: 'CapsuleComponent',
-          displayLabel: _unrealCppMode
-              ? 'GetCapsuleComponent() (UCapsuleComponent)'
-              : 'CapsuleComponent',
-          taskIndices: const <int>[0],
-        ),
-      ...rawComponents,
-    ];
-    final rawHierarchy = activeSubStep.area1Hierarchy?.trim() ?? '';
 
     final componentInspectorRows = _buildComponentInspectorRows(
       node: node,
@@ -952,27 +736,12 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         (codeBody != null && codeBody.trim().isNotEmpty)
             ? codeBody.split('\n')
             : fallbackCodeLines;
-    final hasInsp = componentInspectorRows.isNotEmpty;
     final hasCode = effectiveCodeLines.isNotEmpty;
-
-    final showInsp =
-        hasInsp && (_engineAreaFilter == 0 || _engineAreaFilter == 2);
     final showCode =
         hasCode && (_engineAreaFilter == 0 || _engineAreaFilter == 3);
     final effectiveHeaderPath = (codeWhere != null && codeWhere.trim().isNotEmpty)
         ? codeWhere.trim()
         : stepPath;
-
-    final activeInspectorCategory = componentInspectorRows.isNotEmpty
-        ? componentInspectorRows.first.categoryLabel
-        : _inferOwningComponentForProperty(
-            rawKey: inspRows.isNotEmpty
-                ? inspRows.first.key
-                : activeTargetComp.componentKey,
-            defaultComponentKey: activeTargetComp.componentKey,
-            engineLabel: selectedHowTo.engineLabel,
-            is2D: assetSpec.is2D,
-          ).categoryLabel;
 
     // ── INITIAL SETUP WIDGET (Option A: 3-Column Horizontal Strip · Only visible when assetSpec.isNewAssetOnTask == true) ──
     final Widget initialSetupWidget = assetSpec.isNewAssetOnTask
@@ -1180,194 +949,31 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         .where((s) => s.subtask.completed)
         .length;
 
+    bool isSubStepExpanded(int stepIdx) {
+      final stepKey = '${node.id}_${selectedTaskIdx}_$stepIdx';
+      if (_collapsedSubStepKeys.contains(stepKey)) return false;
+      if (_expandedSubStepKeys.contains(stepKey)) return true;
+      if (widget.workbench.focusMode && selectedHowTo.subSteps.length > 1) {
+        return stepIdx == activeSubStepIdx;
+      }
+      return true;
+    }
+
+    final compactHierarchySummary = components.isNotEmpty
+        ? components
+            .take(3)
+            .map((c) => c.displayLabel)
+            .join(' › ')
+        : '';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Zero-size compatibility hooks for area labels, scene tree nodes, and offstage edit buttons
-        SizedBox(
-          width: 1,
-          height: 1,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Opacity(
-              opacity: 0,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text('1. $area1Title'),
-                  Text('2. $area2Title'),
-                  Text('3. $area3Title'),
-                  Text('Scene hierarchy'),
-                  Text('Inspector details'),
-                  Text('Script implementation'),
-                  Text(
-                    'Task Steps (T${selectedTaskIdx + 1} · ${selectedHowTo.shortTaskTitle})',
-                  ),
-                  Text('▼ IMPLEMENTATION & LEVEL SETUP'),
-                  if (assetSpec.levelHookupTitle.isNotEmpty)
-                    Text(assetSpec.levelHookupTitle),
-                  for (final lvStep in assetSpec.levelHookupSteps) Text(lvStep),
-                  for (final stStep in assetSpec.setupSteps) ...[
-                    Text('${stStep.label}: '),
-                    Text(stStep.detail),
-                  ],
-                  for (final subStep in selectedHowTo.subSteps)
-                    Text('${subStep.shortTitle}: ${subStep.instruction}'),
-                  if (rawHierarchy.isNotEmpty) Text(rawHierarchy),
-                  for (final comp in components) ...[
-                    InkWell(
-                      key: ValueKey(
-                        'scene_tree_node_${node.id}_${comp.componentKey}',
-                      ),
-                      onTap: () {},
-                      child: Text(comp.displayLabel),
-                    ),
-                    for (final tIdx in comp.taskIndices)
-                      InkWell(
-                        key: ValueKey(
-                          'scene_tree_task_pill_${node.id}_${comp.componentKey}_$tIdx',
-                        ),
-                        onTap: () {},
-                        child: Text('T${tIdx + 1}'),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        ),
-
-        // Offstage compatibility hooks for Section 02 Inspector Tuning & Inline Editors
-        SizedBox(
-          height: (_activeStage2InlineEditKey == 'tuning_${node.id}' ||
-                  (_activeStage2InlineEditKey != null &&
-                      _activeStage2InlineEditKey!
-                          .startsWith('area2_tuning_${node.id}_')))
-              ? null
-              : 1,
-          child: Opacity(
-            opacity: (_activeStage2InlineEditKey == 'tuning_${node.id}' ||
-                    (_activeStage2InlineEditKey != null &&
-                        _activeStage2InlineEditKey!
-                            .startsWith('area2_tuning_${node.id}_')))
-                ? 1.0
-                : 0.0,
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Container(
-                key: ValueKey('area2_selected_component_header_${node.id}'),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (taskScopedTuningDisplay.isNotEmpty &&
-                        _activeStage2InlineEditKey != 'tuning_${node.id}')
-                      InkWell(
-                        key: ValueKey('inline_tuning_pill_${node.id}'),
-                        onTap: () => _startStage2InlineEdit(
-                          'tuning_${node.id}',
-                          primaryTuningLabel.isNotEmpty
-                              ? primaryTuningLabel
-                              : taskScopedTuningDisplay,
-                        ),
-                        child: const SizedBox(width: 8, height: 2),
-                      ),
-                    if (_activeStage2InlineEditKey == 'tuning_${node.id}')
-                      SizedBox(
-                        width: 280,
-                        child: _buildStage2InlineEditor(
-                          editKey: 'tuning_${node.id}',
-                          hintText: 'e.g. moveSpeed: 600',
-                          inputKey: ValueKey('inline_tuning_input_${node.id}'),
-                          saveBtnKey:
-                              ValueKey('inline_tuning_save_btn_${node.id}'),
-                          cancelBtnKey:
-                              ValueKey('inline_tuning_cancel_btn_${node.id}'),
-                          onSave: (val) => _saveInlineTuningParam(
-                            feat: feat,
-                            states: states,
-                            node: node,
-                            selectedTaskIdx: selectedTaskIdx,
-                            rawValue: val,
-                          ),
-                        ),
-                      ),
-                    Text(assetSpec.sec1Title),
-                    Text(assetSpec.sec2Title),
-                    Text(activeInspectorCategory),
-                    Text(
-                      '▾ ${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
-                    ),
-                    if (showInsp)
-                      for (int rIdx = 0;
-                          rIdx < componentInspectorRows.length;
-                          rIdx++)
-                        Builder(
-                          builder: (context) {
-                            final row = componentInspectorRows[rIdx];
-                            if (_activeStage2InlineEditKey ==
-                                'area2_tuning_${node.id}_$rIdx') {
-                              return SizedBox(
-                                width: 280,
-                                child: _buildStage2InlineEditor(
-                                  editKey: 'area2_tuning_${node.id}_$rIdx',
-                                  hintText: 'e.g. moveSpeed: 750',
-                                  inputKey: ValueKey(
-                                    'area2_inspector_tuning_input_${node.id}_$rIdx',
-                                  ),
-                                  saveBtnKey: ValueKey(
-                                    'area2_inspector_tuning_save_${node.id}_$rIdx',
-                                  ),
-                                  onSave: (val) => _saveInlineTuningParam(
-                                    feat: feat,
-                                    states: states,
-                                    node: node,
-                                    selectedTaskIdx: selectedTaskIdx,
-                                    rawValue: val,
-                                    tuningParamIndex: row.tuningParamIndex,
-                                    propertyKey: row.key,
-                                  ),
-                                ),
-                              );
-                            }
-                            return InkWell(
-                              key: ValueKey(
-                                'area2_inspector_tuning_row_${node.id}_$rIdx',
-                              ),
-                              onTap: () {
-                                Clipboard.setData(
-                                  ClipboardData(text: row.value),
-                                );
-                                final initialText = (row.value.contains(':') ||
-                                        row.value.contains('='))
-                                    ? row.value.split('·').first.trim()
-                                    : (row.tuningParamIndex != null &&
-                                            row.tuningParamIndex! <
-                                                tuningItems.length
-                                        ? tuningItems[row.tuningParamIndex!]
-                                        : '${row.key}: ${row.value}');
-                                _startStage2InlineEdit(
-                                  'area2_tuning_${node.id}_$rIdx',
-                                  initialText,
-                                );
-                              },
-                              child: Text('${row.propertyLabel} ${row.value} ✎'),
-                            );
-                          },
-                        ),
-                    if (primaryGuardLabel.isNotEmpty && isTaskGuardRelevant)
-                      Text('🛡 Guard: $primaryGuardLabel'),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-
         // ══════════════════════════════════════════════════════════════════════
         // 100% FULL-WIDTH RUNBOOK SHEET:
         //   1. INITIAL SETUP (only when assetSpec.isNewAssetOnTask == true)
-        //   2. STEPS (X/Y) + TARGET: Parent › "Target" + ✦ Copy Task Prompt
-        //   3. Title-Only Expandable Step → Code Accordion (1.1, 1.2, 1.3)
+        //   2. STEPS (X/Y) + TARGET + Hierarchy Summary + Focus/Expand All
+        //   3. Focus-Mode Step → Code Accordion (1.1, 1.2, 1.3)
         // ══════════════════════════════════════════════════════════════════════
         Padding(
           key: ValueKey('area3_script_setup_panel_${node.id}'),
@@ -1379,7 +985,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               initialSetupWidget,
               if (assetSpec.isNewAssetOnTask) const SizedBox(height: 14),
 
-              // ── 2. STEPS (X/Y) + TARGET: Parent › "Target" HEADER BAR ──
+              // ── 2. STEPS (X/Y) + TARGET + COMPACT HIERARCHY HEADER BAR ──
               Wrap(
                 spacing: 8,
                 runSpacing: 6,
@@ -1466,17 +1072,40 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                       ),
+                      if (compactHierarchySummary.isNotEmpty)
+                        Container(
+                          key: ValueKey(
+                            'steps_hierarchy_summary_${node.id}_$selectedTaskIdx',
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF090D15),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                              color: const Color(0xFF1E293B),
+                            ),
+                          ),
+                          child: Text(
+                            'Hierarchy: $compactHierarchySummary',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: weightRegular,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                        ),
                       if (selectedHowTo.subSteps.length > 1)
                         Builder(
                           builder: (context) {
-                            final allCollapsed = List<int>.generate(
+                            final allExpanded = List<int>.generate(
                               selectedHowTo.subSteps.length,
                               (i) => i,
-                            ).every(
-                              (i) => _collapsedSubStepKeys.contains(
-                                '${node.id}_${selectedTaskIdx}_$i',
-                              ),
-                            );
+                            ).every(isSubStepExpanded);
                             return InkWell(
                               key: ValueKey(
                                 'toggle_all_substeps_btn_${node.id}_$selectedTaskIdx',
@@ -1489,10 +1118,18 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       i++) {
                                     final k =
                                         '${node.id}_${selectedTaskIdx}_$i';
-                                    if (allCollapsed) {
-                                      _collapsedSubStepKeys.remove(k);
+                                    if (allExpanded) {
+                                      if (widget.workbench.focusMode &&
+                                          i == activeSubStepIdx) {
+                                        _collapsedSubStepKeys.remove(k);
+                                        _expandedSubStepKeys.add(k);
+                                      } else {
+                                        _expandedSubStepKeys.remove(k);
+                                        _collapsedSubStepKeys.add(k);
+                                      }
                                     } else {
-                                      _collapsedSubStepKeys.add(k);
+                                      _collapsedSubStepKeys.remove(k);
+                                      _expandedSubStepKeys.add(k);
                                     }
                                   }
                                 });
@@ -1510,7 +1147,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                   ),
                                 ),
                                 child: Text(
-                                  allCollapsed ? 'Expand all' : 'Collapse all',
+                                  allExpanded
+                                      ? (widget.workbench.focusMode
+                                          ? '▴ Focus Active'
+                                          : 'Collapse all')
+                                      : '▾ Expand All',
                                   style: GoogleFonts.inter(
                                     fontSize: fontMicro,
                                     fontWeight: weightSemi,
@@ -1648,13 +1289,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         final bool isSubDone = subStep.subtask.completed;
                         final String stepCollapseKey =
                             '${node.id}_${selectedTaskIdx}_$sIdx';
-                        final bool isStepExpanded =
-                            !_collapsedSubStepKeys.contains(stepCollapseKey);
+                        final bool isStepExpanded = isSubStepExpanded(sIdx);
                         final String stepRawCode = subStep.codeFormula.trim();
-                        final bool isStepBpGraph =
-                            stepRawCode.contains('──►') ||
-                                stepRawCode.contains('└──►') ||
-                                stepRawCode.contains('├──►');
                         final List<String> stepCodeLines =
                             stepRawCode.isNotEmpty
                                 ? stepRawCode.split('\n')
@@ -1681,17 +1317,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                     stepRole: subStep.stepRole ?? '',
                                     defaultTarget: activeTargetComp.displayLabel,
                                   );
-                        final bool isEffectiveBpGraph =
-                            isStepBpGraph && effectiveTableLines.isEmpty;
                         final windowCtx = _resolveWindowContextForSubStep(
                           subStep,
-                          isUnrealCpp: effectiveCardUnrealCpp,
                           activeTargetLabel: activeTargetComp.displayLabel,
                         );
                         final prevWindowCtx = sIdx > 0
                             ? _resolveWindowContextForSubStep(
                                 selectedHowTo.subSteps[sIdx - 1],
-                                isUnrealCpp: effectiveCardUnrealCpp,
                                 activeTargetLabel:
                                     activeTargetComp.displayLabel,
                               )
@@ -1767,6 +1399,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           '${node.id}_$selectedTaskIdx'] = sIdx;
                                       _collapsedSubStepKeys
                                           .remove(stepCollapseKey);
+                                      _expandedSubStepKeys.add(stepCollapseKey);
                                     });
                                   },
                                   child: Padding(
@@ -1776,28 +1409,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                     ),
                                     child: Row(
                                       children: [
-                                        // 1x1 compatibility hook for playlist_step_row_ on the active task
-                                        SizedBox(
-                                          width: 1,
-                                          height: 1,
-                                          child: Opacity(
-                                            opacity: 0,
-                                            child: InkWell(
-                                              key: ValueKey(
-                                                'playlist_step_row_${node.id}_${selectedTaskIdx}_$sIdx',
-                                              ),
-                                              onTap: () =>
-                                                  _toggleHowToSubStepCompletion(
-                                                feat,
-                                                states,
-                                                node,
-                                                selectedTaskIdx,
-                                                sIdx,
-                                              ),
-                                              child: const SizedBox.shrink(),
-                                            ),
-                                          ),
-                                        ),
                                         // Step Completion Checkbox
                                         InkWell(
                                           key: ValueKey(
@@ -1908,7 +1519,26 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                                   ),
                                                 ),
                                               ),
-                                              if (stepPathBadgeText
+                                              if (!isStepExpanded) ...[
+                                                const SizedBox(width: 8),
+                                                Expanded(
+                                                  child: Text(
+                                                    '${_summarizeSubStepForCollapsedRow(subStep, rawTableLines: rawPipeTableLines)} · ▾ Re-open',
+                                                    maxLines: 1,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 9.5,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                      color: const Color(
+                                                        0xFF64748B,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ] else if (stepPathBadgeText
                                                   .isNotEmpty) ...[
                                                 const SizedBox(width: 8),
                                                 Flexible(
@@ -2038,11 +1668,15 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           onTap: () {
                                             _rebuild(() {
                                               if (isStepExpanded) {
+                                                _expandedSubStepKeys
+                                                    .remove(stepCollapseKey);
                                                 _collapsedSubStepKeys
                                                     .add(stepCollapseKey);
                                               } else {
                                                 _collapsedSubStepKeys
                                                     .remove(stepCollapseKey);
+                                                _expandedSubStepKeys
+                                                    .add(stepCollapseKey);
                                               }
                                             });
                                           },
@@ -2090,7 +1724,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        // 0. Context-Switch Callout (only when moving to a different UE5 Editor window)
+                                        // 0. Context-Switch Callout (only when moving to a different Godot Dock)
                                         if (isWindowContextSwitch)
                                           Container(
                                             key: ValueKey(
@@ -2114,7 +1748,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               ),
                                             ),
                                             child: Text(
-                                              '↳ Switch to ${windowCtx.icon} ${windowCtx.label}',
+                                              '↳ Switch from ${prevWindowCtx.icon} ${prevWindowCtx.label} to ${windowCtx.icon} ${windowCtx.label}',
                                               style: GoogleFonts.jetBrainsMono(
                                                 fontSize: 10,
                                                 fontWeight: FontWeight.w600,
@@ -2122,7 +1756,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                               ),
                                             ),
                                           ),
-                                        // 1-4. Responsive 2-Column Workbook Spread (Left: DO + Guard + Check | Right: UE5 Panel)
+                                        // 1-4. Responsive 2-Column Workbook Spread (Left: DO + Guard + Check | Right: Godot Panel)
                                         _buildStepDrawerBody(
                                           nodeId: node.id,
                                           selectedTaskIdx: selectedTaskIdx,
@@ -2133,8 +1767,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                                           isDark: isDark,
                                           stepDoInstruction: stepDoInstruction,
                                           stepGuardChipText: stepGuardChipText,
-                                          isEffectiveBpGraph:
-                                              isEffectiveBpGraph,
                                           effectiveTableLines:
                                               effectiveTableLines,
                                           stepRawCode: stepRawCode,
@@ -2184,17 +1816,17 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       return TextSpan(text: '', style: baseStyle);
     }
 
-    // Requirement #5: Multi-token C++ / Script Syntax Highlighting for Code Blocks:
-    // - Comments (//..., #..., /*...*/): #8B949E italic
-    // - Classes/types (FVector, UCollisionProfile, AActor, UStaticMeshComponent, etc.): #79C0FF
-    // - Methods (SetRelativeScale3D, SetCollisionProfileName, or identifier before '('): #D2A8FF
-    // - Numeric/boolean literals (100.0f, false, true, nullptr): #FFA657
+    // Multi-token GDScript / GDExtension C++ Syntax Highlighting for Code Blocks:
+    // - Comments (#..., //..., /*...*/): #8B949E italic
+    // - Annotations & Godot types (@export, Vector2/3, CharacterBody2D/3D, etc.): #79C0FF
+    // - Methods & built-in functions (move_and_slide(), or identifier before '('): #D2A8FF
+    // - Numeric/boolean literals (8.5, false, true, null): #FFA657
     if (isCodeBlock && isDark) {
       final codeSyntaxRegex = RegExp(
         r'(?<comment>//[^\n]*|/\*[\s\S]*?\*/|#[^\n]*)|'
         r'(?<arrow>[└├]?──►)|'
-        r'(?<literal>\b(?:true|false|nullptr|null)\b|(?<![A-Za-z0-9_])-?\d+(?:\.\d+)?f?\b)|'
-        r'(?<type>\b(?:FVector|FRotator|FTransform|FMath|FString|FName|FText|FHitResult|FCollisionQueryParams|UCollisionProfile|UStaticMeshComponent|UBoxComponent|UCapsuleComponent|USphereComponent|USceneComponent|USpringArmComponent|UCameraComponent|UCharacterMovementComponent|UPrimitiveComponent|UAudioComponent|UNiagaraComponent|AActor|ACharacter|APawn|APlayerController|AGameModeBase|UObject|UWorld|GEngine|Super|Vector2|Vector3|CharacterBody2D|CharacterBody3D|RigidBody2D|RigidBody3D|Area2D|Area3D|RayCast2D|RayCast3D|CollisionShape2D|CollisionShape3D|Node2D|Node3D|Line2D|Sprite2D|AnimatedSprite2D|Timer|Rigidbody|Rigidbody2D|MonoBehaviour|GameObject|Transform|BoxCollider|SphereCollider|CapsuleCollider|ConfigurableJoint|Coroutine|WaitForSeconds|Time|Mathf|Physics|Physics2D|Input|KeyCode|SerializeField|UPROPERTY|UFUNCTION|UCLASS|GENERATED_BODY|EditAnywhere|BlueprintReadWrite|BlueprintReadOnly|VisibleAnywhere|Category|void|float|double|int|int32|uint32|bool|auto|const|var|func|extends|Make Transform|Set Actor Transform|Set Collision Profile Name|Add Component|Set Variable|Event BeginPlay|Event Tick|Branch|[UAFE][A-Z][A-Za-z0-9_]+)\b)|'
+        r'(?<literal>\b(?:true|false|nullptr|null|PI|TAU|INF|NAN)\b|(?<![A-Za-z0-9_])-?\d+(?:\.\d+)?f?\b)|'
+        r'(?<type>@[A-Za-z_][A-Za-z0-9_]*|\b(?:Vector2|Vector3|Vector2i|Vector3i|Color|Transform2D|Transform3D|Basis|Quaternion|CharacterBody2D|CharacterBody3D|RigidBody2D|RigidBody3D|StaticBody2D|StaticBody3D|Area2D|Area3D|RayCast2D|RayCast3D|CollisionShape2D|CollisionShape3D|Camera2D|Camera3D|Marker2D|Marker3D|Node2D|Node3D|Node|Control|CanvasLayer|ProgressBar|Label|Button|Line2D|Sprite2D|AnimatedSprite2D|MeshInstance3D|AudioStreamPlayer|AudioStreamPlayer2D|AudioStreamPlayer3D|Timer|Input|InputEvent|Engine|Resource|PackedScene|String|StringName|Array|Dictionary|Callable|Signal|Tween|SceneTree|GDCLASS|ClassDB|void|float|double|int|bool|auto|const|var|func|signal|extends|class_name|self|super|match|await|return|if|elif|else|for|in|while|and|or|not|preload|load)\b)|'
         r'(?<method>\b[A-Za-z_][A-Za-z0-9_]*(?=\s*\())',
       );
 
@@ -2358,7 +1990,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required bool isDark,
     required String stepDoInstruction,
     required String stepGuardChipText,
-    required bool isEffectiveBpGraph,
     required List<String> effectiveTableLines,
     required String stepRawCode,
     required List<String> stepCodeLines,
@@ -2439,7 +2070,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     final Widget? rightVisual = showCode
         ? _buildStepRightVisualPane(
             isDark: isDark,
-            isEffectiveBpGraph: isEffectiveBpGraph,
             effectiveTableLines: effectiveTableLines,
             stepRawCode: stepRawCode,
             stepCodeLines: stepCodeLines,
@@ -2489,7 +2119,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           );
         }
 
-        // Wide Workbook Spread (>= 740px): Left ~38% (DO + Guard + Check) | Right ~62% (UE5 Panel)
+        // Wide Workbook Spread (>= 740px): Left ~38% (DO + Guard + Check) | Right ~62% (Godot Panel)
         return Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2520,6 +2150,92 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         );
       },
     );
+  }
+
+  String _summarizeSubStepForCollapsedRow(
+    TaskHowToSubStep subStep, {
+    required List<String> rawTableLines,
+  }) {
+    if (rawTableLines.length >= 3) {
+      final firstData = rawTableLines
+          .skip(2)
+          .first
+          .split('|')
+          .map((c) => c.trim())
+          .where((c) => c.isNotEmpty)
+          .toList();
+      if (firstData.length >= 2) {
+        return firstData.take(3).join(' · ');
+      }
+    }
+    final formula = subStep.codeFormula.trim().split('\n').first.trim();
+    if (formula.isNotEmpty) {
+      final cleaned = formula.replaceAll('[', '').replaceAll(']', '');
+      return cleaned.length > 68 ? '${cleaned.substring(0, 65)}...' : cleaned;
+    }
+    final instr = subStep.instruction.trim();
+    if (instr.length > 68) return '${instr.substring(0, 65)}...';
+    return instr;
+  }
+
+  Set<String> _extractHoverTokensFromDoText(String text) {
+    const stopWords = <String>{
+      'the',
+      'and',
+      'for',
+      'into',
+      'from',
+      'with',
+      'that',
+      'this',
+      'under',
+      'then',
+      'set',
+      'add',
+      'get',
+      'wire',
+      'open',
+      'select',
+      'click',
+      'drag',
+      'rename',
+      'inspector',
+      'dock',
+      'scene',
+      'script',
+      'variables',
+      'default',
+      'export',
+      'signal',
+      'signals',
+      'property',
+      'false',
+      'true',
+      'float',
+      'bool',
+      'vector',
+      'vector2',
+      'vector3',
+      'node',
+    };
+    final tokens = <String>{};
+    for (final m in RegExp(r'\b[A-Za-z_][A-Za-z0-9_]{2,}\b').allMatches(text)) {
+      final t = m.group(0)!.toLowerCase();
+      if (!stopWords.contains(t)) tokens.add(t);
+    }
+    for (final m in RegExp(r'\b(?:[A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b')
+        .allMatches(text)) {
+      final phrase = m.group(0)!.trim().toLowerCase();
+      if (!stopWords.contains(phrase)) tokens.add(phrase);
+    }
+    for (final m
+        in RegExp(r'\b[XYZ]\s*=\s*(-?\d+(?:\.\d+)?)\b').allMatches(text)) {
+      final numVal = m.group(1);
+      if (numVal != null && numVal.isNotEmpty && numVal != '0') {
+        tokens.add(numVal);
+      }
+    }
+    return tokens;
   }
 
   Widget _buildVerticalDoList({
@@ -2558,51 +2274,97 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             ),
           ),
           for (int i = 0; i < items.length; i++)
-            Padding(
-              padding: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 7),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 18,
-                    height: 18,
-                    margin: const EdgeInsets.only(top: 1.5, right: 8),
-                    alignment: Alignment.center,
+            Builder(
+              builder: (context) {
+                final rowKey = '${nodeId}_${selectedTaskIdx}_${sIdx}_$i';
+                final isRowHovered = _hoveredDoRowKey == rowKey;
+                return MouseRegion(
+                  key: ValueKey('step_do_item_hover_$rowKey'),
+                  onEnter: (_) {
+                    final tokens = _extractHoverTokensFromDoText(items[i]);
+                    if (tokens.isEmpty) return;
+                    _rebuild(() {
+                      _hoveredDoRowKey = rowKey;
+                      _hoveredDoTokens = tokens;
+                    });
+                  },
+                  onExit: (_) {
+                    if (_hoveredDoRowKey == rowKey) {
+                      _rebuild(() {
+                        _hoveredDoRowKey = null;
+                        _hoveredDoTokens = const {};
+                      });
+                    }
+                  },
+                  child: Container(
+                    margin:
+                        EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0E243D),
-                      borderRadius: BorderRadius.circular(4),
+                      color: isRowHovered
+                          ? const Color(0xFF0EA5E9).withValues(alpha: 0.12)
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(5),
                       border: Border.all(
-                        color: const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                        color: isRowHovered
+                            ? const Color(0xFF38BDF8).withValues(alpha: 0.4)
+                            : Colors.transparent,
                       ),
                     ),
-                    child: Text(
-                      '${i + 1}',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10,
-                        fontWeight: weightBold,
-                        color: const Color(0xFF7DD3FC),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Text.rich(
-                      _buildSemanticStepSpan(
-                        text: items[i],
-                        baseStyle: GoogleFonts.inter(
-                          fontSize: fontBody,
-                          fontWeight: weightRegular,
-                          height: 1.45,
-                          color: const Color(0xFFCBD5E1),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 18,
+                          height: 18,
+                          margin: const EdgeInsets.only(top: 1.5, right: 8),
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isRowHovered
+                                ? const Color(0xFF0284C7)
+                                : const Color(0xFF0E243D),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: const Color(0xFF38BDF8)
+                                  .withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            '${i + 1}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: weightBold,
+                              color: isRowHovered
+                                  ? Colors.white
+                                  : const Color(0xFF7DD3FC),
+                            ),
+                          ),
                         ),
-                        tuningItems: tuningItems,
-                        edgeItems: edgeItems,
-                        isCodeBlock: false,
-                      ),
-                      softWrap: true,
+                        Expanded(
+                          child: Text.rich(
+                            _buildSemanticStepSpan(
+                              text: items[i],
+                              baseStyle: GoogleFonts.inter(
+                                fontSize: fontBody,
+                                fontWeight: weightRegular,
+                                height: 1.45,
+                                color: const Color(0xFFCBD5E1),
+                              ),
+                              tuningItems: tuningItems,
+                              edgeItems: edgeItems,
+                              isCodeBlock: false,
+                            ),
+                            softWrap: true,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
         ],
       ),
@@ -2665,7 +2427,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
   Widget? _buildStepRightVisualPane({
     required bool isDark,
-    required bool isEffectiveBpGraph,
     required List<String> effectiveTableLines,
     required String stepRawCode,
     required List<String> stepCodeLines,
@@ -2680,14 +2441,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required FontWeight weightRegular,
     required Color textPrimary,
   }) {
-    if (isEffectiveBpGraph && stepRawCode.isNotEmpty) {
-      final parsedGraph = UeBlueprintGraphCanvas.parseFromFormula(stepRawCode);
-      if (parsedGraph.nodes.isEmpty) return null;
-      return UeBlueprintGraphCanvas(
-        nodes: parsedGraph.nodes,
-        wires: parsedGraph.wires,
-      );
-    }
     if (effectiveTableLines.length >= 2) {
       return _buildLevelPlacementTable(
         effectiveTableLines,
@@ -2695,8 +2448,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         stepPath: stepPathBadgeText,
         assetName: assetName,
         parentClassLabel: parentClassLabel,
-        isLevelOutliner: windowCtx.label == 'LEVEL EDITOR',
-        isInputMapping: windowCtx.label == 'INPUT MAPPING',
+        isLevelScene: windowCtx.label == 'MAIN SCENE (.tscn)',
+        isInputMap: windowCtx.label == 'INPUT MAP',
       );
     }
     if (stepCodeLines.isNotEmpty) {
@@ -2726,6 +2479,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required FontWeight weightRegular,
     required Color textPrimary,
   }) {
+    final signalLines =
+        stepCodeLines.where((l) => l.contains('──►')).toList();
     return Container(
       decoration: BoxDecoration(
         color: const Color(0xFF06090F),
@@ -2768,6 +2523,89 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               ],
             ),
           ),
+          if (signalLines.isNotEmpty)
+            Container(
+              key: const ValueKey('godot_signal_flow_strip'),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF08121E),
+                border: Border(
+                  bottom: BorderSide(
+                    color: const Color(0xFF22D3EE).withValues(alpha: 0.22),
+                  ),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final sigLine in signalLines)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          for (int p = 0;
+                              p <
+                                  sigLine
+                                      .split(RegExp(r'\s*(?:[└├]──►|──►)\s*'))
+                                      .length;
+                              p++) ...[
+                            if (p > 0)
+                              const Text(
+                                '──►',
+                                style: TextStyle(
+                                  fontFamily: 'JetBrainsMono',
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFF22D3EE),
+                                ),
+                              ),
+                            Builder(
+                              builder: (context) {
+                                final rawSeg = sigLine
+                                    .split(RegExp(r'\s*(?:[└├]──►|──►)\s*'))[p]
+                                    .trim();
+                                final isSource = p == 0;
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 7,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSource
+                                        ? const Color(0xFF0F172A)
+                                        : const Color(0xFF062E24),
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                      color: isSource
+                                          ? const Color(0xFF38BDF8)
+                                              .withValues(alpha: 0.45)
+                                          : const Color(0xFF34D399)
+                                              .withValues(alpha: 0.45),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    rawSeg,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: fontMicro,
+                                      fontWeight: FontWeight.w600,
+                                      color: isSource
+                                          ? const Color(0xFF7DD3FC)
+                                          : const Color(0xFF6EE7B7),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Column(
@@ -2780,7 +2618,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       final isAddedDiffLine = rawCodeLine.startsWith('+') &&
                           !rawCodeLine.startsWith('++');
                       final normalizedLine = isAddedDiffLine
-                          ? rawCodeLine.substring(1)
+                          ? (rawCodeLine.startsWith('+ ')
+                              ? rawCodeLine.substring(2)
+                              : rawCodeLine.substring(1))
                           : rawCodeLine;
                       final prefixMatch = RegExp(
                         r'^(\s*(?:[└├]──►\s+|──►\s+|•\s+)?)',
@@ -2931,13 +2771,13 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
   bool _hasRuntimeGraphNodes(String rawCode) {
     return RegExp(
-      r'\b(?:event|beginplay|tick|ia_|enhancedinput|inputaction|branch|delay|timer|timeline|oncomponent|onactor|spawnactor|destroy|apply\s*damage|take\s*damage|overlap|hit|pressed|released|triggered|print|cast\s+to|get\s+player|line\s*trace|sphere\s*trace|custom\s*event|return|for\s*each|foreach|switch\s+on|flip\s*flop|do\s+once|gate|sequence|add\s+movement|add\s+controller|launch\s*character|play\s*montage|play\s*sound|set\s*timer|bind)\b',
+      r'\b(?:_ready|_physics_process|_process|_input|_unhandled_input|body_entered|area_entered|timeout|pressed|button_down|animation_finished|move_and_slide|queue_free|is_on_floor|is_action_pressed|is_action_just_pressed|get_vector|get_axis|emit|connect|await|instantiate|queue_free|push_warning|look_at)\b',
       caseSensitive: false,
     ).hasMatch(rawCode);
   }
 
-  /// Safety guard for `editor_setup` or passive component setup steps that were
-  /// serialized as `[Comp] ──► [Set Prop (...)]` chains instead of a Markdown table.
+  /// Safety guard for `editor_setup` or passive Inspector setup steps that were
+  /// serialized as `[Node] ──► [Set Prop (...)]` chains instead of a Markdown table.
   List<String> _tryConvertConfigGraphToTableLines(
     String rawCode, {
     required String stepDo,
@@ -2959,7 +2799,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           caseSensitive: false,
         ).hasMatch(stepDo.trim()) &&
         !RegExp(
-          r'\b(?:wire|graph|event|on press|when pressed|on overlap|on hit)\b',
+          r'\b(?:signal|connect|emit|when pressed|on overlap|on body entered)\b',
           caseSensitive: false,
         ).hasMatch(stepDo);
 
@@ -2973,11 +2813,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     if (segments.isEmpty) return const [];
 
     final tableRows = <String>[
-      '| Component / Actor | Property | Value |',
+      '| Node / Category | Property | Value |',
       '| --- | --- | --- |',
     ];
     String currentTarget =
-        defaultTarget.trim().isNotEmpty ? defaultTarget.trim() : 'Actor Defaults';
+        defaultTarget.trim().isNotEmpty ? defaultTarget.trim() : 'Root Node';
 
     for (final rawSeg in segments) {
       var seg = rawSeg;
@@ -3042,7 +2882,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
   ({String icon, String label, Color accent}) _resolveWindowContextForSubStep(
     TaskHowToSubStep subStep, {
-    required bool isUnrealCpp,
     required String activeTargetLabel,
   }) {
     final rawCode = subStep.codeFormula.trim();
@@ -3050,7 +2889,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     final pipeLines = lines
         .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
         .toList();
-    final isBpGraph = rawCode.contains('──►') ||
+    final hasSignalGraph = rawCode.contains('──►') ||
         rawCode.contains('└──►') ||
         rawCode.contains('├──►');
     final tableLines = pipeLines.length >= 2
@@ -3061,15 +2900,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             stepRole: subStep.stepRole ?? '',
             defaultTarget: activeTargetLabel,
           );
-    final isEffectiveGraph = isBpGraph && tableLines.isEmpty;
+    final isEffectiveSignalGraph = hasSignalGraph && tableLines.isEmpty;
     return _resolveWindowContextBadge(
       stepPath: subStep.stepPath.trim(),
       instruction: subStep.instruction.trim(),
       codeFormula: rawCode,
-      isUnrealCpp: isUnrealCpp,
       stepRole: subStep.stepRole ?? '',
-      isRenderedAsDetailsTable: tableLines.length >= 2,
-      isRenderedAsBpGraph: isEffectiveGraph,
+      isRenderedAsInspectorTable: tableLines.length >= 2,
+      isRenderedAsSignalGraph: isEffectiveSignalGraph,
     );
   }
 
@@ -3077,21 +2915,35 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required String stepPath,
     required String instruction,
     required String codeFormula,
-    required bool isUnrealCpp,
     String stepRole = '',
-    bool isRenderedAsDetailsTable = false,
-    bool isRenderedAsBpGraph = false,
+    bool isRenderedAsInspectorTable = false,
+    bool isRenderedAsSignalGraph = false,
   }) {
     final lowerPath = stepPath.toLowerCase();
     final lowerInstr = instruction.toLowerCase();
     final lowerCode = codeFormula.toLowerCase();
-    if (lowerPath.contains('world settings') ||
-        lowerInstr.contains('world settings') ||
-        lowerInstr.contains('gamemode override')) {
+    if (lowerPath.contains('project settings') ||
+        lowerInstr.contains('project settings') ||
+        lowerPath.contains('autoload') ||
+        lowerInstr.contains('autoload')) {
       return (
         icon: '⚙',
-        label: 'WORLD SETTINGS',
+        label: 'PROJECT SETTINGS',
         accent: const Color(0xFFF59E0B),
+      );
+    }
+    if (!isRenderedAsSignalGraph &&
+        (lowerPath.contains('input map') ||
+            lowerInstr.contains('input map') ||
+            lowerCode.contains('input map') ||
+            (stepRole == 'editor_setup' &&
+                (lowerInstr.contains('add action') ||
+                    lowerInstr.contains('bind key') ||
+                    lowerInstr.contains('inputmap'))))) {
+      return (
+        icon: '🎮',
+        label: 'INPUT MAP',
+        accent: const Color(0xFFA78BFA),
       );
     }
     final isPipeTable = codeFormula
@@ -3099,81 +2951,77 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
             .length >=
         2;
-    final bool isBpOrDetailsSetup = lowerPath.contains('bp_') ||
-        lowerPath.contains('components') ||
-        lowerPath.contains('details') ||
-        lowerPath.contains('imc_') ||
-        lowerPath.contains('input mapping') ||
-        lowerCode.contains('firstperson') ||
-        lowerCode.contains('charmove') ||
-        lowerCode.contains('capsule') ||
+    final bool isInspectorNodeSetup = lowerPath.contains('inspector') ||
+        lowerPath.contains('scene dock') ||
+        lowerCode.contains('collisionshape') ||
         lowerCode.contains('camera') ||
-        lowerCode.contains('pawn control');
-    if (lowerPath.contains('outliner') ||
-        lowerPath.contains('level editor') ||
-        lowerPath.contains('place actors') ||
-        lowerInstr.contains('playerstart') ||
-        (lowerPath.contains('viewport') &&
-            !lowerPath.contains('bp_') &&
-            !lowerPath.contains('blueprint') &&
-            !lowerPath.contains('components') &&
-            !lowerPath.contains('details')) ||
-        (isPipeTable && !isBpOrDetailsSetup)) {
+        lowerCode.contains('characterbody');
+    if (lowerPath.contains('main scene') ||
+        lowerPath.contains('level scene') ||
+        lowerPath.contains('instantiate child scene') ||
+        lowerInstr.contains('spawnpoint') ||
+        lowerInstr.contains('instantiate child scene') ||
+        (lowerPath.contains('scene tree') &&
+            (lowerInstr.contains('instantiate') ||
+                lowerInstr.contains('main'))) ||
+        (isPipeTable && !isInspectorNodeSetup)) {
       return (
-        icon: '🌍',
-        label: 'LEVEL EDITOR',
+        icon: '🗺',
+        label: 'MAIN SCENE (.tscn)',
         accent: const Color(0xFF10B981),
-      );
-    }
-    if (!isRenderedAsBpGraph &&
-        (lowerPath.contains('imc_') ||
-            lowerPath.contains('input mapping') ||
-            (stepRole == 'editor_setup' &&
-                (lowerInstr.contains('imc_') ||
-                    lowerInstr.contains('ia_') ||
-                    lowerInstr.contains('mapping context'))))) {
-      return (
-        icon: '🎮',
-        label: 'INPUT MAPPING',
-        accent: const Color(0xFFA78BFA),
       );
     }
     final bool looksLikeCppFile = lowerPath.endsWith('.h') ||
         lowerPath.endsWith('.cpp') ||
-        lowerCode.contains('uproperty') ||
-        lowerCode.contains('createdefaultsubobject');
-    if (isRenderedAsDetailsTable ||
-        (stepRole == 'editor_setup' && !looksLikeCppFile) ||
-        lowerPath.contains('details') ||
-        lowerPath.contains('components')) {
+        lowerCode.contains('gdclass(') ||
+        lowerCode.contains('classdb::');
+    final bool looksLikeGdScript = lowerPath.endsWith('.gd') ||
+        lowerCode.contains('func ') ||
+        lowerCode.contains('extends ') ||
+        lowerCode.contains('@export');
+    if (isRenderedAsInspectorTable ||
+        (stepRole == 'editor_setup' && !looksLikeCppFile && !looksLikeGdScript) ||
+        lowerPath.contains('inspector') ||
+        lowerPath.contains('scene dock') ||
+        lowerPath.contains('scene tree') ||
+        lowerPath.contains('add child node')) {
       return (
         icon: '📐',
-        label: 'DETAILS PANEL',
+        label: 'SCENE TREE & INSPECTOR',
         accent: const Color(0xFF38BDF8),
       );
     }
-    if (isUnrealCpp ||
-        lowerPath.contains('.h') ||
-        lowerPath.contains('.cpp') ||
-        lowerCode.contains('uproperty') ||
-        lowerCode.contains('createdefaultsubobject') ||
-        lowerCode.contains('->')) {
+    if (isRenderedAsSignalGraph ||
+        lowerPath.contains('node dock') ||
+        lowerPath.contains('signals') ||
+        (lowerInstr.contains('connect') && lowerInstr.contains('signal'))) {
       return (
-        icon: '📜',
-        label: 'C++ (.h / .cpp)',
+        icon: '⑂',
+        label: 'NODE SIGNALS',
+        accent: const Color(0xFF22D3EE),
+      );
+    }
+    if (stepRole == 'wire_and_verify' &&
+        (lowerInstr.contains('f6') ||
+            lowerInstr.contains('f5') ||
+            lowerInstr.contains('run scene') ||
+            lowerPath.contains('run scene'))) {
+      return (
+        icon: '▶',
+        label: 'RUN SCENE (F6)',
+        accent: const Color(0xFF34D399),
+      );
+    }
+    if (looksLikeCppFile) {
+      return (
+        icon: '⚡',
+        label: 'GDEXTENSION C++',
         accent: const Color(0xFFA78BFA),
       );
     }
-    if (isRenderedAsBpGraph) {
-      return (
-        icon: '⑂',
-        label: 'EVENT GRAPH',
-        accent: const Color(0xFF38BDF8),
-      );
-    }
     return (
-      icon: '📘',
-      label: 'BLUEPRINT EDITOR',
+      icon: '📜',
+      label: 'GDSCRIPT (.gd)',
       accent: const Color(0xFF38BDF8),
     );
   }
@@ -3184,17 +3032,18 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     String stepPath = '',
     String assetName = '',
     String parentClassLabel = '',
-    bool isLevelOutliner = false,
-    bool isInputMapping = false,
+    bool isLevelScene = false,
+    bool isInputMap = false,
   }) {
-    return UeDetailsInspectorPanel(
+    return GodotInspectorPanel(
       tableLines: lines,
       isDark: isDark,
       stepPath: stepPath,
       assetName: assetName,
       parentClassLabel: parentClassLabel,
-      isLevelOutliner: isLevelOutliner,
-      isInputMapping: isInputMapping,
+      isLevelScene: isLevelScene,
+      isInputMap: isInputMap,
+      highlightedTokens: _hoveredDoTokens,
     );
   }
 }

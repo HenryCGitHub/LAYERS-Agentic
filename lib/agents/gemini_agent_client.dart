@@ -5,7 +5,7 @@ import '../constants/text_style_guide.dart';
 
 /// Lightweight, resilient Gemini JSON client for LAYERS-Agentic.
 /// Supports:
-/// - Explicit live model pinning to `gemini-3.8-flash` with Flash-only `gemini-flash-latest` failover (never Argon/Pro).
+/// - Explicit live model pinning to `gemini-4-hydrogen` with Flash-only `gemini-flash-latest` failover (never Argon/Pro).
 /// - Header-only `x-goog-api-key` auth (never exposing API keys in DevTools URLs).
 /// - Exponential backoff + jitter retries on transient `429` / `503` / `5xx` responses.
 class GeminiAgentClient {
@@ -35,9 +35,31 @@ class GeminiAgentClient {
   static const Duration _standardModelTimeout = Duration(seconds: 60);
   static const Duration _metadataTimeout = Duration(seconds: 6);
 
-  static bool _modelMetadataChecked = false;
-  static int? _cachedModelOutputTokenLimit;
-  static bool _cachedSupportsThinkingLevel = true;
+  static final Set<String> _checkedModels = <String>{};
+  static final Map<String, int> _modelOutputTokenLimits = <String, int>{};
+  static final Map<String, bool> _modelSupportsThinkingLevel =
+      <String, bool>{};
+
+  /// Resets cached per-model capability metadata and resolved model status (intended for unit tests).
+  static void resetCapabilityCacheForTest() {
+    _checkedModels.clear();
+    _modelOutputTokenLimits.clear();
+    _modelSupportsThinkingLevel.clear();
+    lastResolvedModel = null;
+    lastModelVersion = null;
+    lastErrorStatus = null;
+  }
+
+  /// True for Gemini 4.x endpoints (`gemini-4-hydrogen`, etc.) where `minimal`/`none`
+  /// thinking levels and sampling overrides (`temperature`) are deprecated/rejected.
+  static bool isGemini4Model(String model) =>
+      model.trim().toLowerCase().startsWith('gemini-4');
+
+  /// True for models that deprecate/reject `temperature` overrides in `generationConfig`.
+  static bool omitsSamplingParameters(String model) {
+    final lower = model.trim().toLowerCase();
+    return lower.startsWith('gemini-4') || lower.startsWith('gemini-3.8');
+  }
 
   /// Shared compact style rules injected across Stage 1 & Stage 2 prompts (sourced from `LayersTextStyleGuide`).
   static const String compactStyleRules =
@@ -52,9 +74,9 @@ class GeminiAgentClient {
 
   /// Pricing rates for Gemini 4 Hydrogen (`gemini-4-hydrogen`):
   /// $1.50 per 1 million input tokens.
-  /// $3.75 per 1 million output tokens (includes candidate text and thinking/reasoning tokens).
+  /// $7.50 per 1 million output tokens (includes candidate text and thinking/reasoning tokens).
   static const double flashInputCostPerMillion = 1.50;
-  static const double flashOutputCostPerMillion = 3.75;
+  static const double flashOutputCostPerMillion = 7.50;
 
   /// Accumulative token counters and estimated cost across all Gemini calls in the session.
   static int totalInputTokens = 0;
@@ -264,25 +286,35 @@ class GeminiAgentClient {
     return canUseAuthenticatedProxy;
   }
 
-  static Future<void> _ensureModelCapabilitiesLoaded(
-    String model,
-    String key,
-  ) async {
-    if (_modelMetadataChecked || testHttpPost != null) return;
-    _modelMetadataChecked = true;
+  static Future<void> _ensureModelCapabilitiesLoaded({
+    required String model,
+    required String apiKey,
+    required bool useProxy,
+    String? proxyBearerToken,
+  }) async {
+    if (_checkedModels.contains(model) || testHttpPost != null) return;
+    _checkedModels.add(model);
     try {
-      final metaUri = Uri.parse(
-        'https://generativelanguage.googleapis.com/v1beta/models/$model',
-      );
-      final res = await http.get(
-        metaUri,
-        headers: <String, String>{'x-goog-api-key': key},
-      ).timeout(_metadataTimeout);
+      final Uri metaUri;
+      final Map<String, String> headers;
+      if (useProxy) {
+        if (proxyBearerToken == null || proxyBearerToken.trim().isEmpty) {
+          return;
+        }
+        metaUri = Uri.parse('$effectiveProxyBaseUrl/v1beta/models/$model');
+        headers = _buildProxyHeaders(proxyBearerToken);
+      } else {
+        metaUri = Uri.parse(
+          'https://generativelanguage.googleapis.com/v1beta/models/$model',
+        );
+        headers = <String, String>{'x-goog-api-key': apiKey};
+      }
+      final res = await http.get(metaUri, headers: headers).timeout(_metadataTimeout);
       if (res.statusCode == 200) {
         final meta = jsonDecode(res.body) as Map<String, dynamic>;
         final outLimit = meta['outputTokenLimit'];
         if (outLimit is int && outLimit > 0) {
-          _cachedModelOutputTokenLimit = outLimit;
+          _modelOutputTokenLimits[model] = outLimit;
         }
         final version = (meta['version'] ?? '').toString().toLowerCase();
         final displayName =
@@ -296,7 +328,7 @@ class GeminiAgentClient {
             displayName.contains(' 4') ||
             description.contains('gemini 3') ||
             description.contains('gemini 4')) {
-          _cachedSupportsThinkingLevel = true;
+          _modelSupportsThinkingLevel[model] = true;
         }
       }
     } catch (_) {
@@ -304,24 +336,58 @@ class GeminiAgentClient {
     }
   }
 
+  /// Builds native `thinkingConfig` for `model`, preserving `LOW`/`MEDIUM`/`HIGH`/`XHIGH`
+  /// and clamping unsupported `MINIMAL`/`NONE` values on Gemini 4 models to `LOW`.
   static Map<String, dynamic> buildNativeThinkingConfig({
     required String normalizedThinking,
     required bool useThinkingLevelEnum,
+    String model = pinnedLiveFlashModel,
   }) {
     final upper = normalizedThinking.trim().toUpperCase();
+    final isG4 = isGemini4Model(model);
     if (useThinkingLevelEnum) {
-      return <String, dynamic>{
-        'thinkingLevel':
-            (upper == 'NONE' || upper == 'MINIMAL') ? upper : 'LOW',
+      final String level = switch (upper) {
+        'XHIGH' => isG4 ? 'XHIGH' : 'HIGH',
+        'HIGH' || 'MEDIUM' || 'LOW' => upper,
+        'MINIMAL' => isG4 ? 'LOW' : 'MINIMAL',
+        'NONE' => isG4 ? 'LOW' : 'MINIMAL',
+        _ => 'LOW',
       };
+      return <String, dynamic>{'thinkingLevel': level};
     }
     final int budget = switch (upper) {
-      'NONE' || 'MINIMAL' => 0,
+      'NONE' || 'MINIMAL' => isG4 ? 256 : 0,
+      'LOW' => 256,
+      'MEDIUM' => 1024,
+      'HIGH' || 'XHIGH' => 4096,
       _ => 256,
     };
     return <String, dynamic>{
       'thinkingBudget': budget,
     };
+  }
+
+  static String _extractErrorMessage(String responseBody) {
+    try {
+      final decoded = jsonDecode(responseBody);
+      if (decoded is Map) {
+        final err = decoded['error'];
+        if (err is Map && err['message'] != null) {
+          return err['message'].toString().trim();
+        }
+        if (decoded['message'] != null) {
+          return decoded['message'].toString().trim();
+        }
+      }
+    } catch (_) {}
+    return '';
+  }
+
+  static bool _isProxyModelPolicyBlock(int statusCode, String errMsg) {
+    if (statusCode != 403) return false;
+    final lower = errMsg.toLowerCase();
+    return lower.contains('blocked by layers') ||
+        (lower.contains('model') && lower.contains('blocked'));
   }
 
   static void _recordUsageFromBody(Map<String, dynamic> body) {
@@ -426,14 +492,18 @@ class GeminiAgentClient {
   static Future<Map<String, dynamic>?> generateJson({
     required String prompt,
     required String apiKey,
-    String preferredModel = 'gemini-flash-latest',
+    String preferredModel = pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
     double temperature = 0.5,
     List<Map<String, dynamic>>? functionDeclarations,
     String functionCallingMode = 'ANY',
     Map<String, dynamic>? responseSchema,
   }) async {
-    const resolvedModel = 'gemini-flash-latest';
+    final trimmedPreferred = preferredModel.trim();
+    final List<String> modelsToTry = trimmedPreferred == fallbackFlashModel
+        ? const <String>[fallbackFlashModel, pinnedLiveFlashModel]
+        : const <String>[pinnedLiveFlashModel, fallbackFlashModel];
+    final resolvedModel = modelsToTry.first;
     if (testMockResponder != null) {
       final mockRes = await testMockResponder!(prompt, resolvedModel);
       if (mockRes != null &&
@@ -459,11 +529,8 @@ class GeminiAgentClient {
         lastErrorStatus = 'Sign in with Google required';
         return null;
       }
-    } else {
-      await _ensureModelCapabilitiesLoaded(pinnedLiveFlashModel, key);
     }
 
-    const modelsToTry = <String>[pinnedLiveFlashModel, 'gemini-flash-latest'];
     final String baseApiRoot = useProxy
         ? effectiveProxyBaseUrl
         : 'https://generativelanguage.googleapis.com';
@@ -483,9 +550,16 @@ class GeminiAgentClient {
     ];
 
     int? lastNon200Status;
+    String? lastPolicyErrorMessage;
     bool refreshedProxyTokenOnce = false;
 
     for (final model in modelsToTry) {
+      await _ensureModelCapabilitiesLoaded(
+        model: model,
+        apiKey: key,
+        useProxy: useProxy,
+        proxyBearerToken: proxyBearerToken,
+      );
       final uri = Uri.parse(
         '$baseApiRoot/v1beta/models/$model:generateContent',
       );
@@ -493,12 +567,13 @@ class GeminiAgentClient {
       final timeoutDuration =
           isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
       int? modelLastStatus;
+      final cachedOutLimit = _modelOutputTokenLimits[model];
+      var supportsThinkingLevel = _modelSupportsThinkingLevel[model] ?? true;
 
       try {
         final genConfig = <String, dynamic>{
-          'temperature': temperature,
-          if (_cachedModelOutputTokenLimit != null)
-            'maxOutputTokens': _cachedModelOutputTokenLimit,
+          if (!omitsSamplingParameters(model)) 'temperature': temperature,
+          if (cachedOutLimit != null) 'maxOutputTokens': cachedOutLimit,
           if (!hasTools) 'responseMimeType': 'application/json',
           if (!hasTools && responseSchema != null)
             'responseSchema': responseSchema,
@@ -506,7 +581,8 @@ class GeminiAgentClient {
         if (normalizedThinking.isNotEmpty) {
           genConfig['thinkingConfig'] = buildNativeThinkingConfig(
             normalizedThinking: normalizedThinking,
-            useThinkingLevelEnum: _cachedSupportsThinkingLevel,
+            useThinkingLevelEnum: supportsThinkingLevel,
+            model: model,
           );
         }
 
@@ -549,20 +625,41 @@ class GeminiAgentClient {
           }
         }
 
-        // If `gemini-flash-latest` alias upgraded on the backend and prefers the alternate
-        // native thinkingConfig schema, flip and retry automatically.
-        if (response.statusCode == 400 && normalizedThinking.isNotEmpty) {
-          _cachedSupportsThinkingLevel = !_cachedSupportsThinkingLevel;
-          genConfig['thinkingConfig'] = buildNativeThinkingConfig(
-            normalizedThinking: normalizedThinking,
-            useThinkingLevelEnum: _cachedSupportsThinkingLevel,
-          );
-          response = await _postWithTransientRetry(
-            uri: uri,
-            headers: requestHeaders,
-            body: jsonEncode(requestPayload),
-            timeoutDuration: timeoutDuration,
-          );
+        // Recover selectively on 400: strip rejected sampling params OR toggle thinking schema
+        // per model without poisoning unrelated models' capability cache.
+        if (response.statusCode == 400) {
+          final errLower = _extractErrorMessage(response.body).toLowerCase();
+          final rejectedSampling = errLower.contains('temperature') ||
+              errLower.contains('top_p') ||
+              errLower.contains('top_k');
+          final rejectedThinking = errLower.contains('thinking') ||
+              (!rejectedSampling &&
+                  !errLower.contains('schema') &&
+                  !errLower.contains('tool') &&
+                  normalizedThinking.isNotEmpty);
+          bool shouldRetry400 = false;
+          if (rejectedSampling && genConfig.containsKey('temperature')) {
+            genConfig.remove('temperature');
+            shouldRetry400 = true;
+          }
+          if (rejectedThinking && normalizedThinking.isNotEmpty) {
+            supportsThinkingLevel = !supportsThinkingLevel;
+            _modelSupportsThinkingLevel[model] = supportsThinkingLevel;
+            genConfig['thinkingConfig'] = buildNativeThinkingConfig(
+              normalizedThinking: normalizedThinking,
+              useThinkingLevelEnum: supportsThinkingLevel,
+              model: model,
+            );
+            shouldRetry400 = true;
+          }
+          if (shouldRetry400) {
+            response = await _postWithTransientRetry(
+              uri: uri,
+              headers: requestHeaders,
+              body: jsonEncode(requestPayload),
+              timeoutDuration: timeoutDuration,
+            );
+          }
         }
 
         modelLastStatus = response.statusCode;
@@ -578,13 +675,22 @@ class GeminiAgentClient {
           } catch (_) {}
           final parsed = _parseCandidateResponseJson(response.body);
           if (parsed != null) return parsed;
-        } else if (response.statusCode == 401 ||
-            response.statusCode == 402 ||
-            response.statusCode == 403) {
-          // Fail fast on auth/billing errors instead of retrying across models
-          lastErrorStatus = 'HTTP ${response.statusCode}';
-          return null;
         } else {
+          final errMsg = _extractErrorMessage(response.body);
+          if (_isProxyModelPolicyBlock(response.statusCode, errMsg)) {
+            lastNon200Status = 403;
+            lastPolicyErrorMessage = errMsg;
+            continue;
+          }
+          if (response.statusCode == 401 ||
+              response.statusCode == 402 ||
+              response.statusCode == 403) {
+            // Fail fast on auth/billing/invite errors instead of retrying across models
+            lastErrorStatus = errMsg.isNotEmpty
+                ? 'HTTP ${response.statusCode}: $errMsg'
+                : 'HTTP ${response.statusCode}';
+            return null;
+          }
           lastNon200Status = response.statusCode;
         }
       } catch (_) {
@@ -602,15 +708,15 @@ class GeminiAgentClient {
                   ? Map<String, dynamic>.from(rawToolParams)
                   : null);
           final fallbackGenConfig = <String, dynamic>{
-            'temperature': temperature,
-            if (_cachedModelOutputTokenLimit != null)
-              'maxOutputTokens': _cachedModelOutputTokenLimit,
+            if (!omitsSamplingParameters(model)) 'temperature': temperature,
+            if (cachedOutLimit != null) 'maxOutputTokens': cachedOutLimit,
             'responseMimeType': 'application/json',
             if (effectiveFallbackSchema != null)
               'responseSchema': effectiveFallbackSchema,
             'thinkingConfig': buildNativeThinkingConfig(
               normalizedThinking: 'LOW',
-              useThinkingLevelEnum: _cachedSupportsThinkingLevel,
+              useThinkingLevelEnum: supportsThinkingLevel,
+              model: model,
             ),
           };
           final fallbackPayload = <String, dynamic>{
@@ -625,14 +731,31 @@ class GeminiAgentClient {
           );
           if (fallbackRes.statusCode == 200) {
             lastErrorStatus = null;
+            lastResolvedModel = model;
+            try {
+              final decoded = jsonDecode(fallbackRes.body);
+              if (decoded is Map<String, dynamic>) {
+                final mv = (decoded['modelVersion'] ?? '').toString().trim();
+                if (mv.isNotEmpty) lastModelVersion = mv;
+              }
+            } catch (_) {}
             final parsed = _parseCandidateResponseJson(fallbackRes.body);
             if (parsed != null) return parsed;
-          } else if (fallbackRes.statusCode == 401 ||
-              fallbackRes.statusCode == 402 ||
-              fallbackRes.statusCode == 403) {
-            lastErrorStatus = 'HTTP ${fallbackRes.statusCode}';
-            return null;
           } else {
+            final errMsg = _extractErrorMessage(fallbackRes.body);
+            if (_isProxyModelPolicyBlock(fallbackRes.statusCode, errMsg)) {
+              lastNon200Status = 403;
+              lastPolicyErrorMessage = errMsg;
+              continue;
+            }
+            if (fallbackRes.statusCode == 401 ||
+                fallbackRes.statusCode == 402 ||
+                fallbackRes.statusCode == 403) {
+              lastErrorStatus = errMsg.isNotEmpty
+                  ? 'HTTP ${fallbackRes.statusCode}: $errMsg'
+                  : 'HTTP ${fallbackRes.statusCode}';
+              return null;
+            }
             lastNon200Status = fallbackRes.statusCode;
           }
         } catch (_) {
@@ -641,7 +764,10 @@ class GeminiAgentClient {
       }
     }
     if (lastNon200Status != null) {
-      lastErrorStatus = 'HTTP $lastNon200Status';
+      lastErrorStatus =
+          (lastPolicyErrorMessage != null && lastPolicyErrorMessage.isNotEmpty)
+              ? 'HTTP $lastNon200Status: $lastPolicyErrorMessage'
+              : 'HTTP $lastNon200Status';
     }
     return null;
   }

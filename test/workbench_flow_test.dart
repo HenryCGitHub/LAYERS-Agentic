@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:layers_agentic/screens/widgets/ue_blueprint_graph_canvas.dart';
+import 'package:layers_agentic/screens/widgets/godot_inspector_panel.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
@@ -289,7 +289,7 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
     return {
       'title': 'Solar Skiff Salvage',
       'goal':
-          'Core Skiff Loop: Build a fast 3D hover-skiff salvage and grapple loop in Unity 6.',
+          'Core Skiff Loop: Build a fast 3D hover-skiff salvage and grapple loop in Godot 4.',
       'gameSpec': [
         '3D Third-Person',
         'Gamepad + Mouse/KB',
@@ -297,7 +297,7 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
         'Open Salvage Zone',
       ],
       'techSpec': [
-        'Unity 6 (C#)',
+        'Godot 4 (GDScript)',
         'PC Desktop',
         '3D Low-Poly Meshes',
         'Offline Local Save',
@@ -441,9 +441,9 @@ Future<Map<String, dynamic>?> _mockGeminiResponder(
           '3D First-Person · Mouse + WASD · Singleplayer · Enclosed Sandbox',
         ],
         'techSpec': [
-          'Godot 4 (2D) · PC Desktop · 2D Sprites + Particles · Offline Local Save',
-          'Unity 6 · PC & Steam Deck · 2D/3D Hybrid Pipeline · Steam Cloud Save',
-          'Unreal Engine 5 · PC Desktop · 3D Greybox Meshes · Offline Local Save',
+          'Godot 4 (GDScript) · PC Desktop · Godot 4 2D Sprites · ConfigFile (.cfg / .tres)',
+          'Godot 4 (GDScript + GDExtension C++) · PC & Steam Deck · Godot 4 Forward+ 3D · Resource (.tres)',
+          'Godot 4 (GDScript) · Web & Desktop · Godot 4 Compatibility 2D/3D · JSON Local Save',
         ],
         'designPillars': [
           'Unbroken Momentum: Prioritize continuous movement velocity and readable telegraphs',
@@ -1070,8 +1070,10 @@ void main() {
         await tester.pumpAndSettle();
 
         // ── Stage 1A: Single-Input 80-Character Word Document Composer (00 · PITCH & CONCEPT) ──
-        expect(find.byKey(const ValueKey('connected_pipeline_track')),
-            findsOneWidget);
+        expect(
+          find.byWidgetPredicate((w) => w is Opacity && w.opacity == 0.0),
+          findsNothing,
+        );
         expect(find.byKey(const ValueKey('rail_concept_blueprint_btn')),
             findsOneWidget);
         expect(find.byKey(const ValueKey('rail_pre_release_empty_state')),
@@ -1285,8 +1287,10 @@ void main() {
         expect(find.text('RELEASE TARGET'), findsOneWidget);
         expect(find.text('v0.1: Core Movement & Game Loop - Prototype'),
             findsOneWidget);
-        expect(find.text('1. Concept'), findsOneWidget);
-        expect(find.text('2. Workbench'), findsOneWidget);
+        expect(find.byKey(const ValueKey('rail_concept_blueprint_btn')),
+            findsOneWidget);
+        expect(find.text('Concept Blueprint'), findsOneWidget);
+        expect(find.text('08/08'), findsOneWidget);
         expect(find.text('2. Release Plan'), findsNothing);
 
         // Clicking "Approve & Build v0.1 →" builds v0.1 and jumps directly into 2. Workbench (2-Stage Workflow)
@@ -1297,6 +1301,7 @@ void main() {
         await tester.tap(approveConceptBtn);
         await tester.pumpAndSettle();
         expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
+        expect(find.text('08/08 ✓'), findsOneWidget);
 
         // Verify all 7 Stage 1 Core Loop Beats map 1-to-1 into the Release Blueprint (8 included features across 7 beats)
         expect(provider.releaseBlueprint!.beats.length, 7);
@@ -1320,7 +1325,10 @@ void main() {
         );
 
         // ── Stage 2 (Workbench): Active Release Workbench (Left Outliner + Open-Canvas Workspace) ──
-        expect(find.text('OUTLINE', skipOffstage: false), findsOneWidget);
+        expect(
+          find.textContaining('v0.1 · ', findRichText: true, skipOffstage: false),
+          findsWidgets,
+        );
         expect(find.byKey(const ValueKey('outline_release_eta_summary')),
             findsOneWidget);
         final firstBeatId = provider.activeReleaseBeats.first.id;
@@ -1373,18 +1381,24 @@ void main() {
         expect(find.byKey(const ValueKey('outline_release_eta_summary')),
             findsOneWidget);
 
-        // Verify Next → starts locked (onTap == null) while Step 1 is unchecked
-        final secondTask0Steps = provider.documents[secondFeat.id]!.subtasks
-            .first.children.first.children.length;
-        final nextBtnBefore = tester.widget<InkWell>(
-          find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
+        // Verify v2.1 Unified Header, Prev/Next Task Switchers, Done & Next Task CTA, and Accordion Step Rows
+        expect(
+          find.byKey(ValueKey('unified_header_$secondCp0NodeId')),
+          findsOneWidget,
         );
-        expect(nextBtnBefore.onTap, isNull);
-        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'),
-            findsOneWidget);
-        expect(find.text('✓ VERIFY BEFORE CHECKING [✓]'), findsOneWidget);
+        final prevTaskBtnBefore = tester.widget<InkWell>(
+          find.byKey(ValueKey('engine_dock_prev_step_$secondCp0NodeId')),
+        );
+        expect(prevTaskBtnBefore.onTap, isNull);
         expect(
           find.byKey(ValueKey('one_click_complete_next_btn_$secondCp0NodeId')),
+          findsOneWidget,
+        );
+        expect(find.text('Done & Next Task →'), findsOneWidget);
+        expect(
+          find.byKey(
+            ValueKey('task_sheet_step_row_${secondCp0NodeId}_0_0'),
+          ),
           findsOneWidget,
         );
         expect(
@@ -1394,7 +1408,7 @@ void main() {
           findsOneWidget,
         );
 
-        // Verify the step mark badge [1] / [✓] on the active step row checks and unchecks directly
+        // Verify the step mark badge on the active step row checks and unchecks directly
         final stepMarkFinder = find.byKey(
           ValueKey('toggle_step_mark_${secondCp0NodeId}_0_0'),
         );
@@ -1409,6 +1423,7 @@ void main() {
           ).first.checklist.first.children.first.completed,
           isTrue,
         );
+        expect(provider.selectedFeature!.id, equals(secondFeat.id));
         await tester.tap(stepMarkFinder);
         await tester.pumpAndSettle();
         expect(
@@ -1418,66 +1433,43 @@ void main() {
           isFalse,
         );
 
-        // Tap the simple square Checkmark Box [✓] to mark Step 1 done in place and unlock Next →
-        final markDoneFinder = find.byKey(
-          ValueKey('mark_active_step_done_btn_$secondCp0NodeId'),
+        // Switch to Task 2 via › in Unified Header and verify accordion shows Task 2 steps
+        final nextTaskBtnFinder = find.byKey(
+          ValueKey('engine_dock_next_step_$secondCp0NodeId'),
         );
-        await tester.ensureVisible(markDoneFinder);
+        await tester.ensureVisible(nextTaskBtnFinder);
         await tester.pumpAndSettle();
-        await tester.tap(markDoneFinder);
+        await tester.tap(nextTaskBtnFinder);
         await tester.pumpAndSettle();
-        expect(provider.selectedFeature!.id, equals(secondFeat.id));
-        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'),
-            findsOneWidget);
-        final nextBtnAfter = tester.widget<InkWell>(
-          find.byKey(ValueKey('next_active_step_btn_$secondCp0NodeId')),
+        expect(
+          find.byKey(
+            ValueKey('task_sheet_step_row_${secondCp0NodeId}_1_0'),
+          ),
+          findsOneWidget,
         );
-        expect(nextBtnAfter.onTap, isNotNull);
 
-        // Tap Next Step → to advance to Step 2
-        final nextBtnFinder = find.byKey(
-          ValueKey('next_active_step_btn_$secondCp0NodeId'),
+        // Switch back to Task 1 via ‹ in Unified Header
+        final prevTaskBtnFinder = find.byKey(
+          ValueKey('engine_dock_prev_step_$secondCp0NodeId'),
         );
-        await tester.ensureVisible(nextBtnFinder);
+        expect(prevTaskBtnFinder, findsOneWidget);
+        await tester.ensureVisible(prevTaskBtnFinder);
         await tester.pumpAndSettle();
-        await tester.tap(nextBtnFinder);
+        await tester.tap(prevTaskBtnFinder);
         await tester.pumpAndSettle();
-        expect(find.textContaining('STEP 2 OF $secondTask0Steps · ~'),
-            findsOneWidget);
-
-        // Verify clicking the task chevron in the Outliner expands Task 02 for peeking without losing Step 2 in the workspace
-        final task1ChevronFinder = find.byKey(
-          ValueKey('outline_task_chevron_${secondCp0NodeId}_1'),
+        expect(
+          find.byKey(
+            ValueKey('task_sheet_step_row_${secondCp0NodeId}_0_0'),
+          ),
+          findsOneWidget,
         );
-        if (task1ChevronFinder.evaluate().isNotEmpty) {
-          await tester.tap(task1ChevronFinder);
-          await tester.pumpAndSettle();
-          expect(find.textContaining('STEP 2 OF $secondTask0Steps · ~'),
-              findsOneWidget);
-        }
-
-        // Verify the compact Previous Step (←) button steps back to Step 1
-        final prevBtnFinder = find.byKey(
-          ValueKey('prev_active_step_btn_$secondCp0NodeId'),
-        );
-        expect(prevBtnFinder, findsOneWidget);
-        await tester.ensureVisible(prevBtnFinder);
-        await tester.pumpAndSettle();
-        await tester.tap(prevBtnFinder);
-        await tester.pumpAndSettle();
-        expect(find.textContaining('STEP 1 OF $secondTask0Steps · ~'),
-            findsOneWidget);
 
         // Verify the Left Outline stops cleanly at the Task level (no duplicate 4th-level step rows)
         expect(
           find.byKey(ValueKey('outline_step_${secondCp0NodeId}_0_0')),
           findsNothing,
         );
-        // Uncheck Step 1 via the workspace Checkmark Box [✓] to restore clean state, then select Feature 1
-        await tester.ensureVisible(markDoneFinder);
-        await tester.pumpAndSettle();
-        await tester.tap(markDoneFinder);
-        await tester.pumpAndSettle();
+        // Re-select Feature 1
         await tester.tap(find.byKey(ValueKey('rail_feat_${activeFeat0.id}')));
         await tester.pumpAndSettle();
         expect(provider.selectedFeature!.id, equals(activeFeat0.id));
@@ -1495,12 +1487,12 @@ void main() {
         await tester.tap(copyCodeBtn);
         await tester.pumpAndSettle();
 
-        // Verify 1-Click "⧉ Copy All Code" in the Task Sheet header copies all task code snippets
-        final copyAllCodeBtn =
-            find.byKey(ValueKey('copy_all_task_code_btn_${cp0Id}_0'));
-        await tester.ensureVisible(copyAllCodeBtn);
+        // Verify 1-Click "Copy Prompt" in the Task Sheet header copies the full task AI prompt
+        final copyTaskPromptBtn =
+            find.byKey(ValueKey('copy_task_ai_prompt_btn_${cp0Id}_0'));
+        await tester.ensureVisible(copyTaskPromptBtn);
         await tester.pumpAndSettle();
-        await tester.tap(copyAllCodeBtn);
+        await tester.tap(copyTaskPromptBtn);
         await tester.pumpAndSettle();
 
         // Verify Task-Scoped AI "✦ Tailor" rewrites sub-steps with exact scene/node context directly in Single-Panel mode
@@ -1525,19 +1517,19 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.byKey(ValueKey('task_sheet_feature_goal_$cp0Id')),
+          find.byKey(ValueKey('unified_header_$cp0Id')),
           findsOneWidget,
         );
         expect(
-          find.byKey(ValueKey('step_dropdown_${cp0Id}_0')),
+          find.byKey(ValueKey('tailor_howto_btn_${cp0Id}_0')),
           findsOneWidget,
         );
         expect(
-          find.byKey(ValueKey('inline_step_copilot_tailor_btn_$cp0Id')),
+          find.byKey(ValueKey('feature_gate_log_bug_btn_$cp0Id')),
           findsOneWidget,
         );
         expect(
-          find.byKey(ValueKey('inline_step_copilot_log_issue_btn_$cp0Id')),
+          find.byKey(ValueKey('one_click_complete_next_btn_$cp0Id')),
           findsOneWidget,
         );
         expect(
@@ -1548,28 +1540,10 @@ void main() {
           find.byKey(ValueKey('workbench_rename_feature_btn_${activeFeat.id}')),
           findsOneWidget,
         );
-        expect(
-          find.byKey(ValueKey('workbench_remove_feature_btn_${activeFeat.id}')),
-          findsOneWidget,
-        );
-        expect(find.textContaining('✓ Verify: '), findsOneWidget);
-        expect(find.text('Complete & Next →'), findsOneWidget);
+        expect(find.text('⋯'), findsWidgets);
+        expect(find.text('Done & Next Task →'), findsOneWidget);
 
-        // Verify Editorial Runbook layout:
-        // 1. Only the focused Task (Task 0) displays its GOAL & DONE rows and its Steps
-        expect(
-          find.byKey(ValueKey('task_overview_goal_box_${cp0Id}_0')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(ValueKey('task_overview_goal_box_${cp0Id}_1')),
-          findsNothing,
-        );
-        expect(find.text('DONE'), findsWidgets);
-        expect(find.text('✓ DONE:'), findsNothing);
-        expect(find.text('Done'), findsWidgets);
-        expect(find.text('✓ Done & Next →'), findsNothing);
-        // 2. Only the focused Task (Task 0) expands its Steps
+        // Verify only the focused Task (Task 0) expands its Steps
         expect(
           find.byKey(ValueKey('task_sheet_step_row_${cp0Id}_0_0')),
           findsOneWidget,
@@ -1643,11 +1617,11 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.textContaining('AGENT ARCHITECTURAL RECOMMENDATION'),
-          findsOneWidget,
+          find.textContaining('GOAL:'),
+          findsWidgets,
         );
         expect(
-          find.textContaining('DONE WHEN'),
+          find.textContaining('✓ END GOAL:'),
           findsWidgets,
         );
         expect(
@@ -1761,27 +1735,29 @@ void main() {
         expect(importedId != null, isTrue);
         expect(provider.savedProjects.any((p) => p.id == importedId), isTrue);
 
-        // Verify Playtest Bug button is visible on the active step action bar
+        // Restore Full-Width desktop layout and verify inline Playtest Issue button opens the drawer
+        tester.view.physicalSize = const Size(1440, 1000);
+        await tester.pumpAndSettle();
         final playtestFeat = provider.selectedFeature!;
         final playtestStates = FeatureStateNode.getStatesForDocument(playtestFeat);
         final cpNode = playtestStates.first;
-        final stepBugBtn = find.byKey(ValueKey('feature_step_log_bug_btn_${cpNode.id}'));
+        final stepBugBtn = find.byKey(ValueKey('feature_gate_log_bug_btn_${cpNode.id}'));
         expect(stepBugBtn, findsOneWidget);
 
-        // Tap the Step Bug button to open the Playtest Bug modal
+        // Tap the Issue button to open the inline Playtest Bug drawer
         await tester.ensureVisible(stepBugBtn);
         await tester.pumpAndSettle();
         await tester.tap(stepBugBtn);
         await tester.pumpAndSettle();
-        expect(find.byKey(const ValueKey('workbench_log_playtest_issue_input')), findsOneWidget);
-        expect(find.byKey(const ValueKey('confirm_workbench_log_playtest_issue_btn')), findsOneWidget);
+        expect(find.byKey(ValueKey('feature_gate_bug_input_${cpNode.id}')), findsOneWidget);
+        expect(find.byKey(ValueKey('feature_gate_bug_submit_btn_${cpNode.id}')), findsOneWidget);
 
         // Enter a bug description and submit
         await tester.enterText(
-          find.byKey(const ValueKey('workbench_log_playtest_issue_input')),
+          find.byKey(ValueKey('feature_gate_bug_input_${cpNode.id}')),
           'Elevator drops player through floor collision',
         );
-        await tester.tap(find.byKey(const ValueKey('confirm_workbench_log_playtest_issue_btn')));
+        await tester.tap(find.byKey(ValueKey('feature_gate_bug_submit_btn_${cpNode.id}')));
         await tester.pumpAndSettle();
 
         // Verify [FIX] task is appended to checkpoint checklist
@@ -2173,7 +2149,7 @@ void main() {
     );
 
     test(
-      'Engine-Aware TaskHowToBlueprint.resolve adapts whereLocation and code formulas for Godot 4, Unity C#, and Unreal 5',
+      'Godot 4 Native TaskHowToBlueprint.resolve adapts whereLocation, GDScript formulas, custom snippets, and scaling',
       () {
         final cp = FeatureStateNode(
           id: 'cp_test',
@@ -2192,74 +2168,28 @@ void main() {
           parentTask: godotTask,
           taskIndex: 0,
           checkpointNode: cp,
-          engineHint: 'Godot 4.3 GDScript 2D',
+          engineHint: 'Godot 4 (GDScript) 2D',
         );
         expect(godotBp.engineLabel, 'GODOT 4');
         expect(godotBp.subSteps.length, 6);
         expect(godotBp.whereLocation, contains('_physics_process'));
+        expect(godotBp.subSteps[0].stepPath, contains('res://scripts/'));
+        expect(godotBp.subSteps[0].instruction, contains('.tscn'));
+        expect(godotBp.subSteps[0].codeFormula, contains('extends CharacterBody2D'));
+        expect(godotBp.subSteps[0].specChips,
+            contains('Next: ${godotBp.subSteps[1].shortTitle}'));
+        expect(godotBp.subSteps[3].codeFormula, contains('@export var'));
         expect(godotBp.subSteps[4].codeFormula,
             contains('Input.is_action_pressed'));
         expect(godotBp.subSteps[4].codeFormula, contains('move_toward'));
 
-        final unityTask = Subtask(
-          id: 't_unity',
-          text: 'Bind WASD movement and dash physics velocity',
-          completed: false,
-        );
-        final unityBp = TaskHowToBlueprint.resolve(
-          parentTask: unityTask,
-          taskIndex: 1,
-          checkpointNode: cp,
-          engineHint: 'Unity 6 C# URP',
-        );
-        expect(unityBp.engineLabel, 'UNITY C#');
-        expect(unityBp.subSteps.length, 6);
-        expect(unityBp.whereLocation, contains('MonoBehaviour'));
-        expect(unityBp.subSteps[4].codeFormula, contains('Input.GetButton'));
+        // Always resolves to GODOT 4 regardless of hint text
         expect(
-            unityBp.subSteps[4].codeFormula, contains('Time.fixedDeltaTime'));
-
-        final unrealTask = Subtask(
-          id: 't_unreal',
-          text: 'Bind WASD movement and dash physics velocity',
-          completed: false,
+          TaskHowToBlueprint.detectEngineLabel('Godot 4 (GDScript + GDExtension C++)'),
+          'GODOT 4',
         );
-        final unrealBp = TaskHowToBlueprint.resolve(
-          parentTask: unrealTask,
-          taskIndex: 1,
-          checkpointNode: cp,
-          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
-          unrealCppMode: false,
-        );
-        expect(unrealBp.engineLabel, 'UNREAL 5');
-        expect(unrealBp.subSteps.length, 6);
-        expect(unrealBp.whereLocation, contains('ActorComponent'));
-        expect(unrealBp.subSteps[0].stepPath, contains('/Game/Blueprints/'));
-        expect(unrealBp.subSteps[0].codeFormula,
-            contains('EMechanicState::Active'));
-        expect(unrealBp.subSteps[0].explainConcept, contains('BP_'));
-        expect(unrealBp.subSteps[0].specChips,
-            contains('Next: ${unrealBp.subSteps[1].shortTitle}'));
-        expect(unrealBp.subSteps[4].codeFormula,
-            contains('FMath::FInterpConstantTo'));
 
-        final unrealCpp = TaskHowToBlueprint.resolve(
-          parentTask: unrealTask,
-          taskIndex: 1,
-          checkpointNode: cp,
-          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
-          unrealCppMode: true,
-        );
-        expect(unrealCpp.engineLabel, 'UNREAL 5');
-        expect(unrealCpp.whereLocation, contains('ActorComponent'));
-        expect(unrealCpp.subSteps[0].explainConcept,
-            contains('AWasdMovementDash'));
-        expect(unrealCpp.subSteps[3].codeFormula,
-            contains('UPROPERTY(EditAnywhere'));
-        expect(unrealCpp.subSteps[4].codeFormula,
-            contains('FMath::FInterpConstantTo'));
-
-        // Verify custom_snippet C++ code adapts to Blueprint node chain when unrealCppMode == false
+        // Verify custom_snippet preserves GDScript / Inspector pipe table / Node signal chain verbatim
         final customRampTask = Subtask(
           id: 'custom_ramp',
           text: 'Dock Collision Bounds',
@@ -2268,104 +2198,24 @@ void main() {
               id: 'custom_ramp_s1',
               text: 'Spawn Cargo Delivery Ramp',
               specNotes:
-                  'Spawn cargo ramp StaticMeshActor in dock arena and set pitch rotation to rampInclineAngle: 25.0 deg.',
+                  'Place Ramp_CargoDelivery scene instance in dock level and configure ramp_incline_angle.',
               codeTargetFile: 'custom_snippet',
-              codeSnippet: '''// Place cargo ramp actor aligned to dock apron
-FTransform RampTransform(FRotator(25.0f, 0.0f, 0.0f), FVector(1200.f, -400.f, 0.f), FVector(4.f, 3.f, 1.5f));
-Ramp_CargoDelivery->SetActorTransform(RampTransform);
-Ramp_CargoDelivery->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("BlockAll"));''',
+              codeSnippet: '''extends Node3D
+@export var ramp_incline_angle: float = 25.0
+func _ready() -> void:
+    rotation_degrees.x = ramp_incline_angle''',
             ),
           ],
         );
-        final resolvedRampBp = TaskHowToBlueprint.resolve(
+        final resolvedRamp = TaskHowToBlueprint.resolve(
           parentTask: customRampTask,
           taskIndex: 0,
           checkpointNode: cp,
-          engineHint: 'Unreal Engine 5',
-          unrealCppMode: false,
-        );
-        final resolvedRampCpp = TaskHowToBlueprint.resolve(
-          parentTask: customRampTask,
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Unreal Engine 5',
-          unrealCppMode: true,
+          engineHint: 'Godot 4 (GDScript)',
         );
         expect(
-          resolvedRampBp.subSteps.first.codeFormula,
-          contains('[Make Transform'),
-        );
-        expect(
-          resolvedRampBp.subSteps.first.codeFormula,
-          contains('[Set Actor Transform (Target: Ramp_CargoDelivery'),
-        );
-        expect(
-          resolvedRampBp.subSteps.first.codeFormula,
-          contains('[Set Collision Profile Name'),
-        );
-        expect(
-          resolvedRampCpp.subSteps.first.codeFormula,
-          contains('Ramp_CargoDelivery->SetActorTransform(RampTransform);'),
-        );
-        expect(
-          resolvedRampBp.subSteps.first.codeFormula,
-          isNot(equals(resolvedRampCpp.subSteps.first.codeFormula)),
-        );
-
-        // Verify custom_snippet Blueprint node chain (Smoke Beacon Marker) adapts to real Unreal C++ when unrealCppMode == true
-        final customBeaconTask = Subtask(
-          id: 'custom_beacon',
-          text: 'Beacon Collision Hull',
-          children: [
-            Subtask(
-              id: 'custom_beacon_s1',
-              text: 'Configure Flare Mesh Collision',
-              specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-                instruction:
-                    'Configure FlareCylinderMesh physics collision and position ScorchDecal onto ground pavement upon first rigid body contact.',
-                area1Hierarchy:
-                    'BP_DropFlareBeacon (Actor)\n└─ SceneRoot (DefaultSceneRoot)\n   ├─ FlareCylinderMesh (StaticMeshComponent)',
-                area2Inspector:
-                    'Simulate Physics: True | Collision Profile: BlockAllDynamic',
-              ),
-              codeTargetFile: 'custom_snippet',
-              codeSnippet: '''[FlareCylinderMesh (OnComponentHit)]
-└──► [LineTraceByChannel (Start: HitLocation, End: HitLocation - (0,0,150), TraceChannel: ECC_Visibility)]
-└──► [Branch (Is Hit Valid)]
-   ├──► [Set World Location (Target: ScorchDecal, NewLocation: TraceHitLocation)]
-   └──► [Set Visibility (Target: ScorchDecal, NewVisibility: True)]''',
-            ),
-          ],
-        );
-        final resolvedBeaconBp = TaskHowToBlueprint.resolve(
-          parentTask: customBeaconTask,
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Unreal Engine 5',
-          unrealCppMode: false,
-        );
-        final resolvedBeaconCpp = TaskHowToBlueprint.resolve(
-          parentTask: customBeaconTask,
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Unreal Engine 5',
-          unrealCppMode: true,
-        );
-        expect(
-          resolvedBeaconBp.subSteps.first.codeFormula,
-          contains('└──► [LineTraceByChannel'),
-        );
-        expect(
-          resolvedBeaconCpp.subSteps.first.codeFormula,
-          contains('GetWorld()->LineTraceSingleByChannel('),
-        );
-        expect(
-          resolvedBeaconCpp.subSteps.first.codeFormula,
-          contains('ScorchDecal->SetWorldLocation(TraceHitLocation);'),
-        );
-        expect(
-          resolvedBeaconCpp.subSteps.first.codeFormula,
-          contains('ScorchDecal->SetVisibility(true);'),
+          resolvedRamp.subSteps.first.codeFormula,
+          contains('@export var ramp_incline_angle: float = 25.0'),
         );
 
         // Verify Task 01 (Setup), Task 02 (State Logic), and Task 03 (Input/Raycast) have non-repeating step titles
@@ -2373,19 +2223,19 @@ Ramp_CargoDelivery->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("Bloc
           parentTask: Subtask(id: 't0', text: 'Create Grid Tile Actor (2h)'),
           taskIndex: 0,
           checkpointNode: cp,
-          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+          engineHint: 'Godot 4 (GDScript)',
         );
         final t1 = TaskHowToBlueprint.resolve(
           parentTask: Subtask(id: 't1', text: 'Implement State Machine (4h)'),
           taskIndex: 1,
           checkpointNode: cp,
-          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+          engineHint: 'Godot 4 (GDScript)',
         );
         final t2 = TaskHowToBlueprint.resolve(
           parentTask: Subtask(id: 't2', text: 'Add Interaction Raycast (2h)'),
           taskIndex: 2,
           checkpointNode: cp,
-          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+          engineHint: 'Godot 4 (GDScript)',
         );
         expect(t0.subSteps[0].shortTitle,
             isNot(equals(t1.subSteps[0].shortTitle)));
@@ -2466,14 +2316,13 @@ Ramp_CargoDelivery->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("Bloc
         // Verify deriveConcreteGuardStepSpec formats underscore bracket tags as clean Title Case
         final spamGuard = TaskHowToBlueprint.deriveConcreteGuardStepSpec(
           rawGuard: '[INPUT_SPAM GUARD] Ignore rapid interact clicks',
-          targetAssetName: 'BP_TerminalContractActor',
-          engineLabel: 'UNREAL 5',
-          unrealCppMode: false,
-          primaryVarName: 'interactCooldown',
+          targetAssetName: 'terminal_contract.tscn',
+          engineLabel: 'GODOT 4',
+          primaryVarName: 'interact_cooldown',
         );
         expect(spamGuard.shortTitle, 'Guard: Input Spam');
 
-        // Verify UI / HUD and Combat tasks resolve their specialized component hierarchies
+        // Verify UI / HUD and Weapon/Combat tasks resolve Godot node hierarchies cleanly
         final uiBp = TaskHowToBlueprint.resolve(
           parentTask: Subtask(
             id: 't_ui',
@@ -2492,10 +2341,9 @@ Ramp_CargoDelivery->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("Bloc
           ),
           taskIndex: 0,
           checkpointNode: cp,
-          engineHint: 'Unreal Engine 5.4 C++ & Blueprints',
+          engineHint: 'Godot 4 (GDScript)',
         );
-        expect(combatBp.subSteps[1].codeFormula, contains('WeaponMesh'));
-        expect(combatBp.subSteps[1].codeFormula, contains('MuzzlePoint'));
+        expect(combatBp.subSteps[1].codeFormula, contains('CollisionShape2D'));
       },
     );
 
@@ -2722,8 +2570,8 @@ Ramp_CargoDelivery->GetStaticMeshComponent()->SetCollisionProfileName(TEXT("Bloc
         // Import Existing GDD / Pitch Notes and jump straight to Step 09 Full Concept Review
         await provider.importExistingGddAndJumpToReview('''
 # Solar Skiff Salvage
-Goal: Build a fast 3D hover-skiff salvage and grapple loop in Unity 6.
-Engine: Unity 6 (C#)
+Goal: Build a fast 3D hover-skiff salvage and grapple loop in Godot 4.
+Engine: Godot 4 (GDScript)
 Done When: Playtester completes 3 consecutive salvage runs and docks without clipping.
 ''');
         expect(provider.conceptDraft, isNotNull);
@@ -3422,14 +3270,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     test(
-      '14. Dynamic 3-Area gemini-flash-latest Synthesis, AGENTS.md Export, and Stage 1 -> Stage 2 Live Sync',
+      '14. Dynamic 3-Area gemini-4-hydrogen Synthesis, AGENTS.md Export, and Stage 1 -> Stage 2 Live Sync',
       () async {
         final provider = WorkbenchProvider(enableAutoLoad: false);
         await provider.startConceptInterview(
-          'Unreal 5 arena shooter with grapple hook, wave spawner, and ore extraction.',
+          'Godot 4 arena shooter with grapple hook, wave spawner, and ore extraction.',
         );
         provider.updateConceptDraft((d) {
-          d.techSpec = ['Unreal Engine 5', '3D Arena'];
+          d.techSpec = ['Godot 4 (GDScript + GDExtension C++)', '3D Arena'];
           d.exclusions = ['No multiplayer matchmaking'];
         });
         await provider.approveConceptAndBuildRelease();
@@ -3452,7 +3300,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         provider.updateFeatureStates(beat1Feat.id, b1States);
         expect(provider.getDocumentProgress(beat1Feat.id), greaterThan(0));
 
-        // ── Upgrade 2: Dynamic 3-Area gemini-flash-latest synthesis & LRU cache invalidation ──
+        // ── Upgrade 2: Dynamic 3-Area gemini-4-hydrogen synthesis & cache ──
         String? capturedModel;
         String? capturedPrompt;
         final prevResponder = GeminiAgentClient.testMockResponder;
@@ -3462,23 +3310,27 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             capturedModel = preferredModel;
             capturedPrompt = prompt;
             return <String, dynamic>{
+              'primarySharedScriptOrScene':
+                  'res://scenes/player_character.tscn · res://scripts/player_character.gd',
               'tasks': [
                 {
                   'taskIndex': 0,
                   'subSteps': [
                     {
-                      'title': 'STEP 1.1 · ATTACH GRAPPLE CABLE COMPONENT',
-                      'stepPath': 'Source/Project/GrappleCharacter.cpp',
+                      'stepRole': 'script_logic',
+                      'title': 'Attach Grapple RayCast',
+                      'stepPath': 'res://scripts/player_character.gd',
                       'instruction':
-                          'Instantiate UCableComponent in C++ constructor.',
+                          'Add @export var grapple_range and GrappleRay node in _ready().',
                       'area1Hierarchy':
-                          'AGrappleCharacter (Self)\n └─ GrappleCable (UCableComponent)',
+                          'PlayerCharacter (CharacterBody3D)\n └─ GrappleRay (RayCast3D)',
                       'area2Inspector':
-                          'grappleRange: 1800.0 cm | cableWidth: 6.0',
+                          'grapple_range: 18.0 m | pull_speed: 28.0',
                       'codeFormula':
-                          'GrappleCable = CreateDefaultSubobject<UCableComponent>(TEXT("GrappleCable"));',
+                          '@export var grapple_range: float = 18.0',
+                      'verifyMode': 'editor',
                       'verifyResult':
-                          'GrappleCable appears under RootComponent in Details panel.',
+                          'GrappleRay appears under PlayerCharacter in Scene Tree.',
                     },
                   ],
                 },
@@ -3494,14 +3346,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           await provider.synthesizeFeatureHowToStepsWithAi(
             beat1Feat.id,
             forceRefresh: true,
-            unrealCppMode: true,
           );
         } finally {
           GeminiAgentClient.testMockResponder = prevResponder;
         }
 
-        expect(capturedModel, equals('gemini-flash-latest'));
-        expect(capturedPrompt, contains('UNREAL 5 C++'));
+        expect(capturedModel, equals('gemini-4-hydrogen'));
+        expect(capturedPrompt, contains('GODOT 4 (GDScript + GDExtension C++)'));
         expect(capturedPrompt, contains('Sibling Feature'));
 
         final updatedStates = FeatureStateNode.getStatesForDocument(beat1Feat);
@@ -3509,22 +3360,19 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           parentTask: updatedStates.first.checklist.first,
           taskIndex: 0,
           checkpointNode: updatedStates.first,
-          engineHint: 'Unreal Engine 5',
-          unrealCppMode: true,
+          engineHint: 'Godot 4 (GDScript + GDExtension C++)',
         );
         expect(
-            resolvedBp.subSteps.first.area1Hierarchy, contains('GrappleCable'));
+            resolvedBp.subSteps.first.area1Hierarchy, contains('GrappleRay'));
         expect(resolvedBp.subSteps.first.area2Inspector,
-            contains('grappleRange: 1800.0 cm'));
+            contains('grapple_range: 18.0 m'));
         expect(resolvedBp.subSteps.first.instruction,
-            equals('Instantiate UCableComponent in C++ constructor.'));
+            equals('Add @export var grapple_range and GrappleRay node in _ready().'));
 
-        // ── Upgrade 3: Engine-Ready Context Export (AGENTS.md / .cursorrules) ──
-        final agentsMd = provider.buildActiveReleaseCodingAgentMarkdown(
-          unrealCppMode: true,
-        );
+        // ── Upgrade 3: Godot 4 AGENTS.md Export ──
+        final agentsMd = provider.buildActiveReleaseCodingAgentMarkdown();
         expect(agentsMd, contains('# AGENTS.md —'));
-        expect(agentsMd, contains('UNREAL 5 C++ (.h / .cpp)'));
+        expect(agentsMd, contains('GODOT 4 (GDScript + GDExtension C++)'));
         expect(agentsMd,
             contains('## 3. Canonical Tuning Variables & Inspector Bindings'));
         expect(
@@ -3535,11 +3383,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         // ── Upgrade 4: Stage 1 -> Stage 2 Live Sync (with Edge Case 3 Guard) ──
         final progressBeforeSync = provider.getDocumentProgress(beat1Feat.id);
         expect(progressBeforeSync, greaterThan(0));
-        // Edit Stage 1:
-        // 1. Rename Beat 1 in-place ("Arena Entry & Traversal" -> "Arena Entry & Grapple Launch")
-        // 2. Delete Beat 2
-        // 3. Keep Beat 3 (shifts to index 1)
-        // 4. Add a brand-new Beat at index 2 ("Boss Escape Portal: Open the warp gate")
         provider.updateConceptDraft((d) {
           d.coreLoopBeats = [
             'Arena Entry & Grapple Launch: Enter the arena, dash across hazards, and chain grapple swings',
@@ -3554,7 +3397,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         final syncedBeats = provider.activeReleaseBeats;
         expect(syncedBeats.length, equals(3));
-        // Beat 1 was updated in-place and preserved its ID and completed progress!
         expect(syncedBeats[0].id, equals(beat1Id));
         expect(syncedBeats[0].title, equals('Arena Entry & Grapple Launch'));
         expect(
@@ -3563,19 +3405,15 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           reason:
               'Stage 1 -> Stage 2 sync must preserve completed task progress',
         );
-        // Beat 3 shifted to index 1 and kept its original Beat ID!
         expect(syncedBeats[1].id, equals(beat3Id));
         expect(syncedBeats[1].title, equals(beat3OriginalTitle));
-        // Brand-new Beat 3 ("Boss Escape Portal") was created fresh and NOT falsely matched to deleted Beat 2!
         expect(syncedBeats[2].id, isNot(equals(beat2Id)));
         expect(syncedBeats[2].title, equals('Boss Escape Portal'));
         expect(provider.featuresForBeat(syncedBeats[2].id), isNotEmpty);
-        // Deleted Beat 2's features were safely archived as superseded
         expect(
           provider.supersededFeatures.any((f) => f.parentId == beat2Id),
           isTrue,
         );
-        // Exclusions synced into ReleaseBlueprint
         expect(
           provider.releaseBlueprint?.explicitExclusions,
           contains('No weapon crafting tree'),
@@ -3584,7 +3422,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     testWidgets(
-      '15. Single-Feature AI Prompt Export, Playtest Run Sheet Gate Triage, and Two-Way Code Sync',
+      '15. Single-Feature AI Prompt Export, Playtest Run Sheet Gate Triage, and Two-Way GDScript Sync',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1600, 1000);
         tester.view.devicePixelRatio = 1.0;
@@ -3596,14 +3434,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await tester.pumpAndSettle();
 
         await provider.startConceptInterview(
-          'Build a fast 3D action slasher in Unreal Engine 5.',
+          'Build a fast 3D action slasher in Godot 4.',
         );
         provider.updateConceptDraft((d) {
           d.title = 'Neon Katana';
-          d.goal = 'Build a fast 3D action slasher in Unreal Engine 5.';
+          d.goal = 'Build a fast 3D action slasher in Godot 4.';
           d.techSpec = [
-            'Engine: Unreal Engine 5',
-            'Language: C++ & Blueprints'
+            'Godot 4 (GDScript)',
+            '3D Third-Person',
           ];
         });
         final buildFuture = provider.approveConceptAndBuildRelease();
@@ -3615,37 +3453,35 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(beats, isNotEmpty);
         final firstFeat = provider.featuresForBeat(beats.first.id).first;
 
-        // ── 1. Single-Feature AI Prompt Export (Upgrade 2) ──
+        // ── 1. Single-Feature AI Prompt Export ──
         final singlePrompt = provider.buildActiveFeatureCodingAgentPrompt(
           firstFeat.id,
-          unrealCppMode: true,
         );
         expect(singlePrompt,
             contains('# AI CODING AGENT TASK PROMPT — ${firstFeat.title}'));
-        expect(singlePrompt, contains('UNREAL 5 C++ (.h / .cpp)'));
+        expect(singlePrompt, contains('GODOT 4 (GDScript)'));
         expect(singlePrompt,
             contains('## 2. Canonical Tuning Variables & Sibling Context'));
         expect(singlePrompt,
             contains('## 3. Mandatory Edge-Case & Playtest Guards'));
         expect(singlePrompt, contains('## 4. 3-Area Implementation Steps'));
-        expect(
-          find.byKey(ValueKey('copy_feature_ai_prompt_btn_${firstFeat.id}')),
-          findsOneWidget,
-        );
+        final moreActionsBtn = find.byTooltip('Feature actions');
+        expect(moreActionsBtn, findsOneWidget);
+        await tester.tap(moreActionsBtn);
+        await tester.pumpAndSettle();
+        expect(find.text('⧉ Copy AI prompt'), findsOneWidget);
+        await tester.tapAt(Offset.zero);
+        await tester.pumpAndSettle();
 
-        // ── 2. Two-Way Engine Code Sync (Upgrade 4 + Gotcha 3 Multi-Line C++/C#/GDScript Regex) ──
+        // ── 2. Two-Way GDScript Code Sync ──
         final syncResult = await provider.syncFeatureTuningAndGuardsFromCode(
           firstFeat.id,
           '''
-          UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Movement")
-          float moveSpeed = 780.0f;
+          @export var move_speed: float = 12.5
+          @export var dash_cooldown: float = 0.25
+          @export var combo_window_sec: float = 0.45
 
-          [SerializeField]
-          private float dashCooldown = 0.25f;
-
-          @export var comboWindowSec: float = 0.45
-
-          // [GUARD] Cancel dash impulse immediately when player hits a solid wall normal
+          # [GUARD] Cancel dash impulse immediately when player hits a solid wall normal
           ''',
         );
         expect(syncResult.updatedVars, greaterThanOrEqualTo(3));
@@ -3653,17 +3489,17 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         final syncedStates = FeatureStateNode.getStatesForDocument(firstFeat);
         expect(
-          syncedStates.last.tuningParams.any((p) => p.contains('780.0')),
+          syncedStates.last.tuningParams.any((p) => p.contains('12.5')),
           isTrue,
         );
         expect(
           syncedStates.last.tuningParams
-              .any((p) => p.contains('dashCooldown: 0.25')),
+              .any((p) => p.contains('0.25')),
           isTrue,
         );
         expect(
           syncedStates.last.tuningParams
-              .any((p) => p.contains('comboWindowSec: 0.45')),
+              .any((p) => p.contains('combo_window_sec: 0.45')),
           isTrue,
         );
         expect(
@@ -3674,7 +3510,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isTrue,
         );
 
-        // ── 3. Unified Playtest Run Sheet Modal + Live Reactive Rebuilds (Upgrade 3 + Gotcha 2) ──
+        // ── 3. Unified Playtest Run Sheet Modal + Live Reactive Rebuilds ──
         final playtestSheetBtn = find.byKey(
           const ValueKey('open_playtest_run_sheet_btn'),
         );
@@ -3690,7 +3526,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(provider.getDocumentProgress(firstFeat.id), lessThan(100));
 
-        // Click "✓ Pass Gate" inside the open modal and verify live reactive rebuild to 100%
         final passBtn = find.byKey(
           ValueKey('playtest_sheet_pass_btn_${firstFeat.id}'),
         );
@@ -3946,19 +3781,19 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await tester.pumpAndSettle();
 
         final inlineTuningPill = find.byKey(
-          ValueKey('inline_tuning_pill_${node0.id}'),
+          ValueKey('blueprint_deck_var_pill_${node0.id}_0'),
         );
         expect(inlineTuningPill, findsOneWidget);
         await tester.tap(inlineTuningPill);
         await tester.pumpAndSettle();
 
         final inlineTuningInput = find.byKey(
-          ValueKey('inline_tuning_input_${node0.id}'),
+          ValueKey('blueprint_deck_var_input_${node0.id}_0'),
         );
         expect(inlineTuningInput, findsOneWidget);
         await tester.enterText(inlineTuningInput, 'boostThrustSpeed: 820.0');
         await tester.tap(
-          find.byKey(ValueKey('inline_tuning_save_btn_${node0.id}')),
+          find.byKey(ValueKey('blueprint_deck_var_save_${node0.id}_0')),
         );
         await tester.pumpAndSettle();
 
@@ -3968,9 +3803,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals('boostThrustSpeed: 820.0'),
         );
 
-        // ── 6. Upgrade 3 & 5: 1-Click "⧉ Copy & Next →", "▶ Next Incomplete", and Release Complete Banner ──
+        // ── 6. Upgrade 3 & 5: 1-Click "Done & Next Task →", and Release Complete Banner ──
         final copyNextBtn = find.byKey(
-          ValueKey('copy_and_complete_next_btn_${node0.id}'),
+          ValueKey('one_click_complete_next_btn_${node0.id}'),
         );
         expect(copyNextBtn, findsOneWidget);
         await tester.ensureVisible(copyNextBtn);
@@ -3981,26 +3816,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final afterCopyNextStates =
             FeatureStateNode.getStatesForDocument(feat0);
         expect(
+          afterCopyNextStates.first.checklist.first.completed,
+          isTrue,
+        );
+        expect(
           afterCopyNextStates.first.checklist.first.children.first.completed,
           isTrue,
         );
-
-        // Click the completed first step row in the Left Step List so "▶ Next Incomplete" appears in the Feature Header Bar
-        final firstStepRow = find.byKey(
-          ValueKey('task_sheet_step_row_${node0.id}_0_0'),
-        );
-        await tester.ensureVisible(firstStepRow);
-        await tester.pumpAndSettle();
-        await tester.tap(firstStepRow);
-        await tester.pumpAndSettle();
-        final resumeNextBtn = find.byKey(
-          const ValueKey('resume_next_incomplete_step_btn'),
-        );
-        expect(resumeNextBtn, findsOneWidget);
-        await tester.ensureVisible(resumeNextBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(resumeNextBtn);
-        await tester.pumpAndSettle();
 
         // Mark all features in v0.1 complete and verify the auto-surfaced Release Complete -> Next Release banner
         for (final f in allFeats) {
@@ -4264,39 +4086,39 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals(initialTaskCount + 1),
         );
 
-        // ── 5. Audit Item 4: 100% Full-Width Step Accordion Runbook & Click-to-Tune Row ──
-        final area2Header = find.byKey(
-          ValueKey('area2_selected_component_header_${node.id}'),
+        // ── 5. Audit Item 4: 100% Full-Width Step Accordion Runbook & Click-to-Tune Header Pill ──
+        final unifiedHeader = find.byKey(
+          ValueKey('unified_header_${node.id}'),
         );
         final area3Panel = find.byKey(
           ValueKey('area3_script_setup_panel_${node.id}'),
         );
-        expect(area2Header, findsOneWidget);
+        expect(unifiedHeader, findsOneWidget);
         expect(area3Panel, findsOneWidget);
         final sec3Rect = tester.getRect(area3Panel);
         expect(
           sec3Rect.width,
           greaterThan(600.0),
           reason:
-              'Section 03 (Step Accordion Runbook) must expand to 100% of the main canvas width on desktop viewports.',
+              'Step Accordion Runbook must expand to full width on desktop viewports.',
         );
 
-        final area2Row0 = find.byKey(
-          ValueKey('area2_inspector_tuning_row_${node.id}_0'),
+        final deckVarPill0 = find.byKey(
+          ValueKey('blueprint_deck_var_pill_${node.id}_0'),
         );
-        expect(area2Row0, findsOneWidget);
-        await tester.ensureVisible(area2Row0);
+        expect(deckVarPill0, findsOneWidget);
+        await tester.ensureVisible(deckVarPill0);
         await tester.pumpAndSettle();
-        await tester.tap(area2Row0);
+        await tester.tap(deckVarPill0);
         await tester.pumpAndSettle();
 
-        final area2Input0 = find.byKey(
-          ValueKey('area2_inspector_tuning_input_${node.id}_0'),
+        final deckVarInput0 = find.byKey(
+          ValueKey('blueprint_deck_var_input_${node.id}_0'),
         );
-        expect(area2Input0, findsOneWidget);
-        await tester.enterText(area2Input0, 'parryWindowSec: 0.35');
+        expect(deckVarInput0, findsOneWidget);
+        await tester.enterText(deckVarInput0, 'parryWindowSec: 0.35');
         await tester.tap(
-          find.byKey(ValueKey('area2_inspector_tuning_save_${node.id}_0')),
+          find.byKey(ValueKey('blueprint_deck_var_save_${node.id}_0')),
         );
         await tester.pumpAndSettle();
         expect(
@@ -4306,7 +4128,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           contains('parryWindowSec: 0.35'),
         );
 
-        // Verify INITIAL SETUP is positioned inside the right column (Section 03)
+        // Verify INITIAL SETUP is positioned inside the full-width workspace below Unified Header
         final initialSetupArea = find.byKey(
           ValueKey('initial_setup_area_${node.id}'),
         );
@@ -4316,7 +4138,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           initRect.left,
           greaterThanOrEqualTo(sec3Rect.left),
           reason:
-              'INITIAL SETUP must be placed inside the right column (Section 03) so Outliner + Details Panel Values move up to the top of the left column.',
+              'INITIAL SETUP must align cleanly inside the full-width runbook workspace.',
         );
       },
     );
@@ -4326,10 +4148,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
       () async {
         final provider = WorkbenchProvider(enableAutoLoad: false);
         await provider.startConceptInterview(
-          'First-person parkour roof runner in Unreal Engine 5.',
+          'First-person parkour roof runner in Godot 4.',
         );
         provider.updateConceptDraft((d) {
-          d.techSpec = ['Unreal Engine 5', '3D First-Person'];
+          d.techSpec = ['Godot 4 (GDScript)', '3D First-Person'];
         });
         await provider.approveConceptAndBuildRelease();
 
@@ -4339,7 +4161,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final states = FeatureStateNode.getStatesForDocument(feat);
         states.first
           ..name = 'Basic Locomotion (v0.1)'
-          ..tuningParams = ['walkSpeed: 600 cm/s', 'jumpForce: 450 cm/s']
+          ..tuningParams = ['walk_speed: 6.0 m/s', 'jump_force: 4.5 m/s']
           ..edgeCases = [
             '[COLLISION GUARD] Prevent player clipping into roof geometry',
           ]
@@ -4350,7 +4172,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           ];
         provider.updateFeatureStates(feat.id, states);
 
-        // ── 1. Deterministic Fallback: Shared Asset (BP_LocomotionCharacter) + Role-Aware SETUP -> INPUT -> PHYSICS ──
+        // ── 1. Deterministic Fallback: Shared Asset (locomotion_character) + Role-Aware SETUP -> INPUT -> PHYSICS ──
         TaskHowToBlueprint.clearCache();
         final freshStates = FeatureStateNode.getStatesForDocument(feat);
         final cp = freshStates.first;
@@ -4358,46 +4180,46 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           parentTask: cp.checklist[0],
           taskIndex: 0,
           checkpointNode: cp,
-          engineHint: 'Unreal Engine 5',
+          engineHint: 'Godot 4 (GDScript)',
         );
         final bp1 = TaskHowToBlueprint.resolve(
           parentTask: cp.checklist[1],
           taskIndex: 1,
           checkpointNode: cp,
-          engineHint: 'Unreal Engine 5',
+          engineHint: 'Godot 4 (GDScript)',
         );
         final bp2 = TaskHowToBlueprint.resolve(
           parentTask: cp.checklist[2],
           taskIndex: 2,
           checkpointNode: cp,
-          engineHint: 'Unreal Engine 5',
+          engineHint: 'Godot 4 (GDScript)',
         );
 
-        // Task 1 (Pawn Setup) creates BP_LocomotionCharacter as ACharacter with Capsule + Camera + CharacterMovement
+        // Task 1 (Pawn Setup) creates locomotion_character.tscn as CharacterBody2D/3D with Visual + HitBox + CollisionShape2D
         expect(bp0.subSteps[0].shortTitle,
-            equals('Create BP_LocomotionCharacter'));
-        expect(bp0.subSteps[0].codeFormula, contains('Character (ACharacter'));
-        expect(bp0.subSteps[1].codeFormula, contains('CapsuleComponent'));
-        expect(bp0.subSteps[1].codeFormula, contains('FirstPersonCamera'));
-        expect(bp0.subSteps[1].codeFormula, contains('CharacterMovement'));
+            equals('Create locomotion_character.tscn'));
+        expect(bp0.subSteps[0].codeFormula, contains('extends CharacterBody2D'));
+        expect(bp0.subSteps[0].codeFormula,
+            contains('class_name LocomotionCharacter'));
+        expect(bp0.subSteps[1].codeFormula, contains('HitBox (Area2D)'));
+        expect(bp0.subSteps[1].codeFormula, contains('CollisionShape2D'));
 
-        // Task 2 (Input Mapping) sets up IA_Move & IMC_Default and wires to AddMovementInput on the SAME BP_LocomotionCharacter
+        // Task 2 (Input Mapping) configures Input Map and reads Input.get_vector() on the SAME locomotion_character.gd
         expect(
-            bp1.subSteps[0].shortTitle, equals('Create IA_Move & IMC_Default'));
-        expect(bp1.subSteps[0].codeFormula,
-            contains('BP_LocomotionCharacter (Reuse from Task 01)'));
-        expect(bp1.subSteps[1].shortTitle, equals('Register Mapping Context'));
-        expect(bp1.subSteps[2].shortTitle,
-            equals('Wire IA_Move to AddMovementInput'));
+            bp1.subSteps[0].shortTitle, equals('Configure Input Map Actions'));
+        expect(bp1.subSteps[0].instruction,
+            contains('res://scripts/locomotion_character.gd (created in Task 01)'));
+        expect(bp1.subSteps[1].shortTitle, equals('Read Input.get_vector()'));
+        expect(bp1.subSteps[2].shortTitle, equals('Wire Input to Velocity'));
 
-        // Task 3 (Physics Tuning) tunes CharacterMovement speed, acceleration & velocity on the SAME BP_LocomotionCharacter
-        expect(bp2.subSteps[0].shortTitle, equals('Select Movement Component'));
-        expect(bp2.subSteps[0].codeFormula,
-            contains('BP_LocomotionCharacter (Reuse from Task 01)'));
-        expect(bp2.subSteps[1].shortTitle,
-            equals('Configure Walk Speed & Gravity'));
+        // Task 3 (Physics Tuning) tunes acceleration, friction & move_and_slide() on the SAME locomotion_character.gd
         expect(
-            bp2.subSteps[2].shortTitle, equals('Wire Physics Momentum Curve'));
+            bp2.subSteps[0].shortTitle, equals('Configure Physics Properties'));
+        expect(bp2.subSteps[0].instruction,
+            contains('res://scripts/locomotion_character.gd (created in Task 01)'));
+        expect(
+            bp2.subSteps[1].shortTitle, equals('Configure Velocity & Gravity'));
+        expect(bp2.subSteps[2].shortTitle, equals('Call move_and_slide()'));
 
         // ── 2. AI Step Synthesis: 1-Based taskIndex (1, 2, 3) Maps Cleanly to checklist[0], [1], [2] with Zero Shift ──
         final prevResponder = GeminiAgentClient.testMockResponder;
@@ -4412,16 +4234,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                   'subSteps': [
                     {
                       'title':
-                          'STEP 1.1 · CREATE CHARACTER BLUEPRINT BP_ROOFRUNNER',
+                          'STEP 1.1 · CREATE CHARACTER SCENE ROOF_RUNNER.TSCN',
                       'stepPath':
-                          'Content Browser → /Game/Blueprints/BP_RoofRunner',
+                          'FileSystem → res://scenes/roof_runner.tscn',
                       'instruction':
-                          'Create BP_RoofRunner inheriting from Character.',
+                          'Create roof_runner.tscn with CharacterBody3D root.',
                       'area1Hierarchy':
-                          'BP_RoofRunner (ACharacter)\n └─ CapsuleComponent',
+                          'RoofRunner (CharacterBody3D)\n └─ CollisionShape3D',
                       'area2Inspector': 'walkSpeed: 600 cm/s',
-                      'codeFormula': 'Parent Class: Character (ACharacter)',
-                      'verifyResult': 'BP_RoofRunner compiles cleanly.',
+                      'codeFormula': 'extends CharacterBody3D\nclass_name RoofRunner',
+                      'verifyResult': 'roof_runner.tscn opens cleanly in Godot 4.',
                     },
                   ],
                 },
@@ -4429,14 +4251,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                   'taskIndex': 2,
                   'subSteps': [
                     {
-                      'title': 'STEP 2.1 · SETUP ENHANCED INPUT MAPPING',
-                      'stepPath': 'BP_RoofRunner → Event Graph',
+                      'title': 'STEP 2.1 · SETUP INPUT MAP ACTIONS',
+                      'stepPath': 'res://scripts/roof_runner.gd',
                       'instruction':
-                          'Bind IA_Move and IMC_Default inside BP_RoofRunner.',
+                          'Bind move actions and read Input.get_vector in roof_runner.gd.',
                       'area1Hierarchy': '',
                       'area2Inspector': 'walkSpeed: 600 cm/s',
-                      'codeFormula': '[IA_Move] ──► [AddMovementInput]',
-                      'verifyResult': 'WASD moves BP_RoofRunner in Play mode.',
+                      'codeFormula': 'var input_dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")',
+                      'verifyResult': 'WASD moves RoofRunner in F6.',
                     },
                   ],
                 },
@@ -4446,16 +4268,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                     {
                       'title':
                           'STEP 3.1 · TUNE VELOCITY, GRAVITY & COLLISION GUARD',
-                      'stepPath': 'BP_RoofRunner → CharacterMovement Details',
+                      'stepPath': 'res://scripts/roof_runner.gd',
                       'instruction':
-                          'Set Max Walk Speed = 600 and Jump Z Velocity = 450.',
+                          'Set @export var walk_speed = 6.0 and jump_velocity = 4.5.',
                       'area1Hierarchy': '',
                       'area2Inspector':
                           'walkSpeed: 600 cm/s | jumpForce: 450 cm/s',
                       'codeFormula':
-                          'CharacterMovement->MaxWalkSpeed = walkSpeed;',
+                          'velocity.x = input_dir.x * walk_speed\nmove_and_slide()',
                       'verifyResult':
-                          'BP_RoofRunner sprints and jumps without roof clipping.',
+                          'RoofRunner sprints and jumps without roof clipping.',
                     },
                   ],
                 },
@@ -4478,23 +4300,23 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         final afterAiStates = FeatureStateNode.getStatesForDocument(feat);
         final afterCp = afterAiStates.first;
-        // Task 01 (Pawn Setup) got taskIndex 1's steps
+        // Task 01 (Character Setup) got taskIndex 1's steps
         expect(
           afterCp.checklist[0].children.first.text,
-          equals('STEP 1.1 · CREATE CHARACTER BLUEPRINT BP_ROOFRUNNER'),
+          equals('STEP 1.1 · CREATE CHARACTER SCENE ROOF_RUNNER.TSCN'),
         );
-        // Task 02 (Input Mapping) got taskIndex 2's steps (NOT Pawn Setup!)
+        // Task 02 (Input Mapping) got taskIndex 2's steps
         expect(
           afterCp.checklist[1].children.first.text,
-          equals('STEP 2.1 · SETUP ENHANCED INPUT MAPPING'),
+          equals('STEP 2.1 · SETUP INPUT MAP ACTIONS'),
         );
-        // Task 03 (Physics Tuning) got taskIndex 3's steps (NOT Input Mapping and NOT dropped!)
+        // Task 03 (Physics Tuning) got taskIndex 3's steps
         expect(
           afterCp.checklist[2].children.first.text,
           equals('STEP 3.1 · TUNE VELOCITY, GRAVITY & COLLISION GUARD'),
         );
 
-        // ── 3. Foundation-First Task Order & Zero Throwaway Actors ("Chamber Blast" & "Concrete Jungle Run") ──
+        // ── 3. Foundation-First Task Order & Zero Throwaway Scenes ──
         final normalizedChamber =
             ReleasePlannerAgent.normalizeFoundationFirstTasks(
           const [
@@ -4526,8 +4348,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(normalizedJungle[2], equals('Animation Blend (2h)'));
 
         // Even if a saved project has Task 1 = "Input Mapping (2h)", TaskHowToBlueprint never creates
-        // a throwaway BP_InputMapping... Actor; Task 1 creates IA_Move & IMC_Default, Task 2 creates
-        // BP_PlayerCharacter, and Task 3 tunes BP_PlayerCharacter!
+        // a throwaway input_mapping scene; Task 1 configures Input Map, Task 2 creates the scene,
+        // and Task 3 edits the same script!
         final slideCp = FeatureStateNode(
           id: 'cp_slide',
           name: 'Movement (v0.1)',
@@ -4546,23 +4368,23 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           parentTask: slideCp.checklist[0],
           taskIndex: 0,
           checkpointNode: slideCp,
-          engineHint: 'Unreal Engine 5',
+          engineHint: 'Godot 4 (GDScript)',
         );
         final slideBp1 = TaskHowToBlueprint.resolve(
           parentTask: slideCp.checklist[1],
           taskIndex: 1,
           checkpointNode: slideCp,
-          engineHint: 'Unreal Engine 5',
+          engineHint: 'Godot 4 (GDScript)',
         );
         final slideBp2 = TaskHowToBlueprint.resolve(
           parentTask: slideCp.checklist[2],
           taskIndex: 2,
           checkpointNode: slideCp,
-          engineHint: 'Unreal Engine 5',
+          engineHint: 'Godot 4 (GDScript)',
         );
         expect(
           slideBp0.subSteps[0].shortTitle,
-          equals('Create IA_Move & IMC_Default'),
+          equals('Configure Input Map Actions'),
         );
         expect(
           slideBp0.subSteps[0].shortTitle.contains('BP_InputMapping'),
@@ -4570,11 +4392,15 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(
           slideBp1.subSteps[0].shortTitle,
-          equals('Create BP_PlayerCharacter'),
+          startsWith('Create '),
+        );
+        expect(
+          slideBp1.subSteps[0].shortTitle,
+          endsWith('.tscn'),
         );
         expect(
           slideBp2.subSteps[0].codeFormula,
-          contains('BP_PlayerCharacter'),
+          contains('extends CharacterBody2D'),
         );
       },
     );
@@ -4668,10 +4494,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
       () async {
         final provider = WorkbenchProvider(enableAutoLoad: false);
         await provider.startConceptInterview(
-          'Unreal 5 arena shooter with grapple hook, wave spawner, and ore extraction.',
+          'Godot 4 arena shooter with grapple hook, wave spawner, and ore extraction.',
         );
         provider.updateConceptDraft((d) {
-          d.techSpec = ['Unreal Engine 5', '3D Arena'];
+          d.techSpec = ['Godot 4 (GDScript)', '3D Arena'];
         });
         await provider.approveConceptAndBuildRelease();
 
@@ -4690,21 +4516,23 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 capturedPromptsByFeatTitle[feat1.title] = prompt;
               }
               return <String, dynamic>{
+                'primarySharedScriptOrScene':
+                    'res://scenes/player_character.tscn · res://scripts/player_character.gd',
                 'tasks': [
                   {
                     'taskIndex': 0,
                     'subSteps': [
                       {
-                        'title': 'STEP 1.1 · CREATE BP_PLAYERCHARACTER ASSET',
-                        'stepPath': '/Game/Blueprints/BP_PlayerCharacter',
+                        'title': 'STEP 1.1 · CREATE PLAYER_CHARACTER.TSCN SCENE',
+                        'stepPath': 'res://scenes/player_character.tscn',
                         'instruction':
-                            'Create BP_PlayerCharacter and attach GrappleComponent.',
+                            'Create player_character.tscn and attach RayCast3D GrappleRay.',
                         'area1Hierarchy':
-                            'BP_PlayerCharacter (Self)\n └─ GrappleComponent (USceneComponent)',
+                            'PlayerCharacter (CharacterBody3D)\n └─ GrappleRay (RayCast3D)',
                         'area2Inspector': 'moveSpeed: 600.0 cm/s',
-                        'codeFormula': 'moveSpeed = 600.0;',
+                        'codeFormula': '@export var moveSpeed: float = 600.0',
                         'verifyResult':
-                            'BP_PlayerCharacter spawns in the arena.',
+                            'PlayerCharacter spawns in the arena.',
                       },
                     ],
                   },
@@ -4716,21 +4544,23 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 capturedPromptsByFeatTitle[feat2.title] = prompt;
               }
               return <String, dynamic>{
+                'primarySharedScriptOrScene':
+                    'res://scenes/player_character.tscn · res://scripts/player_character.gd',
                 'tasks': [
                   {
                     'taskIndex': 0,
                     'subSteps': [
                       {
                         'title':
-                            'STEP 1.1 · EXTEND BP_PLAYERCHARACTER RELEASE IMPULSE',
-                        'stepPath': '/Game/Blueprints/BP_PlayerCharacter',
+                            'STEP 1.1 · EXTEND PLAYER_CHARACTER.GD RELEASE IMPULSE',
+                        'stepPath': 'res://scripts/player_character.gd',
                         'instruction':
-                            'Extend BP_PlayerCharacter with releaseBoostSpeed.',
+                            'Extend player_character.gd with releaseBoostSpeed.',
                         'area1Hierarchy': '',
                         'area2Inspector': 'releaseBoostSpeed: 320.0 px/s',
-                        'codeFormula': 'releaseBoostSpeed = 320.0;',
+                        'codeFormula': '@export var releaseBoostSpeed: float = 320.0',
                         'verifyResult':
-                            'Release boost launches BP_PlayerCharacter.',
+                            'Release boost launches PlayerCharacter.',
                       },
                     ],
                   },
@@ -4784,7 +4614,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         // 3. Cumulative Project Ledger passed from Feature #1 into Feature #2
         expect(prompt2, contains('CUMULATIVE PROJECT LEDGER'));
-        expect(prompt2, contains('BP_PlayerCharacter'));
+        expect(prompt2, contains('player_character.gd'));
         expect(prompt2, contains('moveSpeed: 240.0 px/s'));
 
         // 4. Stage 2 Intra-Epic Build Dependency Rules (Surface Before Actor, Target Before Tether, Base Action Before Gate)
@@ -5882,20 +5712,20 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           'A 2D top-down arena shooter where you farm crops by day for shotgun ammo by night',
         );
 
-        // Verify Fix 1: Generic "2D Game Engine" normalized to Unreal Engine 5 workflow and initial releaseTrainTitles capped to 1
+        // Verify Fix 1: Generic "2D Game Engine" normalized to Godot 4 (GDScript) workflow and initial releaseTrainTitles capped to 1
         expect(
           provider.conceptDraft!.techSpec.first,
-          'Unreal Engine 5 (Blueprints / C++)',
+          'Godot 4 (GDScript)',
         );
         expect(provider.conceptDraft!.releaseTrainTitles.length, 1);
 
-        // Verify Fix 1 on chat turn as well ("2D Engine" -> Unreal Engine 5)
+        // Verify Fix 1 on chat turn as well ("2D Engine" -> Godot 4 (GDScript))
         await provider.sendConceptChatMessage(
           'Add dash-through-enemy reload mechanic',
         );
         expect(
           provider.conceptDraft!.techSpec.first,
-          'Unreal Engine 5 (Blueprints / C++)',
+          'Godot 4 (GDScript)',
         );
 
         // Build v0.1 Release
@@ -5941,7 +5771,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(capturedInboxPrompts.last, contains('Game Spec: 2D Top-Down'));
         expect(
           capturedInboxPrompts.last,
-          contains('Tech Spec: Unreal Engine 5 (Blueprints / C++)'),
+          contains('Tech Spec: Godot 4 (GDScript)'),
         );
         final nowFeatId = await provider.acceptFeatureInboxTriage(nowInbox!.id);
         expect(nowFeatId, isNotNull);
@@ -6012,7 +5842,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     test(
-      '2nd Project Multi-Project Vault & Token Optimization Audit ("Submerged Mech Salvage" Unity 6 C# after "Crop Shotgun Arena" Godot 4)',
+      '2nd Project Multi-Project Vault & Token Optimization Audit ("Submerged Mech Salvage" Godot 4 after "Crop Shotgun Arena" Godot 4)',
       () async {
         int planReleaseCalls = 0;
         GeminiAgentClient.testMockResponder = (prompt, model) async {
@@ -6026,7 +5856,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 'agentReasoning':
                     'Prioritizes weighted 3D seabed movement and physics-tethered harpoon towing.',
                 'goal':
-                    'Build a playable 3D abyssal trench salvage loop in Unity 6.',
+                    'Build a playable 3D abyssal trench salvage loop in Godot 4.',
                 'doneWhen':
                     'Playtester walks the trench, winches a core, defends against drones, and docks.',
                 'explicitExclusions': ['4-Player Co-Op'],
@@ -6041,12 +5871,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                       {
                         'id': 'feat_1_1',
                         'title': 'Exo-Rig Buoyancy Walk',
-                        'goal': 'Implement 3D Rigidbody movement.',
+                        'goal': 'Implement 3D RigidBody3D movement.',
                         'doneWhen': 'Rig walks and jumps with thruster hop.',
                         'estimatedHours': 4,
                         'included': true,
                         'lifecycle': 'new',
-                        'inScope': ['Rigidbody movement'],
+                        'inScope': ['RigidBody3D movement'],
                         'outOfScope': [],
                         'tuningParams': ['moveForce: 18000 N'],
                         'edgeCases': [
@@ -6058,7 +5888,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                             'playtestCriteria':
                                 'Hold WASD -> Rig walks with weighted footstep drag',
                             'tasks': [
-                              'Configure ExoRigController Rigidbody (2h)',
+                              'Configure ExoRigController RigidBody3D (2h)',
                               'Implement WASD movement and thruster impulse (1h)',
                               'Clamp terminal sink speed (1h)',
                             ],
@@ -6081,7 +5911,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                         'estimatedHours': 4,
                         'included': true,
                         'lifecycle': 'new',
-                        'inScope': ['ConfigurableJoint winch'],
+                        'inScope': ['Generic6DOFJoint3D winch'],
                         'outOfScope': [],
                         'tuningParams': ['maxCableLength: 28.0 m'],
                         'edgeCases': [
@@ -6093,9 +5923,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                             'playtestCriteria':
                                 'Fire harpoon -> core reels toward rig',
                             'tasks': [
-                              'Create HarpoonProjectile and ConfigurableJoint (2h)',
+                              'Create HarpoonProjectile and Generic6DOFJoint3D (2h)',
                               'Implement cable reel-in force (1h)',
-                              'Add LineRenderer cable visual (1h)',
+                              'Add MeshInstance3D cable visual (1h)',
                             ],
                           },
                         ],
@@ -6113,7 +5943,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               'reply':
                   'Added Cable Tension Snap Meter to Harpoon Winch & Tow.',
               'goal':
-                  'Build a playable 3D abyssal trench salvage loop in Unity 6.',
+                  'Build a playable 3D abyssal trench salvage loop in Godot 4.',
               'doneWhen':
                   'Playtester walks the trench, winches a core with tension gauge, and docks.',
               'explicitExclusions': ['4-Player Co-Op'],
@@ -6184,9 +6014,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               'reply': 'Drafted Submerged Mech Salvage.',
               'title': 'Submerged Mech Salvage',
               'goal':
-                  'Build a 3D underwater mech salvage loop in Unity 6.',
+                  'Build a 3D underwater mech salvage loop in Godot 4.',
               'gameSpec': ['Perspective: 3D Third-Person Over-Shoulder'],
-              'techSpec': ['Engine: Unity 6 (C#)'],
+              'techSpec': ['Engine: Godot 4 (GDScript)'],
               'designPillars': ['Crushing Abyssal Weight: Heavy momentum'],
               'tradeOffs': [
                 'Tethered cable physics over free-swimming arcade flight',
@@ -6222,14 +6052,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.releaseViewFilter, equals('active'));
         expect(provider.executionLog, isEmpty);
 
-        // 3. Draft Project #2 ("Submerged Mech Salvage", Unity 6 C#) and verify Cost Fix 1
+        // 3. Draft Project #2 ("Submerged Mech Salvage", Godot 4) and verify Cost Fix 1
         // (Stage 1 concept edits do NOT trigger background planRelease pre-warm calls)
         planReleaseCalls = 0;
         await provider.startConceptInterview('Submerged Mech Salvage');
         final proj2Id = provider.activeProject!.id;
         expect(proj2Id, isNot(equals(proj1Id)));
         provider.updateConceptDraft((d) {
-          d.techSpec = ['Engine: Unity 6 (C#)', 'Platform: Desktop PC'];
+          d.techSpec = ['Engine: Godot 4 (GDScript)', 'Platform: Desktop PC'];
         });
         await Future<void>.delayed(const Duration(milliseconds: 20));
         expect(
@@ -6291,8 +6121,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         for (final task in addedStates.first.checklist) {
           expect(task.children.length, greaterThanOrEqualTo(3));
         }
+        await Future<void>.delayed(const Duration(milliseconds: 50));
 
-        // 7. Verify Bug 4 Fix: logPlaytestIssueOnCheckpoint on Unity 6 (C#) project uses C# Debug.LogWarning & .cs path
+        // 7. Verify Bug 4 Fix: logPlaytestIssueOnCheckpoint on Godot 4 project uses GDScript push_warning & res://scripts/*.gd path
         final firstFeat =
             provider.featuresForBeat(provider.activeReleaseBeats.first.id).first;
         final firstStates = FeatureStateNode.getStatesForDocument(firstFeat);
@@ -6310,18 +6141,18 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 .checklist[fixIdx]
                 .children
                 .first;
-        expect(fixSub1.codeSnippet, contains('Debug.LogWarning'));
+        expect(fixSub1.codeSnippet, contains('push_warning'));
         expect(
           fixSub1.codeLanguage,
-          startsWith('Assets/Scripts/'),
+          startsWith('res://scripts/'),
         );
         expect(
           fixSub1.codeLanguage,
-          endsWith('Controller.cs'),
+          endsWith('.gd'),
         );
         expect(
           fixSub1.codeLanguage,
-          isNot(contains('PlaytestFixController')),
+          isNot(contains('playtest_fix_controller')),
         );
 
         // 8. Verify Multi-Project Vault Switching (Project #2 <-> Project #1)
@@ -6334,7 +6165,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.activeProject!.title, equals('Submerged Mech Salvage'));
         expect(provider.conceptDraft!.title, equals('Submerged Mech Salvage'));
 
-        // 9. Verify Pure gemini-flash-latest (LOW) configuration & Focused Context Architecture:
+        // 9. Verify Pure gemini-4-hydrogen (LOW) configuration & Focused Context Architecture:
         expect(
           WorkbenchProvider.availablePlanningModels,
           isNot(contains('gemini-4-argon')),
@@ -6356,7 +6187,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           }
           if (prompt.contains('3-Area Engine How-To steps') &&
               prompt.contains('for Feature')) {
-            capturedStepSynthPrompt = prompt;
+            if (prompt.contains('for Feature "Harpoon Cable Winch"')) {
+              capturedStepSynthPrompt = prompt;
+            }
             if (prompt.contains('"Hull Breach Welder"')) {
               sonarStepSynthCalls++;
             }
@@ -6370,12 +6203,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               'subSteps': [
                 {
                   'title': 'STEP 1.1 · WIRE HARPOON REEL JOINT',
-                  'stepPath': 'Assets/Scripts/HarpoonWinch.cs',
-                  'instruction': 'Attach ConfigurableJoint to HarpoonWinch.',
+                  'stepPath': 'res://scripts/harpoon_winch.gd',
+                  'instruction': 'Attach Generic6DOFJoint3D to HarpoonWinch.',
                   'area1Hierarchy': 'HarpoonWinch\n └─ WinchCableJoint',
                   'area2Inspector': 'maxReelForce: 450 N | cableDamping: 0.8',
-                  'codeFormula': 'winchJoint.xMotion = ConfigurableJointMotion.Limited;',
-                  'verifyResult': 'Cable reels in target core cleanly in Play mode.',
+                  'codeFormula': 'winch_joint.set_flag_x(Generic6DOFJoint3D.FLAG_ENABLE_LINEAR_LIMIT, true)',
+                  'verifyResult': 'Cable reels in target core cleanly in F6.',
                 },
               ],
             };
@@ -6420,13 +6253,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(capturedStepSynthPrompt, contains('Checkpoint Playtest Gate:'));
         expect(
           capturedStepSynthPrompt,
-          contains('PlayerController.cs / MonoBehaviour Prefab'),
+          contains('res://scripts/harpoon_cable_winch.gd'),
         );
         expect(
           capturedStepSynthPrompt,
           isNot(contains('BP_PlayerCharacter')),
           reason:
-              'Unity 6 step synthesis prompt must not contain hardcoded Unreal 5 BP_PlayerCharacter instructions',
+              'Godot 4 step synthesis prompt must not contain legacy UE5 BP_PlayerCharacter instructions',
         );
         expect(
           capturedStepSynthPrompt,
@@ -6527,7 +6360,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             ),
           ),
         );
-        expect(capturedRelChatPrompt, contains('Unity 6 (C#)'));
+        expect(capturedRelChatPrompt, contains('Godot 4 (GDScript)'));
 
         // Verify Native Gemini Function Calling tool schemas & typed argument parsers
         expect(
@@ -6937,7 +6770,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals('res://actors/grapple_hook.gd'),
         );
 
-        // 5c. buildSectionOptionsTool('techSpec') uses canonical 'Unreal Engine 5 (Blueprints / C++)'
+        // 5c. buildSectionOptionsTool('techSpec') uses canonical 'Godot 4 (GDScript)' & 'Godot 4 (GDScript + GDExtension C++)'
         final pass2TechSpecTool = ProjectConceptAgent.buildSectionOptionsTool(
           'techSpec',
         );
@@ -6950,7 +6783,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 as Map)['enum'] as List<dynamic>;
         expect(
           pass2EngineEnum,
-          contains('Unreal Engine 5 (Blueprints / C++)'),
+          contains('Godot 4 (GDScript)'),
+        );
+        expect(
+          pass2EngineEnum,
+          contains('Godot 4 (GDScript + GDExtension C++)'),
         );
 
         // 5d. updateFeatureStates automatically syncs _releaseBlueprint feature tuning, edgeCases, and task titles
@@ -7147,7 +6984,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           );
         }
 
-        // 9b. Switching 03 Tech Spec Engine in Stage 1 (Unity 6 -> Godot 4 -> Unity 6) invalidates stale custom_snippet code and regenerates engine steps
+        // 9b. Switching 03 Tech Spec stack in Stage 1 (Godot 4 GDScript 2D -> GDExtension C++ 3D) invalidates stale custom_snippet code and regenerates engine steps
         final switchFeatId = liveDocForBpSync.id;
         provider.updateConceptDraft((d) {
           d.techSpec = ['Godot 4 (GDScript)', 'PC (Steam)', '2D Sprite & Tilemap'];
@@ -7174,7 +7011,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         provider.updateFeatureStates(switchFeatId, preSwitchStates);
 
         provider.updateConceptDraft((d) {
-          d.techSpec = ['Unity 6 (C#)', 'PC (Steam)', '2D Sprite & Tilemap'];
+          d.techSpec = [
+            'Godot 4 (GDScript + GDExtension C++)',
+            'PC (Steam)',
+            '3D Low-Poly Meshes',
+          ];
         });
 
         final postSwitchDoc = provider.documents[switchFeatId]!;
@@ -7187,16 +7028,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isFalse,
         );
         expect(postSwitchStates.first.checklist.first.completed, isTrue);
-        final resolvedUnityBp = TaskHowToBlueprint.resolve(
+        final resolvedGodotBp = TaskHowToBlueprint.resolve(
           parentTask: postSwitchStates.first.checklist.first,
           taskIndex: 0,
           checkpointNode: postSwitchStates.first,
-          engineHint: 'Unity 6 (C#)',
+          engineHint: 'Godot 4 (GDScript + GDExtension C++)',
         );
-        expect(resolvedUnityBp.engineLabel, equals('UNITY C#'));
+        expect(resolvedGodotBp.engineLabel, equals('GODOT 4'));
         expect(
-          resolvedUnityBp.subSteps.first.codeFormula,
-          isNot(contains('@export var')),
+          resolvedGodotBp.subSteps.first.codeFormula,
+          isNot(contains('@export var cable_speed')),
         );
 
         // 9c. Promoting an Exclusion inside Progressive Release Co-Pilot and then canceling restores _conceptDraft.exclusions
@@ -7284,7 +7125,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
 
         // 11. Stage 2 Workbench & AI Release Architecture Audit Regressions
-        // 11a. GeminiAgentClient.buildNativeThinkingConfig uses capped fast thinking budget (256)
+        // 11a. GeminiAgentClient.buildNativeThinkingConfig maps LOW/MEDIUM/HIGH budgets accurately
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'LOW',
@@ -7297,14 +7138,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             normalizedThinking: 'MEDIUM',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(256),
+          equals(1024),
         );
         expect(
           GeminiAgentClient.buildNativeThinkingConfig(
             normalizedThinking: 'HIGH',
             useThinkingLevelEnum: false,
           )['thinkingBudget'],
-          equals(256),
+          equals(4096),
         );
         expect(
           ProjectConceptAgent.conceptSectionBuildOrder.length,
@@ -7758,9 +7599,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(
           TaskHowToBlueprint.formatTelegraphicStepTitle(
-            'STEP 1.2 · CREATE THE BP_PLAYER_CHARACTER ACTOR IN THE LEVEL',
+            'STEP 1.2 · CREATE THE GD_PLAYER_DASH SCENE IN THE SCENE',
           ),
-          equals('Create BP_Player_Character Actor'),
+          equals('Create GD_Player_Dash Scene'),
         );
 
         // 3. Telegraphic Guard Chip (converts "Prevent <X> from <Y>ing" -> "Block <X> <Y>ing" and strips articles)
@@ -8632,13 +8473,17 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isTrue,
         );
 
-        // 2. Click "Pass Playtest & Continue ->" on the inline gate card
-        final passGateBtn = find.byKey(ValueKey('feature_gate_pass_btn_$cpId'));
-        expect(passGateBtn, findsOneWidget);
-        await tester.ensureVisible(passGateBtn);
-        await tester.pumpAndSettle();
-        await tester.tap(passGateBtn);
-        await tester.pumpAndSettle();
+        // 2. Complete all tasks via header `Done & Next Task →` / `✓ Complete Feature & Next →` button to pass playtest & advance
+        final taskCountAfterBug = statesAfterBug.last.checklist.length;
+        for (int t = 0; t < taskCountAfterBug; t++) {
+          final passGateBtn =
+              find.byKey(ValueKey('one_click_complete_next_btn_$cpId'));
+          expect(passGateBtn, findsOneWidget);
+          await tester.ensureVisible(passGateBtn);
+          await tester.pumpAndSettle();
+          await tester.tap(passGateBtn);
+          await tester.pumpAndSettle();
+        }
 
         expect(provider.getDocumentProgress(firstFeatId), equals(100));
         expect(provider.selectedFeatureId, isNot(equals(firstFeatId)));
@@ -8646,7 +8491,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     testWidgets(
-      'Gemini 3.8 Flash LOW thinking standard, accumulative token usage tracking, pricing math, and reset',
+      'Gemini 4 Hydrogen LOW thinking standard, accumulative token usage tracking, pricing math, and reset',
       (tester) async {
         final provider = WorkbenchProvider();
         expect(provider.thinkingLevel, equals('LOW'));
@@ -8657,7 +8502,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         // 1. Simulate multiple API calls accumulating tokens
         // Call 1: 100,000 in, 20,000 out
-        // Cost: (100000 * 1.50 + 20000 * 3.75) / 1,000,000 = (150,000 + 75,000) / 1M = 0.225
+        // Cost: (100000 * 1.50 + 20000 * 7.50) / 1,000,000 = (150,000 + 150,000) / 1M = 0.300
         provider.recordTokenUsage(
           inputTokens: 100000,
           outputTokens: 20000,
@@ -8666,12 +8511,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.totalInputTokens, equals(100000));
         expect(provider.totalOutputTokens, equals(20000));
         expect(provider.totalThinkingTokens, equals(5000));
-        expect(provider.totalEstimatedCostUsd, closeTo(0.225, 0.0001));
-        expect(provider.tokenUsageCompactLabel, equals('100k in · 20k out · \$0.225'));
+        expect(provider.totalEstimatedCostUsd, closeTo(0.300, 0.0001));
+        expect(provider.tokenUsageCompactLabel, equals('100k in · 20k out · \$0.300'));
 
         // Call 2: Add 50,000 in, 10,000 out
         // Total In: 150,000, Total Out: 30,000
-        // Cost: (150000 * 1.50 + 30000 * 3.75) / 1M = (225,000 + 112,500) / 1M = 0.3375
+        // Cost: (150000 * 1.50 + 30000 * 7.50) / 1M = (225,000 + 225,000) / 1M = 0.450
         provider.recordTokenUsage(
           inputTokens: 50000,
           outputTokens: 10000,
@@ -8680,8 +8525,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(provider.totalInputTokens, equals(150000));
         expect(provider.totalOutputTokens, equals(30000));
         expect(provider.totalThinkingTokens, equals(7000));
-        expect(provider.totalEstimatedCostUsd, closeTo(0.3375, 0.0001));
-        expect(provider.tokenUsageCompactLabel, equals('150k in · 30k out · \$0.338'));
+        expect(provider.totalEstimatedCostUsd, closeTo(0.450, 0.0001));
+        expect(provider.tokenUsageCompactLabel, equals('150k in · 30k out · \$0.450'));
 
         // 2. Pump the app UI and verify top bar token tracker pill displays
         tester.view.physicalSize = const Size(1280, 800);
@@ -8696,7 +8541,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         final pillFinder = find.byKey(const ValueKey('token_usage_tracker_pill'));
         expect(pillFinder, findsOneWidget);
-        expect(find.text('150k in · 30k out · \$0.338'), findsOneWidget);
+        expect(find.text('150k in · 30k out · \$0.450'), findsOneWidget);
 
         // 3. Click the pill to reset token counters
         await tester.tap(pillFinder);
@@ -8716,7 +8561,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           ),
         );
         expect(tooltipWidget.message, contains('\$1.50 / 1M'));
-        expect(tooltipWidget.message, contains('\$3.75 / 1M'));
+        expect(tooltipWidget.message, contains('\$7.50 / 1M'));
       },
     );
 
@@ -9015,7 +8860,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     testWidgets(
-      'Level Blockout Engine Accuracy: Pinned gemini-3.8-flash, DefaultPawn before Character, Static Outliner Steps, Hidden C++ Toggle & Task Switchers',
+      'Level Blockout Engine Accuracy: Pinned gemini-4-hydrogen, Test Capsule RigidBody Bootstrap, Static Scene Tree Inspector Steps & Task Switchers',
       (WidgetTester tester) async {
         expect(
           GeminiAgentClient.pinnedLiveFlashModel,
@@ -9031,7 +8876,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         provider.updateConceptDraft((d) {
           d.techSpec = [
-            'Engine: Unreal Engine 5 (Blueprints / C++)',
+            'Engine: Godot 4 (GDScript)',
             'Dimension: 3D First-Person',
           ];
           d.coreLoopBeats = [
@@ -9059,24 +8904,26 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         GeminiAgentClient.testMockResponder = (prompt, model) async {
           capturedLevelPrompt = prompt;
           return {
-            'primarySharedScriptOrScene': 'L_GreyboxArena',
+            'primarySharedScriptOrScene': 'res://scenes/levels/greybox_arena.tscn',
             'tasks': [
               {
                 'taskIndex': 0,
                 'taskTitle': 'Arena Floor Sectors',
                 'subSteps': [
                   {
-                    'shortTitle': 'Place Greenhouse Floor Cylinder',
-                    'stepPath': '/Game/Maps/L_GreyboxArena',
+                    'stepRole': 'editor_setup',
+                    'shortTitle': 'Place Greenhouse Floor StaticBody3D',
+                    'stepPath': 'res://scenes/levels/greybox_arena.tscn',
                     'doInstruction':
-                        'Place Cylinder Floor_Greenhouse at (0, 0, 0) with BlockAll collision.',
+                        'Add StaticBody3D Floor_Greenhouse at (0, 0, 0) with BoxShape3D.',
                     'area1Hierarchy':
-                        'L_GreyboxArena (Level)\n └─ Floor_Greenhouse (StaticMeshActor) ← SELECTED',
-                    'area2Inspector': 'Location: (0, 0, 0)\nScale: (20, 20, 0.2)',
+                        'GreyboxArena (Node3D)\n └─ Floor_Greenhouse (StaticBody3D) ← SELECTED',
+                    'area2Inspector': 'Position: Vector3(0, 0, 0)\nScale: Vector3(20, 0.5, 20)',
                     'codeFormula':
-                        'Place Actors → Cylinder ("Floor_Greenhouse")\n  └──► Static Mesh: /Engine/BasicShapes/Cylinder',
+                        '| Node (Type) | Property | Value |\n| --- | --- | --- |\n| Floor_Greenhouse (StaticBody3D) | Transform > Position | Vector3(0, 0, 0) |',
+                    'verifyMode': 'playtest',
                     'verifyResult':
-                        'Press Play → DefaultPawn spawns at (0, 0, 120) above Floor_Greenhouse.',
+                        'Press F6 -> Test Capsule RigidBody lands on Floor_Greenhouse.',
                   },
                 ],
               },
@@ -9085,17 +8932,19 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 'taskTitle': 'Perimeter Blocker Walls',
                 'subSteps': [
                   {
+                    'stepRole': 'editor_setup',
                     'shortTitle': 'Place Perimeter Wall Shell',
-                    'stepPath': '/Game/Maps/L_GreyboxArena',
+                    'stepPath': 'res://scenes/levels/greybox_arena.tscn',
                     'doInstruction':
-                        'Place Wall_Arena_Perimeter around the outer ring.',
+                        'Place Wall_Arena_Perimeter StaticBody3D around the outer ring.',
                     'area1Hierarchy':
-                        'L_GreyboxArena (Level)\n └─ Wall_Arena_Perimeter (StaticMeshActor) ← SELECTED',
-                    'area2Inspector': 'Collision Preset: BlockAll',
+                        'GreyboxArena (Node3D)\n └─ Wall_Arena_Perimeter (StaticBody3D) ← SELECTED',
+                    'area2Inspector': 'Collision Layer: 1',
                     'codeFormula':
-                        'Place Actors → Cylinder ("Wall_Arena_Perimeter")',
+                        '| Node (Type) | Property | Value |\n| --- | --- | --- |\n| Wall_Arena_Perimeter (StaticBody3D) | Transform > Position | Vector3(20, 2, 0) |',
+                    'verifyMode': 'playtest',
                     'verifyResult':
-                        'Fly outward → Wall_Arena_Perimeter blocks outward traversal.',
+                        'Run F6 -> Wall_Arena_Perimeter blocks outward traversal.',
                   },
                 ],
               },
@@ -9114,13 +8963,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
 
         expect(capturedLevelPrompt, isNotNull);
-        expect(capturedLevelPrompt, contains('DefaultPawn'));
-        expect(capturedLevelPrompt, contains('PlayerStart'));
-        expect(capturedLevelPrompt, contains('(0, 0, 120)'));
-        expect(
-          capturedLevelPrompt,
-          contains('NEVER prefix placed World Outliner Actor names with `SM_`'),
-        );
+        expect(capturedLevelPrompt, contains('RigidBody'));
+        expect(capturedLevelPrompt, contains('StaticBody floor/walls'));
+        expect(capturedLevelPrompt, contains('F6 Run Scene'));
 
         provider.selectFeature(levelFeat.id);
         await tester.pumpWidget(LayersAgenticApp(provider: provider));
@@ -9130,17 +8975,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           provider.documents[levelFeat.id]!,
         ).first.id;
 
-        // 1. Blueprint | C++ toggle is hidden on .umap Level Map features
-        expect(
-          find.byKey(ValueKey('unreal_mode_toggle_$cp0Id')),
-          findsNothing,
-        );
-        // 2. Initial Setup shows DefaultPawn (no chicken-and-egg BP_PlayerCharacter before Movement)
-        expect(find.textContaining('DefaultPawn'), findsWidgets);
-        // 3. Copy button reads "⧉ Copy steps" for static level blockouts & TARGET resolves Floor_Greenhouse
+        // 1. Initial Setup shows Test Capsule (RigidBody3D + CollisionShape3D) before Movement exists
+        expect(find.textContaining('Test Capsule'), findsWidgets);
+        // 2. Copy button reads "⧉ Copy steps" for static level blockouts & TARGET resolves Floor_Greenhouse
         expect(find.text('⧉ Copy steps'), findsWidgets);
         expect(find.textContaining('Floor_Greenhouse'), findsWidgets);
-        // 4. Header Row 1 task switchers advance cleanly from T1 -> T2 -> T1
+        // 3. Header task switchers advance cleanly from T1 -> T2 -> T1
         expect(find.text('T1'), findsWidgets);
         await tester.tap(
           find.byKey(ValueKey('engine_dock_next_step_$cp0Id')),
@@ -9343,6 +9183,163 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           );
           expect(capturedHeaders.single.containsKey('Authorization'), isFalse);
         } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+          GeminiAgentClient.proxyBaseUrlOverride = prevProxyOverride;
+          GeminiAgentClient.isProxyAuthenticated = prevIsAuth;
+          GeminiAgentClient.authTokenProvider = prevTokenProvider;
+        }
+      },
+    );
+
+    test(
+      'Gemini 4 Hydrogen Parameters & Proxy Policy Fallback: omits temperature, preserves LOW/MEDIUM/HIGH/XHIGH, clamps MINIMAL->LOW, and falls back on 403 model policy block',
+      () async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        final prevProxyOverride = GeminiAgentClient.proxyBaseUrlOverride;
+        final prevIsAuth = GeminiAgentClient.isProxyAuthenticated;
+        final prevTokenProvider = GeminiAgentClient.authTokenProvider;
+
+        GeminiAgentClient.resetCapabilityCacheForTest();
+        GeminiAgentClient.testMockResponder = null;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+        GeminiAgentClient.proxyBaseUrlOverride =
+            'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy';
+        GeminiAgentClient.isProxyAuthenticated = () => true;
+        GeminiAgentClient.authTokenProvider =
+            ({bool forceRefresh = false}) async => 'valid_firebase_jwt';
+
+        final capturedPayloads = <Map<String, dynamic>>[];
+        final capturedPaths = <String>[];
+
+        try {
+          // 1. Direct Hydrogen request omits temperature and preserves HIGH thinkingLevel
+          GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+            capturedPaths.add(uri.path);
+            capturedPayloads.add(
+              jsonDecode(body! as String) as Map<String, dynamic>,
+            );
+            return http.Response(
+              jsonEncode({
+                'candidates': [
+                  {
+                    'content': {
+                      'parts': [
+                        {'text': '{"hydrogenOk": true}'},
+                      ],
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          };
+
+          final highRes = await GeminiAgentClient.generateJson(
+            prompt: 'Test HIGH thinking',
+            apiKey: '',
+            preferredModel: 'gemini-4-hydrogen',
+            thinkingLevel: 'HIGH',
+          );
+          expect(highRes?['hydrogenOk'], isTrue);
+          final highGenCfg =
+              capturedPayloads.single['generationConfig'] as Map<String, dynamic>;
+          expect(highGenCfg.containsKey('temperature'), isFalse);
+          expect(
+            (highGenCfg['thinkingConfig'] as Map)['thinkingLevel'],
+            equals('HIGH'),
+          );
+
+          // 2. MINIMAL / NONE thinkingLevel is safely clamped to LOW on gemini-4-hydrogen
+          capturedPayloads.clear();
+          await GeminiAgentClient.generateJson(
+            prompt: 'Test MINIMAL clamp',
+            apiKey: '',
+            preferredModel: 'gemini-4-hydrogen',
+            thinkingLevel: 'MINIMAL',
+          );
+          final clampedCfg =
+              capturedPayloads.single['generationConfig'] as Map<String, dynamic>;
+          expect(
+            (clampedCfg['thinkingConfig'] as Map)['thinkingLevel'],
+            equals('LOW'),
+          );
+
+          // 3. 403 proxy policy block on Hydrogen falls back to gemini-flash-latest cleanly
+          capturedPaths.clear();
+          GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+            capturedPaths.add(uri.path);
+            if (uri.path.contains('gemini-4-hydrogen')) {
+              return http.Response(
+                jsonEncode({
+                  'error': {
+                    'code': 403,
+                    'message':
+                        'Model "gemini-4-hydrogen" is blocked by LAYERS Flash-only policy.',
+                  },
+                }),
+                403,
+              );
+            }
+            return http.Response(
+              jsonEncode({
+                'candidates': [
+                  {
+                    'content': {
+                      'parts': [
+                        {'text': '{"recoveredViaFallback": true}'},
+                      ],
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          };
+
+          final policyFallbackRes = await GeminiAgentClient.generateJson(
+            prompt: 'Test proxy policy fallback',
+            apiKey: '',
+          );
+          expect(policyFallbackRes?['recoveredViaFallback'], isTrue);
+          expect(capturedPaths.length, equals(2));
+          expect(capturedPaths.first, contains('gemini-4-hydrogen'));
+          expect(capturedPaths.last, contains('gemini-flash-latest'));
+          expect(
+            GeminiAgentClient.lastResolvedModel,
+            equals('gemini-flash-latest'),
+          );
+
+          // 4. Genuine invite/auth 403 fails fast without hitting fallback model
+          capturedPaths.clear();
+          GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+            capturedPaths.add(uri.path);
+            return http.Response(
+              jsonEncode({
+                'error': {
+                  'code': 403,
+                  'message': 'Invite approval required for user@example.com.',
+                },
+              }),
+              403,
+            );
+          };
+
+          final authDenied = await GeminiAgentClient.generateJson(
+            prompt: 'Test uninvited 403 fail-fast',
+            apiKey: '',
+          );
+          expect(authDenied, isNull);
+          expect(capturedPaths.length, equals(1));
+          expect(
+            GeminiAgentClient.lastErrorStatus,
+            contains('Invite approval required'),
+          );
+        } finally {
+          GeminiAgentClient.resetCapabilityCacheForTest();
           GeminiAgentClient.testMockResponder = prevMock;
           GeminiAgentClient.testHttpPost = prevHttp;
           GeminiAgentClient.testBaseRetryDelay = prevDelay;
@@ -9893,12 +9890,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           );
           expect(capturedEpic2FeaturePrompt, contains('dashSpeed'));
 
-          // Select Epic 2 feature in UI and verify Step 1 was hoisted to `editor` check ("✓ CHECK IN EDITOR:")
+          // Select Epic 2 feature in UI and verify Step 1 was hoisted to `editor` check (`↳ Editor Check:`)
           provider.selectFeature(epic2Feat.id);
           await tester.pumpWidget(LayersAgenticApp(provider: provider));
           await tester.pumpAndSettle();
 
-          expect(find.text('✓ CHECK IN EDITOR:'), findsOneWidget);
+          expect(find.textContaining('↳ Editor Check:'), findsWidgets);
           expect(find.textContaining('Add MuzzleMarker Node'), findsWidgets);
 
           // AGENTS.md markdown export labels Step 1 as `*Check in Editor*:` and Step 2 as `*Verify*:`
@@ -9912,7 +9909,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     testWidgets(
-      'Pillar 3: Omitted-Task Auto-Fill (Zero Generic Fallback Leaks), Dual-Cached Unreal BP <-> C++ Toggle & 1-Click Timeout Retry Banner',
+      'Pillar 3: Omitted-Task Auto-Fill (Zero Generic Fallback Leaks), Tech Spec Live Cache Invalidation & 1-Click Timeout Retry Banner',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -9931,15 +9928,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           );
           provider.updateConceptDraft((d) {
             d.techSpec = [
-              'Engine: Unreal Engine 5 (Blueprints / C++)',
-              'Dimension: 3D Third-Person',
+              'Godot 4 (GDScript)',
+              '3D Third-Person',
             ];
           });
           await tester.runAsync(
             () => provider.approveConceptAndBuildRelease(),
           );
 
-          // Pick a non-level Actor/Character feature so Unreal Blueprint | C++ toggle is active
           final allFeats = <TierDocument>[
             for (final b in provider.activeReleaseBeats)
               ...provider.featuresForBeat(b.id),
@@ -9950,7 +9946,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           // Ensure targetFeat has 3 tasks on its active checkpoint
           final initStates = FeatureStateNode.getStatesForDocument(targetFeat);
           initStates.first.checklist = [
-            Subtask(id: 't1', text: 'Cable Component Setup'),
+            Subtask(id: 't1', text: 'RayCast3D Setup'),
             Subtask(id: 't2', text: 'Reel Force Impulse'),
             Subtask(id: 't3', text: 'Detach Distance Guard'),
           ];
@@ -9979,85 +9975,91 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           );
 
           // B) Omitted-Task Auto-Fill: First call returns only Task 0 & Task 1 (omitting Task 2); follow-up call fills Task 2!
-          int bpApiCalls = 0;
-          int cppApiCalls = 0;
+          int gdApiCalls = 0;
+          int gdExtApiCalls = 0;
           GeminiAgentClient.testMockResponder = (prompt, model) async {
-            final isCpp = prompt.contains('UNREAL 5 C++');
-            if (isCpp) {
-              cppApiCalls++;
+            final isGdExtension = prompt.contains('GDExtension C++');
+            if (isGdExtension) {
+              gdExtApiCalls++;
               return {
-                'primarySharedScriptOrScene': 'AGrappleLauncher',
+                'primarySharedScriptOrScene':
+                    'res://scenes/grapple_launcher.tscn · src/grapple_launcher.cpp',
                 'tasks': [
                   for (int idx = 0; idx < 3; idx++)
                     {
                       'taskIndex': idx,
                       'subSteps': [
                         {
-                          'shortTitle': 'Bind Cpp Grapple Task ${idx + 1}',
-                          'stepPath': 'Source/Game/GrappleLauncher.cpp',
+                          'stepRole': 'script_logic',
+                          'shortTitle': 'Bind GDExtension Grapple ${idx + 1}',
+                          'stepPath': 'src/grapple_launcher.cpp',
                           'doInstruction':
-                              'Implement C++ grapple logic for task ${idx + 1}.',
+                              'Implement GDExtension physics pull for task ${idx + 1}.',
                           'area1Hierarchy':
-                              'AGrappleLauncher\n └─ CableComp (UCableComponent)',
-                          'area2Inspector': 'ReelSpeed: 1800.0',
+                              'GrappleLauncher (Node3D)\n └─ GrappleRay (RayCast3D)',
+                          'area2Inspector': 'reel_speed: 18.0',
                           'codeFormula':
-                              'CableComp = CreateDefaultSubobject<UCableComponent>(TEXT("CableComp"));',
+                              '+ ClassDB::bind_method(D_METHOD("reel_step"), &GrappleLauncher::reel_step);',
                           'verifyMode': 'playtest',
                           'verifyResult':
-                              'Press E -> C++ CableComp reels player cleanly.',
+                              'Press E -> GDExtension grapple reels player cleanly.',
                         },
                       ],
                     },
                 ],
               };
             }
-            bpApiCalls++;
+            gdApiCalls++;
             if (prompt.contains('Complete OMITTED 3-Area Engine How-To steps')) {
               return {
-                'primarySharedScriptOrScene': 'BP_GrappleLauncher',
+                'primarySharedScriptOrScene':
+                    'res://scenes/grapple_launcher.tscn · res://scripts/grapple_launcher.gd',
                 'tasks': [
                   {
                     'taskIndex': 2,
                     'subSteps': [
                       {
+                        'stepRole': 'wire_and_verify',
                         'shortTitle': 'Clamp Max Detach Distance',
-                        'stepPath': '/Game/Blueprints/BP_GrappleLauncher',
+                        'stepPath': 'res://scripts/grapple_launcher.gd',
                         'doInstruction':
-                            'Break tether when distance exceeds MaxGrappleRange.',
+                            'Break tether when distance exceeds max_grapple_range.',
                         'area1Hierarchy': '',
-                        'area2Inspector': 'MaxGrappleRange: 2200.0',
+                        'area2Inspector': 'max_grapple_range: 22.0',
                         'codeFormula':
-                            '[Event Tick] ──► [Branch (Distance > MaxGrappleRange)] ──► [DetachFromActor]',
+                            '[GrappleRay.hit_target] ──► [_on_tether_detach()]',
                         'verifyMode': 'playtest',
                         'verifyResult':
-                            'Exceed 2200 cm -> tether detaches cleanly.',
+                            'Exceed 22 m -> tether detaches cleanly.',
                       },
                     ],
                   },
                 ],
               };
             }
-            // Initial BP response omits Task 2!
+            // Initial GDScript response omits Task 2!
             return {
-              'primarySharedScriptOrScene': 'BP_GrappleLauncher',
+              'primarySharedScriptOrScene':
+                  'res://scenes/grapple_launcher.tscn · res://scripts/grapple_launcher.gd',
               'tasks': [
                 for (int idx = 0; idx < 2; idx++)
                   {
                     'taskIndex': idx,
                     'subSteps': [
                       {
-                        'shortTitle': 'Wire Blueprint Grapple ${idx + 1}',
-                        'stepPath': '/Game/Blueprints/BP_GrappleLauncher',
+                        'stepRole': 'script_logic',
+                        'shortTitle': 'Wire GDScript Grapple ${idx + 1}',
+                        'stepPath': 'res://scripts/grapple_launcher.gd',
                         'doInstruction':
-                            'Wire Blueprint node graph for task ${idx + 1}.',
+                            'Implement grapple task ${idx + 1} in res://scripts/grapple_launcher.gd.',
                         'area1Hierarchy':
-                            'BP_GrappleLauncher\n └─ CableComp (CableComponent)',
-                        'area2Inspector': 'ReelSpeed: 1800.0',
+                            'GrappleLauncher (Node3D)\n └─ GrappleRay (RayCast3D)',
+                        'area2Inspector': 'reel_speed: 18.0',
                         'codeFormula':
-                            '[IA_Grapple] ──► [LaunchCharacter (LaunchVelocity: ReelDir * 1800.0)]',
+                            'velocity += reel_dir * reel_speed * delta',
                         'verifyMode': 'playtest',
                         'verifyResult':
-                            'Press E -> Blueprint grapple launches player.',
+                            'Press E -> GDScript grapple launches player.',
                       },
                     ],
                   },
@@ -10073,7 +10075,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           await tester.tap(retryBanner);
           await tester.pumpAndSettle();
 
-          expect(bpApiCalls, equals(2));
+          expect(gdApiCalls, equals(2));
           expect(provider.hasFailedStepSynthesis(targetFeat.id), isFalse);
           expect(
             provider.hasSynthesizedFeatureStepsForActiveRelease(targetFeat.id),
@@ -10084,11 +10086,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             findsNothing,
           );
 
-          final bpStates = FeatureStateNode.getStatesForDocument(
+          final gdStates = FeatureStateNode.getStatesForDocument(
             provider.documents[targetFeat.id]!,
           );
           expect(
-            bpStates.first.checklist.every(
+            gdStates.first.checklist.every(
               (t) =>
                   t.children.isNotEmpty &&
                   t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
@@ -10098,51 +10100,38 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 'All 3 tasks (including omitted Task 3) must have custom_snippet AI steps with zero generic fallback leaks',
           );
           expect(
-            bpStates.first.checklist[2].children.first.text,
+            gdStates.first.checklist[2].children.first.text,
             contains('Clamp Max Detach Distance'),
           );
 
-          // C) Dual-Cached Unreal Blueprint <-> C++ Toggle:
-          // Switch to C++ -> synthesizes C++ once (`cppApiCalls == 1`)
+          // C) Tech Spec Live Invalidation: switching GDScript -> GDScript + GDExtension C++ invalidates cached GDScript steps
+          provider.updateConceptDraft((d) {
+            d.techSpec = [
+              'Godot 4 (GDScript + GDExtension C++)',
+              '3D Third-Person',
+            ];
+          });
           await tester.runAsync(
             () => provider.synthesizeFeatureHowToStepsWithAi(
               targetFeat.id,
-              unrealCppMode: true,
             ),
           );
-          expect(cppApiCalls, equals(1));
-          final afterCppStates = FeatureStateNode.getStatesForDocument(
+          expect(gdExtApiCalls, equals(1));
+          final afterGdExtStates = FeatureStateNode.getStatesForDocument(
             provider.documents[targetFeat.id]!,
           );
           expect(
-            afterCppStates.first.checklist.first.children.first.codeSnippet,
-            contains('CreateDefaultSubobject<UCableComponent>'),
+            afterGdExtStates.first.checklist.first.children.first.codeSnippet,
+            contains('ClassDB::bind_method'),
           );
 
-          // Toggle back to Blueprint -> restores cached Blueprint steps in 0ms with ZERO extra API calls (`bpApiCalls` stays 2)!
+          // Subsequent re-trigger while unchanged reuses cached GDExtension steps in 0ms (`gdExtApiCalls` stays 1)!
           await tester.runAsync(
             () => provider.synthesizeFeatureHowToStepsWithAi(
               targetFeat.id,
-              unrealCppMode: false,
             ),
           );
-          expect(bpApiCalls, equals(2));
-          final restoredBpStates = FeatureStateNode.getStatesForDocument(
-            provider.documents[targetFeat.id]!,
-          );
-          expect(
-            restoredBpStates.first.checklist.first.children.first.codeSnippet,
-            contains('[IA_Grapple] ──► [LaunchCharacter'),
-          );
-
-          // Toggle back to C++ again -> restores cached C++ steps in 0ms with ZERO extra API calls (`cppApiCalls` stays 1)!
-          await tester.runAsync(
-            () => provider.synthesizeFeatureHowToStepsWithAi(
-              targetFeat.id,
-              unrealCppMode: true,
-            ),
-          );
-          expect(cppApiCalls, equals(1));
+          expect(gdExtApiCalls, equals(1));
         } finally {
           GeminiAgentClient.testMockResponder = prevMock;
         }
@@ -10232,24 +10221,24 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           await tester.pumpWidget(LayersAgenticApp(provider: provider));
           await tester.pumpAndSettle();
 
-          // 1. Step 1.1 is active: Row 2 displays `✓ CHECK IN EDITOR:` bound to Step 1.1's exact verifyResult, plus `Task Goal:` alongside
-          expect(find.text('✓ CHECK IN EDITOR:'), findsOneWidget);
+          // 1. Step 1.1 is active & expanded: Step check footer displays `↳ Editor Check:` bound to Step 1.1's exact verifyResult
+          expect(
+            find.byKey(ValueKey('step_check_footer_${cp0.id}_0_0')),
+            findsOneWidget,
+          );
+          expect(find.textContaining('↳ Editor Check:'), findsWidgets);
           expect(
             find.textContaining('DashRay2D points 96px right'),
             findsWidgets,
           );
-          expect(
-            find.byKey(ValueKey('task_overview_secondary_goal_${cp0.id}_0')),
-            findsOneWidget,
-          );
 
-          // 2. Step 1.1 renders visible DO:, Window Context Badge, and `↳ Editor Check:` footer (and NO repetitive per-step hierarchy/inspector pills or guard pill since hierarchy/specs are hoisted to Adaptive Feature Blueprint Deck)
+          // 2. Step 1.1 renders visible DO:, Window Context Badge, and Unified Header deck (without repetitive per-step hierarchy/inspector/non-guard pills)
           expect(
             find.byKey(ValueKey('step_do_instruction_${cp0.id}_0_0')),
             findsOneWidget,
           );
           expect(
-            find.byKey(ValueKey('adaptive_feature_blueprint_deck_${cp0.id}')),
+            find.byKey(ValueKey('unified_header_${cp0.id}')),
             findsOneWidget,
           );
           expect(
@@ -10268,20 +10257,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             find.byKey(ValueKey('step_guard_pill_${cp0.id}_0_0')),
             findsNothing,
           );
-          expect(
-            find.byKey(ValueKey('step_guard_pill_${cp0.id}_0_1')),
-            findsOneWidget,
-          );
-          expect(
-            find.byKey(ValueKey('step_check_footer_${cp0.id}_0_0')),
-            findsOneWidget,
-          );
-          expect(
-            find.byKey(ValueKey('step_check_footer_${cp0.id}_0_1')),
-            findsOneWidget,
-          );
 
-          // 3. Tap Blueprint Deck's variable pill `⚙ dashImpulse: 620.0 ✎` to inline-edit it to `780.0`
+          // 3. Tap Unified Header's variable pill `dashImpulse = 620.0 ✎` to inline-edit it to `780.0`
           final deckVarPill = find.byKey(
             ValueKey('blueprint_deck_var_pill_${cp0.id}_0'),
           );
@@ -10306,14 +10283,22 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             contains('dashImpulse: 780.0'),
           );
 
-          // 4. Tap Step 1.2 header -> Row 2 updates dynamically from `✓ CHECK IN EDITOR:` to `✓ VERIFY IN ENGINE:` with Step 1.2's playtest check
+          // 4. Tap Step 1.2 header -> Focus Mode expands Step 1.2 showing guard pill & `↳ Playtest Check:`
           final step2Header = find.byKey(
             ValueKey('task_sheet_step_row_${cp0.id}_0_1'),
           );
           await tester.ensureVisible(step2Header);
           await tester.tap(step2Header);
           await tester.pumpAndSettle();
-          expect(find.text('✓ VERIFY IN ENGINE:'), findsOneWidget);
+          expect(
+            find.byKey(ValueKey('step_guard_pill_${cp0.id}_0_1')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('step_check_footer_${cp0.id}_0_1')),
+            findsOneWidget,
+          );
+          expect(find.textContaining('↳ Playtest Check:'), findsWidgets);
           expect(
             find.textContaining('Character bursts at 620 px/s'),
             findsWidgets,
@@ -10454,9 +10439,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           await tester.pumpWidget(LayersAgenticApp(provider: provider));
           await tester.pumpAndSettle();
 
-          // 1. Desktop Feature Context Bar visibly renders CP1 -> CP2 switcher, shared script badge, tuning delta strip, Tailor & Sync Code buttons
+          // 1. Unified Feature Header visibly renders CP1 -> CP2 switcher, shared script badge, tuning delta strip, Tailor & Sync Code buttons
           expect(
-            find.byKey(const ValueKey('desktop_feature_context_bar_cp_v02')),
+            find.byKey(const ValueKey('unified_header_cp_v02')),
             findsOneWidget,
           );
           expect(
@@ -10523,7 +10508,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           );
           // Active task advanced to T2 ("Afterimage Trail Spawner")
           expect(
-            find.byKey(const ValueKey('task_overview_goal_box_cp_v02_1')),
+            find.byKey(const ValueKey('task_sheet_step_row_cp_v02_1_0')),
             findsOneWidget,
           );
         } finally {
@@ -10657,13 +10642,21 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
       },
     );
-    test('UeBlueprintGraphCanvas parses UE5 Blueprint node chain', () {
-      const formula =
-          '[Event BeginPlay] ──► [Set Timer by Event (Time: 0.25s)] ──► [Spawn Actor from Class (Class: BP_EnemyDrone)]';
-      final parsed = UeBlueprintGraphCanvas.parseFromFormula(formula);
-      expect(parsed.nodes.length, greaterThanOrEqualTo(3));
-      expect(parsed.wires.length, greaterThanOrEqualTo(2));
-      expect(parsed.nodes.first.title, contains('BeginPlay'));
+    test('GodotInspectorPanel token matching highlights properties and Vector3 coordinates accurately', () {
+      expect(
+        TaskHowToBlueprint.matchesHighlightTokens(
+          const {'camerachild', '1.6', 'position'},
+          'Camera3D Transform > Position (0, 1.6, 0)',
+        ),
+        isTrue,
+      );
+      expect(
+        TaskHowToBlueprint.matchesHighlightTokens(
+          const {'dash_speed'},
+          'CollisionShape2D Radius 16.0',
+        ),
+        isFalse,
+      );
     });
 
     test('WorkbenchProvider activeModelIndicatorLabel defaults to Hydrogen', () {
@@ -10672,13 +10665,14 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     });
 
     testWidgets(
-      '46. Zero-Repetition UE5 Workbench: Blueprint Deck toggle, Window Context Switch Callout, Level Placement Table + Copy Transform & C++ Incremental Diff',
+      '46. Zero-Repetition Godot 4 Workbench: @export Vars Deck toggle, Dock Context Switch Callout, Main Scene Inspector Table & Living GDScript Incremental Diff',
       (tester) async {
         final prevMock = GeminiAgentClient.testMockResponder;
         GeminiAgentClient.testMockResponder = (prompt, model) async {
           if (prompt.contains('3-Area Engine How-To steps')) {
             return <String, dynamic>{
-              'primarySharedScriptOrScene': 'PlayerCharacter.h / PlayerCharacter.cpp',
+              'primarySharedScriptOrScene':
+                  'res://scenes/player_character.tscn · res://scripts/player_character.gd',
               'tasks': [
                 {
                   'taskIndex': 0,
@@ -10687,48 +10681,44 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                     {
                       'stepRole': 'editor_setup',
                       'title': 'Place Arena Floor',
-                      'stepPath': 'Level Editor → Outliner',
-                      'instruction': 'Place a Cylinder named Floor_Arena and PlayerStart in the level.',
+                      'stepPath': 'Scene Tree → main_arena.tscn',
+                      'instruction': 'Instantiate FloorArena and Marker3D SpawnPoint in main_arena.tscn.',
                       'area1Hierarchy': '',
                       'area2Inspector': '',
                       'codeFormula':
-                          '| Actor / Component | Property / Transform | Value |\n'
+                          '| Node / Category | Property | Value |\n'
                           '| --- | --- | --- |\n'
-                          '| Floor_Arena | Location | (0, 0, 0) |\n'
-                          '| PlayerStart | Location | (0, 0, 120) |',
+                          '| FloorArena | Transform > Position | (0, 0, 0) |\n'
+                          '| SpawnPoint | Transform > Position | (0, 2, 0) |',
                       'verifyMode': 'editor',
-                      'verifyResult': 'Check Outliner -> Floor_Arena and PlayerStart exist.',
+                      'verifyResult': 'Check Scene Tree -> FloorArena and SpawnPoint exist.',
                     },
                     {
                       'stepRole': 'script_logic',
-                      'title': 'Declare DashSpeed Property',
-                      'stepPath': 'PlayerCharacter.h',
-                      'instruction': 'Declare DashSpeed as UPROPERTY in PlayerCharacter.h.',
+                      'title': 'Declare Dash Speed Var',
+                      'stepPath': 'res://scripts/player_character.gd',
+                      'instruction': 'Declare dash_speed as @export var in player_character.gd.',
                       'area1Hierarchy': '',
                       'area2Inspector': '',
                       'codeFormula':
-                          'class APlayerCharacter : public ACharacter {\n'
-                          '    UPROPERTY(EditAnywhere, Category="Dash")\n'
-                          '    float DashSpeed = 1200.f;\n'
-                          '};',
+                          'extends CharacterBody3D\n'
+                          '@export var dash_speed: float = 12.0',
                       'verifyMode': 'editor',
-                      'verifyResult': 'Inspect PlayerCharacter.h -> DashSpeed compiles.',
+                      'verifyResult': 'Inspect Inspector -> dash_speed equals 12.0.',
                     },
                     {
                       'stepRole': 'script_logic',
-                      'title': 'Add DashCooldown Guard',
-                      'stepPath': 'PlayerCharacter.h',
-                      'instruction': 'Add DashCooldown UPROPERTY beneath DashSpeed.',
+                      'title': 'Add Dash Cooldown Guard',
+                      'stepPath': 'res://scripts/player_character.gd',
+                      'instruction': 'Add dash_cooldown beneath dash_speed in player_character.gd.',
                       'area1Hierarchy': '',
                       'area2Inspector': '',
                       'codeFormula':
-                          'class APlayerCharacter : public ACharacter {\n'
-                          '    UPROPERTY(EditAnywhere, Category="Dash")\n'
-                          '    float DashSpeed = 1200.f;\n'
-                          '    float DashCooldown = 0.6f;\n'
-                          '};',
+                          'extends CharacterBody3D\n'
+                          '@export var dash_speed: float = 12.0\n'
+                          '@export var dash_cooldown: float = 0.6',
                       'verifyMode': 'playtest',
-                      'verifyResult': 'Press Shift -> Player dashes at 1200 uu/s with 0.6s cooldown.',
+                      'verifyResult': 'Press Shift (F6) -> Player dashes at 12 m/s with 0.6s cooldown.',
                     },
                   ],
                 },
@@ -10747,15 +10737,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
           final provider = WorkbenchProvider();
           await tester.runAsync(
-            () => provider.startConceptInterview('UE5 Arena Test'),
+            () => provider.startConceptInterview('Godot Arena Test'),
           );
           provider.updateConceptDraft((d) {
-            d.title = 'UE5 Arena Test';
+            d.title = 'Godot Arena Test';
             d.techSpec = [
-              'Unreal Engine 5 (C++)',
-              'PC Desktop',
-              'UE5 Greybox + Lumen',
-              'SaveGame Slot (.sav)',
+              'Godot 4 (GDScript)',
+              '3D Arena',
             ];
           });
           await tester.runAsync(
@@ -10768,8 +10756,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             provider.documents[feat.id]!,
           );
           final cp0 = states.first;
-          cp0.tuningParams = ['DashSpeed: 1200 uu/s'];
-          cp0.edgeCases = ['[STATE GUARD] Clamp DashCooldown >= 0.6s'];
+          cp0.tuningParams = ['dash_speed: 12.0 m/s'];
+          cp0.edgeCases = ['[STATE GUARD] Clamp dash_cooldown >= 0.6s'];
           cp0.checklist = [
             Subtask(
               id: '${cp0.id}_t0',
@@ -10784,23 +10772,22 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             () => provider.synthesizeFeatureHowToStepsWithAi(
               feat.id,
               forceRefresh: true,
-              unrealCppMode: true,
             ),
           );
 
-          // Verify Dart automatically computed `+` inline diff markers on Step 1.3 vs Step 1.2
+          // Verify Dart automatically computed `+ ` inline diff markers on Step 1.3 vs Step 1.2
           final updatedCp =
               FeatureStateNode.getStatesForDocument(provider.documents[feat.id]!)
                   .first;
           expect(
             updatedCp.checklist.first.children[2].codeSnippet,
-            contains('+    float DashCooldown = 0.6f;'),
+            contains('+ @export var dash_cooldown: float = 0.6'),
           );
 
           await tester.pumpWidget(LayersAgenticApp(provider: provider));
           await tester.pumpAndSettle();
 
-          // 1. Level Placement Table + Copy Transform rendered cleanly on Step 1.1
+          // 1. Main Scene Inspector Table + Copy Transform rendered cleanly on Step 1.1
           expect(
             find.byKey(const ValueKey('level_placement_table')),
             findsOneWidget,
@@ -10810,7 +10797,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             findsOneWidget,
           );
 
-          // 2. Window Context Badges + Context-Switch Callout when transitioning LEVEL EDITOR -> C++ (.h / .cpp)
+          // 2. Window Context Badges + Context-Switch Callout when transitioning MAIN SCENE (.tscn) -> GDSCRIPT (.gd)
           expect(
             find.byKey(ValueKey('window_context_badge_${cp0.id}_0_0')),
             findsOneWidget,
@@ -10819,27 +10806,32 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             find.byKey(ValueKey('window_context_badge_${cp0.id}_0_1')),
             findsOneWidget,
           );
+          final step12Row = find.byKey(
+            ValueKey('task_sheet_step_row_${cp0.id}_0_1'),
+          );
+          expect(step12Row, findsOneWidget);
+          await tester.ensureVisible(step12Row);
+          await tester.tap(step12Row);
+          await tester.pumpAndSettle();
           expect(
             find.byKey(ValueKey('window_context_switch_${cp0.id}_0_1')),
             findsOneWidget,
           );
-          expect(find.textContaining('LEVEL EDITOR'), findsWidgets);
-          expect(find.textContaining('C++ (.h / .cpp)'), findsWidgets);
+          expect(find.textContaining('MAIN SCENE (.tscn)'), findsWidgets);
+          expect(find.textContaining('GDSCRIPT (.gd)'), findsWidgets);
 
-          // 3. Adaptive Feature Blueprint Deck collapses and expands cleanly
-          final deckToggle = find.byKey(
-            ValueKey('adaptive_blueprint_deck_toggle_${cp0.id}'),
+          // 3. Unified Header @EXPORT VARS deck renders live variable and guard pills cleanly
+          expect(
+            find.text('@EXPORT VARS:'),
+            findsOneWidget,
           );
-          expect(deckToggle, findsOneWidget);
           expect(
             find.byKey(ValueKey('blueprint_deck_var_pill_${cp0.id}_0')),
             findsOneWidget,
           );
-          await tester.tap(deckToggle);
-          await tester.pumpAndSettle();
           expect(
-            find.byKey(ValueKey('blueprint_deck_var_pill_${cp0.id}_0')),
-            findsNothing,
+            find.byKey(ValueKey('blueprint_deck_guard_pill_${cp0.id}_0')),
+            findsOneWidget,
           );
         } finally {
           GeminiAgentClient.testMockResponder = prevMock;
@@ -10848,7 +10840,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     test(
-      'LayersTextStyleGuide & UE5 synthesis prompt enforce vertical DO items and forbid Event Graph arrows on editor_setup',
+      'LayersTextStyleGuide & Godot 4 synthesis prompt enforce vertical DO items and Inspector pipe tables on editor_setup',
       () async {
         expect(
           LayersTextStyleGuide.runbookInstructionSchemaDesc,
@@ -10860,7 +10852,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           if (prompt.contains('3-Area Engine How-To steps')) {
             if (capturedPrompt.isEmpty) capturedPrompt = prompt;
             return <String, dynamic>{
-              'primarySharedScriptOrScene': 'BP_PlayerCharacter',
+              'primarySharedScriptOrScene':
+                  'res://scenes/player_character.tscn · res://scripts/player_character.gd',
               'tasks': [
                 {
                   'taskIndex': 0,
@@ -10869,18 +10862,18 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                     {
                       'stepRole': 'editor_setup',
                       'title': 'Rig Camera Height',
-                      'stepPath': 'BP_PlayerCharacter → Components > FirstPersonCamera',
+                      'stepPath': 'Scene Dock → player_character.tscn > Camera3D',
                       'instruction':
-                          '- Components → Select FirstPersonCamera\n- Details > Transform → Set Location (0, 0, 64)',
-                      'area1Hierarchy': 'BP_PlayerCharacter\n └─ FirstPersonCamera',
-                      'area2Inspector': 'Location: (0, 0, 64)',
+                          '- Scene Dock → Select Camera3D\n- Inspector > Transform → Set Position (0, 1.6, 0)',
+                      'area1Hierarchy': 'PlayerCharacter\n └─ Camera3D',
+                      'area2Inspector': 'Position: (0, 1.6, 0)',
                       'codeFormula':
-                          '| Component / Actor | Property | Value |\n'
+                          '| Node / Category | Property | Value |\n'
                           '| --- | --- | --- |\n'
-                          '| FirstPersonCamera | Transform > Relative Location | (0, 0, 64) |',
+                          '| Camera3D | Transform > Position | (0, 1.6, 0) |',
                       'verifyMode': 'editor',
                       'verifyResult':
-                          'Inspect Viewport -> Camera sits at Z=64.',
+                          'Inspect 3D Viewport -> Camera3D sits at Y=1.6.',
                     },
                   ],
                 },
@@ -10891,14 +10884,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         };
         try {
           final provider = WorkbenchProvider();
-          await provider.startConceptInterview('UE5 Prompt Test');
+          await provider.startConceptInterview('Godot Prompt Test');
           provider.updateConceptDraft((d) {
-            d.title = 'UE5 Prompt Test';
+            d.title = 'Godot Prompt Test';
             d.techSpec = [
-              'Unreal Engine 5 (Blueprint)',
-              'PC Desktop',
-              'UE5 Greybox',
-              'SaveGame Slot (.sav)',
+              'Godot 4 (GDScript)',
+              '3D First-Person',
             ];
           });
           await provider.approveConceptAndBuildRelease();
@@ -10910,12 +10901,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           await provider.synthesizeFeatureHowToStepsWithAi(
             feat.id,
             forceRefresh: true,
-            unrealCppMode: false,
           );
           expect(capturedPrompt, contains('stepRole == "editor_setup"'));
           expect(
             capturedPrompt,
-            contains('NEVER emit `[Node] ──► [Node]` Event Graph arrows'),
+            contains('NEVER emit runtime `_ready()` property setters'),
           );
           expect(
             capturedPrompt,
@@ -10928,106 +10918,84 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     test(
-      'UeBlueprintGraphCanvas classifies component getter without Exec pins and wires Object data pin to Target',
+      'TaskHowToBlueprint.filterDeclaredGameplayVariables strips Godot Node built-ins and preserves @export vars',
       () {
-        const formula =
-            '[FirstPersonCamera] ──► [Set Relative Location (New Location: X=0, Y=0, Z=64)]';
-        final parsed = UeBlueprintGraphCanvas.parseFromFormula(formula);
-        expect(parsed.nodes.length, 2);
-        final getter = parsed.nodes.firstWhere(
-          (n) => n.kind == UeNodeKind.variableGet,
-        );
-        expect(getter.title, contains('FirstPersonCamera'));
-        expect(
-          getter.leftPins.any((p) => p.type == UePinType.exec),
-          isFalse,
-        );
-        expect(
-          getter.rightPins.any((p) => p.type == UePinType.exec),
-          isFalse,
-        );
-        final setter = parsed.nodes.firstWhere(
-          (n) => n.kind == UeNodeKind.functionCall,
-        );
-        expect(
-          setter.leftPins.any((p) => p.type == UePinType.exec),
-          isTrue,
-        );
-        expect(
-          parsed.wires.any(
-            (w) =>
-                w.fromNodeId == getter.id &&
-                w.toNodeId == setter.id &&
-                w.type == UePinType.objectPin,
-          ),
-          isTrue,
-        );
+        final vars = TaskHowToBlueprint.filterDeclaredGameplayVariables(const [
+          'position: Vector3(0, 1.6, 0)',
+          'visible: true',
+          'dash_speed: 14.0',
+          'is_airborne: bool',
+        ]);
+        expect(vars.map((v) => v.name), isNot(contains('position')));
+        expect(vars.map((v) => v.name), isNot(contains('visible')));
+        expect(vars.map((v) => v.name), containsAll(['dash_speed', 'is_airborne']));
       },
     );
 
     testWidgets(
-      '47. UE5 Guide Book Workbench: 2-Column Workbook Spread, Components Hierarchy, RGB XYZ Details & Legacy Config Guard',
+      '47. Godot 4 Handbook Workbench: 2-Column Workbook Spread, Scene Tree & Inspector Panel, Node Signal Flow Strip & Legacy Config Guard',
       (tester) async {
         final prevMock = GeminiAgentClient.testMockResponder;
         GeminiAgentClient.testMockResponder = (prompt, model) async {
           if (prompt.contains('3-Area Engine How-To steps')) {
             return <String, dynamic>{
-              'primarySharedScriptOrScene': 'BP_PlayerCharacter',
+              'primarySharedScriptOrScene':
+                  'res://scenes/player_character.tscn · res://scripts/player_character.gd',
               'tasks': [
                 {
                   'taskIndex': 0,
-                  'taskTitle': 'Rig Commando Camera View',
+                  'taskTitle': 'Rig Player Camera View',
                   'subSteps': [
                     {
                       'stepRole': 'editor_setup',
-                      'title': 'Rig Commando Camera View',
+                      'title': 'Rig Player Camera View',
                       'stepPath':
-                          'BP_PlayerCharacter → Components > FirstPersonCamera',
+                          'Scene Dock → player_character.tscn > Camera3D',
                       'instruction':
-                          '- Components → Select FirstPersonCamera\n'
-                          '- Details > Transform → Set Relative Location to (0, 0, 64)\n'
-                          '- Details > Camera Options → Enable Use Pawn Control Rotation',
+                          '- Scene Dock → Select Camera3D\n'
+                          '- Inspector > Transform → Set Position to (0, 1.6, 0)\n'
+                          '- Inspector > CharacterBody3D → Set move_speed to 6.5',
                       'area1Hierarchy':
-                          'BP_PlayerCharacter\n └─ CapsuleComponent\n    └─ FirstPersonCamera',
-                      'area2Inspector': 'Z=64; UsePawnControlRotation=true',
+                          'PlayerCharacter\n └─ CollisionShape3D\n    └─ Camera3D',
+                      'area2Inspector': 'Y=1.6; move_speed=6.5',
                       'codeFormula':
-                          '| Component / Actor | Property | Value |\n'
+                          '| Node / Category | Property | Value |\n'
                           '| --- | --- | --- |\n'
-                          '| FirstPersonCamera | Transform > Relative Location | (0, 0, 64) |\n'
-                          '| FirstPersonCamera | Camera Options > Use Pawn Control Rotation | true |\n'
-                          '| CharMove | Character Movement: Walking > Max Walk Speed | 650.0 |',
+                          '| Camera3D | Transform > Position | (0, 1.6, 0) |\n'
+                          '| Camera3D | Current | true |\n'
+                          '| CharacterBody3D | Script Variables > move_speed | 6.5 |',
                       'verifyMode': 'editor',
                       'verifyResult':
-                          'Open BP_PlayerCharacter viewport -> FirstPersonCamera sits at eye level.',
+                          'Open player_character.tscn viewport -> Camera3D sits at eye level.',
                     },
                     {
-                      'stepRole': 'script_logic',
-                      'title': 'Wire Move Input Axis',
-                      'stepPath': 'BP_PlayerCharacter → EventGraph',
+                      'stepRole': 'wire_and_verify',
+                      'title': 'Connect Hurtbox Signal',
+                      'stepPath': 'Node Dock → Signals',
                       'instruction':
-                          '- EventGraph → Right-click and add IA_Move event node\n'
-                          '- Wire Triggered exec into Add Movement Input',
+                          '- Select Hurtbox (Area3D) → Node > Signals\n'
+                          '- Connect body_entered to _on_hurtbox_body_entered()',
                       'area1Hierarchy': '',
                       'area2Inspector': '',
                       'codeFormula':
-                          '[IA_Move] ──► [Add Movement Input (Scale Value: 1.0)]',
+                          '[Hurtbox.body_entered] ──► [PlayerCharacter._on_hurtbox_body_entered()]',
                       'verifyMode': 'playtest',
                       'verifyResult':
-                          'Press WASD in PIE -> Character moves smoothly.',
+                          'Press F6 -> Overlapping Hazard logs damage in Output.',
                     },
                     {
                       'stepRole': 'editor_setup',
                       'title': 'Legacy Cached Camera Defaults',
-                      'stepPath': 'BP_PlayerCharacter → Viewport',
+                      'stepPath': 'Scene Dock → Inspector',
                       'instruction':
-                          'Configure FirstPersonCamera eye height and enable pawn control rotation on FirstPersonCamera.',
+                          'Configure Camera3D eye height and enable Current camera toggle.',
                       'area1Hierarchy': '',
                       'area2Inspector': '',
                       'codeFormula':
-                          '[FirstPersonCamera] ──► [Set Relative Location (New Location: X=0, Y=0, Z=64)]',
+                          '[Camera3D] ──► [Set Position (X=0, Y=1.6, Z=0)]',
                       'verifyMode': 'editor',
                       'verifyResult':
-                          'Inspect FirstPersonCamera -> Z is 64.',
+                          'Inspect Camera3D -> Y is 1.6.',
                     },
                   ],
                 },
@@ -11046,15 +11014,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
           final provider = WorkbenchProvider();
           await tester.runAsync(
-            () => provider.startConceptInterview('UE5 Guidebook FPS'),
+            () => provider.startConceptInterview('Godot Guidebook FPS'),
           );
           provider.updateConceptDraft((d) {
-            d.title = 'UE5 Guidebook FPS';
+            d.title = 'Godot Guidebook FPS';
             d.techSpec = [
-              'Unreal Engine 5 (Blueprint)',
-              'PC Desktop',
-              'UE5 Greybox + Lumen',
-              'SaveGame Slot (.sav)',
+              'Godot 4 (GDScript)',
+              '3D First-Person',
             ];
           });
           await tester.runAsync(
@@ -11070,7 +11036,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           cp0.checklist = [
             Subtask(
               id: '${cp0.id}_t0',
-              text: 'Rig Commando Camera View (1h)',
+              text: 'Rig Player Camera View (1h)',
               children: const [],
             ),
           ];
@@ -11081,16 +11047,15 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             () => provider.synthesizeFeatureHowToStepsWithAi(
               feat.id,
               forceRefresh: true,
-              unrealCppMode: false,
             ),
           );
 
           await tester.pumpWidget(LayersAgenticApp(provider: provider));
           await tester.pumpAndSettle();
 
-          // 1. Step 1.1 renders Details Panel (NOT Event Graph), vertical numbered DO items, Components hierarchy & RGB XYZ controls
-          expect(find.textContaining('DETAILS PANEL'), findsWidgets);
-          expect(find.textContaining('EVENT GRAPH'), findsWidgets);
+          // 1. Step 1.1 renders GodotInspectorPanel (Scene Tree & Inspector), vertical numbered DO items & RGB XYZ boxes
+          expect(find.textContaining('SCENE TREE & INSPECTOR'), findsWidgets);
+          expect(find.textContaining('NODE SIGNALS'), findsWidgets);
           expect(
             find.byKey(ValueKey('step_do_instruction_${cp0.id}_0_0')),
             findsOneWidget,
@@ -11098,14 +11063,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           expect(find.text('1'), findsWidgets);
           expect(find.text('2'), findsWidgets);
           expect(find.text('3'), findsWidgets);
-          expect(find.textContaining('Components'), findsWidgets);
-          expect(find.text('+ Add'), findsWidgets);
-          expect(find.textContaining('CapsuleComponent'), findsWidgets);
+          expect(find.textContaining('Scene Tree'), findsWidgets);
+          expect(find.text('+ Add Node'), findsWidgets);
           expect(find.text('X'), findsWidgets);
           expect(find.text('Y'), findsWidgets);
           expect(find.text('Z'), findsWidgets);
-          expect(find.text('64'), findsWidgets);
-          expect(find.text('650.0'), findsWidgets);
+          expect(find.text('1.6'), findsWidgets);
+          expect(find.text('6.5'), findsWidgets);
           expect(
             find.byKey(const ValueKey('level_placement_table')),
             findsWidgets,
@@ -11115,17 +11079,24 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             findsWidgets,
           );
 
-          // 2. Step 1.2 renders genuine Event Graph + Fit toggle + Context Switch Callout
+          // 2. Tap Step 1.2 to expand it in Focus Mode Accordion -> renders Node Signals flow strip + Context Switch Callout
+          final step12Row = find.byKey(
+            ValueKey('task_sheet_step_row_${cp0.id}_0_1'),
+          );
+          expect(step12Row, findsOneWidget);
+          await tester.ensureVisible(step12Row);
+          await tester.tap(step12Row);
+          await tester.pumpAndSettle();
           expect(
             find.byKey(ValueKey('window_context_switch_${cp0.id}_0_1')),
             findsOneWidget,
           );
           expect(
-            find.byKey(const ValueKey('ue_graph_fit_toggle')),
+            find.byKey(const ValueKey('godot_signal_flow_strip')),
             findsOneWidget,
           );
 
-          // 3. Step 1.3 legacy config-graph step is auto-converted to Details Panel instead of Event Graph
+          // 3. Step 1.3 legacy config-graph step is auto-converted to GodotInspectorPanel instead of code
           expect(
             find.byKey(ValueKey('window_context_badge_${cp0.id}_0_2')),
             findsOneWidget,
@@ -11133,6 +11104,50 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         } finally {
           GeminiAgentClient.testMockResponder = prevMock;
         }
+      },
+    );
+
+    testWidgets(
+      'GodotInspectorPanel renders Scene Tree, Inspector RGB Vector3, Input Map & compact Copy Transform tooltip (<420px)',
+      (tester) async {
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SingleChildScrollView(
+                child: GodotInspectorPanel(
+                  isDark: true,
+                  tableLines: const [
+                    '| Node / Category | Property | Value |',
+                    '| --- | --- | --- |',
+                    '| FloorArena | Transform > Position | Vector3(0.0, 0.0, 0.0) |',
+                    '| SpawnPoint (Marker3D) | Transform > Position | Vector3(0.0, 2.0, 0.0) |',
+                    '| Input Map > dash | Key | Shift |',
+                  ],
+                  stepPath: 'res://scenes/main_arena.tscn',
+                  highlightedTokens: const {'SpawnPoint'},
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('level_placement_table')), findsOneWidget);
+        expect(find.textContaining('Scene Tree'), findsWidgets);
+        expect(find.textContaining('INSPECTOR'), findsWidgets);
+        expect(find.text('▾ Input Map'), findsOneWidget);
+        expect(find.text('X'), findsWidgets);
+        expect(find.text('Y'), findsWidgets);
+        expect(find.text('Z'), findsWidgets);
+        expect(find.text('2.0'), findsWidgets);
+        expect(find.byTooltip('Copy Godot Transform'), findsWidgets);
       },
     );
   });

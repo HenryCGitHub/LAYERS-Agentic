@@ -360,8 +360,11 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final relId = projId == 'proj_main' ? 'rel_v0_1' : '${projId}_rel_v0_1';
     final relTitle = trainTitles.first;
     final existingRel = documents[relId];
+    final draftEngineHint = '${draft.gameSpec.join(' ')} ${draft.techSpec.join(' ')}';
     final draftEngineLabel =
-        TaskHowToBlueprint.detectEngineLabel(draft.techSpec.join(' '));
+        TaskHowToBlueprint.detectEngineLabel(draftEngineHint);
+    final draftStackSig =
+        _godotTechStackSignature(draftEngineHint);
 
     if (existingRel != null) {
       existingRel.title = relTitle;
@@ -378,10 +381,16 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         existingRel.sections['synced_core_loop_sig'] =
             draft.coreLoopBeats.join('||');
         existingRel.sections['synced_engine_label'] = draftEngineLabel;
+        existingRel.sections['synced_tech_stack_sig'] = draftStackSig;
         existingRel.sections['scope'] = draft.toFormattedScopeSection();
       } else if (prevTechSpec != null && prevTechSpec.trim().isNotEmpty) {
+        final prevGameSpec =
+            existingProj?.sections['game_spec'] ?? existingProj?.sections['gameSpec'] ?? '';
+        final prevHint = '$prevGameSpec $prevTechSpec'.trim();
         existingRel.sections['synced_engine_label'] ??=
-            TaskHowToBlueprint.detectEngineLabel(prevTechSpec);
+            TaskHowToBlueprint.detectEngineLabel(prevHint);
+        existingRel.sections['synced_tech_stack_sig'] ??=
+            _godotTechStackSignature(prevHint);
       }
       _persistDocument(existingRel);
       releaseIds.add(relId);
@@ -396,6 +405,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           'phase': ProductionPhase.prototype.name,
           'synced_core_loop_sig': draft.coreLoopBeats.join('||'),
           'synced_engine_label': draftEngineLabel,
+          'synced_tech_stack_sig': draftStackSig,
           if (isSplitPrototype) 'prototypePart': '1',
           if (isSplitPrototype) 'splitPrototypePart2Title': trainTitles[1],
           'scope': draft.toFormattedScopeSection(),
@@ -501,6 +511,18 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     );
   }
 
+  static String _godotTechStackSignature(String hint) {
+    final lower = hint.toLowerCase();
+    final is2d = lower.contains('2d') ||
+        lower.contains('sprite') ||
+        lower.contains('pixel') ||
+        lower.contains('tilemap') ||
+        (lower.contains('top-down') && !lower.contains('3d')) ||
+        (lower.contains('side-scroll') && !lower.contains('3d'));
+    final isGdExt = lower.contains('gdextension') || lower.contains('c++');
+    return 'GODOT4_${is2d ? '2D' : '3D'}_${isGdExt ? 'GDEXT' : 'GDSCRIPT'}';
+  }
+
   /// Non-destructively syncs Stage 1 edits (`06 Core Loop`, `07 Out of Scope`, `01 Goal`, `08 Done When`)
   /// into an already-built Stage 2 Release (`activeRelease.childrenIds.isNotEmpty`) without wiping
   /// existing `v0.1+` Feature checkpoints or completed subtask progress.
@@ -535,16 +557,22 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _persistDocument(rel);
     }
 
-    // 1b. If 03 · Tech Spec Engine changed (e.g., Godot 4 <-> Unity 6 <-> Unreal 5),
+    // 1b. If 03 · Tech Spec changed meaningfully (e.g., 2D <-> 3D, GDScript <-> GDExtension C++, or legacy engine migration),
     // invalidate stale engine-specific custom_snippet steps and primary_asset paths across built features.
-    final newEngineHint = draft.techSpec.join(' ');
+    final newEngineHint = '${draft.gameSpec.join(' ')} ${draft.techSpec.join(' ')}';
     final currentEngineLabel =
         TaskHowToBlueprint.detectEngineLabel(newEngineHint);
+    final currentStackSig = _godotTechStackSignature(newEngineHint);
     final previousEngineLabel = rel.sections['synced_engine_label'] ?? '';
-    if (previousEngineLabel.isNotEmpty &&
-        previousEngineLabel != currentEngineLabel) {
+    final previousStackSig = rel.sections['synced_tech_stack_sig'] ?? '';
+    final engineChanged = previousEngineLabel.isNotEmpty &&
+        previousEngineLabel != currentEngineLabel;
+    final stackChanged = previousStackSig.isNotEmpty &&
+        previousStackSig != currentStackSig;
+    if (engineChanged || stackChanged) {
       for (final r in releases) {
         r.sections['synced_engine_label'] = currentEngineLabel;
+        r.sections['synced_tech_stack_sig'] = currentStackSig;
         final relBp = releaseBlueprintFor(r.id);
         if (relBp != null) {
           for (final b in relBp.beats) {
@@ -579,9 +607,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         final states = FeatureStateNode.getStatesForDocument(featDoc);
         for (final cp in states) {
           cp.parameters.remove('primarySharedScriptOrScene');
-          cp.parameters.remove('synthesized_unreal_mode');
-          cp.parameters.remove('unreal_bp_steps_json');
-          cp.parameters.remove('unreal_cpp_steps_json');
+          cp.parameters.removeWhere(
+            (k, _) => k.startsWith('synthesized_') || k.endsWith('_steps_json'),
+          );
           for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
             final task = cp.checklist[tIdx];
             task.children = [];
@@ -618,12 +646,18 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           forceRefresh: true,
         );
       }
-    } else if (previousEngineLabel.isEmpty) {
+    } else {
       for (final r in releases) {
+        var dirty = false;
         if ((r.sections['synced_engine_label'] ?? '').isEmpty) {
           r.sections['synced_engine_label'] = currentEngineLabel;
-          _persistDocument(r);
+          dirty = true;
         }
+        if ((r.sections['synced_tech_stack_sig'] ?? '').isEmpty) {
+          r.sections['synced_tech_stack_sig'] = currentStackSig;
+          dirty = true;
+        }
+        if (dirty) _persistDocument(r);
       }
     }
 

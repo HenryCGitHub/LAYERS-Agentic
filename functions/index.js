@@ -13,6 +13,7 @@ const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
 
 // Hard model lock: strictly allow Gemini Flash models only (never Argon / Pro / Imagen / Veo).
 const ALLOWED_MODELS = new Set([
+  "gemini-4-hydrogen",
   "gemini-3.8-flash",
   "gemini-flash-latest",
 ]);
@@ -129,7 +130,7 @@ async function sendInviteEmailIfConfigured({ toEmail, inviteUrl, invitedBy }) {
       <div style="font-family: monospace; font-size: 11px; letter-spacing: 1px; color: #10B981; font-weight: 700; margin-bottom: 10px;">LAYERS-AGENTIC STUDIO</div>
       <h2 style="margin: 0 0 12px 0; font-size: 20px; color: #FFFFFF;">You've been invited to LAYERS-Agentic</h2>
       <p style="margin: 0 0 20px 0; font-size: 14px; line-height: 1.55; color: #9CA3AF;">
-        <strong>${invitedBy}</strong> invited <strong>${toEmail}</strong> to collaborate and build with Gemini 3.8 Flash in LAYERS-Agentic.
+        <strong>${invitedBy}</strong> invited <strong>${toEmail}</strong> to collaborate and build with Gemini 4 Hydrogen in LAYERS-Agentic.
       </p>
       <a href="${inviteUrl}" style="display: inline-block; padding: 11px 20px; background: #10B981; color: #06281E; text-decoration: none; font-weight: 700; font-size: 14px; border-radius: 6px;">
         Accept Invite &amp; Sign in with Google &rarr;

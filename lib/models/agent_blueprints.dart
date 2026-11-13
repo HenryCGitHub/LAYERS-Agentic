@@ -108,10 +108,10 @@ class ProjectConceptBlueprint {
     'Single-Screen Wave Arena',
   ];
   static const List<String> defaultTechSpec = [
-    'Unreal Engine 5 (Blueprints / C++)',
+    'Godot 4 (GDScript)',
     'PC Desktop',
-    'UE5 Greybox + Lumen',
-    'SaveGame Slot (.sav)',
+    'Godot 4 Greybox (2D / Forward+)',
+    'ConfigFile (.cfg / .tres)',
   ];
   static const List<String> defaultDesignPillars = [
     'Decisive Momentum: Every cycle rewards decisive movement and timing over hesitation',

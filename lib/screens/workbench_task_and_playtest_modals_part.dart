@@ -17,7 +17,6 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
       taskIndex: pIdx,
       checkpointNode: node,
       engineHint: _engineHint,
-      unrealCppMode: _unrealCppMode,
     );
     final resolvedSub = sIdx < bp.subSteps.length ? bp.subSteps[sIdx] : null;
     final titleCtrl = TextEditingController(
@@ -232,7 +231,22 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     int sIdx,
     String codeFormula,
   ) async {
-    await Clipboard.setData(ClipboardData(text: codeFormula));
+    final cleanCode = codeFormula
+        .split('\n')
+        .map((line) {
+          if (line.startsWith('+ ') && !line.startsWith('++')) {
+            return line.substring(2);
+          }
+          if (line.startsWith('+') &&
+              !line.startsWith('++') &&
+              line.length > 1 &&
+              RegExp(r'^[@\w\s#\$]').hasMatch(line.substring(1))) {
+            return line.substring(1);
+          }
+          return line;
+        })
+        .join('\n');
+    await Clipboard.setData(ClipboardData(text: cleanCode));
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -240,36 +254,6 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         behavior: SnackBarBehavior.floating,
         content: Text(
           'Copied Step ${pIdx + 1}.${sIdx + 1} code formula to clipboard ✓',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: textPrimary,
-          ),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
-  Future<void> _copyAllTaskCode(TaskHowToBlueprint howTo) async {
-    final buffer = StringBuffer()
-      ..writeln('// === Task ${howTo.numLabel}: ${howTo.cleanTitle} ===');
-    for (int i = 0; i < howTo.subSteps.length; i++) {
-      final step = howTo.subSteps[i];
-      final stepNum = (i + 1).toString().padLeft(2, '0');
-      buffer
-        ..writeln()
-        ..writeln('// --- Step $stepNum: ${step.shortTitle} ---')
-        ..writeln(step.codeFormula.trim());
-    }
-    await Clipboard.setData(ClipboardData(text: buffer.toString().trim()));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: bgSurface,
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          'Copied all ${howTo.subSteps.length} step code blocks for Task ${howTo.numLabel} ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -423,7 +407,6 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         taskIndex: pIdx,
         checkpointNode: node,
         engineHint: _engineHint,
-        unrealCppMode: _unrealCppMode,
         phase: widget.workbench.currentPhase,
       );
     }
@@ -434,6 +417,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     parentTask.completed = parentTask.children.isNotEmpty &&
         parentTask.children.every((c) => c.completed);
     final nowDone = node.isCompleted;
+    final curStepKey = '${node.id}_${pIdx}_$sIdx';
+    final nextIncompleteSubIdx = parentTask.children.indexWhere((c) => !c.completed);
     _rebuild(() {
       final cpIdx = states.indexWhere((s) => s.id == node.id);
       if (cpIdx != -1) {
@@ -441,7 +426,25 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         _manualCheckpointFocusFeatureId = feat.id;
       }
       _selectedTaskIndexByCheckpoint[node.id] = pIdx;
-      _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
+      if (nextCompleted) {
+        _expandedSubStepKeys.remove(curStepKey);
+        if (widget.workbench.focusMode) {
+          _collapsedSubStepKeys.add(curStepKey);
+        }
+        if (nextIncompleteSubIdx != -1) {
+          final nextKey = '${node.id}_${pIdx}_$nextIncompleteSubIdx';
+          _selectedSubStepIndexByTask['${node.id}_$pIdx'] =
+              nextIncompleteSubIdx;
+          _collapsedSubStepKeys.remove(nextKey);
+          _expandedSubStepKeys.add(nextKey);
+        } else {
+          _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
+        }
+      } else {
+        _collapsedSubStepKeys.remove(curStepKey);
+        _expandedSubStepKeys.add(curStepKey);
+        _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
+      }
       if (!wasDone && nowDone) {
         _awaitingPlaytestVerification.add(node.id);
       } else if (!nowDone) {
@@ -465,7 +468,6 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         taskIndex: tIdx,
         checkpointNode: node,
         engineHint: _engineHint,
-        unrealCppMode: _unrealCppMode,
         phase: widget.workbench.currentPhase,
       );
     }
@@ -694,7 +696,6 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
   void _copyActiveFeaturePrompt(TierDocument feat) {
     final promptText = widget.workbench.buildActiveFeatureCodingAgentPrompt(
       feat.id,
-      unrealCppMode: _unrealCppMode,
     );
     Clipboard.setData(ClipboardData(text: promptText));
     if (!mounted) return;
@@ -1141,8 +1142,8 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     );
   }
 
-  /// Opens the Two-Way Engine Code Sync dialog where the developer can paste a GDScript, C#,
-  /// or Unreal C++ script to update Feature tuning parameters and `[GUARD]` rules.
+  /// Opens the Two-Way Godot Code Sync dialog where the developer can paste a GDScript (`.gd`)
+  /// or GDExtension C++ snippet to update Feature `@export` tuning parameters and `[GUARD]` rules.
   Future<void> _showSyncFeatureFromCodeDialog(
     TierDocument feat,
     FeatureStateNode node,
@@ -1158,7 +1159,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
           side: BorderSide(color: borderSubtle),
         ),
         title: Text(
-          '⇄ Sync Tuning & Guards from Engine Code · ${feat.title}',
+          '⇄ Sync Tuning & Guards from GDScript · ${feat.title}',
           style: GoogleFonts.inter(
             fontSize: 14,
             fontWeight: FontWeight.w800,
@@ -1172,7 +1173,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Paste your GDScript (.gd), Unity C# (.cs), or Unreal C++ (.h/.cpp) script to sync variable values and [GUARD] checks into "${node.cleanStageTitle}".',
+                'Paste your GDScript (.gd) or GDExtension C++ snippet to sync @export variable values and [GUARD] checks into "${node.cleanStageTitle}".',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   color: textSecondary,
@@ -1191,7 +1192,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                 ),
                 decoration: InputDecoration(
                   hintText:
-                      'e.g.\nUPROPERTY(EditAnywhere)\nfloat MoveSpeed = 640.0f;\n// [GUARD] Prevent dash while stunned',
+                      'e.g.\n@export var move_speed: float = 8.5\n# [GUARD] Prevent dash while stunned',
                   hintStyle: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
                     color: textMuted,

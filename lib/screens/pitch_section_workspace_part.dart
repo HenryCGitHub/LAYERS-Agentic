@@ -196,7 +196,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                             isDense: true,
                             hintText: focusedSec != null
                                 ? 'Ask AI to refine ${focusedSec.numLabel} ${focusedSec.shortTitle}...'
-                                : 'Ask AI to refine any section (e.g. "Add 2 more core loop beats" or "Switch engine to Unity")...',
+                                : 'Ask AI to refine any section (e.g. "Add 2 more core loop beats" or "Switch to Forward+ 3D")...',
                             hintStyle: GoogleFonts.inter(
                               fontSize: 13.5,
                               color: _secT4Muted,
@@ -631,15 +631,15 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
     }
 
     final presets = _kvPresetsForCell(isGameSpec, cellIndex);
-    final bool isLockedUe5EngineCell = !isGameSpec && cellIndex == 0;
+    final bool isLockedGodotEngineCell = !isGameSpec && cellIndex == 0;
     return Material(
       color: Colors.transparent,
       child: PopupMenuButton<String>(
         key: ValueKey(
           'kv_cell_dropdown_${isGameSpec ? "game" : "tech"}_$cellIndex',
         ),
-        tooltip: isLockedUe5EngineCell
-            ? 'Locked to Unreal Engine 5 — pick Blueprints, C++, or Hybrid workflow'
+        tooltip: isLockedGodotEngineCell
+            ? 'Locked to Godot 4 Native — pick GDScript or GDScript + GDExtension C++ workflow'
             : 'Click to pick $k preset or type custom value',
         color: bgSurface,
         onSelected: (val) {
@@ -666,7 +666,7 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                 ),
               ),
             ),
-          if (!isLockedUe5EngineCell) ...[
+          if (!isLockedGodotEngineCell) ...[
             const PopupMenuDivider(),
             PopupMenuItem<String>(
               value: '__custom__',

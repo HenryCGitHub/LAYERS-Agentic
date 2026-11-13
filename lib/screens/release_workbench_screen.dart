@@ -8,8 +8,7 @@ import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/section_text_utils.dart';
 import 'project_pitch_screen.dart';
-import 'widgets/ue_blueprint_graph_canvas.dart';
-import 'widgets/ue_details_inspector_panel.dart';
+import 'widgets/godot_inspector_panel.dart';
 
 part 'workbench_engine_areas_card.dart';
 part 'workbench_modals_part.dart';
@@ -38,7 +37,7 @@ class ReleaseWorkbenchScreen extends StatefulWidget {
 class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     with WorkbenchThemeMixin {
   static final RegExp _assetTokenRegex = RegExp(
-    r'\b(?:BP_[A-Za-z0-9_]+|A[A-Z][A-Za-z0-9_]+Actor|[A-Za-z0-9_]+\.(?:uasset|tscn|gd|cs|h|cpp)|InteractBox|VisualMesh|DefaultSceneRoot|InteractTrigger|HitBox|CollisionShape2D|BoxCollider)\b',
+    r'\b(?:res://[A-Za-z0-9_./-]+\.(?:tscn|gd|tres)|[A-Za-z0-9_]+\.(?:tscn|gd|tres|h|cpp)|CharacterBody[23]D|RigidBody[23]D|StaticBody[23]D|CollisionShape[23]D|Area[23]D|Camera[23]D|Marker[23]D|MeshInstance3D|Sprite2D|CanvasLayer|Control|Timer|RayCast[23]D)\b',
   );
   static final RegExp _treeChildRegex = RegExp(
     r'[├└]─\s*([A-Za-z0-9_]+)\s*(?:\(([^)]+)\))?',
@@ -54,8 +53,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Map<String, int> _selectedTaskIndexByCheckpoint = {};
   final Map<String, int> _selectedSubStepIndexByTask = {};
   final Set<String> _collapsedSubStepKeys = {};
-  final Set<String> _collapsedBlueprintDeckNodeIds = {};
-  bool _unrealCppMode = false;
+  final Set<String> _expandedSubStepKeys = {};
+  Set<String> _hoveredDoTokens = const {};
+  String? _hoveredDoRowKey;
   double _outlinerWidth = 320.0;
   final int _engineAreaFilter = 0;
   final Set<String> _collapsedBeatIds = {};
@@ -572,7 +572,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         taskIndex: tIdx,
         checkpointNode: cpNode,
         engineHint: hint,
-        unrealCppMode: _unrealCppMode,
         phase: phase,
       );
       rem += bp.remainingTaskMinutes;

@@ -214,7 +214,7 @@ class ReleasePlannerAgent {
                     'primarySharedScriptOrScene': {
                       'type': 'STRING',
                       'description':
-                          'Shared script, scene, prefab, or Blueprint asset owned or extended by this feature.',
+                          'Shared Godot 4 scene or script asset owned or extended by this feature (e.g. "res://scenes/player_character.tscn · res://scripts/player_character.gd").',
                     },
                     'inScope': {
                       'type': 'ARRAY',
@@ -396,7 +396,7 @@ class ReleasePlannerAgent {
               'primarySharedScriptOrScene': {
                 'type': 'STRING',
                 'description':
-                    'Canonical scene, prefab, script, or Actor Blueprint owned or extended by this feature (e.g. "player_character.tscn / player_character.gd", "EnemyChaser.cs", or "BP_Shotgun").',
+                    'Canonical Godot 4 scene and script owned or extended by this feature (e.g. "res://scenes/player_character.tscn · res://scripts/player_character.gd").',
               },
               'inScope': {
                 'type': 'ARRAY',
@@ -1926,7 +1926,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
       apiKey: apiKey,
-      preferredModel: 'gemini-flash-latest',
+      preferredModel: GeminiAgentClient.pinnedLiveFlashModel,
       thinkingLevel: 'LOW',
       temperature: 0.35,
       functionDeclarations: const [commitProgressiveEpicChangesTool],

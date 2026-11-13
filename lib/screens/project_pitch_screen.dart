@@ -229,9 +229,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
       shortTitle: 'Tech Spec',
       title: 'Tech Spec',
       options: [
-        'UE5 Blueprint-First Stack: Unreal Engine 5 (Blueprints) · PC Desktop · UE5 Greybox + Lumen · SaveGame Slot (.sav)',
-        'UE5 Hybrid Stack: Unreal Engine 5 (Blueprints / C++) · PC & Steam Deck · 3D Meshes + Niagara VFX · Steam Cloud Save',
-        'UE5 C++ Core Stack: Unreal Engine 5 (C++) · Console + PC · 3D Meshes + Niagara VFX · SaveGame Slot (.sav)',
+        'Godot 4 2D Native Stack: Godot 4 (GDScript) · PC & Web · Godot 4 2D Pixel / Vector · ConfigFile (.cfg / .tres)',
+        'Godot 4 Forward+ 3D Stack: Godot 4 (GDScript) · PC & Steam Deck · Godot 4 Forward+ 3D · Resource (.tres)',
+        'Godot 4 GDExtension Stack: Godot 4 (GDScript + GDExtension C++) · PC Desktop · Godot 4 Forward+ 3D · ConfigFile (.cfg / .tres)',
       ],
     ),
     _SectionConfig(
@@ -657,18 +657,17 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     };
     const techSpecPresets = <int, List<String>>{
       0: [
-        'Unreal Engine 5 (Blueprints / C++)',
-        'Unreal Engine 5 (Blueprints)',
-        'Unreal Engine 5 (C++)',
+        'Godot 4 (GDScript)',
+        'Godot 4 (GDScript + GDExtension C++)',
       ],
-      1: ['PC Desktop', 'PC & Steam Deck', 'Console + PC'],
+      1: ['PC Desktop', 'PC & Steam Deck', 'PC & Web (HTML5)'],
       2: [
-        'UE5 Greybox + Lumen',
-        '3D Meshes + Niagara VFX',
-        'Paper2D / 2.5D Hybrid',
-        'Stylized Low-Poly UE5',
+        'Godot 4 Greybox (2D / Forward+)',
+        'Godot 4 Forward+ 3D',
+        'Godot 4 2D Pixel / Vector',
+        'Godot 4 Compatibility (Web/Mobile)',
       ],
-      3: ['SaveGame Slot (.sav)', 'Steam Cloud Save', 'Stateless Arcade Session'],
+      3: ['ConfigFile (.cfg / .tres)', 'Steam Cloud Save', 'Stateless Arcade Session'],
     };
     return (isGameSpec ? gameSpecPresets[cellIndex] : techSpecPresets[cellIndex]) ?? const <String>[];
   }

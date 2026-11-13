@@ -6,22 +6,22 @@ import '../models/tier_document.dart';
 /// Represents a single checkable "How-To" sub-step inside a Parent Task's walkthrough.
 class TaskHowToSubStep {
   final Subtask subtask;
-  final String stepNumberLabel; // e.g., "STEP 1.1 · CREATE ASSET FILE"
-  final String shortTitle;      // e.g., "Create BP_GridTileActor"
+  final String stepNumberLabel; // e.g., "STEP 1.1 · CREATE SCENE & SCRIPT"
+  final String shortTitle;      // e.g., "Create player_character.tscn"
   final String instruction;     // Concrete implementation instruction
   final String verifyResult;    // "✓ VERIFY BEFORE CHECKING [✓]" visual check
-  final String stepPath;        // e.g., "Content Browser → /Game/Blueprints"
-  final String codeFormula;     // Short code / formula / hierarchy snippet
+  final String stepPath;        // e.g., "Scene Dock → res://scenes/characters/"
+  final String codeFormula;     // Short GDScript diff / Inspector pipe table / node chain
   final String explainConcept;  // Project-connected "🎯 Connects to your Spec & Next Step" note
   final List<String> specChips; // Spec connection chips (e.g. ["Next: ...", "Spec: ..."])
   final String quickFixPitfall; // Step-specific "🔧 Quick Fix / Common Pitfall" for the right footer
   final int estimatedMinutes;   // Weighted minutes for this specific step (e.g., 15, 25, 65, 35)
   final String etaLabel;        // Formatted step ETA (e.g., "15m", "25m", "1.1h")
   final bool isGuardStep;
-  final bool isEditorCheck;     // True when step checks Scene Tree / Inspector / Compiler without Play mode
+  final bool isEditorCheck;     // True when step checks Scene Tree / Inspector without Play mode
   final String? stepRole;       // Optional 'editor_setup' | 'script_logic' | 'wire_and_verify'
-  final String? area1Hierarchy; // Optional AI-synthesized Area 1 (Scene / Component Hierarchy)
-  final String? area2Inspector; // Optional AI-synthesized Area 2 (Inspector / Details Bindings)
+  final String? area1Hierarchy; // Optional AI-synthesized Area 1 (Scene Tree Hierarchy)
+  final String? area2Inspector; // Optional AI-synthesized Area 2 (Inspector Bindings)
 
   const TaskHowToSubStep({
     required this.subtask,
@@ -46,14 +46,14 @@ class TaskHowToSubStep {
 
 /// Resolves and caches the structured Parent Task metadata (`numLabel`, `layerTag`,
 /// `cleanTitle`, `durationChip`, `whereLocation`, `engineLabel`) and ensures each Parent Task has
-/// 6 checkable `How-To` sub-steps (`Subtask.children`) with automatic rollup and engine-aware code formulas.
+/// checkable `How-To` sub-steps (`Subtask.children`) with automatic rollup and Godot 4 formulas.
 class TaskHowToBlueprint {
   final String numLabel;      // "01", "02", ...
   final String layerTag;      // "INPUT", "PHYSICS", "STATE", "FEEL", "UI"
   final String cleanTitle;    // Task title without trailing "(2h)"
   final String durationChip;  // Extracted "2h" or "1h"
-  final String whereLocation; // e.g. "Script: PlayerController._physics_process(delta)"
-  final String engineLabel;   // "GODOT 4", "UNITY C#", "UNREAL 5"
+  final String whereLocation; // e.g. "Script: player_character._physics_process(delta)"
+  final String engineLabel;   // "GODOT 4"
   final List<TaskHowToSubStep> subSteps;
 
   const TaskHowToBlueprint({
@@ -481,6 +481,123 @@ class TaskHowToBlueprint {
     return clean;
   }
 
+  static const Set<String> _inheritedComponentPropertyKeys = {
+    'position',
+    'globalposition',
+    'rotation',
+    'rotationdegrees',
+    'scale',
+    'skew',
+    'transform',
+    'location',
+    'visible',
+    'modulate',
+    'selfmodulate',
+    'zindex',
+    'ysortenabled',
+    'collisionlayer',
+    'collisionmask',
+    'processmode',
+    'motionmode',
+    'wallminslideangle',
+    'floorsnaplength',
+    'scenepath',
+    'nodepath',
+    'assetname',
+    'parentclass',
+  };
+
+  /// Filters out built-in Godot Node Inspector properties (`position`, `rotation`,
+  /// `scale`, `collision_layer`, etc.) so the Unified Header shows only true
+  /// `@export` declared gameplay tuning variables.
+  static List<
+      ({
+        String name,
+        String value,
+        String raw,
+        int origIdx,
+        int typeColorArgb,
+      })> filterDeclaredGameplayVariables(List<String> tuningItems) {
+    final result = <({
+      String name,
+      String value,
+      String raw,
+      int origIdx,
+      int typeColorArgb,
+    })>[];
+    for (int i = 0; i < tuningItems.length; i++) {
+      final raw = tuningItems[i].trim();
+      if (raw.isEmpty) continue;
+
+      String name;
+      String value;
+      final eqIdx = raw.indexOf('=');
+      final colonIdx = raw.indexOf(':');
+      if (eqIdx > 0 && (colonIdx == -1 || eqIdx < colonIdx || raw.contains('.'))) {
+        name = raw.substring(0, eqIdx).trim();
+        value = raw.substring(eqIdx + 1).trim();
+      } else if (colonIdx > 0) {
+        name = raw.substring(0, colonIdx).trim();
+        value = raw.substring(colonIdx + 1).trim();
+      } else {
+        name = raw;
+        value = '';
+      }
+
+      if (name.isEmpty) continue;
+
+      final lowerName = name.toLowerCase();
+      final tailSegment = name.split(RegExp(r'[.:]')).last.trim().toLowerCase();
+      final tailToken = tailSegment.split(RegExp(r'\s+')).last.trim();
+      String norm(String s) => s.replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+      final candidates = {
+        norm(lowerName),
+        norm(tailSegment),
+        norm(tailToken),
+      };
+      if (candidates.any(_inheritedComponentPropertyKeys.contains)) {
+        continue;
+      }
+
+      final lowerVal = value.toLowerCase();
+      final int typeColorArgb;
+      if (lowerVal == 'true' ||
+          lowerVal == 'false' ||
+          lowerName.startsWith('bool ') ||
+          lowerName.endsWith(': bool') ||
+          lowerName.startsWith('is_') ||
+          lowerName.startsWith('can_') ||
+          lowerName.startsWith('has_')) {
+        typeColorArgb = 0xFFEF4444; // bool (red)
+      } else if (lowerVal.startsWith('(') ||
+          lowerVal.startsWith('vector') ||
+          lowerVal.startsWith('color(') ||
+          lowerName.contains('vector') ||
+          lowerName.contains('color') ||
+          lowerVal.contains('x=') ||
+          lowerVal.contains('y=') ||
+          lowerVal.contains('z=')) {
+        typeColorArgb = 0xFFEAB308; // Vector2 / Vector3 / Color (gold)
+      } else if (int.tryParse(value) != null ||
+          lowerName.startsWith('int ') ||
+          lowerName.endsWith(': int')) {
+        typeColorArgb = 0xFF2DD4BF; // int (teal)
+      } else {
+        typeColorArgb = 0xFF22C55E; // float (green)
+      }
+
+      result.add((
+        name: name,
+        value: value,
+        raw: raw,
+        origIdx: i,
+        typeColorArgb: typeColorArgb,
+      ));
+    }
+    return result;
+  }
+
   /// Lightweight LRU-style memoization cache for `TaskHowToBlueprint.resolve`
   /// so Outliner ETA rollups and Active Step Workspace renders do not re-run regexes
   /// and object allocations multiple times per frame.
@@ -598,16 +715,8 @@ class TaskHowToBlueprint {
     );
   }
 
-  static String detectEngineLabel(String? engineHint) {
-    final lower = (engineHint ?? '').toLowerCase();
-    if (lower.contains('unity') || lower.contains('c#')) {
-      return 'UNITY C#';
-    }
-    if (lower.contains('unreal') || lower.contains('ue5') || lower.contains('c++')) {
-      return 'UNREAL 5';
-    }
-    return 'GODOT 4';
-  }
+  /// Godot 4 Native engine label across Stage 1 and Stage 2.
+  static String detectEngineLabel(String? engineHint) => 'GODOT 4';
 
   static String extractCleanTitle(String rawText) {
     var cleaned = rawText.replaceAll(_trailingDurationRe, '').trim();
@@ -749,34 +858,6 @@ class TaskHowToBlueprint {
     String layerTag, {
     String engineLabel = 'GODOT 4',
   }) {
-    if (engineLabel == 'UNITY C#') {
-      switch (layerTag) {
-        case 'INPUT':
-          return 'MonoBehaviour: PlayerInputController.Update()';
-        case 'PHYSICS':
-          return 'MonoBehaviour: MechanicController.FixedUpdate()';
-        case 'FEEL':
-          return 'MonoBehaviour: FeedbackPresenter.LateUpdate()';
-        case 'UI / HUD':
-          return 'MonoBehaviour: GameHudOverlay.RefreshReadout()';
-        default:
-          return 'MonoBehaviour: CoreLoopStateController.FixedUpdate()';
-      }
-    }
-    if (engineLabel == 'UNREAL 5') {
-      switch (layerTag) {
-        case 'INPUT':
-          return 'ActorComponent: UPlayerInputComp::SetupPlayerInputComponent()';
-        case 'PHYSICS':
-          return 'ActorComponent: UMechanicComponent::TickComponent(DeltaTime)';
-        case 'FEEL':
-          return 'ActorComponent: UFeedbackPresenter::TriggerFeelCue()';
-        case 'UI / HUD':
-          return 'UserWidget: UGameHudWidget::UpdateStateReadout()';
-        default:
-          return 'ActorComponent: UCoreLoopStateComp::TickComponent(DeltaTime)';
-      }
-    }
     switch (layerTag) {
       case 'INPUT':
         return 'Script: PlayerController._unhandled_input(event)';
@@ -844,14 +925,9 @@ class TaskHowToBlueprint {
     r'[A-Z]+(?=[A-Z][a-z]|\d|\b)|[A-Z]?[a-z]+|\d+',
   );
   static final RegExp _assetExtRegex = RegExp(
-    r'\.(?:gd|tscn|tres|cs|prefab|h|cpp|uasset|umap)$',
+    r'\.(?:gd|tscn|tres|h|cpp)$',
     caseSensitive: false,
   );
-  static final RegExp _unrealBpPrefixRegex = RegExp(
-    r'^(?:WBP_|ABP_|BP_)',
-    caseSensitive: false,
-  );
-  static final RegExp _unrealCppPrefixRegex = RegExp(r'^[AU](?=[A-Z][a-z])');
 
   /// Resolves `(pascalName, snakeName)` from an explicit `primarySharedScriptOrScene`
   /// when present, or falls back to `deriveConcreteAssetName(fallbackText)`.
@@ -865,8 +941,6 @@ class TaskHowToBlueprint {
       if (head.isEmpty) head = raw;
       head = head.split('/').last.split(r'\').last.trim();
       head = head.replaceFirst(_assetExtRegex, '').trim();
-      head = head.replaceFirst(_unrealBpPrefixRegex, '').trim();
-      head = head.replaceFirst(_unrealCppPrefixRegex, '').trim();
       final tokens = _camelOrSnakeTokenRegex
           .allMatches(head)
           .map((m) => m.group(0)!)
@@ -887,7 +961,6 @@ class TaskHowToBlueprint {
     required Subtask parentTask,
     required FeatureStateNode checkpointNode,
     required String? engineHint,
-    required bool unrealCppMode,
     required ProductionPhase effectivePhase,
   }) {
     var hash = Object.hash(
@@ -902,7 +975,6 @@ class TaskHowToBlueprint {
       checkpointNode.edgeCases.join('|'),
       checkpointNode.parameters['primarySharedScriptOrScene'] ?? '',
       engineHint ?? '',
-      unrealCppMode,
       effectivePhase.name,
     );
     for (final c in parentTask.children) {
@@ -1034,8 +1106,7 @@ class TaskHowToBlueprint {
   }) deriveConcreteGuardStepSpec({
     required String rawGuard,
     required String targetAssetName,
-    required String engineLabel,
-    required bool unrealCppMode,
+    String engineLabel = 'GODOT 4',
     required String primaryVarName,
   }) {
     final shortGuard =
@@ -1043,19 +1114,9 @@ class TaskHowToBlueprint {
     final lower = shortGuard.toLowerCase();
 
     final isResetGuard = lower.contains('reset') || lower.contains('restart');
-    final flagName = engineLabel == 'GODOT 4'
-        ? (isResetGuard ? 'reset_in_progress' : 'selection_locked')
-        : (isResetGuard ? 'bResetInProgress' : 'bSelectionLocked');
-    final notFlagExpr = engineLabel == 'UNREAL 5' && !unrealCppMode
-        ? 'NOT $flagName'
-        : (engineLabel == 'GODOT 4' ? 'not $flagName' : '!$flagName');
-    final code = engineLabel == 'UNREAL 5'
-        ? (unrealCppMode
-            ? 'if ($flagName) return;\n$flagName = true;'
-            : '[Branch: $notFlagExpr]\n   └──► (True) ──► [Set $flagName = true]\n                   [Apply Action ($primaryVarName)]')
-        : (engineLabel == 'UNITY C#'
-            ? 'if ($flagName) return;\n$flagName = true;'
-            : 'if $flagName:\n    return\n$flagName = true');
+    final flagName = isResetGuard ? 'reset_in_progress' : 'selection_locked';
+    final notFlagExpr = 'not $flagName';
+    final code = '+ if $flagName:\n+     return\n+ $flagName = true';
     return (
       shortTitle: _formatConciseGuardShortTitle(
         rawGuard,
@@ -1064,21 +1125,19 @@ class TaskHowToBlueprint {
             : 'Guard: Duplicate Trigger Lock',
       ),
       highlightTokens: [
-        'NOT $flagName',
-        '!$flagName',
-        'not $flagName',
+        notFlagExpr,
         '$flagName = true',
         flagName,
       ],
       instruction:
-          'At the start of your trigger event in $targetAssetName, check $notFlagExpr and set $flagName = true on the first activation.',
+          'At the top of your trigger callback in $targetAssetName, check $notFlagExpr and set $flagName = true on the first activation.',
       explain:
           'Enforces "$shortGuard" so rapid double-clicks or duplicate triggers cannot fire the action twice.',
       code: code,
       verify:
-          'Trigger the action rapidly in Play mode and confirm $flagName blocks duplicate activations so only 1 trigger runs.',
+          'Trigger the action rapidly in Play mode (F5/F6) and confirm $flagName blocks duplicate activations so only 1 trigger runs.',
       pitfall:
-          'Set $flagName = true immediately on the first frame before running any animation or state delay.',
+          'Set $flagName = true immediately on the first frame before yielding with await.',
     );
   }
 
@@ -1098,16 +1157,13 @@ class TaskHowToBlueprint {
     return tokens.toList();
   }
 
-  /// Dynamically resolves `parentTask.children` into `1..N` atomic, zero-assumption "LEGO / IKEA" sub-steps
-  /// (`Step X.1` through `Step X.N`) adapted to `engineHint` (`GODOT 4`, `UNITY C#`, `UNREAL 5`),
-  /// scaling down to 3–4 steps for compact feel/guard tasks or up to 10+ steps for multi-clause,
-  /// multi-parameter, and multi-guard mechanics, while supporting Unreal 5 `Blueprint | C++` toggle (`unrealCppMode`).
+  /// Dynamically resolves `parentTask.children` into `1..N` atomic Godot 4 Native Handbook sub-steps
+  /// (`Step X.1` through `Step X.N`) across `Scene Tree`, `Inspector`, `Input Map`, `GDScript (.gd)`, and `Signals`.
   static TaskHowToBlueprint resolve({
     required Subtask parentTask,
     required int taskIndex,
     required FeatureStateNode checkpointNode,
     String? engineHint,
-    bool unrealCppMode = false,
     ProductionPhase? phase,
   }) {
     final effectivePhase = inferCheckpointPhase(
@@ -1115,13 +1171,12 @@ class TaskHowToBlueprint {
       explicitPhase: phase,
     );
     final cacheKey =
-        '${checkpointNode.id}_${parentTask.id}_${taskIndex}_${engineHint ?? ''}_${unrealCppMode ? 'cpp' : 'bp'}_${effectivePhase.name}';
+        '${checkpointNode.id}_${parentTask.id}_${taskIndex}_${engineHint ?? ''}_${effectivePhase.name}';
     if (parentTask.children.isNotEmpty) {
       final sig = _computeTaskSignature(
         parentTask: parentTask,
         checkpointNode: checkpointNode,
         engineHint: engineHint,
-        unrealCppMode: unrealCppMode,
         effectivePhase: effectivePhase,
       );
       final cached = _blueprintCache[cacheKey];
@@ -1152,8 +1207,6 @@ class TaskHowToBlueprint {
     );
     final pascalAsset = asset.pascalName;
     final snakeAsset = asset.snakeName;
-    final bpAsset = 'BP_$pascalAsset';
-    final cppClass = 'A$pascalAsset';
 
     final lowerCategoryCorpus =
         '$cleanTitle ${checkpointNode.name}'.toLowerCase();
@@ -1245,557 +1298,6 @@ class TaskHowToBlueprint {
       String explain,
     }) buildAtomicStepSpec(int stepIdx) {
       // =======================================================================
-      // UNREAL 5 (Supports both Blueprint mode & C++ mode)
-      // =======================================================================
-      if (engineLabel == 'UNREAL 5') {
-        if (unrealCppMode) {
-          switch (stepIdx) {
-            case 0:
-              return (
-                stepHeader: isFoundationTask
-                    ? 'STEP $taskNum.1 · CREATE $cppClass C++ CLASS'
-                    : (isStateLogicTask
-                        ? 'STEP $taskNum.1 · DEFINE STATE ENUM & PROPERTIES IN $pascalAsset.h'
-                        : 'STEP $taskNum.1 · BIND INTERACTION INPUT IN $pascalAsset.cpp'),
-                shortTitle: isFoundationTask
-                    ? 'Create $cppClass C++ Class'
-                    : (isStateLogicTask
-                        ? 'Define State Enum'
-                        : 'Bind Player Interaction Input'),
-                instruction: isFoundationTask
-                    ? 'In the Unreal Editor top menu, click Tools → New C++ Class... → choose Actor as the parent class → name it $pascalAsset and click Create Class.'
-                    : (isStateLogicTask
-                        ? 'Open $pascalAsset.h and declare the state enum and active state properties for "$cleanTitle" on $cppClass.'
-                        : 'Open $pascalAsset.cpp and bind the player interaction action / trace trigger for "$cleanTitle".'),
-                verify: isFoundationTask
-                    ? 'Visual Studio / Rider opens with $pascalAsset.h and $pascalAsset.cpp generated.'
-                    : '$pascalAsset.h and $pascalAsset.cpp compile cleanly in your IDE.',
-                path: 'Source/Project/$pascalAsset.h',
-                code: '#pragma once\n#include "CoreMinimal.h"\n#include "GameFramework/Actor.h"\n#include "$pascalAsset.generated.h"\n\nUCLASS()\nclass $cppClass : public AActor {\n  GENERATED_BODY()\npublic:\n  $cppClass();\n  EMechanicState ActiveState = EMechanicState::Idle;\n};',
-                explain: 'An AActor C++ class is the foundation object you can spawn or place inside a level.',
-              );
-            case 1:
-              return (
-                stepHeader: isFoundationTask
-                    ? 'STEP $taskNum.2 · ATTACH MESH & COLLISION SUBOBJECTS'
-                    : (isStateLogicTask
-                        ? 'STEP $taskNum.2 · BUILD SETSTATE() TRANSITION FUNCTION'
-                        : 'STEP $taskNum.2 · CAST INTERACTION LINETRACE IN C++'),
-                shortTitle: isFoundationTask
-                    ? 'Attach Mesh Subobject'
-                    : (isStateLogicTask
-                        ? 'Build State Transition Function'
-                        : 'Cast Interaction LineTrace'),
-                instruction: isFoundationTask
-                    ? 'Inside the $cppClass() constructor in $pascalAsset.cpp, instantiate a UStaticMeshComponent ("VisualMesh") and UBoxComponent ("InteractBox") and attach them to RootComponent.'
-                    : (isStateLogicTask
-                        ? 'In $pascalAsset.cpp, add a SetMechanicState(EMechanicState NewState) method that validates and updates ActiveState.'
-                        : 'In $pascalAsset.cpp, run GetWorld()->LineTraceSingleByChannel from the camera view to detect $cppClass instances.'),
-                verify: isFoundationTask
-                    ? 'Live Coding (Ctrl+Alt+F11) compiles cleanly with VisualMesh and InteractBox attached under RootComponent.'
-                    : (isStateLogicTask
-                        ? 'SetMechanicState compiles cleanly and updates ActiveState when called.'
-                        : 'LineTrace hits $cppClass InteractBox within interaction range.'),
-                path: 'Source/Project/$pascalAsset.cpp :: $cppClass()',
-                code: isFoundationTask
-                    ? (effectiveCategory == 'ui'
-                        ? '$cppClass::$cppClass() {\n  RootComponent = CreateDefaultSubobject<USceneComponent>("Root");\n  CameraBoom = CreateDefaultSubobject<USpringArmComponent>("CameraBoom");\n  CameraBoom->SetupAttachment(RootComponent);\n  CameraBoom->TargetArmLength = 400.f;\n  FollowCamera = CreateDefaultSubobject<UCameraComponent>("FollowCamera");\n  FollowCamera->SetupAttachment(CameraBoom);\n}'
-                        : '$cppClass::$cppClass() {\n  RootComponent = CreateDefaultSubobject<USceneComponent>("Root");\n  VisualMesh = CreateDefaultSubobject<UStaticMeshComponent>("VisualMesh");\n  VisualMesh->SetupAttachment(RootComponent);\n  InteractBox = CreateDefaultSubobject<UBoxComponent>("InteractBox");\n  InteractBox->InitBoxExtent(FVector(50.f, 50.f, 20.f));\n  InteractBox->SetupAttachment(RootComponent);\n}')
-                    : (isStateLogicTask
-                        ? 'void $cppClass::SetMechanicState(EMechanicState NewState) {\n  if (ActiveState == NewState) return;\n  ActiveState = NewState;\n  OnStateChanged(ActiveState);\n}'
-                        : 'FHitResult Hit;\nGetWorld()->LineTraceSingleByChannel(Hit, StartLoc, EndLoc, ECC_Visibility);\nif ($cppClass* Target = Cast<$cppClass>(Hit.GetActor())) {\n  Target->Interact();\n}'),
-                explain: isFoundationTask
-                    ? 'CreateDefaultSubobject constructs the visible 3D mesh and the collision sensor box inside your C++ constructor.'
-                    : 'Separating state transition and raycast queries into dedicated C++ methods keeps your actor modular and easy to debug.',
-              );
-            case 2:
-              return (
-                stepHeader: isFoundationTask
-                    ? 'STEP $taskNum.3 · COMPILE & PLACE IN LEVEL VIEWPORT'
-                    : (isStateLogicTask
-                        ? 'STEP $taskNum.3 · SWAP MATERIAL / VISUAL ON STATE CHANGE'
-                        : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $cppClass'),
-                shortTitle: isFoundationTask
-                    ? 'Place $cppClass in Level'
-                    : (isStateLogicTask
-                        ? 'Swap Visual Material on State Change'
-                        : 'Call Interact Trigger on Hit Actor'),
-                instruction: isFoundationTask
-                    ? 'Press Ctrl+Alt+F11 (Live Coding) to compile, then open C++ Classes in the Content Browser and drag $pascalAsset into the Level Viewport at (0, 0, 0).'
-                    : (isStateLogicTask
-                        ? 'Inside OnStateChanged(), update VisualMesh material parameters so each state of $cppClass is visually distinct.'
-                        : 'When the trace hits $cppClass, invoke its interaction method to advance the state machine.'),
-                verify:
-                    '$pascalAsset updates cleanly in the Level Viewport and World Outliner.',
-                path: 'Level Editor → Content Browser → C++ Classes → Viewport',
-                code: isFoundationTask
-                    ? 'Instance: ${pascalAsset}_0 ($cppClass)\nTransform Location: FVector(0.f, 0.f, 0.f)'
-                    : 'VisualMesh->SetVectorParameterValueOnMaterials(TEXT("StateTint"), ActiveColor);',
-                explain: 'Immediate visual feedback on the mesh lets playtesters see state changes without relying on debug text.',
-              );
-            case 3:
-              return (
-                stepHeader: 'STEP $taskNum.4 · EXPOSE UPROPERTY TUNING VARIABLES',
-                shortTitle: isFoundationTask
-                    ? 'Expose UPROPERTY $primaryVarName'
-                    : (isStateLogicTask
-                        ? 'Bind $primaryVarName to State Transition'
-                        : 'Add Target Hover Highlight Cue'),
-                instruction:
-                    'In $pascalAsset.h under public:, declare $primaryVarName with UPROPERTY(EditAnywhere, BlueprintReadWrite) so designers can tune $primaryVarName in the Details panel.',
-                verify:
-                    'After Live Coding, selecting $cppClass in the Level shows $primaryVarName as an editable field inside the Details panel.',
-                path: 'Source/Project/$pascalAsset.h (UPROPERTY)',
-                code: 'UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tuning")\nfloat $primaryVarName = 1.0f; // $primaryVar\n\nUPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="State")\nbool bIsOccupied = false;',
-                explain: 'UPROPERTY(EditAnywhere) exposes a C++ variable to the Unreal Editor Details panel so you can tweak it without recompiling.',
-              );
-            case 4:
-              return (
-                stepHeader: 'STEP $taskNum.5 · IMPLEMENT OVERLAP / TICK LOGIC',
-                shortTitle: isFoundationTask
-                    ? 'Initialize Default Component State'
-                    : (isStateLogicTask
-                        ? 'Step State with Interpolation Logic'
-                        : 'Add Cooldown Timer'),
-                instruction:
-                    'In $pascalAsset.cpp, implement the trigger and state interpolation for "$cleanTitle" using FMath::FInterpConstantTo driven by $primaryVarName.',
-                verify:
-                    'Triggering $cppClass in Play mode updates ActiveState smoothly using $primaryVarName.',
-                path: 'Source/Project/$pascalAsset.cpp :: TickComponent / Overlap',
-                code: 'void $cppClass::ExecuteMechanicStep(float DeltaTime) {\n  if (bInputPressed && CanEnterState()) {\n    ActiveState = EMechanicState::Active;\n  }\n  CurrentVal = FMath::FInterpConstantTo(CurrentVal, TargetVal, DeltaTime, $primaryVarName);\n}',
-                explain: 'FMath::FInterpConstantTo smoothly steps your value each frame using DeltaTime so movement speed is frame-rate independent.',
-              );
-            default:
-              return (
-                stepHeader: isFoundationTask
-                    ? 'STEP $taskNum.6 · COMPILE & VERIFY ACTOR IN LEVEL'
-                    : (isStateLogicTask
-                        ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
-                        : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN VIEWPORT (ALT+P)'),
-                shortTitle: isFoundationTask
-                    ? 'Verify Actor in Level'
-                    : (isStateLogicTask
-                        ? 'Add Invalid-State Transition Guard'
-                        : 'Playtest Full Loop in Viewport (Alt+P)'),
-                instruction:
-                    'Add a guard check at the top of your function to enforce "$primaryGuard", compile with Ctrl+Alt+F11, and press Play (Alt+P) to test in the viewport.',
-                verify:
-                    'Pressing Play (Alt+P) triggers "$cleanTitle" cleanly on screen and blocks duplicate triggers.',
-                path: 'Main Toolbar → Live Coding (Ctrl+Alt+F11) → Play (Alt+P)',
-                code: 'if (IsBoundaryBlocked() || CooldownTimer > 0.f) return; // Guard: $primaryGuard\nif (GEngine) {\n  GEngine->AddOnScreenDebugMessage(-1, 2.f, FColor::Cyan, TEXT("$cleanTitle Active!"));\n}',
-                explain: 'The early-return guard prevents double-triggering or out-of-bounds states when the player spams input.',
-              );
-          }
-        } else {
-          // UNREAL 5 — Blueprint Mode (Default)
-          switch (stepIdx) {
-            case 0:
-              return (
-                stepHeader: isFoundationTask
-                    ? (effectiveCategory == 'character'
-                        ? 'STEP $taskNum.1 · CREATE $bpAsset CHARACTER BLUEPRINT'
-                        : 'STEP $taskNum.1 · CREATE $bpAsset BLUEPRINT ASSET')
-                    : (isInputMappingTask
-                        ? 'STEP $taskNum.1 · CREATE INPUT ACTION & MAPPING CONTEXT FOR $bpAsset'
-                        : (isPhysicsTuningTask
-                            ? 'STEP $taskNum.1 · SELECT MOVEMENT & PHYSICS COMPONENT IN $bpAsset'
-                            : (isStateLogicTask
-                                ? 'STEP $taskNum.1 · DEFINE STATE ENUM & VARIABLES IN $bpAsset'
-                                : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $bpAsset'))),
-                shortTitle: isFoundationTask
-                    ? 'Create $bpAsset'
-                    : (isInputMappingTask
-                        ? 'Create IA_Move & IMC_Default'
-                        : (isPhysicsTuningTask
-                            ? 'Select Movement Component'
-                            : (isStateLogicTask
-                                ? 'Define State Enum'
-                                : 'Bind Player Interaction Input'))),
-                instruction: isFoundationTask
-                    ? (effectiveCategory == 'character'
-                        ? 'In the Content Browser (bottom panel), right-click inside /Game/Blueprints → choose Blueprint Class → click Character, and name it $bpAsset.'
-                        : 'In the Content Browser (bottom panel), right-click inside /Game/Blueprints → choose Blueprint Class → click Actor, and name it $bpAsset.')
-                    : (isInputMappingTask
-                        ? 'In /Game/Input, create an Input Action IA_Move (Value Type: Axis2D) and an Input Mapping Context IMC_Default (bind WASD / Left Stick), then open $bpAsset (created in Task 01).'
-                        : (isPhysicsTuningTask
-                            ? 'In /Game/Blueprints, double-click $bpAsset (created in Task 01) and select its CharacterMovement / physics component in the Components panel.'
-                            : (isStateLogicTask
-                                ? 'In /Game/Blueprints, double-click $bpAsset (created in Task 01) and add a State variable (Enum / Integer) under My Blueprint → Variables for "$cleanTitle".'
-                                : 'Open $bpAsset in /Game/Blueprints and add your player interaction input event (e.g., EnhancedInputAction IA_Interact) on the Event Graph.'))),
-                verify: isFoundationTask
-                    ? 'A new blue-underlined Blueprint icon named $bpAsset appears inside /Game/Blueprints.'
-                    : 'The Blueprint Editor opens showing $bpAsset ready for "$cleanTitle".',
-                path: 'Content Browser → /Game/Blueprints/$bpAsset',
-                code: isFoundationTask && effectiveCategory == 'character'
-                    ? 'Asset Name:   $bpAsset\nParent Class: Character (ACharacter / EMechanicState::Active)'
-                    : (isInputMappingTask
-                        ? 'Target Blueprint: $bpAsset (Reuse from Task 01)\nInput Assets:     IA_Move (Axis2D), IMC_Default (WASD)'
-                        : (isPhysicsTuningTask
-                            ? 'Target Blueprint: $bpAsset (Reuse from Task 01)\nTarget Component: CharacterMovement (UCharacterMovementComponent)'
-                            : 'Asset Name:   $bpAsset\nParent Class: Actor (AActor / EMechanicState::Active)')),
-                explain: 'All tasks in this feature modify the single $bpAsset Blueprint created in Task 01 so your setup, input, and physics work together seamlessly.',
-              );
-            case 1:
-              return (
-                stepHeader: isFoundationTask
-                    ? (effectiveCategory == 'character'
-                        ? 'STEP $taskNum.2 · CONFIGURE CAPSULE, CAMERA & MOVEMENT COMPONENTS'
-                        : 'STEP $taskNum.2 · ATTACH VISUAL MESH & BOX COLLISION')
-                    : (isInputMappingTask
-                        ? 'STEP $taskNum.2 · REGISTER IMC_DEFAULT ON BEGINPLAY IN $bpAsset'
-                        : (isPhysicsTuningTask
-                            ? 'STEP $taskNum.2 · CONFIGURE VELOCITY, ACCELERATION & GRAVITY'
-                            : (isStateLogicTask
-                                ? 'STEP $taskNum.2 · BUILD STATE TRANSITION FUNCTION'
-                                : 'STEP $taskNum.2 · CAST INTERACTION LINETRACE BY CHANNEL'))),
-                shortTitle: isFoundationTask
-                    ? (effectiveCategory == 'character'
-                        ? 'Configure Capsule & Camera'
-                        : 'Attach BoxCollision')
-                    : (isInputMappingTask
-                        ? 'Register Mapping Context'
-                        : (isPhysicsTuningTask
-                            ? 'Configure Walk Speed & Gravity'
-                            : (isStateLogicTask
-                                ? 'Build State Transition Function'
-                                : 'Cast Interaction LineTrace'))),
-                instruction: isFoundationTask
-                    ? (effectiveCategory == 'character'
-                        ? 'Inside $bpAsset, select the CapsuleComponent in the Components panel, click + Add to attach a CameraComponent ("FirstPersonCamera") at eye height, and verify CharacterMovement is present.'
-                        : 'Inside $bpAsset, look at the top-left Components panel and click + Add to attach a Static Mesh ("VisualMesh", set to Shape_Plane/Cube) and a Box Collision ("InteractBox").')
-                    : (isInputMappingTask
-                        ? 'In $bpAsset Event Graph, drag off Event BeginPlay → Get Controller → Cast To PlayerController → Enhanced Input Local Player Subsystem → Add Mapping Context (IMC_Default).'
-                        : (isPhysicsTuningTask
-                            ? 'With CharacterMovement selected in $bpAsset, open the Details panel and configure Max Walk Speed, Max Acceleration, Braking Deceleration, and Gravity Scale.'
-                            : (isStateLogicTask
-                                ? 'In $bpAsset under My Blueprint → Functions, click + to create a function named "AdvanceState" with a Switch on State node to step through valid states.'
-                                : 'From your Input Action node, wire a LineTraceByChannel node projecting forward from the Player Camera to detect $bpAsset.'))),
-                verify: isFoundationTask
-                    ? 'A visible 3D shape surrounded by a wireframe collision bounds appears in the central Viewport tab.'
-                    : (isInputMappingTask
-                        ? 'Event BeginPlay registers IMC_Default on $bpAsset with zero compiler warnings.'
-                        : (isPhysicsTuningTask
-                            ? 'CharacterMovement Details panel reflects your updated speed, acceleration, and gravity values.'
-                            : (isStateLogicTask
-                                ? 'The AdvanceState function tab opens with Input → Switch on State → Set CurrentState nodes.'
-                                : 'Triggering the input fires a red debug trace line toward the targeted $bpAsset.'))),
-                path: isFoundationTask
-                    ? '$bpAsset → Components Panel (Top-Left)'
-                    : '$bpAsset → Functions / Event Graph',
-                code: isFoundationTask
-                    ? (effectiveCategory == 'ui'
-                        ? '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ CameraBoom   (SpringArmComponent: TargetArmLength = 400.0)\n     │   └─ FollowCamera (CameraComponent)\n     └─ HudCanvas    (WidgetComponent: Screen Space)'
-                        : (effectiveCategory == 'combat'
-                            ? '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ WeaponMesh  (StaticMeshComponent)\n     ├─ MuzzlePoint (SceneComponent)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)'
-                            : (effectiveCategory == 'character'
-                                ? '$bpAsset (Self: ACharacter)\n ├─ CapsuleComponent  (Collision Cylinder: HalfHeight = 88, Radius = 34)\n ├─ FirstPersonCamera (CameraComponent: Use Pawn Control Rotation = true)\n └─ CharacterMovement (Movement Component)'
-                                : '$bpAsset (Self)\n └─ DefaultSceneRoot\n     ├─ VisualMesh  (StaticMesh: Shape_Plane / Cube)\n     └─ InteractBox (BoxCollision: Extent 50, 50, 20)')))
-                    : (isInputMappingTask
-                        ? '[Event BeginPlay] ──► [Get Controller] ──► [EnhancedInputLocalPlayerSubsystem]\n   └──► [Add Mapping Context (MappingContext = IMC_Default, Priority = 0)]'
-                        : (isPhysicsTuningTask
-                            ? 'CharacterMovement (Details Panel):\n ├─ Max Walk Speed:               $primaryVar\n ├─ Max Acceleration:             2048.0 cm/s²\n └─ Braking Deceleration Walking: 2048.0 cm/s²'
-                            : (isStateLogicTask
-                                ? '[Function: AdvanceState]\n   └──► [Switch on E_State]\n           ├──► Idle   ──► [Set CurrentState = Active]\n           └──► Active ──► [Set CurrentState = Complete]'
-                                : '[IA_Interact (Started)] ──► [LineTraceByChannel (Camera → +400cm)]\n   └──► [Break Hit Result (Hit Actor)]'))),
-                explain: isFoundationTask
-                    ? 'Static Mesh / Capsule defines the physical bounds, and components give $bpAsset its core capabilities.'
-                    : (isStateLogicTask
-                        ? 'Putting state transitions inside a dedicated function keeps your Event Graph clean and callable from any trigger.'
-                        : 'Connecting input and movement directly inside $bpAsset keeps your mechanic self-contained.'),
-              );
-            case 2:
-              return (
-                stepHeader: isFoundationTask
-                    ? (effectiveCategory == 'character'
-                        ? 'STEP $taskNum.3 · PLACE $bpAsset IN LEVEL & SET DEFAULT PAWN'
-                        : 'STEP $taskNum.3 · DRAG $bpAsset INTO LEVEL VIEWPORT')
-                    : (isInputMappingTask
-                        ? 'STEP $taskNum.3 · WIRE IA_MOVE AXIS TO MOVEMENT IN $bpAsset'
-                        : (isPhysicsTuningTask
-                            ? 'STEP $taskNum.3 · WIRE VELOCITY & MOMENTUM INTERPOLATION IN $bpAsset'
-                            : (isStateLogicTask
-                                ? 'STEP $taskNum.3 · SWAP VISUAL MATERIAL ON STATE CHANGE'
-                                : 'STEP $taskNum.3 · CALL INTERACT TRIGGER ON HIT ACTOR'))),
-                shortTitle: isFoundationTask
-                    ? 'Drag into Level Viewport'
-                    : (isInputMappingTask
-                        ? 'Wire IA_Move to AddMovementInput'
-                        : (isPhysicsTuningTask
-                            ? 'Wire Physics Momentum Curve'
-                            : (isStateLogicTask
-                                ? 'Swap Visual Material on State Change'
-                                : 'Call Interact Trigger on Hit Actor'))),
-                instruction: isFoundationTask
-                    ? (effectiveCategory == 'character'
-                        ? 'Click Compile & Save in $bpAsset, drag $bpAsset into the Level Viewport (or set Auto Possess Player = Player 0 in Details), so Play mode spawns inside $bpAsset.'
-                        : 'Click Compile & Save (top-left of $bpAsset), then switch to the main Level tab and drag $bpAsset from the Content Browser onto the floor at (0, 0, 0).')
-                    : (isInputMappingTask
-                        ? 'In $bpAsset Event Graph, right-click and add EnhancedInputAction IA_Move, then wire Triggered (Action Value X/Y) into Add Movement Input.'
-                        : (isPhysicsTuningTask
-                            ? 'In $bpAsset Event Graph, connect Event Tick / Movement update to scale CharacterMovement Max Walk Speed & velocity interpolation using $primaryVarName.'
-                            : (isStateLogicTask
-                                ? 'At the end of AdvanceState in $bpAsset, drag VisualMesh into the graph and call Set Material (or Set Vector Parameter Value) so each state changes color on screen.'
-                                : 'Drag off the Hit Actor pin from Break Hit Result, Cast To $bpAsset, and call its AdvanceState / Interact function.'))),
-                verify: isFoundationTask
-                    ? '$bpAsset sits on the level floor and is listed inside the World Outliner panel.'
-                    : (isInputMappingTask
-                        ? 'Pressing WASD in Play mode drives AddMovementInput on $bpAsset.'
-                        : (isPhysicsTuningTask
-                            ? '$bpAsset accelerates and decelerates smoothly according to $primaryVarName.'
-                            : (isStateLogicTask
-                                ? 'VisualMesh updates its material color immediately whenever CurrentState changes.'
-                                : 'Looking at $bpAsset and pressing Interact invokes AdvanceState on the hit instance.'))),
-                path: isFoundationTask
-                    ? 'Main Level Viewport & World Outliner'
-                    : '$bpAsset → Event Graph / AdvanceState',
-                code: isFoundationTask
-                    ? 'Instance: ${bpAsset}_0\nLocation: X = 0.0, Y = 0.0, Z = 0.0'
-                    : (isInputMappingTask
-                        ? '[EnhancedInputAction IA_Move (Triggered)]\n   ├──► [Add Movement Input (WorldDirection: ForwardVector, ScaleValue: ActionValue.Y)]\n   └──► [Add Movement Input (WorldDirection: RightVector,   ScaleValue: ActionValue.X)]'
-                        : (isPhysicsTuningTask
-                            ? '[Event Tick] ──► [CharacterMovement → Set Max Walk Speed ($primaryVarName)]\n   └──► [FMath::FInterpConstantTo (Velocity, TargetVelocity, DeltaSeconds, $primaryVarName)]'
-                            : (isStateLogicTask
-                                ? '[Set CurrentState] ──► [Set Material (Target: VisualMesh)]\n                         (Select Material by CurrentState)'
-                                : '[Break Hit Result] ──► [Cast To $bpAsset]\n                          └──► [Call AdvanceState ()]'))),
-                explain: isFoundationTask
-                    ? 'A Blueprint in the Content Browser is just a template. Dragging it into the Level Viewport spawns an actual physical copy inside your game world.'
-                    : 'Updating the active component state on $bpAsset gives instant playable response in the viewport.',
-              );
-            case 3:
-              return (
-                stepHeader: 'STEP $taskNum.4 · ADD & EXPOSE TUNING VARIABLES',
-                shortTitle: isFoundationTask
-                    ? 'Add $primaryVarName Variable'
-                    : (isInputMappingTask
-                        ? 'Expose $primaryVarName Input Tuning'
-                        : (isPhysicsTuningTask
-                            ? 'Expose $primaryVarName Physics Tuning'
-                            : (isStateLogicTask
-                                ? 'Bind $primaryVarName to Transition Speed'
-                                : 'Add Target Hover Highlight Cue'))),
-                instruction:
-                    'In $bpAsset, find My Blueprint → Variables on the left and click + to add $primaryVarName (Float) and bIsActive (Boolean). Click the Eye Icon next to $primaryVarName to make it Instance Editable.',
-                verify:
-                    'Select $bpAsset in the Level and confirm $primaryVarName is editable inside the Details panel.',
-                path: '$bpAsset → My Blueprint → Variables → +',
-                code: '$primaryVarName : Float ($primaryVar)  [👁 Instance Editable]\nbIsActive      : Boolean = false      [👁 Instance Editable]',
-                explain: 'Variables store your mechanic\'s state and speed. Clicking the Eye Icon (Instance Editable) lets you tweak $primaryVarName directly in the Level without reopening the Blueprint.',
-              );
-            case 4:
-              return (
-                stepHeader: 'STEP $taskNum.5 · WIRE EVENT GRAPH NODE CHAIN',
-                shortTitle: isFoundationTask
-                    ? 'Initialize Default Component State'
-                    : (isStateLogicTask
-                        ? 'Step State with Interpolation Logic'
-                        : 'Add Cooldown Timer'),
-                instruction:
-                    'Open the Event Graph tab. Right-click InteractBox → Add Event → OnComponentBeginOverlap (or Input Action) → connect a Branch node → Set bIsActive = true and update the active state using $primaryVarName.',
-                verify:
-                    'Walk into $bpAsset in Play mode and confirm the overlap event updates the active state driven by $primaryVarName.',
-                path: '$bpAsset → Event Graph Tab',
-                code: '[Event OnBeginOverlap (InteractBox)]\n   └──► [Branch: NOT bIsActive]\n           └──► (True) ──► [Set bIsActive = true]\n                           [FMath::FInterpConstantTo ($primaryVarName)]',
-                explain: 'The Event Graph is the visual brain of your Blueprint. Execution flows left-to-right along the white wire whenever the event fires.',
-              );
-            default:
-              return (
-                stepHeader: isFoundationTask
-                    ? 'STEP $taskNum.6 · COMPILE & VERIFY ACTOR IN LEVEL'
-                    : (isStateLogicTask
-                        ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
-                        : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN VIEWPORT (ALT+P)'),
-                shortTitle: isFoundationTask
-                    ? 'Verify Actor in Level'
-                    : (isStateLogicTask
-                        ? 'Add Invalid-State Transition Guard'
-                        : 'Playtest Full Loop in Viewport (Alt+P)'),
-                instruction:
-                    'Ensure your Branch node checks "$primaryGuard" before firing, connect a Print String ("$cleanTitle Active!") node to confirm, click Compile, and press Play (Alt+P).',
-                verify:
-                    'Pressing Play (Alt+P) and triggering the object prints "$cleanTitle Active!" in cyan text at the top-left of the viewport.',
-                path: 'Main Toolbar → Compile → Play (Alt+P)',
-                code: '// Guard: $primaryGuard\n[Branch: !IsBoundaryBlocked && Cooldown <= 0]\n   └──► (True) ──► [Print String: "$cleanTitle Active!"]',
-                explain: 'Checking the guard condition on the Branch node prevents the mechanic from double-firing or locking up when inputs are spammed.',
-              );
-          }
-        }
-      }
-
-      // =======================================================================
-      // UNITY C# (Strictly C# MonoBehaviour + GameObject Hierarchy)
-      // =======================================================================
-      if (engineLabel == 'UNITY C#') {
-        switch (stepIdx) {
-          case 0:
-            return (
-              stepHeader: isFoundationTask
-                  ? 'STEP $taskNum.1 · CREATE $pascalAsset.cs C# SCRIPT'
-                  : (isInputMappingTask
-                      ? 'STEP $taskNum.1 · DEFINE INPUT AXES IN $pascalAsset.cs'
-                      : (isPhysicsTuningTask
-                          ? 'STEP $taskNum.1 · CONFIGURE PHYSICS FIELDS IN $pascalAsset.cs'
-                          : (isStateLogicTask
-                              ? 'STEP $taskNum.1 · DEFINE STATE ENUM IN $pascalAsset.cs'
-                              : 'STEP $taskNum.1 · BIND PLAYER INTERACTION INPUT IN $pascalAsset.cs'))),
-              shortTitle: isFoundationTask
-                  ? 'Create $pascalAsset.cs'
-                  : (isInputMappingTask
-                      ? 'Define Input Axes'
-                      : (isPhysicsTuningTask
-                          ? 'Configure Physics Fields'
-                          : (isStateLogicTask
-                              ? 'Define State Enum'
-                              : 'Bind Player Interaction Input'))),
-              instruction: isFoundationTask
-                  ? 'In the Project window (bottom panel), right-click inside Assets/Scripts → Create → C# Script, and name it $pascalAsset.'
-                  : (isInputMappingTask
-                      ? 'Open Assets/Scripts/$pascalAsset.cs (created in Task 01) and declare the input vector fields for "$cleanTitle".'
-                      : (isPhysicsTuningTask
-                          ? 'Open Assets/Scripts/$pascalAsset.cs (created in Task 01) and cache the CharacterController / Rigidbody reference for "$cleanTitle".'
-                          : (isStateLogicTask
-                              ? 'In Assets/Scripts, open $pascalAsset.cs and define the state enum and active state field for "$cleanTitle".'
-                              : 'Open $pascalAsset.cs and bind the player interaction input check for "$cleanTitle".'))),
-              verify: isFoundationTask
-                  ? '$pascalAsset.cs appears in Assets/Scripts with class $pascalAsset : MonoBehaviour.'
-                  : '$pascalAsset.cs compiles cleanly in your code editor.',
-              path: 'Project Window → Assets/Scripts/$pascalAsset.cs',
-              code: 'using UnityEngine;\n\npublic class $pascalAsset : MonoBehaviour {\n    private bool isActive = false;\n}',
-              explain: 'A MonoBehaviour C# script is a custom component you can attach to any GameObject in your Unity scene.',
-            );
-          case 1:
-            return (
-              stepHeader: isFoundationTask
-                  ? 'STEP $taskNum.2 · CREATE GAMEOBJECT & ATTACH COLLIDER'
-                  : (isInputMappingTask
-                      ? 'STEP $taskNum.2 · READ INPUT AXES IN UPDATE()'
-                      : (isPhysicsTuningTask
-                          ? 'STEP $taskNum.2 · CONFIGURE VELOCITY, GRAVITY & DRAG'
-                          : (isStateLogicTask
-                              ? 'STEP $taskNum.2 · BUILD SETSTATE() TRANSITION METHOD'
-                              : 'STEP $taskNum.2 · CAST PHYSICS RAYCAST TO TARGET'))),
-              shortTitle: isFoundationTask
-                  ? 'Attach BoxCollider'
-                  : (isInputMappingTask
-                      ? 'Read Input Axes in Update()'
-                      : (isPhysicsTuningTask
-                          ? 'Configure Velocity & Gravity'
-                          : (isStateLogicTask
-                              ? 'Build State Transition Function'
-                              : 'Cast Interaction Raycast'))),
-              instruction: isFoundationTask
-                  ? 'In the Hierarchy window (left), right-click → Create Empty → name it "$pascalAsset". In the Inspector, click Add Component to attach a MeshRenderer/SpriteRenderer, a BoxCollider (check Is Trigger), and your $pascalAsset script.'
-                  : (isInputMappingTask
-                      ? 'Inside $pascalAsset.cs Update(), sample Horizontal and Vertical input axes into a normalized moveInput vector.'
-                      : (isPhysicsTuningTask
-                          ? 'Inside $pascalAsset.cs FixedUpdate(), apply acceleration, gravity, and velocity damping to the movement component.'
-                          : (isStateLogicTask
-                              ? 'Inside $pascalAsset.cs, write a SetState() method that validates and advances the current state.'
-                              : 'Inside $pascalAsset.cs, cast a Physics.Raycast from Camera.main to detect the targeted $pascalAsset collider.'))),
-              verify:
-                  'Selecting $pascalAsset in the Scene view shows a green wireframe BoxCollider outline.',
-              path: 'Hierarchy → $pascalAsset → Inspector → Add Component',
-              code: isFoundationTask
-                  ? (effectiveCategory == 'ui'
-                      ? '$pascalAsset (GameObject)\n ├─ CameraArm  (Transform + Camera)\n ├─ HudCanvas  (Canvas + CanvasScaler + GraphicRaycaster)\n └─ $pascalAsset (MonoBehaviour Script)'
-                      : '$pascalAsset (GameObject)\n ├─ VisualMesh      (MeshFilter + MeshRenderer / SpriteRenderer)\n ├─ InteractTrigger (BoxCollider: isTrigger = true)\n └─ $pascalAsset    (MonoBehaviour Script)')
-                  : (isInputMappingTask
-                      ? 'Vector2 moveInput = new Vector2(Input.GetAxisRaw("Horizontal"), Input.GetAxisRaw("Vertical")).normalized;'
-                      : (isPhysicsTuningTask
-                          ? 'velocity = Vector3.MoveTowards(velocity, targetVelocity, $primaryVarName * Time.fixedDeltaTime);'
-                          : 'public void ExecuteStep(float delta) {\n    // Step 2: Core State / Raycast\n}')),
-              explain: 'The Renderer draws the object on screen, the BoxCollider detects overlaps/clicks, and the Script runs your C# logic.',
-            );
-          case 2:
-            return (
-              stepHeader: isFoundationTask
-                  ? 'STEP $taskNum.3 · POSITION IN SCENE & SAVE PREFAB'
-                  : (isInputMappingTask
-                      ? 'STEP $taskNum.3 · WIRE INPUT VECTOR TO MOVEMENT IN $pascalAsset.cs'
-                      : (isPhysicsTuningTask
-                          ? 'STEP $taskNum.3 · APPLY PHYSICS VELOCITY TO CONTROLLER'
-                          : (isStateLogicTask
-                              ? 'STEP $taskNum.3 · SWAP MATERIAL COLOR ON STATE CHANGE'
-                              : 'STEP $taskNum.3 · CALL TRIGGER ON HIT $pascalAsset'))),
-              shortTitle: isFoundationTask
-                  ? 'Place in Scene at (0, 0, 0)'
-                  : (isInputMappingTask
-                      ? 'Wire Input Vector to Movement'
-                      : (isPhysicsTuningTask
-                          ? 'Apply Physics Velocity'
-                          : (isStateLogicTask
-                              ? 'Swap Visual Material on State Change'
-                              : 'Call Interact Trigger on Hit Actor'))),
-              instruction: isFoundationTask
-                  ? 'Select $pascalAsset in the Hierarchy, set its Transform Position to (0, 0, 0) in the Inspector, and drag it into Assets/Prefabs to save a reusable Prefab.'
-                  : (isInputMappingTask
-                      ? 'Pass moveInput into $pascalAsset movement direction so WASD / Stick input drives the character in real time.'
-                      : (isPhysicsTuningTask
-                          ? 'Apply the tuned velocity vector inside FixedUpdate() on $pascalAsset.'
-                          : (isStateLogicTask
-                              ? 'Update the MeshRenderer / SpriteRenderer color inside SetState() so each state is visually distinct.'
-                              : 'When Physics.Raycast hits a collider, call GetComponent<$pascalAsset>()?.TriggerInteract().'))),
-              verify:
-                  '$pascalAsset sits at (0, 0, 0) in the Scene view with a blue Prefab icon in the Hierarchy.',
-              path: 'Hierarchy & Scene View → Transform (0, 0, 0)',
-              code: 'GameObject: $pascalAsset\nTransform.position = new Vector3(0f, 0f, 0f);',
-              explain: 'Saving your GameObject as a Prefab lets you place multiple copies across the level and update them all at once.',
-            );
-          case 3:
-            return (
-              stepHeader: 'STEP $taskNum.4 · EXPOSE [SerializeField] TUNING VARIABLES',
-              shortTitle: isFoundationTask
-                  ? 'Add [SerializeField] $primaryVarName'
-                  : (isStateLogicTask
-                      ? 'Bind $primaryVarName to Transition Speed'
-                      : 'Add Target Hover Highlight Cue'),
-              instruction:
-                  'At the top of $pascalAsset.cs inside the class body, add [SerializeField] private float $primaryVarName so you can tune $primaryVarName directly in the Unity Inspector.',
-              verify:
-                  'Saving the script and clicking $pascalAsset in Unity shows $primaryVarName as an editable number field in the Inspector.',
-              path: 'Assets/Scripts/$pascalAsset.cs (Inspector Fields)',
-              code: '[Header("Tuning Parameters")]\n[SerializeField] private float $primaryVarName = 1.0f; // $primaryVar\n[SerializeField] private bool canTrigger = true;',
-              explain: '[SerializeField] exposes a private C# variable inside the Unity Inspector without making it public to other scripts.',
-            );
-          case 4:
-            return (
-              stepHeader: 'STEP $taskNum.5 · WRITE UPDATE / TRIGGER LOGIC IN C#',
-              shortTitle: isFoundationTask
-                  ? 'Initialize Default Component State'
-                  : (isStateLogicTask
-                      ? 'Step State with Interpolation Logic'
-                      : 'Add Cooldown Timer'),
-              instruction:
-                  'Inside $pascalAsset.cs, implement Update() / FixedUpdate() to read input with Input.GetButton("Fire1") and advance state using Time.fixedDeltaTime and $primaryVarName.',
-              verify:
-                  'Triggering $pascalAsset in Play Mode steps the active value smoothly using $primaryVarName.',
-              path: 'Assets/Scripts/$pascalAsset.cs :: FixedUpdate()',
-              code: 'private void FixedUpdate() {\n    if (Input.GetButton("Fire1") && canTrigger) {\n        isActive = true;\n        currentVal = Mathf.MoveTowards(currentVal, targetVal, $primaryVarName * Time.fixedDeltaTime);\n    }\n}',
-              explain: 'FixedUpdate() runs on a fixed physics clock, and multiplying by Time.fixedDeltaTime keeps speeds identical at any frame rate.',
-            );
-          default:
-            return (
-              stepHeader: isFoundationTask
-                  ? 'STEP $taskNum.6 · COMPILE & VERIFY PREFAB IN SCENE'
-                  : (isStateLogicTask
-                      ? 'STEP $taskNum.6 · ADD INVALID-STATE TRANSITION GUARD'
-                      : 'STEP $taskNum.6 · PLAYTEST FULL LOOP IN EDITOR (CTRL+P)'),
-              shortTitle: isFoundationTask
-                  ? 'Verify Prefab in Scene'
-                  : (isStateLogicTask
-                      ? 'Add Invalid-State Transition Guard'
-                      : 'Playtest Full Loop in Editor (Ctrl+P)'),
-              instruction:
-                  'Add an early return guard at the top of your method to enforce "$primaryGuard", save the script, and press the Play button (Ctrl+P) at the top of the Unity Editor.',
-              verify:
-                  'In Play Mode, triggering "$cleanTitle" logs confirmation in the Console and prevents duplicate triggers.',
-              path: 'Unity Top Toolbar → Play (Ctrl+P)',
-              code: 'if (!canTrigger || cooldownTimer > 0f) return; // Guard: $primaryGuard\nDebug.Log("$cleanTitle activated!");',
-              explain: 'The guard clause exits immediately if the mechanic is on cooldown or blocked, preventing state bugs when buttons are spammed.',
-            );
-        }
-      }
-
-      // =======================================================================
       // DEFAULT: GODOT 4 (Strictly GDScript .gd + Scene .tscn Hierarchy)
       // =======================================================================
       switch (stepIdx) {
@@ -1869,8 +1371,8 @@ class TaskHowToBlueprint {
             path: 'Scene Dock (Top-Left) → $pascalAsset Hierarchy',
             code: isFoundationTask
                 ? (effectiveCategory == 'ui'
-                    ? '$pascalAsset (Node2D / CharacterBody2D)\n ├─ FollowCamera (Camera2D: Position Smoothing = On)\n └─ HudCanvas    (CanvasLayer)\n     └─ StatusLabel (Label)'
-                    : '$pascalAsset (Node2D / CharacterBody2D)\n ├─ Visual (Sprite2D / ColorRect: 64x64)\n └─ HitBox (Area2D)\n     └─ CollisionShape2D (RectangleShape2D)')
+                    ? '| Node / Category | Property | Value |\n| --- | --- | --- |\n| FollowCamera (Camera2D) | Position Smoothing | true |\n| HudCanvas (CanvasLayer) | Layer | 1 |\n| StatusLabel (Label) | Text | Ready |'
+                    : '| Node / Category | Property | Value |\n| --- | --- | --- |\n| Visual (Sprite2D) | Scale | (1.0, 1.0) |\n| HitBox (Area2D) | Monitoring | true |\n| CollisionShape2D | Shape | RectangleShape2D |')
                 : (isInputMappingTask
                     ? 'var input_dir: Vector2 = Input.get_vector("move_left", "move_right", "move_up", "move_down")'
                     : (isPhysicsTuningTask
@@ -1910,7 +1412,15 @@ class TaskHowToBlueprint {
             verify:
                 '$pascalAsset appears in the Main scene tree with a small movie-clapper / chain icon next to it.',
             path: 'Main Scene Tab → Instantiate Child Scene (Ctrl+Shift+A)',
-            code: 'Instanced Node: $pascalAsset (res://scenes/$snakeAsset.tscn)\nposition = Vector2(0, 0)',
+            code: isFoundationTask
+                ? '| Node (Type) | Property | Value |\n| --- | --- | --- |\n| $pascalAsset ($snakeAsset.tscn) | Transform > Position | (0, 0) |\n| $pascalAsset ($snakeAsset.tscn) | Visible | true |'
+                : (isInputMappingTask
+                    ? 'velocity = input_dir * $primaryVarName'
+                    : (isPhysicsTuningTask
+                        ? 'move_and_slide()'
+                        : (isStateLogicTask
+                            ? '\$Visual.modulate = Color.CYAN if current_state > 0 else Color.WHITE'
+                            : 'if ray.is_colliding() and ray.get_collider() == target:\n    target.set_mechanic_state(1)'))),
             explain: 'Instantiating places a live copy of your scene inside the game level so you can see and test it when pressing Play.',
           );
         case 3:
@@ -1972,11 +1482,7 @@ class TaskHowToBlueprint {
     final clauses = extractActionClauses(cleanTitle);
     final lowerTitle = cleanTitle.toLowerCase();
 
-    final targetAssetName = engineLabel == 'UNREAL 5'
-        ? (unrealCppMode ? cppClass : bpAsset)
-        : (engineLabel == 'UNITY C#'
-            ? '$pascalAsset.cs'
-            : '$snakeAsset.tscn');
+    final targetAssetName = '$snakeAsset.tscn';
 
     final phaseFocusNote = switch (effectivePhase) {
       ProductionPhase.prototype =>
@@ -2009,55 +1515,40 @@ class TaskHowToBlueprint {
             explain:
                 '$phaseFocusNote Every step in this task builds inside $targetAssetName so ${checkpointNode.cleanStageTitle} stays modular and reusable across the level.',
             primaryChip: 'Asset: $targetAssetName',
-            pitfall: engineLabel == 'UNREAL 5'
-                ? 'Choose Actor (AActor) as the parent class so you can attach components and place $targetAssetName in the level.'
-                : (engineLabel == 'UNITY C#'
-                    ? 'Make sure the file name "$pascalAsset.cs" matches the class name "$pascalAsset" so Unity can attach it.'
-                    : 'Save the scene in res://scenes/ before attaching the script so node paths stay clean.'),
+            pitfall:
+                'Save the scene in res://scenes/ before attaching the script so node paths stay clean.',
           );
         case 1:
           return (
             explain:
                 '$phaseFocusNote Gives $targetAssetName both its visible shape and the collision trigger sensor needed for core logic.',
             primaryChip: 'Asset: $targetAssetName',
-            pitfall: engineLabel == 'UNREAL 5'
-                ? 'Set Collision Presets on InteractBox to OverlapAllDynamic so player overlap events fire reliably.'
-                : (engineLabel == 'UNITY C#'
-                     ? 'Check the "Is Trigger" box on BoxCollider so the player does not physically snag on the sensor.'
-                     : 'Assign a RectangleShape2D resource inside CollisionShape2D to clear the yellow scene warning icon.'),
+            pitfall:
+                'Assign a RectangleShape2D or CapsuleShape2D resource inside CollisionShape2D to clear the yellow scene warning icon.',
           );
         case 2:
           return (
             explain:
                 '$phaseFocusNote Places a live $targetAssetName instance in the level so you can test "${checkpointNode.playtestCondition}" on screen.',
             primaryChip: 'Instance: $targetAssetName',
-            pitfall: engineLabel == 'UNREAL 5'
-                ? 'Click Compile & Save before dragging $targetAssetName into the viewport so the new mesh and collision box appear.'
-                : (engineLabel == 'UNITY C#'
-                    ? 'Reset Transform Position to (0, 0, 0) in the Inspector so $pascalAsset is not hidden off-camera.'
-                    : 'Use the Chain-Link icon (Ctrl+Shift+A) to instantiate $targetAssetName rather than copying raw nodes.'),
+            pitfall:
+                'Use the Chain-Link icon (Ctrl+Shift+A) to instantiate $targetAssetName rather than copying raw nodes.',
           );
         case 3:
           return (
             explain:
-                '$phaseFocusNote Exposes $primaryVarName on $targetAssetName so you can tune gameplay feel live in the editor without recompiling.',
+                '$phaseFocusNote Exposes $primaryVarName on $targetAssetName so you can tune gameplay feel live in the Inspector without editing code.',
             primaryChip: 'Spec Param: $primaryVar',
-            pitfall: engineLabel == 'UNREAL 5'
-                ? 'Click the Eye icon (Instance Editable) next to $primaryVarName so it appears in the Level Details panel.'
-                : (engineLabel == 'UNITY C#'
-                    ? 'Keep [SerializeField] above private float $primaryVarName so Unity serializes it in the Inspector.'
-                    : 'Save the script (Ctrl+S) after adding @export var $primaryVarName so the Inspector dock refreshes.'),
+            pitfall:
+                'Save the script (Ctrl+S) after adding @export var $primaryVarName so the Inspector dock refreshes.',
           );
         case 4:
           return (
             explain:
                 '$phaseFocusNote Connects player trigger input on $targetAssetName to $primaryVarName so the active state updates smoothly every frame.',
             primaryChip: 'Drives: $primaryVar',
-            pitfall: engineLabel == 'UNREAL 5'
-                ? 'Connect the white execution wire from the Branch (True) pin into your state update node.'
-                : (engineLabel == 'UNITY C#'
-                    ? 'Multiply by Time.fixedDeltaTime inside FixedUpdate() so speed stays identical at any frame rate.'
-                    : 'Multiply $primaryVarName by delta inside _physics_process(delta) for frame-rate independent motion.'),
+            pitfall:
+                'Multiply $primaryVarName by delta inside _physics_process(delta) for frame-rate independent motion.',
           );
         default:
           return (
@@ -2091,7 +1582,6 @@ class TaskHowToBlueprint {
           rawGuard: primaryGuard,
           targetAssetName: targetAssetName,
           engineLabel: engineLabel,
-          unrealCppMode: unrealCppMode,
           primaryVarName: primaryVarName,
         );
         dynamicSpecs.add((
@@ -2189,13 +1679,7 @@ class TaskHowToBlueprint {
           verify:
               'Triggering "$clauseText" in the editor updates $targetAssetName state with zero errors.',
           path: whereLocation,
-          code: engineLabel == 'UNREAL 5'
-              ? (unrealCppMode
-                  ? 'void $cppClass::Execute_$safeMethod(float DeltaTime) {\n  // Clause: $clauseText\n  ApplyStateDelta(DeltaTime * $primaryVarName);\n}'
-                  : '[Custom Event: Execute_$safeMethod]\n   └──► [Apply State Delta ($primaryVarName)] // $clauseText')
-              : (engineLabel == 'UNITY C#'
-                  ? 'private void Execute_$safeMethod() {\n    // Clause: $clauseText\n    ApplyStateDelta($primaryVarName * Time.fixedDeltaTime);\n}'
-                  : 'func _execute_$safeMethod(delta: float) -> void:\n    # Clause: $clauseText\n    apply_state_delta($primaryVarName * delta)'),
+          code: 'func _execute_$safeMethod(delta: float) -> void:\n    # Clause: $clauseText\n    apply_state_delta($primaryVarName * delta)',
           explain:
               'Isolating "$clauseText" into its own step keeps complex multi-part mechanics easy to test and debug.',
           primaryChip: 'Clause: $clauseText',
@@ -2222,11 +1706,7 @@ class TaskHowToBlueprint {
             verify:
                 'Select $targetAssetName in the editor and confirm $extraVarName updates the active behavior live in Play mode.',
             path: whereLocation,
-            code: engineLabel == 'UNREAL 5'
-                ? 'UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Tuning")\nfloat $extraVarName = 1.0f; // $extraTune'
-                : (engineLabel == 'UNITY C#'
-                    ? '[SerializeField] private float $extraVarName = 1.0f; // $extraTune'
-                    : '@export var $extraVarName: float = 1.0 # $extraTune'),
+            code: '+ @export var $extraVarName: float = 1.0 # $extraTune',
             explain:
                 'Connects $extraVarName directly to $targetAssetName so you can balance gameplay feel live.',
             primaryChip: 'Spec Param: $extraTune',
@@ -2241,7 +1721,6 @@ class TaskHowToBlueprint {
             rawGuard: extraGuard,
             targetAssetName: targetAssetName,
             engineLabel: engineLabel,
-            unrealCppMode: unrealCppMode,
             primaryVarName: primaryVarName,
           );
           dynamicSpecs.add((
@@ -2341,14 +1820,7 @@ class TaskHowToBlueprint {
               : (child.codeSnippet != null && child.codeSnippet!.trim().isNotEmpty
                   ? child.codeSnippet!.trim()
                   : '// Step $taskNum.${i + 1}: $rawLabel\nexecute_step_${taskNum}_${i + 1}($primaryVarName)'));
-      final code = (engineLabel == 'UNREAL 5' && isCustomSnippet)
-          ? adaptUnrealCodeForMode(
-              rawResolvedCode,
-              unrealCppMode: unrealCppMode,
-              fallbackSpecCode: spec.code,
-              primaryVarName: primaryVarName,
-            )
-          : rawResolvedCode;
+      final code = rawResolvedCode;
       final shortTitle = (!isCustomSnippet && hasDynamicSpec)
           ? spec.shortTitle
           : formatTelegraphicStepTitle(rawLabel);
@@ -2431,7 +1903,6 @@ class TaskHowToBlueprint {
         parentTask: parentTask,
         checkpointNode: checkpointNode,
         engineHint: engineHint,
-        unrealCppMode: unrealCppMode,
         effectivePhase: effectivePhase,
       ),
       blueprint: result,
@@ -2439,397 +1910,24 @@ class TaskHowToBlueprint {
     return result;
   }
 
-  /// Deterministically adapts Unreal Engine 5 `codeFormula` between Blueprint Event Graph node wiring
-  /// (`[Node] ──► [Node]`) and Unreal C++ statements (`->`, `FTransform`, `CreateDefaultSubobject`, `UPROPERTY`)
-  /// in 0ms with zero extra Gemini API calls when toggling `[ Blueprint | C++ ]`.
-  static String adaptUnrealCodeForMode(
-    String rawCode, {
-    required bool unrealCppMode,
-    required String fallbackSpecCode,
-    required String primaryVarName,
-  }) {
-    final trimmed = rawCode.trim();
-    if (trimmed.isEmpty) return fallbackSpecCode;
-    final pipeRows = trimmed
-        .split('\n')
-        .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
-        .length;
-    if (pipeRows >= 2) {
-      return trimmed;
+  /// Returns true when any active highlight token matches [searchableText]
+  /// (case-insensitive substring or compact alphanumeric match).
+  static bool matchesHighlightTokens(
+    Set<String> tokens,
+    String searchableText,
+  ) {
+    if (tokens.isEmpty || searchableText.trim().isEmpty) return false;
+    final lower = searchableText.toLowerCase();
+    final compact = lower.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+    for (final raw in tokens) {
+      final token = raw.trim().toLowerCase();
+      if (token.length < 3) continue;
+      final compactToken = token.replaceAll(RegExp(r'[^a-z0-9]+'), '');
+      if (lower.contains(token) ||
+          (compactToken.length >= 4 && compact.contains(compactToken))) {
+        return true;
+      }
     }
-
-    final hasBpArrows = trimmed.contains('──►') ||
-        trimmed.contains('└──►') ||
-        trimmed.contains('├──►') ||
-        RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(trimmed);
-    final hasCppSyntax = trimmed.contains('->') ||
-        trimmed.contains('CreateDefaultSubobject<') ||
-        trimmed.contains('UPROPERTY(') ||
-        trimmed.contains('UFUNCTION(') ||
-        trimmed.contains('#include ') ||
-        RegExp(r'\b(?:FTransform|FVector|FRotator|FHitResult)\s+[A-Za-z_][A-Za-z0-9_]*')
-            .hasMatch(trimmed) ||
-        RegExp(r'\b(?:float|int32|bool|void)\s+[A-Za-z_][A-Za-z0-9_]*\s*[=;()]')
-            .hasMatch(trimmed);
-
-    // 1. Blueprint Mode (`unrealCppMode == false`): Convert C++ code into visual Blueprint Event Graph node chains
-    if (!unrealCppMode) {
-      if (hasBpArrows || !hasCppSyntax) {
-        return trimmed;
-      }
-      final lines = trimmed.split('\n');
-      final outLines = <String>[];
-      int chainDepth = 0;
-
-      String humanizeMethod(String camel) {
-        return camel
-            .replaceAllMapped(
-              RegExp(r'([a-z0-9])([A-Z])'),
-              (m) => '${m.group(1)} ${m.group(2)}',
-            )
-            .trim();
-      }
-
-      String cleanCppArg(String arg) {
-        return arg
-            .replaceAllMapped(
-              RegExp(r'TEXT\(\s*"([^"]*)"\s*\)'),
-              (m) => '"${m.group(1)}"',
-            )
-            .replaceAllMapped(
-              RegExp(r'FVector\(\s*([^)]*)\s*\)'),
-              (m) => '(${m.group(1)})',
-            )
-            .replaceAllMapped(
-              RegExp(r'FRotator\(\s*([^)]*)\s*\)'),
-              (m) => '(${m.group(1)})',
-            )
-            .replaceAll(RegExp(r'(\d+\.\d+|\d+)f\b'), r'$1')
-            .trim();
-      }
-
-      for (final rawLine in lines) {
-        final line = rawLine.trim();
-        if (line.isEmpty || line == '{' || line == '}') continue;
-        if (line.startsWith('//')) {
-          outLines.add(line);
-          continue;
-        }
-        // FTransform Name(FRotator(...), FVector(...), FVector(...));
-        final transformMatch = RegExp(
-          r'FTransform\s+([A-Za-z0-9_]+)\s*\(\s*FRotator\(([^)]*)\)\s*,\s*FVector\(([^)]*)\)\s*,\s*FVector\(([^)]*)\)\s*\)\s*;?',
-        ).firstMatch(line);
-        if (transformMatch != null) {
-          final varName = transformMatch.group(1)!;
-          final rot = cleanCppArg(transformMatch.group(2)!);
-          final loc = cleanCppArg(transformMatch.group(3)!);
-          final scale = cleanCppArg(transformMatch.group(4)!);
-          outLines.add(
-            '[Make Transform ($varName → Rotation: ($rot), Location: ($loc), Scale: ($scale))]',
-          );
-          chainDepth++;
-          continue;
-        }
-        // Comp = CreateDefaultSubobject<UType>(TEXT("Name"));
-        final subobjMatch = RegExp(
-          r'([A-Za-z0-9_]+)\s*=\s*CreateDefaultSubobject<\s*([A-Za-z0-9_]+)\s*>\s*\(\s*(?:TEXT\(\s*)?"([^"]+)"\s*\)?\s*\)\s*;?',
-        ).firstMatch(line);
-        if (subobjMatch != null) {
-          final compType = subobjMatch.group(2)!.replaceFirst(RegExp(r'^U'), '');
-          final compName = subobjMatch.group(3)!;
-          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
-          outLines.add('$prefix[Add Component: $compType ("$compName")]');
-          chainDepth++;
-          continue;
-        }
-        // UPROPERTY(...) Type Name = Val;
-        if (line.startsWith('UPROPERTY(')) {
-          continue;
-        }
-        final propDeclMatch = RegExp(
-          r'^(?:float|int32|int|bool|FVector|FRotator)\s+([A-Za-z0-9_]+)\s*=\s*([^;]+);',
-        ).firstMatch(line);
-        if (propDeclMatch != null) {
-          final vName = propDeclMatch.group(1)!;
-          final vVal = cleanCppArg(propDeclMatch.group(2)!);
-          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
-          outLines.add(
-            '$prefix[Set Variable: $vName = $vVal  (👁 Instance Editable)]',
-          );
-          chainDepth++;
-          continue;
-        }
-        // Chained pointer call: Obj->GetSubComp()->Method(Args); or Obj->Method(Args);
-        final nestedCallMatch = RegExp(
-          r'([A-Za-z0-9_]+)->([A-Za-z0-9_]+)\(\)->([A-Za-z0-9_]+)\((.*)\)\s*;?',
-        ).firstMatch(line);
-        if (nestedCallMatch != null) {
-          final obj = nestedCallMatch.group(1)!;
-          final getter = nestedCallMatch
-              .group(2)!
-              .replaceFirst(RegExp(r'^Get'), '');
-          final method = humanizeMethod(nestedCallMatch.group(3)!);
-          final args = cleanCppArg(nestedCallMatch.group(4)!);
-          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
-          outLines.add(
-            '$prefix[$method (Target: $obj.$getter${args.isNotEmpty ? ', Value: $args' : ''})]',
-          );
-          chainDepth++;
-          continue;
-        }
-        final directCallMatch = RegExp(
-          r'([A-Za-z0-9_.]+)->([A-Za-z0-9_]+)\((.*)\)\s*;?',
-        ).firstMatch(line);
-        if (directCallMatch != null) {
-          final obj = directCallMatch.group(1)!;
-          final method = humanizeMethod(directCallMatch.group(2)!);
-          final args = cleanCppArg(directCallMatch.group(3)!);
-          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
-          outLines.add(
-            '$prefix[$method (Target: $obj${args.isNotEmpty ? ', Value: $args' : ''})]',
-          );
-          chainDepth++;
-          continue;
-        }
-        // Assignment: Obj->Prop = Val; or Prop = Val;
-        final assignMatch = RegExp(
-          r'([A-Za-z0-9_]+(?:->[A-Za-z0-9_]+)?)\s*=\s*([^;]+);?',
-        ).firstMatch(line);
-        if (assignMatch != null) {
-          final lhs = assignMatch.group(1)!.replaceAll('->', '.');
-          final rhs = cleanCppArg(assignMatch.group(2)!);
-          final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
-          outLines.add('$prefix[Set $lhs = $rhs]');
-          chainDepth++;
-          continue;
-        }
-        final cleanFallback = cleanCppArg(line.replaceAll(';', ''));
-        final prefix = chainDepth == 0 ? '' : '${'   ' * chainDepth}└──► ';
-        outLines.add('$prefix[$cleanFallback]');
-        chainDepth++;
-      }
-      return outLines.isNotEmpty ? outLines.join('\n') : fallbackSpecCode;
-    }
-
-    // 2. C++ Mode (`unrealCppMode == true`): Convert Blueprint Event Graph node chains into Unreal C++ statements
-    if (hasCppSyntax && !hasBpArrows) {
-      return trimmed;
-    }
-    if (hasBpArrows) {
-      List<String> splitTopLevelArgs(String input) {
-        final parts = <String>[];
-        final buf = StringBuffer();
-        int depth = 0;
-        for (int i = 0; i < input.length; i++) {
-          final ch = input[i];
-          if (ch == '(') depth++;
-          if (ch == ')' && depth > 0) depth--;
-          if (ch == ',' && depth == 0) {
-            parts.add(buf.toString().trim());
-            buf.clear();
-          } else {
-            buf.write(ch);
-          }
-        }
-        final tail = buf.toString().trim();
-        if (tail.isNotEmpty) parts.add(tail);
-        return parts;
-      }
-
-      String formatCppValue(String rawVal) {
-        var v = rawVal.trim();
-        if (v.toLowerCase() == 'true') return 'true';
-        if (v.toLowerCase() == 'false') return 'false';
-        v = v.replaceAllMapped(
-          RegExp(r'\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)'),
-          (m) => 'FVector(${m.group(1)}.f, ${m.group(2)}.f, ${m.group(3)}.f)',
-        );
-        v = v.replaceAll('.0.f', '.0f');
-        if (v.startsWith('"') && v.endsWith('"')) {
-          return 'TEXT($v)';
-        }
-        return v;
-      }
-
-      final lines = trimmed.split('\n');
-      final cppLines = <String>[];
-      bool openBranchBlock = false;
-
-      for (final rawLine in lines) {
-        final line = rawLine.trim();
-        if (line.isEmpty) continue;
-        if (line.startsWith('//')) {
-          cppLines.add(line);
-          continue;
-        }
-        final nodeMatches = RegExp(r'\[([^\]]+)\]').allMatches(line);
-        for (final m in nodeMatches) {
-          final nodeContent = m.group(1)!.trim();
-          final indent = openBranchBlock ? '    ' : '';
-
-          // 2a. Component Hit / Overlap Event Node
-          if (nodeContent.contains('OnComponentHit') ||
-              nodeContent.contains('OnComponentBeginOverlap')) {
-            final compMatch = RegExp(r'([A-Za-z0-9_]+)\s*\(\s*(OnComponent[A-Za-z0-9_]+)\s*\)')
-                    .firstMatch(nodeContent) ??
-                RegExp(r'(OnComponent[A-Za-z0-9_]+)\s*\(\s*([A-Za-z0-9_]+)\s*\)')
-                    .firstMatch(nodeContent);
-            if (compMatch != null) {
-              final g1 = compMatch.group(1)!;
-              final g2 = compMatch.group(2)!;
-              final isG1Event = g1.startsWith('OnComponent');
-              final comp = isG1Event ? g2 : g1;
-              final ev = isG1Event ? g1 : g2;
-              cppLines.add('// $comp->$ev.AddDynamic(this, &ThisClass::OnHit);');
-            } else {
-              cppLines.add('// $nodeContent');
-            }
-            continue;
-          }
-
-          // 2b. Standard Event / Enhanced Input Node
-          if (nodeContent.startsWith('Event ') ||
-              nodeContent.startsWith('IA_') ||
-              nodeContent.startsWith('EnhancedInputAction ')) {
-            cppLines.add('// $nodeContent');
-            continue;
-          }
-
-          // 2c. LineTraceByChannel / SphereTraceByChannel
-          if (nodeContent.startsWith('LineTraceByChannel') ||
-              nodeContent.startsWith('Line Trace By Channel')) {
-            final parenStart = nodeContent.indexOf('(');
-            final parenEnd = nodeContent.lastIndexOf(')');
-            String startExpr = 'GetActorLocation()';
-            String endExpr = 'GetActorLocation() - FVector(0.f, 0.f, 150.f)';
-            String channelExpr = 'ECC_Visibility';
-            if (parenStart != -1 && parenEnd > parenStart) {
-              final pins = splitTopLevelArgs(
-                nodeContent.substring(parenStart + 1, parenEnd),
-              );
-              for (final p in pins) {
-                final colon = p.indexOf(':');
-                if (colon > 0) {
-                  final k = p.substring(0, colon).trim().toLowerCase();
-                  final val = formatCppValue(p.substring(colon + 1));
-                  if (k.contains('start')) startExpr = val;
-                  if (k.contains('end')) endExpr = val;
-                  if (k.contains('channel')) channelExpr = val;
-                }
-              }
-            }
-            cppLines.add('${indent}FHitResult HitResult;');
-            cppLines.add(
-              '${indent}const bool bBlockingHit = GetWorld()->LineTraceSingleByChannel(HitResult, $startExpr, $endExpr, $channelExpr);',
-            );
-            continue;
-          }
-
-          // 2d. Branch Node (`[Branch: Cond]` or `[Branch (Cond)]`)
-          if (nodeContent.startsWith('Branch')) {
-            String cond = '';
-            if (nodeContent.startsWith('Branch:')) {
-              cond = nodeContent.substring(7).trim();
-            } else {
-              final pStart = nodeContent.indexOf('(');
-              final pEnd = nodeContent.lastIndexOf(')');
-              if (pStart != -1 && pEnd > pStart) {
-                cond = nodeContent.substring(pStart + 1, pEnd).trim();
-              }
-            }
-            if (cond.toLowerCase().contains('hit')) {
-              cppLines.add('if (bBlockingHit)');
-              cppLines.add('{');
-              openBranchBlock = true;
-            } else if (cond.startsWith('NOT ') || cond.startsWith('!')) {
-              final cleanFlag =
-                  cond.replaceFirst(RegExp(r'^(?:NOT\s+|!)'), '').trim();
-              cppLines.add('if ($cleanFlag) return;');
-            } else if (cond.isNotEmpty) {
-              final safeCond =
-                  cond.replaceAll(RegExp(r'[^A-Za-z0-9_!=<>|&() ]'), '').trim();
-              cppLines.add('if ($safeCond)');
-              cppLines.add('{');
-              openBranchBlock = true;
-            }
-            continue;
-          }
-
-          // 2e. Simple Variable Assignment (`[Set X = Y]` or `[Set Variable: X = Y]`)
-          if ((nodeContent.startsWith('Set ') ||
-                  nodeContent.startsWith('Set Variable:')) &&
-              nodeContent.contains('=') &&
-              !nodeContent.contains('Target:')) {
-            final expr = nodeContent
-                .replaceFirst(RegExp(r'^Set(?:\s+Variable:)?\s+'), '')
-                .replaceFirst(RegExp(r'\s*\(👁[^)]*\)\s*$'), '')
-                .trim();
-            cppLines.add('$indent$expr;');
-            continue;
-          }
-
-          // 2f. AddMovementInput
-          if (nodeContent.startsWith('AddMovementInput') ||
-              nodeContent.startsWith('Add Movement Input')) {
-            cppLines.add(
-              '${indent}AddMovementInput(GetActorForwardVector(), $primaryVarName);',
-            );
-            continue;
-          }
-
-          // 2g. General Node with Pins: `[Node Title (Target: Obj, Pin1: Val1, ...)]`
-          final pStart = nodeContent.indexOf('(');
-          final pEnd = nodeContent.lastIndexOf(')');
-          if (pStart > 0 && pEnd > pStart) {
-            final rawNodeTitle = nodeContent.substring(0, pStart).trim();
-            final pascalMethod = rawNodeTitle
-                .split(RegExp(r'\s+'))
-                .where((w) => w.isNotEmpty)
-                .map((w) => w[0].toUpperCase() + w.substring(1))
-                .join()
-                .replaceAll(RegExp(r'[^A-Za-z0-9_]'), '');
-            final pins = splitTopLevelArgs(
-              nodeContent.substring(pStart + 1, pEnd),
-            );
-            String? targetObj;
-            final callArgs = <String>[];
-            for (final p in pins) {
-              final colon = p.indexOf(':');
-              if (colon > 0) {
-                final k = p.substring(0, colon).trim();
-                final val = formatCppValue(p.substring(colon + 1));
-                if (k.toLowerCase() == 'target') {
-                  targetObj = val.replaceAll('.', '->');
-                } else {
-                  callArgs.add(val);
-                }
-              } else {
-                callArgs.add(formatCppValue(p));
-              }
-            }
-            if (pascalMethod.isNotEmpty) {
-              final receiver =
-                  (targetObj != null && targetObj.isNotEmpty) ? '$targetObj->' : '';
-              cppLines.add(
-                '$indent$receiver$pascalMethod(${callArgs.join(', ')});',
-              );
-              continue;
-            }
-          }
-
-          final safeIdent = nodeContent
-              .replaceAll(RegExp(r'[^A-Za-z0-9_(),.= ]'), '')
-              .trim();
-          if (safeIdent.isNotEmpty) {
-            cppLines.add('$indent$safeIdent;');
-          }
-        }
-      }
-      if (openBranchBlock) {
-        cppLines.add('}');
-      }
-      return cppLines.isNotEmpty ? cppLines.join('\n') : fallbackSpecCode;
-    }
-    return trimmed;
+    return false;
   }
 }

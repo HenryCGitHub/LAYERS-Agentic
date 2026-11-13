@@ -15,7 +15,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 - Release Goals (BLUF): "[2-4 Word Payoff] — [Scope]" (e.g. "3-Wave Arena Combat — Complete E02 Shotgun Hazards and E03 Enemy Waves for MVP.").
 - Feature Goals & In-Scope (Changelog +Delta): Direct 5-10 word summary of concrete mechanics/deltas (e.g. "+6-pellet cone spread, +knockback impulse" for upgrades; "Magnetic ore shard spawn on enemy kill" for new features). NEVER start feature goals with "Build a playable..." or "Upgrade <Feature> into/with..." and NEVER copy-paste raw user instructions verbatim.
 - Done When, Playtest Gates & Verify (Causal Trigger -> Result): "[Player Action] -> [Observable Screen Result]" (<= 14 words, e.g. "Press Fire within 4m of target -> 6 pellets fan out + push enemy back 2.5m"). NEVER use FPS/60fps targets.
-- Concept Spec Cells (02 Game Spec & 03 Tech Spec): Strictly 2-4 Title-Case words naming the concrete setup (e.g. "3D First-Person", "WASD + Mouse", "Singleplayer", "Rooftop Garden Hub", "Unreal Engine 5", "PC Desktop"). NEVER write narrative sentences, explanatory preambles ("with...", "featuring..."), or punctuation.
+- Concept Spec Cells (02 Game Spec & 03 Tech Spec): Strictly 2-4 Title-Case words naming the concrete setup (e.g. "3D First-Person", "WASD + Mouse", "Singleplayer", "Rooftop Garden Hub", "Godot 4 (GDScript)", "PC Desktop"). NEVER write narrative sentences, explanatory preambles ("with...", "featuring..."), or punctuation.
 - Parent Task Group Titles & Goals (tasks[]): tasks[].title = strictly 2-4 Title-Case words naming the specific scene node, UI widget, data resource, or gameplay calculation for that task (e.g. "Shard Physics Hull", "Merchant Trade Panel", "Backpack Weight Counter", "Hitscan Recoil Ray"; NO verbs, NO 3-item lists, NO "(2h)" tags, and NEVER use generic template suffixes like "Body & Collision", "Prop & Collision", "Action & Math", "Cue & Clamp", or "Cue & Boundary Clamp"); tasks[].goal = 1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").
 - Sub-Step Titles & Instructions (Imperative Runbook): subSteps[].title = 3-4 Title-Case "Verb + Object" words (e.g. "Spawn 6 Pellet Raycasts", NO "STEP X.Y" prefix); instruction = 1 imperative sentence (<= 18 words) starting with a command verb + exact node/script and tuning value.''';
 
@@ -439,7 +439,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
       'Telegraphic editor panel/menu/inspector/script breadcrumb separated by " > "';
 
   static const String runbookInstructionSchemaDesc =
-      '2-4 short newline-separated imperative micro-actions (max 10 words per line, each starting with "- <Panel/Component> → <Command Verb + Value>" or "- <Command Verb + Exact Node/Value>"). Never write a paragraph.';
+      '2-4 short newline-separated imperative micro-actions (max 10 words per line, each starting with "- <Dock/Node> → <Command Verb + Value>" or "- <Command Verb + Exact Node/Value>"). Never write a paragraph.';
 
   static const List<String> engineBuildTierEnum = <String>[
     'tier_1_world_space',

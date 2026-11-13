@@ -74,33 +74,6 @@ class WorkbenchShell extends StatelessWidget {
     final textSecondary = AppTheme.textSecondaryFor(isDark);
 
     final draft = workbench.conceptDraft;
-    final bp = workbench.releaseBlueprint;
-    final rel = workbench.activeRelease;
-
-    int totalFeatCount = 0;
-    int doneFeatCount = 0;
-    int activeTotalCount = 0;
-    int activeDoneCount = 0;
-
-    for (final b in workbench.activeReleaseBeats) {
-      for (final f in workbench.featuresForBeat(b.id)) {
-        totalFeatCount++;
-        final isDone = workbench.getDocumentProgress(f.id) >= 100;
-        if (isDone) doneFeatCount++;
-        if (workbench.isFeatureActiveInRelease(f)) {
-          activeTotalCount++;
-          if (isDone) activeDoneCount++;
-        }
-      }
-    }
-
-    final int targetTotal = activeTotalCount > 0 ? activeTotalCount : totalFeatCount;
-    final int targetDone = activeTotalCount > 0 ? activeDoneCount : doneFeatCount;
-
-    final String? stage1Badge = draft != null ? '✓' : null;
-    final String? stage3Badge = targetTotal > 0
-        ? '$targetDone/$targetTotal'
-        : (rel != null ? '${workbench.getDocumentProgress(rel.id)}%' : null);
 
     final projTitle = workbench.activeProject?.title.trim();
     final draftIdea = draft?.sparkIdea.trim();
@@ -439,77 +412,12 @@ class WorkbenchShell extends StatelessWidget {
                                 color: textSecondary,
                               ),
                             ),
-                            SizedBox(
-                              width: 1,
-                              height: 1,
-                              child: Opacity(
-                                opacity: 0,
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      '${workbench.activeReleaseVersionTag} · ${workbench.releaseDisplayName(workbench.activeRelease!)}',
-                                    ),
-                                    Text(
-                                      '${workbench.getDocumentProgress(workbench.activeRelease!.id)}%',
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
                     ),
                   ],
                 ],
-              ),
-              SizedBox(
-                width: 1,
-                height: 1,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Opacity(
-                    opacity: 0,
-                    child: Container(
-                      key: const ValueKey('connected_pipeline_track'),
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          _buildStagePill(
-                            label: '1. Concept',
-                            badge: stage1Badge,
-                            stage: WorkbenchStage.projectPitch,
-                            isCompleted: bp != null || totalFeatCount > 0,
-                            onTap: () => workbench.setStage(WorkbenchStage.projectPitch),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 6),
-                            child: Text(
-                              '▸',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                color: textMuted,
-                              ),
-                            ),
-                          ),
-                          _buildStagePill(
-                            label: '2. Workbench',
-                            badge: stage3Badge,
-                            stage: WorkbenchStage.releaseWorkbench,
-                            isCompleted: workbench.isActiveReleaseComplete,
-                            onTap: workbench.activeReleaseBeats.isNotEmpty
-                                ? () => workbench.setStage(WorkbenchStage.releaseWorkbench)
-                                : (workbench.conceptDraft != null && !workbench.isAgentBusy
-                                    ? () => workbench.approveConceptAndBuildRelease()
-                                    : null),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
               ),
               Row(
                 mainAxisSize: MainAxisSize.min,
@@ -794,7 +702,7 @@ class WorkbenchShell extends StatelessWidget {
                       Tooltip(
                         message: 'Gemini 4 Hydrogen Session Token Usage:\n'
                             '• Input: ${workbench.totalInputTokens} tokens (\$1.50 / 1M)\n'
-                            '• Output: ${workbench.totalOutputTokens} tokens (\$3.75 / 1M inc. reasoning)\n'
+                            '• Output: ${workbench.totalOutputTokens} tokens (\$7.50 / 1M inc. reasoning)\n'
                             '• Est. Cost: \$${workbench.totalEstimatedCostUsd.toStringAsFixed(4)}\n\n'
                             'Click to reset session token counter.',
                         child: InkWell(
@@ -1073,8 +981,8 @@ class WorkbenchShell extends StatelessWidget {
                       Text(
                         workbench.pendingUrlInvitedEmail != null &&
                                 workbench.pendingUrlInvitedEmail!.isNotEmpty
-                            ? 'Accept your invite using your Google account (${workbench.pendingUrlInvitedEmail}) to unlock Cloud Sync and Gemini 3.8 Flash.'
-                            : 'Accept your invite by signing in with your invited Google account to unlock Cloud Sync and Gemini 3.8 Flash.',
+                            ? 'Accept your invite using your Google account (${workbench.pendingUrlInvitedEmail}) to unlock Cloud Sync and Gemini 4 Hydrogen.'
+                            : 'Accept your invite by signing in with your invited Google account to unlock Cloud Sync and Gemini 4 Hydrogen.',
                         style: GoogleFonts.inter(
                           fontSize: 12.5,
                           height: 1.45,
@@ -1139,55 +1047,6 @@ class WorkbenchShell extends StatelessWidget {
               ),
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildStagePill({
-    required String label,
-    String? badge,
-    required WorkbenchStage stage,
-    required bool isCompleted,
-    VoidCallback? onTap,
-  }) {
-    final isDark = workbench.isDark;
-    final isActive = stage == workbench.currentStage;
-    final textPrimary = AppTheme.textPrimaryFor(isDark);
-    final textSecondary = AppTheme.textSecondaryFor(isDark);
-    final textMuted = AppTheme.textMutedFor(isDark);
-
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(5),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: AppTheme.displayFont(
-                fontSize: 12,
-                fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                letterSpacing: -0.1,
-                color: isActive
-                    ? textPrimary
-                    : (isCompleted ? textSecondary : textMuted),
-              ),
-            ),
-            if (badge != null) ...[
-              const SizedBox(width: 5),
-              Text(
-                badge,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 10.5,
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? textPrimary : textMuted,
-                ),
-              ),
-            ],
-          ],
-        ),
       ),
     );
   }

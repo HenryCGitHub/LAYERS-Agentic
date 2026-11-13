@@ -472,10 +472,6 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   );
   static final RegExp _trailingSemicolonRegex = RegExp(r';$');
   static final RegExp _floatSuffixRegex = RegExp(r'^(-?\d+(?:\.\d+)?)[fF]$');
-  static final RegExp _attrFieldRegex = RegExp(
-    r'(?:\[SerializeField[^\]]*\]|UPROPERTY\([^)]*\))\s*(?:(?:private|public|protected|internal|mutable|const)\s+)?[\w<>:*&]+\s+(\w+)\s*=\s*([^;\n]+);',
-    multiLine: true,
-  );
   static final RegExp _gdVarRegex = RegExp(
     r'@export(?:_[a-z_]+)?(?:\([^)]*\))?\s+var\s+(\w+)(?:\s*:\s*[\w.]+)?\s*=\s*([^\n#;]+)',
     multiLine: true,
@@ -3015,9 +3011,9 @@ Concept Blueprint:
         if (tradeOffs.isNotEmpty) 'Trade-Offs: $tradeOffs',
         is2d
             ? 'PROJECT DIMENSION & CAMERA SPEC: 2D GAME ($gameSpec | $techSpec)\n'
-                '- STRICT 2D ENGINE NODE RULE: Use ONLY 2D scenes/nodes/Vector2 (Node2D, CharacterBody2D, Area2D, Sprite2D, CollisionShape2D; or Unity Rigidbody2D, Collider2D, SpriteRenderer). NEVER use 3D nodes or Vector3!'
+                '- STRICT 2D GODOT NODE RULE: Use ONLY 2D scenes/nodes/Vector2 (Node2D, CharacterBody2D, Area2D, Sprite2D, CollisionShape2D, Camera2D). NEVER use 3D nodes or Vector3!'
             : 'PROJECT DIMENSION & CAMERA SPEC: 3D GAME ($gameSpec | $techSpec)\n'
-                '- Use 3D actors/nodes/components and Vector3/FVector math matching $modeLabel.',
+                '- Use Godot 4 3D nodes (Node3D, CharacterBody3D, Area3D, MeshInstance3D, CollisionShape3D, Camera3D) and Vector3 math matching $modeLabel.',
       ];
       return lines.join('\n');
     }
@@ -3030,17 +3026,17 @@ Concept Blueprint:
         if (tradeOffs.isNotEmpty) 'Trade-Offs: $tradeOffs',
       ].join(' | ');
       final dimLine = is2d
-          ? 'Dimension Rule: 2D ONLY (CharacterBody2D/Area2D/Sprite2D/Rigidbody2D/Vector2; NEVER 3D nodes or Vector3).\n'
+          ? 'Dimension Rule: 2D ONLY (CharacterBody2D/Area2D/Sprite2D/CollisionShape2D/Vector2; NEVER 3D nodes or Vector3).\n'
           : (specLine.isNotEmpty
-              ? 'Dimension Rule: 3D ($engineLabel 3D actors/nodes/Vector3).\n'
+              ? 'Dimension Rule: 3D (Godot 4 Node3D/CharacterBody3D/CollisionShape3D/Vector3).\n'
               : '');
       return '${specLine.isNotEmpty ? 'Project Specs (match exact 2D/3D classes and camera): $specLine\n' : ''}$dimLine';
     }
 
     final dimLine = is2d
-        ? 'Dimension Rule: 2D ONLY (2D scenes/nodes/colliders/Vector2; NEVER 3D nodes or Vector3).\n'
+        ? 'Dimension Rule: 2D ONLY (2D Godot scenes/nodes/colliders/Vector2; NEVER 3D nodes or Vector3).\n'
         : (gameSpec.isNotEmpty || techSpec.isNotEmpty
-            ? 'Dimension Rule: 3D ($engineLabel 3D actors/nodes/Vector3).\n'
+            ? 'Dimension Rule: 3D (Godot 4 3D nodes/colliders/Vector3).\n'
             : '');
     final sb = StringBuffer();
     if (gameSpec.isNotEmpty) sb.writeln('Game Spec: $gameSpec');
@@ -3746,7 +3742,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     required List<FeatureStateNode> states,
     required int checkpointIndex,
     required String rawTaskTitle,
-    bool unrealCppMode = false,
   }) {
     final trimmed = rawTaskTitle.trim();
     if (trimmed.isEmpty ||
@@ -3770,7 +3765,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       taskIndex: newIdx,
       checkpointNode: cpNode,
       engineHint: _activeEngineHint,
-      unrealCppMode: unrealCppMode,
       phase: _currentPhase,
     );
     updateFeatureStates(featureId, states);
@@ -3925,10 +3919,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     final taskNum = newTaskIndex + 1;
     final featDoc = documents[featureId];
     final featTitle = featDoc?.title ?? cpNode.cleanStageTitle;
-    final engineLabel = _activeEngineLabel;
-    final engineUpper = engineLabel.toUpperCase();
-    final isUnity = engineUpper.contains('UNITY');
-    final isUnreal = engineUpper.contains('UNREAL');
 
     String explicitScript = '';
     for (final existingTask in cpNode.checklist) {
@@ -3937,11 +3927,11 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         if (candidate.isNotEmpty &&
             candidate != 'custom_snippet' &&
             (candidate.endsWith('.gd') ||
-                candidate.endsWith('.cs') ||
+                candidate.endsWith('.tscn') ||
+                candidate.endsWith('.tres') ||
                 candidate.endsWith('.cpp') ||
                 candidate.endsWith('.h') ||
-                candidate.startsWith('/Game/') ||
-                candidate.startsWith('BP_'))) {
+                candidate.startsWith('res://'))) {
           explicitScript = candidate;
           break;
         }
@@ -3955,19 +3945,11 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           .trim();
     }
     final derivedAsset = TaskHowToBlueprint.deriveConcreteAssetName(featTitle);
-    final pascalName = derivedAsset.pascalName.isNotEmpty
-        ? derivedAsset.pascalName
-        : 'GameplayFeature';
     final snakeName = derivedAsset.snakeName.isNotEmpty
         ? derivedAsset.snakeName
         : 'gameplay_feature';
-    final defaultScriptPath = explicitScript.isNotEmpty
-        ? explicitScript
-        : (isUnity
-            ? 'Assets/Scripts/${pascalName}Controller.cs'
-            : (isUnreal
-                ? 'Source/${pascalName}Actor.cpp'
-                : 'res://scripts/$snakeName.gd'));
+    final defaultScriptPath =
+        explicitScript.isNotEmpty ? explicitScript : 'res://scripts/$snakeName.gd';
     final primaryTune = cpNode.tuningParams.isNotEmpty
         ? cpNode.tuningParams.first
         : 'threshold: 1.0';
@@ -3981,40 +3963,31 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           id: generateUniqueId('fix_sub_1'),
           text: 'STEP $taskNum.1 · REPRODUCE & INSPECT PLAYTEST ISSUE',
           specNotes:
-              'Trigger "$cleanIssue" in the game viewport and inspect live state values ($primaryTune).',
+              'Trigger "$cleanIssue" in F6 Run Scene and inspect live @export values ($primaryTune).',
           codeLanguage: defaultScriptPath,
           codeTargetFile: 'custom_snippet',
-          codeSnippet: isUnity
-              ? '// Inspect live state when "$cleanIssue" occurs\nDebug.LogWarning("[PLAYTEST FIX] $cleanIssue | $primaryTune");'
-              : (isUnreal
-                  ? '// Inspect live state when "$cleanIssue" occurs\nUE_LOG(LogTemp, Warning, TEXT("[PLAYTEST FIX] %s"), *GetName());'
-                  : '# Inspect live state when "$cleanIssue" occurs\nprint("[PLAYTEST FIX] $cleanIssue | $primaryTune")'),
+          codeSnippet:
+              '# Inspect live state when "$cleanIssue" occurs\npush_warning("[PLAYTEST FIX] $cleanIssue | $primaryTune")',
         ),
         Subtask(
           id: generateUniqueId('fix_sub_2'),
           text: 'STEP $taskNum.2 · APPLY FIX & CLAMP TUNING BOUNDS',
           specNotes:
-              'Adjust the update/collision logic and clamp $primaryTune so "$cleanIssue" cannot happen.',
+              'Adjust the handler/physics logic and clamp $primaryTune so "$cleanIssue" cannot happen.',
           codeLanguage: defaultScriptPath,
           codeTargetFile: 'custom_snippet',
-          codeSnippet: isUnity
-              ? '// Enforce boundary check for: $cleanIssue\n// Active tuning: $primaryTune'
-              : (isUnreal
-                  ? '// Enforce boundary check for: $cleanIssue\n// Active tuning: $primaryTune'
-                  : '# Enforce boundary check for: $cleanIssue\n# Active tuning: $primaryTune'),
+          codeSnippet:
+              '# Enforce boundary check for: $cleanIssue\n# Active tuning: $primaryTune',
         ),
         Subtask(
           id: generateUniqueId('fix_sub_3'),
-          text: 'STEP $taskNum.3 · VERIFY PLAYTEST GUARD IN VIEWPORT',
+          text: 'STEP $taskNum.3 · VERIFY PLAYTEST GUARD IN SCENE (F6)',
           specNotes:
-              'Re-run the checkpoint playtest gate ("${cpNode.playtestCondition}") 3 times to confirm "$cleanIssue" is resolved.',
+              'Re-run the checkpoint playtest gate ("${cpNode.playtestCondition}") 3 times with F6 to confirm "$cleanIssue" is resolved.',
           codeLanguage: defaultScriptPath,
           codeTargetFile: 'custom_snippet',
-          codeSnippet: isUnity
-              ? '// Verify guard in Play mode: [PLAYTEST GUARD] $cleanIssue'
-              : (isUnreal
-                  ? '// Verify guard in Play mode: [PLAYTEST GUARD] $cleanIssue'
-                  : '# Verify guard in Play mode: [PLAYTEST GUARD] $cleanIssue'),
+          codeSnippet:
+              '# Verify guard in F6 Run Scene: [PLAYTEST GUARD] $cleanIssue',
         ),
       ],
     );
@@ -4668,7 +4641,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
       _pendingFeatureStepQueue.length + _synthesizingFeatureIds.length;
 
   static final RegExp _ledgerAssetTokenRegex = RegExp(
-    r'\b(?:BP_[A-Za-z0-9_]+|IA_[A-Za-z0-9_]+|IMC_[A-Za-z0-9_]+|WBP_[A-Za-z0-9_]+|[A-Z][A-Za-z0-9_]+(?:Character|Controller|Pawn|Actor|Component|Spawner|Projectile|Weapon|Manager)\b|[A-Za-z0-9_]+\.(?:cs|gd|tscn|h|cpp))\b',
+    r'\b(?:res://[A-Za-z0-9_./-]+\.(?:gd|tscn|tres)|[A-Za-z0-9_]+\.(?:gd|tscn|tres|h|cpp)|CharacterBody[23]D|Area[23]D|RigidBody[23]D|StaticBody[23]D|CollisionShape[23]D|Camera[23]D|MeshInstance3D|Sprite2D|CanvasLayer|RayCast[23]D|[A-Z][A-Za-z0-9_]+(?:Character|Controller|Spawner|Projectile|Weapon|Manager))\b',
   );
   static final RegExp _scriptSymbolRegex = RegExp(
     r'\b(?:func|signal|void|IEnumerator)\s+([A-Za-z_][A-Za-z0-9_]*)\b',
@@ -4744,11 +4717,11 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
   }
 
   /// Native Gemini Tool (`functionDeclarations`) for Stage 2 3-Area How-To synthesis (`synthesizeFeatureHowToStepsWithAi`).
-  /// Enforces a single shared `primarySharedScriptOrScene` across all tasks and polymorphic UE5 step payloads.
+  /// Enforces a single shared `primarySharedScriptOrScene` across all tasks and polymorphic Godot 4 step payloads.
   static const Map<String, dynamic> commitFeatureHowToStepsTool = {
     'name': 'commit_feature_howto_steps',
     'description':
-        'Commits concrete, Unreal Engine 5 How-To sub-steps (Level Placement Tables, Blueprint Event Graph nodes, or C++ .h/.cpp scripts) for every task in the active Feature checkpoint on one shared asset.',
+        'Commits concrete, Godot 4 Native How-To sub-steps (Scene Tree & Inspector Tables, Living Incremental GDScript Diffs, and Node Signal Connections) for every task in the active Feature checkpoint on one shared scene/script.',
     'parameters': {
       'type': 'OBJECT',
       'required': ['primarySharedScriptOrScene', 'tasks'],
@@ -4756,7 +4729,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         'primarySharedScriptOrScene': {
           'type': 'STRING',
           'description':
-              'The single shared UE5 Actor Blueprint, C++ Class (.h/.cpp), Widget Blueprint, or Level Map used across Task 1..N (e.g., "BP_PlayerCharacter", "PlayerCharacter.h / PlayerCharacter.cpp", "WBP_Hud", or "L_ArenaMap").',
+              'The single shared Godot 4 scene (.tscn) and GDScript (.gd) used across Task 1..N (e.g., "res://scenes/player_character.tscn · res://scripts/player_character.gd", "res://scenes/hud.tscn · res://scripts/hud.gd", or "res://scenes/levels/arena.tscn").',
         },
         'tasks': {
           'type': 'ARRAY',
@@ -4807,17 +4780,17 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
                     'area1Hierarchy': {
                       'type': 'STRING',
                       'description':
-                          'Optional Component/Outliner hierarchy tree using ├─ / └─ ONLY when adding a new component/actor in this step ("" when reusing the Blueprint Deck tree).',
+                          'Optional Godot Scene Tree hierarchy using ├─ / └─ ONLY when adding a new child node in this step ("" when reusing the feature Scene Tree).',
                     },
                     'area2Inspector': {
                       'type': 'STRING',
                       'description':
-                          'Details Panel property delta ONLY when modifying values in this step ("Property: Value | Property2: Value2"; "" when already in a Level Placement Table or Blueprint Deck).',
+                          'Godot Inspector property delta ONLY when modifying values in this step ("Property: Value | Property2: Value2"; "" when already in an Inspector pipe table).',
                     },
                     'codeFormula': {
                       'type': 'STRING',
                       'description':
-                          'Polymorphic step payload by stepRole: (1) On stepRole="editor_setup" (Level Outliner, Blueprint Components/Details defaults, World Settings, Input Mappings IA_*/IMC_*), ALWAYS emit a Markdown pipe table ("| Component / Category | Property | Value |", e.g. "| FirstPersonCamera > Transform | Location | (0, 0, 64) |") and NEVER emit "[Node] ──► [Node]" Event Graph wiring. (2) On stepRole="script_logic" or "wire_and_verify": in Blueprint mode emit "[Event / Function] ──► [Branch / Action (Target: ..., Pin: Value)]"; in C++ mode emit .h/.cpp lines with "+ " on lines added/changed in this step.',
+                          'Polymorphic Godot 4 payload by stepRole: (1) On stepRole="editor_setup" (Scene Tree nodes, Inspector properties, Input Map, Project Settings, Level placement), ALWAYS emit a Markdown pipe table ("| Node / Category | Property | Value |", e.g. "| DashTimer > Timer | Wait Time | 0.2 |"). (2) On stepRole="script_logic", emit a Living Incremental GDScript (.gd) diff keeping existing extends/class_name/@export/func header lines plain for context and prefixing EVERY new/modified line with "+ ". (3) On stepRole="wire_and_verify", emit Node Signal Connections ("[Node.signal_name] ──► [_on_handler()]") or F6 Run Scene checks.',
                     },
                     'verifyMode': {
                       'type': 'STRING',
@@ -4851,7 +4824,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         'primarySharedScriptOrScene': {
           'type': 'STRING',
           'description':
-              'Optional shared Actor Blueprint, Prefab/MonoBehaviour, or Godot Scene/Script specified by the developer.',
+              'Optional shared Godot 4 scene (.tscn) or script (.gd) specified by the developer.',
         },
         'subSteps': {
           'type': 'ARRAY',
@@ -5499,61 +5472,12 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
     return '- Feature #$orderNumber "${featDoc.title}": $summaryTail';
   }
 
-  String _serializeChecklistSnapshot(List<Subtask> checklist) {
-    return jsonEncode([
-      for (final task in checklist)
-        [
-          for (final child in task.children) child.toJson(),
-        ],
-    ]);
-  }
-
-  bool _restoreChecklistSnapshot(
-    List<Subtask> checklist,
-    String rawSnapshotJson,
-  ) {
-    if (rawSnapshotJson.trim().isEmpty) return false;
-    try {
-      final decoded = jsonDecode(rawSnapshotJson);
-      if (decoded is! List || decoded.length != checklist.length) {
-        return false;
-      }
-      final restoredPerTask = <List<Subtask>>[];
-      for (int tIdx = 0; tIdx < checklist.length; tIdx++) {
-        final rawChildren = decoded[tIdx];
-        if (rawChildren is! List || rawChildren.isEmpty) return false;
-        final prevChildren = checklist[tIdx].children;
-        final children = <Subtask>[];
-        for (int sIdx = 0; sIdx < rawChildren.length; sIdx++) {
-          final rawChild = rawChildren[sIdx];
-          if (rawChild is! Map) continue;
-          final parsed = Subtask.fromJson(Map<String, dynamic>.from(rawChild));
-          if (sIdx < prevChildren.length) {
-            parsed.completed = prevChildren[sIdx].completed;
-          } else {
-            parsed.completed = checklist[tIdx].completed;
-          }
-          children.add(parsed);
-        }
-        if (children.isEmpty) return false;
-        restoredPerTask.add(children);
-      }
-      for (int tIdx = 0; tIdx < checklist.length; tIdx++) {
-        checklist[tIdx].children = restoredPerTask[tIdx];
-      }
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Synthesizes bespoke, engine-specific 3-Area How-To Sub-Steps (`Hierarchy` -> `Inspector` -> `Code` -> `Verify`)
-  /// for the active checkpoint of `featureId` using `_conversationModel` (`gemini-flash-latest`),
-  /// reasoning through the project's cumulative asset state, same-Epic sibling boundaries, exact variable names, and previous checkpoints.
+  /// Synthesizes bespoke Godot 4 3-Area How-To Sub-Steps (`Scene Tree` -> `Inspector` -> `GDScript / Node Signals` -> `Run Scene`)
+  /// for the active checkpoint of `featureId` using `_conversationModel`,
+  /// reasoning through the project's cumulative asset state, same-Epic sibling boundaries, exact `@export` variable names, and previous checkpoints.
   Future<void> synthesizeFeatureHowToStepsWithAi(
     String featureId, {
     bool forceRefresh = false,
-    bool unrealCppMode = false,
   }) async {
     _pendingFeatureStepQueue.remove(featureId);
     if (!GeminiAgentClient.hasKey(_apiKey) &&
@@ -5565,10 +5489,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
     final engineLabel = _activeEngineLabel;
     final engineHint = _activeEngineHint;
     final activeVer = activeReleaseVersionTag;
-    final modeSuffix = engineLabel == 'UNREAL 5'
-        ? (unrealCppMode ? '_CPP' : '_BP')
-        : '';
-    final synthKey = '${featureId}_${activeVer}_$engineLabel$modeSuffix';
+    final synthKey = '${featureId}_${activeVer}_$engineLabel';
     if (!forceRefresh && _synthesizingFeatureIds.contains(featureId)) {
       return;
     }
@@ -5585,59 +5506,20 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
     final cpNode = states[effectiveCpIndex];
     if (cpNode.checklist.isEmpty) return;
 
-    final isUnreal = engineLabel == 'UNREAL 5';
-    final targetUnrealMode = unrealCppMode ? 'cpp' : 'bp';
-    final storedUnrealMode =
-        (cpNode.parameters['synthesized_unreal_mode'] ?? '').trim();
-    if (!forceRefresh &&
-        _aiSynthesizedFeatureSteps.contains(synthKey) &&
-        (!isUnreal ||
-            storedUnrealMode.isEmpty ||
-            storedUnrealMode == targetUnrealMode)) {
+    if (!forceRefresh && _aiSynthesizedFeatureSteps.contains(synthKey)) {
       return;
     }
 
-    // Skip if already customized with custom_snippet across ALL tasks in the matching engine mode (unless forceRefresh)
+    // Skip if already customized with custom_snippet across ALL tasks (unless forceRefresh)
     final alreadyCustom = cpNode.checklist.every(
       (t) =>
           t.children.isNotEmpty &&
           t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
     );
     if (!forceRefresh && alreadyCustom) {
-      if (!isUnreal ||
-          storedUnrealMode.isEmpty ||
-          storedUnrealMode == targetUnrealMode) {
-        if (isUnreal && storedUnrealMode.isEmpty) {
-          cpNode.parameters['synthesized_unreal_mode'] = targetUnrealMode;
-          final initCacheKey = targetUnrealMode == 'cpp'
-              ? 'unreal_cpp_steps_json'
-              : 'unreal_bp_steps_json';
-          cpNode.parameters[initCacheKey] =
-              _serializeChecklistSnapshot(cpNode.checklist);
-        }
-        _failedStepSynthesisFeatureIds.remove(featureId);
-        _aiSynthesizedFeatureSteps.add(synthKey);
-        return;
-      }
-
-      // Unreal BP <-> C++ mode switch: save outgoing mode snapshot, then swap in cached target mode in 0ms if available!
-      final outgoingCacheKey = storedUnrealMode == 'cpp'
-          ? 'unreal_cpp_steps_json'
-          : 'unreal_bp_steps_json';
-      cpNode.parameters[outgoingCacheKey] =
-          _serializeChecklistSnapshot(cpNode.checklist);
-      final targetCacheKey = targetUnrealMode == 'cpp'
-          ? 'unreal_cpp_steps_json'
-          : 'unreal_bp_steps_json';
-      final cachedTargetJson = cpNode.parameters[targetCacheKey] ?? '';
-      if (_restoreChecklistSnapshot(cpNode.checklist, cachedTargetJson)) {
-        cpNode.parameters['synthesized_unreal_mode'] = targetUnrealMode;
-        _failedStepSynthesisFeatureIds.remove(featureId);
-        _aiSynthesizedFeatureSteps.add(synthKey);
-        TaskHowToBlueprint.clearCache();
-        updateFeatureStates(featureId, states);
-        return;
-      }
+      _failedStepSynthesisFeatureIds.remove(featureId);
+      _aiSynthesizedFeatureSteps.add(synthKey);
+      return;
     }
 
     for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
@@ -5646,7 +5528,6 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         taskIndex: tIdx,
         checkpointNode: cpNode,
         engineHint: engineHint,
-        unrealCppMode: unrealCppMode,
         phase: _currentPhase,
       );
     }
@@ -5692,9 +5573,6 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
       final currentArchetype = classifyAssetArchetype(feat.title);
       final derivedAssetNames =
           TaskHowToBlueprint.deriveConcreteAssetName(feat.title);
-      final featPascal = derivedAssetNames.pascalName.isNotEmpty
-          ? derivedAssetNames.pascalName
-          : 'GameplayFeature';
       final featSnake = derivedAssetNames.snakeName.isNotEmpty
           ? derivedAssetNames.snakeName
           : 'gameplay_feature';
@@ -5719,51 +5597,26 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
           ? precedingFeatureTitles.join(', ')
           : '${precedingFeatureTitles.first}, ..., ${precedingFeatureTitles.sublist(precedingFeatureTitles.length - 2).join(', ')} (${precedingFeatureTitles.length} total)';
       final engineAssetHint = switch (currentArchetype) {
-        'character' => engineLabel == 'UNREAL 5'
-            ? 'BP_PlayerCharacter (ACharacter) and IMC_Default'
-            : (engineLabel == 'UNITY C#'
-                ? 'PlayerController.cs / MonoBehaviour Prefab and CharacterController / Rigidbody'
-                : 'player_character.tscn (CharacterBody) + player_character.gd and Project Input Map'),
-        'ui' => engineLabel == 'UNREAL 5'
-            ? 'WBP_$featPascal (UUserWidget) with CanvasPanel'
-            : (engineLabel == 'UNITY C#'
-                ? '${featPascal}Canvas.prefab / ${featPascal}UI.cs (PlayerController.cs / MonoBehaviour Prefab UI)'
-                : '${featSnake}_hud.tscn (Control / CanvasLayer) + ${featSnake}_hud.gd'),
-        'level' => engineLabel == 'UNREAL 5'
-            ? (hasPrecedingCharacterFeature
-                ? 'Level Map L_$featPascal (/Game/Maps/) with World Outliner Actors (Floor_*, Wall_*, BoxCollision / KillZVolume, and PlayerStart at (0, 0, 120) + BP_PlayerCharacter)'
-                : 'Level Map L_$featPascal (/Game/Maps/) with World Outliner Actors (Floor_*, Wall_*, BoxCollision / KillZVolume, and PlayerStart at (0, 0, 120) with DefaultPawn in World Settings until BP_PlayerCharacter is built)')
-            : (engineLabel == 'UNITY C#'
-                ? (hasPrecedingCharacterFeature
-                    ? 'Scene $featPascal.unity (Assets/Scenes/) with Floor/Wall GameObjects, Colliders, and PlayerController.cs / MonoBehaviour Prefab spawn at (0, 2, 0)'
-                    : 'Scene $featPascal.unity (Assets/Scenes/) with Floor/Wall GameObjects, Colliders, and temporary test Capsule (Rigidbody + CapsuleCollider) at (0, 2, 0)')
-                : (hasPrecedingCharacterFeature
-                    ? 'Level Scene $featSnake.tscn (res://scenes/levels/) with StaticBody/CollisionShape floor/walls and player_character spawn at (0, 2, 0)'
-                    : 'Level Scene $featSnake.tscn (res://scenes/levels/) with StaticBody/CollisionShape floor/walls and temporary test RigidBody + CollisionShape at (0, 2, 0)')),
-        _ => engineLabel == 'UNREAL 5'
-            ? 'BP_$featPascal (AActor) with StaticMeshComponent and Collision Component'
-            : (engineLabel == 'UNITY C#'
-                ? '$featPascal.prefab / ${featPascal}Controller.cs (PlayerController.cs / MonoBehaviour Prefab and Collider)'
-                : '$featSnake.tscn (Node3D / Area3D / StaticBody3D) + $featSnake.gd'),
+        'character' =>
+          'res://scenes/player_character.tscn (CharacterBody3D/2D) + res://scripts/player_character.gd and Project Input Map',
+        'ui' =>
+          'res://scenes/${featSnake}_hud.tscn (CanvasLayer / Control) + res://scripts/${featSnake}_hud.gd',
+        'level' => hasPrecedingCharacterFeature
+            ? 'res://scenes/levels/$featSnake.tscn (Node3D/2D with StaticBody floor/walls, Area bounds, and player_character.tscn instance at spawn)'
+            : 'res://scenes/levels/$featSnake.tscn (Node3D/2D with StaticBody floor/walls and temporary RigidBody + CollisionShape test body at spawn)',
+        _ =>
+          'res://scenes/$featSnake.tscn (Node3D/2D / Area / StaticBody) + res://scripts/$featSnake.gd',
       };
       final needsFirstFeaturePlayerBootstrap =
           (currentArchetype == 'level' || currentArchetype == 'actor') &&
               !hasPrecedingCharacterFeature &&
               effectiveCpIndex == 0;
-      final playerBootstrapLabel = engineLabel == 'UNREAL 5'
-          ? (hasPrecedingCharacterFeature
-              ? 'PlayerStart spawn point at (0, 0, 120) above the floor with BP_PlayerCharacter assigned in World Settings (do NOT make IMC_Default a floor component)'
-              : 'PlayerStart spawn point at (0, 0, 120) above the floor with DefaultPawn assigned in World Settings so the map can be tested immediately before BP_PlayerCharacter exists (keep PlayerStart at (0, 0, 120); do NOT make IMC_Default a floor component)')
-          : (engineLabel == 'UNITY C#'
-              ? (hasPrecedingCharacterFeature
-                  ? 'PlayerCharacter spawn point at (0, 2, 0) above the floor in the Scene Hierarchy'
-                  : 'temporary test Capsule (Rigidbody + CapsuleCollider) at (0, 2, 0) above the floor in the Scene Hierarchy')
-              : (hasPrecedingCharacterFeature
-                  ? 'PlayerStart / player_character spawn node at (0, 2, 0) above the floor in the Main Scene'
-                  : 'temporary test RigidBody + CollisionShape node at (0, 2, 0) above the floor in the Main Scene'));
+      final playerBootstrapLabel = hasPrecedingCharacterFeature
+          ? 'PlayerSpawn Marker node above the floor instancing player_character.tscn'
+          : 'temporary test RigidBody + CollisionShape node above the floor in the main scene so F6 Run Scene spawns a testable body';
       final projectBuildStateContext = isGreenfieldFirstFeature
-          ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Setup). On Task 1, explicitly instruct how to set up ${currentArchetype == 'level' ? 'the Level Map & World Outliner geometry' : (currentArchetype == 'character' ? 'the Character Blueprint / Prefab / Scene' : (currentArchetype == 'ui' ? 'the UI Widget / Canvas / Control Scene' : 'the Actor Blueprint / Prefab / Scene'))} ($engineAssetHint), specify its exact folder path, and ${needsFirstFeaturePlayerBootstrap ? 'include placing a $playerBootstrapLabel so pressing Play spawns the player landing on the floor.' : 'explain how to place or spawn it in the active level.'}'
-          : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing project scenes/scripts ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated scene/prefab/actor and connect it to the player.';
+          ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Setup). On Task 1, explicitly instruct how to set up ${currentArchetype == 'level' ? 'the Godot Level Scene (.tscn) & Scene Tree geometry' : (currentArchetype == 'character' ? 'the Player Character Scene (.tscn) & Script (.gd)' : (currentArchetype == 'ui' ? 'the Godot Control / CanvasLayer HUD Scene (.tscn)' : 'the Godot Feature Scene (.tscn) & Script (.gd)'))} ($engineAssetHint), specify its exact `res://` folder path, and ${needsFirstFeaturePlayerBootstrap ? 'include placing a $playerBootstrapLabel so pressing F6 spawns cleanly onto the floor.' : 'explain how to instance or attach it inside the main scene.'}'
+          : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing `res://scenes/` & `res://scripts/` files ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated `.tscn`/`.gd` and connect signals to the player.';
 
       // Build Project-Wide Cross-Epic Asset & Symbol Registry (`< 220 tokens`, max 12 entries):
       // 1) All same-Epic earlier siblings (full assets, scene nodes, functions/signals, planned scope fallback, and tuning vars)
@@ -5894,11 +5747,11 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         }
       }
 
-      final targetEngineMode = engineLabel == 'UNREAL 5'
-          ? (unrealCppMode ? 'UNREAL 5 C++ (.h / .cpp)' : 'UNREAL 5 BLUEPRINTS')
-          : (engineLabel == 'UNITY C#'
-              ? 'UNITY C# (MonoBehaviour)'
-              : 'GODOT 4 (GDScript 2.0)');
+      final usesGdExtension = (engineHint ?? '').toLowerCase().contains('gdextension') ||
+          (engineHint ?? '').toLowerCase().contains('c++');
+      final targetEngineMode = usesGdExtension
+          ? 'GODOT 4 (GDScript + GDExtension C++)'
+          : 'GODOT 4 (GDScript)';
 
       final compactSpecBlock = _buildCompactWorkbenchSpecContext(
         includeFullDimensionBanner: true,
@@ -5907,15 +5760,15 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
 
       final phaseInstructionBlock = switch (_currentPhase) {
         ProductionPhase.prototype =>
-          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes, greybox shapes/sprites, and direct Inspector/Details variables.\n- Focus strictly on proving the core mechanic feel and playtest loop.\n- Keep greybox steps lean and cohesive (~2-3 sub-steps per task, ~6-9 total steps per feature; avoid 20-step bloat).',
+          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes (BoxShape3D / CapsuleShape3D / RectangleShape2D), greybox meshes/ColorRect sprites, and direct Inspector `@export` variables.\n- Focus strictly on proving the core mechanic feel and F6 Run Scene loop.\n- Keep greybox steps lean and cohesive (~2-3 sub-steps per task, ~6-9 total steps per feature; avoid 20-step bloat).',
         ProductionPhase.mvp =>
-          'ACTIVE PRODUCTION PHASE: 02 · MVP (FUNCTIONAL DELTA UPGRADE)\n- Extend the existing v0.1 prototype script/Actor in-place (NEVER recreate from scratch).\n- Wire cross-system state, HUD counters, or progression loops.',
+          'ACTIVE PRODUCTION PHASE: 02 · MVP (FUNCTIONAL DELTA UPGRADE)\n- Extend the existing v0.1 `.tscn` scene and `.gd` script in-place (NEVER recreate from scratch).\n- Wire cross-system signals, HUD counters, or progression loops.',
         ProductionPhase.verticalSlice =>
-          'ACTIVE PRODUCTION PHASE: 03 · VERTICAL SLICE (GOLD STANDARD POLISH)\n- Attach Animation/VFX/SFX/Camera/UI feedback nodes and polish triggers to the existing mechanic without rewriting core movement/combat math.',
+          'ACTIVE PRODUCTION PHASE: 03 · VERTICAL SLICE (GOLD STANDARD POLISH)\n- Attach AnimationPlayer/GPUParticles/AudioStreamPlayer/Camera/Control feedback nodes and polish triggers to the existing mechanic without rewriting core movement/combat math.',
         ProductionPhase.fullProduction =>
-          'ACTIVE PRODUCTION PHASE: 04 · FULL PRODUCTION (FULL-GAME BUILD-OUT)\n- Build the full-game feature on top of the finished core systems (reuse their scripts and variable names).\n- Match the Vertical Slice quality bar; use data-driven Resources / ScriptableObjects / DataAssets for content rosters.',
+          'ACTIVE PRODUCTION PHASE: 04 · FULL PRODUCTION (FULL-GAME BUILD-OUT)\n- Build the full-game feature on top of the finished core systems (reuse their `.gd` scripts and `@export` variable names).\n- Match the Vertical Slice quality bar; use data-driven Godot Custom `Resource` (`.tres`) files for content rosters.',
         ProductionPhase.postLaunch =>
-          'ACTIVE PRODUCTION PHASE: 05 · POST-LAUNCH & LIVE OPS (PATCH & EXPANSION)\n- Apply surgical balance parameter adjustments, modular DLC/biome hooks, and regression guards without breaking existing save/state schemas.',
+          'ACTIVE PRODUCTION PHASE: 05 · POST-LAUNCH & LIVE OPS (PATCH & EXPANSION)\n- Apply surgical `@export` balance adjustments, modular DLC/biome `.tscn` hooks, and regression guards without breaking existing save/state schemas.',
       };
 
       final featureGoalText = SectionTextUtils.resolveGoal(feat.sections);
@@ -5936,21 +5789,15 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
       ].join('\n');
 
       final codeFormulaModeGuide = currentArchetype == 'level'
-          ? (engineLabel == 'UNREAL 5'
-              ? 'a clean Markdown Level Placement & Details Table (e.g.\n| Actor / Component | Property / Transform | Value |\n| --- | --- | --- |\n| Floor_Arena (Cylinder) | Location / Scale | (0, 0, 0) / (20.0, 20.0, 0.2) |\n| PlayerStart | Location | (0, 0, 120) |\n). Do NOT write runtime BeginPlay/C++ code to place static blockout actors, NEVER prefix World Outliner Actors with `SM_`, use UE5 centimeters (`uu`), and pre-calculate literal numeric Location/Scale values from Active Tuning Parameters'
-              : '2-5 lines of Scene Hierarchy / Scene Tree placement & Inspector setup with literal numeric Position/Scale values derived from Active Tuning Parameters (do NOT write runtime Start()/_ready() code just to place static blockout floors/walls, and keep spawn at `(0, 2, 0)` without conflicting coordinates)')
-          : (engineLabel == 'UNREAL 5'
-              ? (unrealCppMode
-                  ? 'on `stepRole: "editor_setup"` (Asset/Component Details, Input Mapping, World Settings) emit a clean Markdown Details table (`| Component / Category | Property | Value |`—NEVER runtime setters for static defaults); on `stepRole: "script_logic"` / `"wire_and_verify"` emit 3-8 lines of Unreal 5 C++ (.h / .cpp) as a Unified Living Script keeping existing class/function lines plain for context and prefixing EVERY line added or modified in THIS step with `+ ` (e.g. `+ UPROPERTY(EditAnywhere, Category="Dash")\n+ float DashSpeed = 1200.f;`) using `CreateDefaultSubobject`, `FVector`, `TObjectPtr<>`, `uu` units, and `Ctrl+Alt+F11`—NEVER Blueprint node arrows'
-                  : 'STRICT CONFIG vs. GRAPH SPLIT BY `stepRole`: (A) When `stepRole == "editor_setup"` (creating assets, adding Components, setting Details Panel defaults like `Location`, `Use Pawn Control Rotation`, `Max Walk Speed`, Collision, or `IMC_Default` key bindings), ALWAYS emit a clean Markdown Details / Mapping table (`| Component / Category | Property | Value |`, e.g. `| FirstPersonCamera > Transform | Location | (0, 0, 64) |` or `| FirstPersonCamera > Camera Options | Use Pawn Control Rotation | true |` or `| CharacterMovement > Walking | Max Walk Speed | 650.0 cm/s |`) and NEVER emit `[Node] ──► [Node]` Event Graph arrows or runtime `Set Relative Location`/`Set Max Walk Speed` wiring! (B) ONLY when `stepRole == "script_logic"` or `"wire_and_verify"` emit 2-6 lines of Unreal 5 Blueprint Event Graph wiring (`[Event / Enhanced Input Node] ──► [Function Node (Target: ..., Pin: Value)]`, keeping pure getters like `[Get FirstPersonCamera]` separate from Exec flow—NEVER C++ `->` syntax)')
-              : '2-6 lines of concrete $targetEngineMode code using the exact tuning variables and guard checks');
+          ? 'a clean Markdown Godot Level Scene Placement & Inspector Table (e.g.\n| Node (Type) | Property / Transform | Value |\n| --- | --- | --- |\n| ArenaFloor (StaticBody3D) | Position / Size | Vector3(0, 0, 0) / Vector3(20, 0.5, 20) |\n| PlayerSpawn (Marker3D) | Position | Vector3(0, 2, 0) |\n). Do NOT write runtime `_ready()` code just to place static blockout floors/walls, use meters/pixels matching 3D/2D dimension, and pre-calculate literal numeric Position/Size values from Active Tuning Parameters'
+          : 'STRICT CONFIG vs. DIFF vs. SIGNAL SPLIT BY `stepRole`: (A) When `stepRole == "editor_setup"` (creating `.tscn` child nodes, Inspector properties like `Motion Mode`, `Position`, `Radius`, Collision Layers/Masks, Project Settings, or `Input Map` actions), ALWAYS emit a clean Markdown Inspector / Input Map pipe table (`| Node / Category | Property | Value |`, e.g. `| CharacterBody3D > Motion Mode | Motion Mode | Grounded |` or `| DashTimer > Timer | Wait Time | 0.2 |` or `| Input Map > dash | Key | Shift |`) and NEVER emit runtime `_ready()` property setters! (B) When `stepRole == "script_logic"`, emit 3-8 lines of Living Incremental GDScript (`.gd`) keeping existing `extends` / `@export` / `func` signature context lines plain and prefixing EVERY new or modified line added in THIS step with `+ ` (e.g. `+ @export var dash_speed: float = 18.0\n+ func _trigger_dash() -> void:`${usesGdExtension ? '; for native performance hotspots show clean GDExtension C++ (.hpp/.cpp) with `+ ` on added lines' : ''}). (C) When `stepRole == "wire_and_verify"`, emit Godot Node Signal connections (`[Node.signal_name] ──► [_on_handler_method()]`) or concise F6 Run Scene debug checks';
 
       final prompt = '''
-You are the Principal Unreal Engine 5 Architect ($targetEngineMode) for "$projTitle".
-Synthesize concise, zero-repetition 3-Area Engine How-To steps using native UE5 terminology (`Content Drawer`, `Outliner`, `Details Panel`, `My Blueprint`, `Event Graph`, `World Settings`, `Enhanced Input`, `uu`, `Alt+P`, `Ctrl+Alt+F11`) for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+You are the Principal Godot 4 Architect ($targetEngineMode) for "$projTitle".
+Synthesize concise, zero-repetition 3-Area Engine How-To steps using native Godot 4 terminology (`FileSystem`, `Scene Tree`, `Inspector`, `Node -> Signals`, `GDScript Editor`, `Input Map`, `Project Settings`, `@export`, `@onready`, `F6 Run Current Scene`) for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
 ${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$phaseInstructionBlock
 $projectBuildStateContext
-${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Epic-Scoped & Root Project Anchors — reuse exact Actor/Scene/Script & Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
+${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Epic-Scoped & Root Project Anchors — reuse exact Scene/Script & `@export` Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
 ${sameEpicSiblingBoundaryLines.isNotEmpty ? sameEpicSiblingBoundaryLines.join('\n') : ''}
 ${coreSystemsReferenceLines.isNotEmpty ? 'CORE SYSTEMS REFERENCE (finished STABLE core scripts — plug into these, NEVER rebuild them):\n${coreSystemsReferenceLines.join('\n')}' : ''}
 Tasks:
@@ -5960,25 +5807,25 @@ Active Guards (MUST enforce in code without raw [TAG] brackets in prose): ${clea
 ${priorCheckpointSnapshot.isNotEmpty ? 'Previous Checkpoints Structural Snapshot (extend existing nodes & functions in-place):\n$priorCheckpointSnapshot' : ''}
 
 CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
-- ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary asset/class/scene for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway input/test actor in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
+- ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary scene/script pair for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway test scene/script in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
 - INTRA-TASK ENGINE CAUSAL ORDERING (`editor_setup` -> `script_logic` -> `wire_and_verify`):
   * Inside EVERY task, set `stepRole` so engine prerequisites come strictly BEFORE code that references them:
-    1) `editor_setup` FIRST: Create/attach Scene Tree / Hierarchy / Component nodes (`area1Hierarchy`), Input Actions, Collision Layers, or Inspector bindings (`area2Inspector`) BEFORE any script step calls `\$NodeName`, `GetComponent`, `CreateDefaultSubobject`, or `Input.is_action_*`.
-    2) `script_logic` SECOND: Declare `@export` / `[SerializeField]` / `UPROPERTY` tuning variables and write the handler/physics method incrementally on the shared script (Task 2..N MUST extend the variables and functions created in Task 1—never paste conflicting duplicate class definitions).
-    3) `wire_and_verify` LAST: Connect signals/UnityEvents/Blueprint pins or place the prefab in the active level and check the result.
+    1) `editor_setup` FIRST: Create/attach Godot Scene Tree child nodes (`area1Hierarchy`), Input Map actions, Collision Layers/Masks, or Inspector bindings (`area2Inspector`) BEFORE any GDScript step calls `\$NodeName`, `@onready`, `get_node`, or `Input.is_action_*`.
+    2) `script_logic` SECOND: Declare `@export var` tuning variables and write the handler/physics method incrementally on the shared `.gd` script (Task 2..N MUST extend the variables and functions created in Task 1—never paste conflicting duplicate class definitions).
+    3) `wire_and_verify` LAST: Connect Godot Node Signals (`[Node.signal_name] ──► [_on_handler()]`) or instance the `.tscn` in the main scene and verify with `F6`.
 - HONEST DUAL-MODE CHECKS (`verifyMode: "editor"` vs `"playtest"`):
-  * Set `verifyMode: "editor"` on intermediate structural/declaration steps where pressing Play cannot yet test runtime behavior (e.g. creating a collision layer, attaching a child node, declaring variables)—write an honest Editor check (`"Inspect Scene Tree → DashTimer appears under Player"`).
-  * Set `verifyMode: "playtest"` ONLY once runtime wiring is runnable in Play Mode (`"Press Shift → Player dashes 4m forward"`). The final step of a runnable task should use `"playtest"`.
+  * Set `verifyMode: "editor"` on intermediate structural/declaration steps where pressing F6 cannot yet test runtime behavior (e.g. creating an Input Map action, attaching a `Timer` node, declaring `@export` variables)—write an honest Editor check (`"Inspect Scene Tree → DashTimer appears under PlayerCharacter"`).
+  * Set `verifyMode: "playtest"` ONLY once runtime wiring is runnable with `F6` (`"Press Shift in F6 → Player dashes forward"`). The final step of a runnable task should use `"playtest"`.
 - STRICT TASK-ROLE ALIGNMENT & NON-OVERLAPPING SLICES (ACROSS ALL ${cpNode.checklist.length} TASKS):
   * Return ALL ${cpNode.checklist.length} tasks (`taskIndex: 0..${cpNode.checklist.length - 1}`)—never omit a task.
   * Each task MUST own a strictly non-overlapping slice of the feature—NEVER implement Task 2's perimeter walls or logic inside Task 1.
-  * First Task (Task 1) builds ONLY the primary floor/scene/node/actor/prefab foundation in the level.
-  * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) add secondary structural bounds or wire the core mechanic velocity, interaction, or simulation math inside that same asset using ${cpNode.tuningParams.join(', ')}.
-  * Final Task (Task ${cpNode.checklist.length}) stays on that same asset to add a concrete trigger volume, state guard, clamp, or observable feedback cue (${cleanEdgeCases.join(', ')})—NEVER emit a passive "Verification" or "Testing" task title.
+  * First Task (Task 1) builds ONLY the primary floor/scene/node/character foundation in the `.tscn` scene.
+  * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) add secondary structural bounds or wire the core mechanic velocity, interaction, or simulation math inside that same script using ${cpNode.tuningParams.join(', ')}.
+  * Final Task (Task ${cpNode.checklist.length}) stays on that same scene/script to add a concrete trigger Area, state guard, clamp, or observable feedback cue (${cleanEdgeCases.join(', ')})—NEVER emit a passive "Verification" or "Testing" task title.
 
-For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI widget, data resource, or gameplay calculation—never generic phrases like "Body & Collision", "Action & Math", "Cue & Boundary Clamp", or passive "Verification" titles) and return the sequential 3-Area sub-steps needed to implement and verify that task (zero artificial step count limits; in 01 · PROTOTYPE prefer 2-3 cohesive sub-steps per task so greybox features stay around 6-9 total steps):
-- In `area2Inspector`, list ONLY the 1-3 properties modified in THIS specific task's component (never dump CharacterMovement properties onto a Capsule/Collider task).
-- In `instruction` (DO), ALWAYS emit 2-4 short newline-separated imperative micro-actions (`- <Panel/Component> → <Command Verb + Exact Value>`) for a scannable Unreal Editor Guide Book, never a prose sentence or paragraph.
+For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI control, data resource, or gameplay calculation—never generic phrases like "Body & Collision", "Action & Math", "Cue & Boundary Clamp", or passive "Verification" titles) and return the sequential 3-Area sub-steps needed to implement and verify that task (zero artificial step count limits; in 01 · PROTOTYPE prefer 2-3 cohesive sub-steps per task so greybox features stay around 6-9 total steps):
+- In `area2Inspector`, list ONLY the 1-3 properties modified in THIS specific task's node (never dump unrelated properties across tasks).
+- In `instruction` (DO), ALWAYS emit 2-4 short newline-separated imperative micro-actions (`- <Dock/Node> → <Command Verb + Exact Value>`) for a scannable Godot 4 Editor Guide Book, never a prose sentence or paragraph.
 - In `codeFormula`, emit $codeFormulaModeGuide.
 
 Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each task.''';
@@ -6026,7 +5873,7 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
             incomingTasks.length == cpNode.checklist.length;
 
         bool appliedAny = false;
-        final seenCppLines = <String>{};
+        final seenScriptLines = <String>{};
         for (int listIdx = 0; listIdx < incomingTasks.length; listIdx++) {
           final rawTask = incomingTasks[listIdx];
           if (rawTask is! Map) continue;
@@ -6105,7 +5952,7 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
             final rawPlacementRows = item['placementRows'];
             if (code.isEmpty && rawPlacementRows is List && rawPlacementRows.isNotEmpty) {
               final tbl = <String>[
-                '| Actor / Component | Property / Transform | Value |',
+                '| Node / Category | Property | Value |',
                 '| --- | --- | --- |',
               ];
               for (final row in rawPlacementRows.whereType<Map>()) {
@@ -6118,8 +5965,7 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
               }
               if (tbl.length > 2) code = tbl.join('\n');
             }
-            if (unrealCppMode &&
-                code.isNotEmpty &&
+            if (code.isNotEmpty &&
                 !code.startsWith('|') &&
                 !code.contains('──►')) {
               final rawLines = code.split('\n');
@@ -6128,29 +5974,30 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
               );
               if (!alreadyHasDiff) {
                 final diffedLines = <String>[];
-                final hadPriorLines = seenCppLines.isNotEmpty;
+                final hadPriorLines = seenScriptLines.isNotEmpty;
                 for (final l in rawLines) {
                   final trimmedLine = l.trim();
                   if (trimmedLine.isEmpty ||
                       trimmedLine == '{' ||
                       trimmedLine == '}' ||
                       trimmedLine == '};' ||
+                      trimmedLine.startsWith('#') ||
                       trimmedLine.startsWith('//')) {
                     diffedLines.add(l);
                     continue;
                   }
-                  if (hadPriorLines && !seenCppLines.contains(trimmedLine)) {
-                    diffedLines.add('+$l');
+                  if (hadPriorLines && !seenScriptLines.contains(trimmedLine)) {
+                    diffedLines.add('+ $l');
                   } else {
                     diffedLines.add(l);
                   }
-                  seenCppLines.add(trimmedLine);
+                  seenScriptLines.add(trimmedLine);
                 }
                 code = diffedLines.join('\n');
               } else {
                 for (final l in rawLines) {
                   final clean = l.startsWith('+') ? l.substring(1).trim() : l.trim();
-                  if (clean.isNotEmpty) seenCppLines.add(clean);
+                  if (clean.isNotEmpty) seenScriptLines.add(clean);
                 }
               }
             }
@@ -6213,13 +6060,13 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
             'Task ${mIdx + 1} (taskIndex: $mIdx): "${cpNode.checklist[mIdx].text}"',
         ].join('\n');
         final followUpPrompt = '''
-You are the Principal Game Engine Architect ($targetEngineMode) for "$projTitle".
+You are the Principal Godot 4 Architect ($targetEngineMode) for "$projTitle".
 Complete OMITTED 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
 ${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}$projectBuildStateContext
 Shared Asset (extend in-place): ${primaryAsset.isNotEmpty ? primaryAsset : engineAssetHint}
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cleanEdgeCases.join(', ')}
-${ engineLabel == 'UNREAL 5' && currentArchetype == 'level' ? 'Rule: NEVER prefix placed World Outliner Actor names with `SM_` (reserve `SM_` strictly for Static Mesh assets), and keep `PlayerStart` at `(0, 0, 120)` with `DefaultPawn` if before Character setup.\n' : ''}Missing Tasks ONLY (return exact `taskIndex` for each):
+Missing Tasks ONLY (return exact `taskIndex` for each):
 $missingSummaries
 
 Follow `editor_setup` -> `script_logic` -> `wire_and_verify` ordering and `verifyMode: "editor" | "playtest"`.
@@ -6251,14 +6098,6 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
       );
 
       if (mutated) {
-        if (isUnreal && allTasksSynthesized) {
-          cpNode.parameters['synthesized_unreal_mode'] = targetUnrealMode;
-          final cacheKey = targetUnrealMode == 'cpp'
-              ? 'unreal_cpp_steps_json'
-              : 'unreal_bp_steps_json';
-          cpNode.parameters[cacheKey] =
-              _serializeChecklistSnapshot(cpNode.checklist);
-        }
         if (allTasksSynthesized) {
           _failedStepSynthesisFeatureIds.remove(featureId);
           _aiSynthesizedFeatureSteps.add(synthKey);
@@ -6284,18 +6123,17 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
   /// Generates a drop-in `AGENTS.md` / `.cursorrules` context file for the Active Release (`v0.1`, `v0.2`, etc.)
   /// containing the release's engine architecture, Epic/Feature hierarchy, canonical tuning variable table,
   /// mandatory `[GUARD]` rules, and 3-Area implementation steps.
-  String buildActiveReleaseCodingAgentMarkdown({bool unrealCppMode = false}) {
+  String buildActiveReleaseCodingAgentMarkdown() {
     final draft = _conceptDraft;
     final proj = activeProject;
     final rel = activeRelease;
     final activeVer = activeReleaseVersionTag;
     final engineHint = _activeEngineHint;
-    final engineLabel = _activeEngineLabel;
-    final effectiveEngineTarget = engineLabel == 'UNREAL 5'
-        ? (unrealCppMode ? 'UNREAL 5 C++ (.h / .cpp)' : 'UNREAL 5 BLUEPRINTS')
-        : (engineLabel == 'UNITY C#'
-            ? 'UNITY C# (MonoBehaviour)'
-            : 'GODOT 4 (GDScript 2.0)');
+    final usesGdExtension = (engineHint ?? '').toLowerCase().contains('gdextension') ||
+        (engineHint ?? '').toLowerCase().contains('c++');
+    final effectiveEngineTarget = usesGdExtension
+        ? 'GODOT 4 (GDScript + GDExtension C++)'
+        : 'GODOT 4 (GDScript)';
     final projectTitle = (draft != null && draft.title.trim().isNotEmpty)
         ? draft.title.trim()
         : (proj != null && proj.title.trim().isNotEmpty
@@ -6436,7 +6274,7 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
 
     sb.writeln('\n## 3. Canonical Tuning Variables & Inspector Bindings');
     sb.writeln(
-      'Always use these exact variable identifiers across scripts, Inspector/Details panels, and scenes:',
+      'Always use these exact `@export` variable identifiers across GDScript files, Godot Inspector docks, and `.tscn` scenes:',
     );
     if (allTuningRows.isEmpty) {
       sb.writeln('- *(No numeric tuning variables registered yet)*');
@@ -6490,7 +6328,6 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
               taskIndex: tIdx,
               checkpointNode: cp,
               engineHint: engineHint,
-              unrealCppMode: unrealCppMode,
               phase: _currentPhase,
             );
             final doneMark = task.completed ? 'x' : ' ';
@@ -6672,22 +6509,18 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
   /// Generates a focused, single-feature AI Coding Agent prompt (for Cursor, Claude Code, or Antigravity)
   /// containing only the selected Feature's 3-Area blueprint, exact tuning variable names, sibling variable
   /// references, mandatory `[GUARD]` rules, and Playtest Gate condition.
-  String buildActiveFeatureCodingAgentPrompt(
-    String featureId, {
-    bool unrealCppMode = false,
-  }) {
+  String buildActiveFeatureCodingAgentPrompt(String featureId) {
     final feat = documents[featureId];
     if (feat == null) return '';
     final draft = _conceptDraft;
     final proj = activeProject;
     final activeVer = activeReleaseVersionTag;
     final engineHint = _activeEngineHint;
-    final engineLabel = _activeEngineLabel;
-    final effectiveEngineTarget = engineLabel == 'UNREAL 5'
-        ? (unrealCppMode ? 'UNREAL 5 C++ (.h / .cpp)' : 'UNREAL 5 BLUEPRINTS')
-        : (engineLabel == 'UNITY C#'
-            ? 'UNITY C# (MonoBehaviour)'
-            : 'GODOT 4 (GDScript 2.0)');
+    final usesGdExtension = (engineHint ?? '').toLowerCase().contains('gdextension') ||
+        (engineHint ?? '').toLowerCase().contains('c++');
+    final effectiveEngineTarget = usesGdExtension
+        ? 'GODOT 4 (GDScript + GDExtension C++)'
+        : 'GODOT 4 (GDScript)';
     final projectTitle = (draft != null && draft.title.trim().isNotEmpty)
         ? draft.title.trim()
         : (proj != null && proj.title.trim().isNotEmpty
@@ -6818,7 +6651,6 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
           taskIndex: tIdx,
           checkpointNode: cpNode,
           engineHint: engineHint,
-          unrealCppMode: unrealCppMode,
           phase: _currentPhase,
         );
         final doneMark = task.completed ? 'x' : ' ';
@@ -6859,9 +6691,9 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
     return sb.toString();
   }
 
-  /// Two-Way Engine Sync: Parses a developer's pasted GDScript, C#, or Unreal C++ script
-  /// (using `gemini-flash-latest` when online + a deterministic multi-line regex parser fallback)
-  /// to update changed numeric tuning variable values and append newly added `[GUARD]` checks
+  /// Two-Way Godot Sync: Parses a developer's pasted GDScript (`.gd`) or GDExtension C++ snippet
+  /// (using `_conversationModel` when online + a deterministic multi-line regex parser fallback)
+  /// to update changed numeric `@export var` values and append newly added `# [GUARD]` checks
   /// directly onto the Feature's active checkpoint.
   Future<({int updatedVars, int addedGuards})>
       syncFeatureTuningAndGuardsFromCode(
@@ -6885,7 +6717,7 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
     final extractedGuards = <String>[];
     String? extractedPrimaryAsset;
 
-    // 1. Deterministic multi-line regex extraction FIRST (0 LLM tokens; handles Godot 4 @export, Unity [SerializeField], Unreal UPROPERTY across line breaks)
+    // 1. Deterministic regex extraction FIRST (0 LLM tokens; handles Godot 4 @export var across declarations)
     String cleanNumericValue(String raw) {
       var val = raw
           .split('//')
@@ -6895,7 +6727,6 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
           .trim()
           .replaceAll(_trailingSemicolonRegex, '')
           .trim();
-      // Strip trailing C#/C++ float 'f' suffix on numeric literals (e.g. 600.0f -> 600.0, 6f -> 6.0)
       final floatMatch = _floatSuffixRegex.firstMatch(val);
       if (floatMatch != null) {
         final numPart = floatMatch.group(1)!;
@@ -6904,16 +6735,7 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
       return val;
     }
 
-    // 1a. Multi-line Unity [SerializeField] / Unreal UPROPERTY(...) attribute on same or preceding line
-    for (final m in _attrFieldRegex.allMatches(trimmedCode)) {
-      final k = m.group(1)?.trim() ?? '';
-      final v = cleanNumericValue(m.group(2) ?? '');
-      if (k.isNotEmpty && v.isNotEmpty) {
-        extractedTuning.putIfAbsent(k, () => v);
-      }
-    }
-
-    // 1b. Godot 4 @export var / typed var declarations
+    // 1a. Godot 4 @export var / typed var declarations
     for (final m in _gdVarRegex.allMatches(trimmedCode)) {
       final k = m.group(1)?.trim() ?? '';
       final v = cleanNumericValue(m.group(2) ?? '');

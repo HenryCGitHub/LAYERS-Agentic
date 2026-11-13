@@ -151,7 +151,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       states: states,
       checkpointIndex: cpIdx,
       rawTaskTitle: trimmed,
-      unrealCppMode: _unrealCppMode,
     );
     if (newIdx < 0) return;
     _rebuild(() {
@@ -206,19 +205,16 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
 
     final topHeader = rel == null
         ? const SizedBox.shrink()
-        : SizedBox(
-      height: 1,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Opacity(
-          opacity: 0,
-          child: SizedBox(
-            width: 240,
-            child: Stack(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
+        : Container(
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: borderSubtle),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
                   // Left: Release Selector Dropdown Pill ("v0.1 Prototype ▾")
                   Flexible(
                     child: PopupMenuButton<String>(
@@ -777,50 +773,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   ),
                 ],
               ),
-              SizedBox(
-                height: 1,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Opacity(
-                    opacity: 0,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('OUTLINE'),
-                        const Text('ACTIVE RELEASE'),
-                        Text(widget.workbench.releasePhaseShortBadge(rel)),
-                        Text('$releaseRemHoursStr Left $relProgress%'),
-                        Text(
-                          widget.workbench.activePhaseBadgeLabel,
-                          key: const ValueKey('stage3_phase_badge'),
-                        ),
-                        InkWell(
-                          key: const ValueKey('focus_mode_toggle_btn'),
-                          onTap: () => widget.workbench.toggleFocusMode(),
-                          child: const SizedBox(width: 2, height: 1),
-                        ),
-                        if (widget.workbench
-                                .backgroundStepSynthesisRemainingCount >
-                            0)
-                          Container(
-                            key: const ValueKey(
-                              'outliner_background_synthesis_banner',
-                            ),
-                            child: Text(
-                              '✦ Generating engine steps (${widget.workbench.backgroundStepSynthesisRemainingCount} left)',
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          ),
-        ),
-      ),
-    );
+            );
 
     final middleScrollable = SingleChildScrollView(
       child: Column(
@@ -1079,23 +1032,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     ],
                   ),
                 ),
-              )
-            else
-              SizedBox(
-                height: 1,
-                child: Opacity(
-                  opacity: 0,
-                  child: TextField(
-                    key: const ValueKey('outliner_feature_search_input'),
-                    controller: _outlinerSearchController,
-                    onChanged: (val) {
-                      _rebuild(() {
-                        _outlinerSearchQuery = val;
-                        if (val.isNotEmpty) _isOutlinerSearchOpen = true;
-                      });
-                    },
-                  ),
-                ),
               ),
           ],
           if (widget.workbench.releaseViewFilter == 'archived' &&
@@ -1245,8 +1181,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                   beat.sections['description'] ??
                                   '')
                               .trim();
-                          final beatCodeLabel =
-                              'E${(bIdx + 1).toString().padLeft(2, '0')}';
                           final beatDisplayTitle =
                               _formatOutlineBeatDisplayTitle(beat.title);
 
@@ -1368,24 +1302,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                                       : const Color(
                                                           0xFFCBD5E1,
                                                         )),
-                                            ),
-                                          ),
-                                        ),
-                                        // 1x1 Opacity(0) compatibility text hook for legacy E01 test assertions
-                                        SizedBox(
-                                          width: 1,
-                                          height: 1,
-                                          child: Opacity(
-                                            opacity: 0,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Text(
-                                                  '${isExpanded ? '▾' : '▸'} $beatCodeLabel · $beatDisplayTitle',
-                                                ),
-                                                if (allBeatDone)
-                                                  const Text('✓'),
-                                              ],
                                             ),
                                           ),
                                         ),
@@ -1566,55 +1482,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                     ),
                                   ),
                                 ),
-                              ] else
-                                SizedBox(
-                                  height: 1,
-                                  child: SingleChildScrollView(
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
-                                    child: Opacity(
-                                      opacity: 0,
-                                      child: Column(
-                                        children: [
-                                          InkWell(
-                                            key: ValueKey(
-                                              'rail_add_feat_to_beat_${beat.id}',
-                                            ),
-                                            onTap: () {
-                                              _collapsedBeatIds
-                                                ..clear()
-                                                ..addAll(
-                                                  beats
-                                                      .where(
-                                                        (b) => b.id != beat.id,
-                                                      )
-                                                      .map((b) => b.id),
-                                                );
-                                              _startStage2InlineEdit(
-                                                'add_feat_${beat.id}',
-                                                '',
-                                              );
-                                            },
-                                            child: const SizedBox(
-                                              width: 1,
-                                              height: 1,
-                                            ),
-                                          ),
-                                          for (int fIdx = 0;
-                                              fIdx < beatFeats.length;
-                                              fIdx++)
-                                            _buildFeatureRailItem(
-                                              beatFeats[fIdx],
-                                              activeVer: activeVer,
-                                              beatTitle: beat.title,
-                                              beatIndex: bIdx,
-                                              isOverlayDrawer: isOverlayDrawer,
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                              ],
                             ],
                           );
                         },
@@ -1843,15 +1711,40 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Hidden 1px compatibility hook for legacy playtest run sheet modal tests
-                  SizedBox(
-                    height: 1,
-                    child: Opacity(
-                      opacity: 0,
-                      child: InkWell(
-                        key: const ValueKey('open_playtest_run_sheet_btn'),
-                        onTap: () => _showPlaytestRunSheetModal(context),
-                        child: Text('$verifiedFeats/$totalActiveFeats'),
+                  InkWell(
+                    key: const ValueKey('open_playtest_run_sheet_btn'),
+                    onTap: () => _showPlaytestRunSheetModal(context),
+                    borderRadius: BorderRadius.circular(5),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 5,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              'Playtest',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: fontMicro,
+                                fontWeight: weightSemi,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '$verifiedFeats/$totalActiveFeats',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: fontMicro,
+                              fontWeight: weightSemi,
+                              color: isRelComplete ? accentEmerald : textMuted,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -1945,8 +1838,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         widget.workbench.selectedFeatureId == feat.id;
     final progress = widget.workbench.getDocumentProgress(feat.id);
     final featRemMins = _computeFeatureRemainingMinutes(feat);
-    final featRemLabel =
-        TaskHowToBlueprint.formatRemainingHoursShort(featRemMins);
     final isDone = progress >= 100 || featRemMins <= 0;
     final isFocus = widget.workbench.focusMode;
 
@@ -2012,7 +1903,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           taskIndex: tIdx,
           checkpointNode: activeCp,
           engineHint: hint,
-          unrealCppMode: _unrealCppMode,
           phase: phase,
         );
         howToBlueprints.add(bp);
@@ -2157,87 +2047,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                                         : (isSelected
                                             ? const Color(0xFFF8FAFC)
                                             : const Color(0xFFCBD5E1)),
-                                  ),
-                                ),
-                                SizedBox(
-                                  height: 1,
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: Opacity(
-                                      opacity: 0,
-                                      child: Builder(
-                                        builder: (context) {
-                                          final scheduledUpgrades = widget
-                                              .workbench
-                                              .scheduledInboxUpgradesForFeature(
-                                            feat.id,
-                                          );
-                                          final isStableInAllView = widget
-                                                      .workbench
-                                                      .releaseViewFilter ==
-                                                  'all' &&
-                                              !widget.workbench
-                                                  .isFeatureActiveInRelease(
-                                                feat,
-                                              ) &&
-                                              feat.sections['lifecycle'] !=
-                                                  FeatureLifecycleStatus
-                                                      .superseded.name;
-                                          return Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              if (displayTitle != feat.title)
-                                                Text(feat.title),
-                                              Text(
-                                                isDone ? 'DONE' : featRemLabel,
-                                              ),
-                                              if (isDone) const Text('✓'),
-                                              if (scheduledUpgrades.isNotEmpty)
-                                                Text(
-                                                  '🗓 Queued for ${scheduledUpgrades.first.targetFuturePhase.shortName}: ${scheduledUpgrades.first.futureCheckpointTitle.isNotEmpty ? scheduledUpgrades.first.futureCheckpointTitle : scheduledUpgrades.first.checkpointTitle}',
-                                                ),
-                                              if (isStableInAllView)
-                                                Text(
-                                                  'STABLE ✓ (${feat.sections['originVersion'] ?? 'v0.1'})',
-                                                ),
-                                              if (isSelected)
-                                                InkWell(
-                                                  key: ValueKey(
-                                                    'rail_supersede_feat_${feat.id}',
-                                                  ),
-                                                  onTap: () => widget.workbench
-                                                      .toggleSupersedeFeature(
-                                                    feat.id,
-                                                    pivotReason:
-                                                        'Archived from Outliner in $activeVer',
-                                                  ),
-                                                  child: const SizedBox(
-                                                    width: 2,
-                                                    height: 1,
-                                                  ),
-                                                ),
-                                              if (isSelected &&
-                                                  _activeStage2InlineEditKey !=
-                                                      'rename_rail_feat_${feat.id}')
-                                                InkWell(
-                                                  key: ValueKey(
-                                                    'rail_rename_feat_${feat.id}',
-                                                  ),
-                                                  onTap: () =>
-                                                      _startStage2InlineEdit(
-                                                    'rename_rail_feat_${feat.id}',
-                                                    feat.title,
-                                                  ),
-                                                  child: const SizedBox(
-                                                    width: 2,
-                                                    height: 1,
-                                                  ),
-                                                ),
-                                            ],
-                                          );
-                                        },
-                                      ),
-                                    ),
                                   ),
                                 ),
                               ],
@@ -2899,14 +2708,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       fontWeight: FontWeight.w700,
                       color: textPrimary,
                     ),
-                  ),
-                ),
-                SizedBox(
-                  width: 1,
-                  height: 1,
-                  child: Opacity(
-                    opacity: 0,
-                    child: Text('$completedTitle is 100% VERIFIED ✓!'),
                   ),
                 ),
               ],
