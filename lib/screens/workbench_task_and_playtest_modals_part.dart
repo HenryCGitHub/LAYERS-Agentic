@@ -5,208 +5,320 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     TierDocument feat,
     List<FeatureStateNode> states,
     FeatureStateNode node,
-    int pIdx,
-    int sIdx,
+    int stepIdx,
   ) async {
-    if (pIdx < 0 || pIdx >= node.checklist.length) return;
-    final parentTask = node.checklist[pIdx];
-    if (sIdx < 0 || sIdx >= parentTask.children.length) return;
-    final sub = parentTask.children[sIdx];
-    final bp = TaskHowToBlueprint.resolve(
-      parentTask: parentTask,
-      taskIndex: pIdx,
+    node.flattenLegacyNestedChecklistIfNeeded();
+    final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
       checkpointNode: node,
       engineHint: _engineHint,
+      phase: widget.workbench.currentPhase,
     );
-    final resolvedSub = sIdx < bp.subSteps.length ? bp.subSteps[sIdx] : null;
+    if (stepIdx < 0 || stepIdx >= unifiedSteps.length) return;
+    final resolvedSub = unifiedSteps[stepIdx];
+    final sub = resolvedSub.subtask;
+    String selectedStepRole = TaskHowToBlueprint.normalizeStepRole(
+      resolvedSub.stepRole ?? resolvedSub.resolvedDockStage.stepRole,
+    );
+    if (selectedStepRole.isEmpty) {
+      selectedStepRole = GodotDockStage.code.stepRole;
+    }
+    String selectedVerifyMode =
+        resolvedSub.isEditorCheck ? 'editor' : 'playtest';
     final titleCtrl = TextEditingController(
-      text: resolvedSub?.stepNumberLabel ?? sub.text,
+      text: resolvedSub.shortTitle.isNotEmpty
+          ? resolvedSub.shortTitle
+          : sub.text,
     );
     final whereCtrl = TextEditingController(
-      text: resolvedSub?.stepPath ?? sub.codeLanguage ?? '',
+      text: resolvedSub.stepPath.isNotEmpty
+          ? resolvedSub.stepPath
+          : (sub.codeLanguage ?? ''),
     );
     final instrCtrl = TextEditingController(
-      text: resolvedSub?.instruction ?? sub.specNotes ?? '',
+      text: resolvedSub.instruction.isNotEmpty
+          ? resolvedSub.instruction
+          : (sub.specNotes ?? ''),
     );
     final codeCtrl = TextEditingController(
-      text: resolvedSub?.codeFormula ?? sub.codeSnippet ?? '',
+      text: resolvedSub.codeFormula.isNotEmpty
+          ? resolvedSub.codeFormula
+          : (sub.codeSnippet ?? ''),
     );
     final verifyCtrl = TextEditingController(
-      text: resolvedSub?.verifyResult ?? sub.verification ?? '',
+      text: resolvedSub.verifyResult.isNotEmpty
+          ? resolvedSub.verifyResult
+          : (sub.verification ?? ''),
     );
+
+    const roleOptions = <({String role, String badge, String defaultVerify})>[
+      (role: 'editor_setup', badge: 'SCENE', defaultVerify: 'editor'),
+      (role: 'inspector_setup', badge: 'INSP', defaultVerify: 'editor'),
+      (role: 'script_logic', badge: 'CODE', defaultVerify: 'playtest'),
+      (role: 'wire_and_verify', badge: 'WIRE', defaultVerify: 'playtest'),
+      (role: 'fix', badge: 'FIX', defaultVerify: 'playtest'),
+    ];
 
     final action = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: bgSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: borderBright),
-        ),
-        title: Text(
-          'Edit How-To Sub-Step (${pIdx + 1}.${sIdx + 1})',
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: textPrimary,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: borderBright),
           ),
-        ),
-        content: SizedBox(
-          width: 480,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                key: const ValueKey('edit_substep_title_input'),
-                controller: titleCtrl,
-                style: GoogleFonts.inter(fontSize: 12.5, color: textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Sub-step Title',
-                  labelStyle: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    color: textSecondary,
-                  ),
-                  filled: true,
-                  fillColor: bgRecessed,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderSubtle),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                key: const ValueKey('edit_substep_where_input'),
-                controller: whereCtrl,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11.5,
-                  color: textPrimary,
-                ),
-                decoration: InputDecoration(
-                  labelText: 'Where in Engine (Menu / Panel / File Path)',
-                  labelStyle: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    color: textSecondary,
-                  ),
-                  filled: true,
-                  fillColor: bgRecessed,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderSubtle),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                key: const ValueKey('edit_substep_instruction_input'),
-                controller: instrCtrl,
-                maxLines: 2,
-                style: GoogleFonts.inter(fontSize: 12, color: textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'How-To Instruction',
-                  labelStyle: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    color: textSecondary,
-                  ),
-                  filled: true,
-                  fillColor: bgRecessed,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderSubtle),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                key: const ValueKey('edit_substep_code_input'),
-                controller: codeCtrl,
-                maxLines: 3,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11.5,
-                  color: AppTheme.accentCyanFor(isDark),
-                ),
-                decoration: InputDecoration(
-                  labelText: 'Code Formula / Snippet',
-                  labelStyle: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    color: textSecondary,
-                  ),
-                  filled: true,
-                  fillColor: bgRecessed,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderSubtle),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                key: const ValueKey('edit_substep_verify_input'),
-                controller: verifyCtrl,
-                style: GoogleFonts.inter(fontSize: 12, color: textPrimary),
-                decoration: InputDecoration(
-                  labelText: 'Done Check (Verify in Viewport)',
-                  labelStyle: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    color: textSecondary,
-                  ),
-                  filled: true,
-                  fillColor: bgRecessed,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderSubtle),
-                  ),
-                ),
-              ),
-            ],
+          title: Text(
+            'Edit How-To Step (${stepIdx + 1})',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: textPrimary,
+            ),
           ),
-        ),
-        actions: [
-          if (parentTask.children.length > 1)
+          content: SizedBox(
+            width: 500,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'DOCK:',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                          color: textMuted,
+                        ),
+                      ),
+                      for (final opt in roleOptions)
+                        InkWell(
+                          key: ValueKey('edit_substep_role_${opt.role}'),
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: () => setDialogState(() {
+                            selectedStepRole = opt.role;
+                            selectedVerifyMode = opt.defaultVerify;
+                          }),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3.5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: selectedStepRole == opt.role
+                                  ? accentCyan.withValues(alpha: 0.16)
+                                  : bgRecessed,
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                color: selectedStepRole == opt.role
+                                    ? accentCyan
+                                    : borderSubtle,
+                              ),
+                            ),
+                            child: Text(
+                              opt.badge,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: selectedStepRole == opt.role
+                                    ? accentCyan
+                                    : textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        key: const ValueKey('edit_substep_verify_mode_toggle'),
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: () => setDialogState(() {
+                          selectedVerifyMode =
+                              selectedVerifyMode == 'editor' ? 'playtest' : 'editor';
+                        }),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 3.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bgRecessed,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Text(
+                            selectedVerifyMode == 'editor'
+                                ? 'Verify: Editor'
+                                : 'Verify: F6 Playtest',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    key: const ValueKey('edit_substep_title_input'),
+                    controller: titleCtrl,
+                    style: GoogleFonts.inter(fontSize: 12.5, color: textPrimary),
+                    decoration: InputDecoration(
+                      labelText: 'Sub-step Title',
+                      labelStyle: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        color: textSecondary,
+                      ),
+                      filled: true,
+                      fillColor: bgRecessed,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: borderSubtle),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    key: const ValueKey('edit_substep_where_input'),
+                    controller: whereCtrl,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11.5,
+                      color: textPrimary,
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Where in Engine (Menu / Panel / File Path)',
+                      labelStyle: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        color: textSecondary,
+                      ),
+                      filled: true,
+                      fillColor: bgRecessed,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: borderSubtle),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    key: const ValueKey('edit_substep_instruction_input'),
+                    controller: instrCtrl,
+                    maxLines: 2,
+                    style: GoogleFonts.inter(fontSize: 12, color: textPrimary),
+                    decoration: InputDecoration(
+                      labelText: 'How-To Instruction',
+                      labelStyle: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        color: textSecondary,
+                      ),
+                      filled: true,
+                      fillColor: bgRecessed,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: borderSubtle),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    key: const ValueKey('edit_substep_code_input'),
+                    controller: codeCtrl,
+                    maxLines: 3,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11.5,
+                      color: AppTheme.accentCyanFor(isDark),
+                    ),
+                    decoration: InputDecoration(
+                      labelText: 'Code Formula / Snippet',
+                      labelStyle: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        color: textSecondary,
+                      ),
+                      filled: true,
+                      fillColor: bgRecessed,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: borderSubtle),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    key: const ValueKey('edit_substep_verify_input'),
+                    controller: verifyCtrl,
+                    style: GoogleFonts.inter(fontSize: 12, color: textPrimary),
+                    decoration: InputDecoration(
+                      labelText: 'Done Check (Verify in Viewport)',
+                      labelStyle: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        color: textSecondary,
+                      ),
+                      filled: true,
+                      fillColor: bgRecessed,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: borderSubtle),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            if (node.checklist.length > 1)
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop('delete'),
+                child: Text(
+                  'Delete',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: accentCrimson,
+                  ),
+                ),
+              ),
             TextButton(
-              onPressed: () => Navigator.of(ctx).pop('delete'),
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
               child: Text(
-                'Delete',
+                'Cancel',
+                style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentEmerald,
+                foregroundColor:
+                    isDark ? const Color(0xFF06281E) : Colors.white,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('save'),
+              child: Text(
+                'Save Step',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: accentCrimson,
                 ),
               ),
             ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop('cancel'),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentEmerald,
-              foregroundColor:
-                  isDark ? const Color(0xFF06281E) : Colors.white,
-              elevation: 0,
-            ),
-            onPressed: () => Navigator.of(ctx).pop('save'),
-            child: Text(
-              'Save Sub-Step',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
     if (!mounted || action == null || action == 'cancel') return;
-        _rebuild(() {
-      if (action == 'delete' && parentTask.children.length > 1) {
-        parentTask.children.removeAt(sIdx);
-        parentTask.completed = parentTask.children.isNotEmpty &&
-            parentTask.children.every((c) => c.completed);
+    _rebuild(() {
+      if (action == 'delete' && node.checklist.length > 1) {
+        final removeIdx = node.checklist.indexOf(sub);
+        if (removeIdx != -1) {
+          node.checklist.removeAt(removeIdx);
+          final nextMax = (node.checklist.length - 1).clamp(0, node.checklist.length);
+          _selectedFlatStepIndexByCheckpoint[node.id] = removeIdx.clamp(0, nextMax);
+        }
       } else if (action == 'save') {
         if (titleCtrl.text.trim().isNotEmpty) {
           sub.text = titleCtrl.text.trim();
@@ -214,8 +326,10 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         sub.codeLanguage = whereCtrl.text.trim();
         sub.specNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
           instruction: instrCtrl.text.trim(),
-          area1Hierarchy: resolvedSub?.area1Hierarchy ?? '',
-          area2Inspector: resolvedSub?.area2Inspector ?? '',
+          area1Hierarchy: resolvedSub.area1Hierarchy,
+          area2Inspector: resolvedSub.area2Inspector,
+          verifyMode: selectedVerifyMode,
+          stepRole: selectedStepRole,
         );
         sub.codeSnippet = codeCtrl.text.trim();
         sub.verification = verifyCtrl.text.trim();
@@ -227,8 +341,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
   }
 
   Future<void> _copySubStepCodeFormula(
-    int pIdx,
-    int sIdx,
+    int stepIdx,
     String codeFormula,
   ) async {
     final cleanCode = codeFormula
@@ -253,7 +366,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
         backgroundColor: bgSurface,
         behavior: SnackBarBehavior.floating,
         content: Text(
-          'Copied Step ${pIdx + 1}.${sIdx + 1} code formula to clipboard ✓',
+          'Copied Step ${stepIdx + 1} code formula to clipboard ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -269,97 +382,181 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     TierDocument feat,
     List<FeatureStateNode> states,
     int checkpointIndex,
-    int pIdx,
+    int stepIdx,
   ) async {
     final node = states[checkpointIndex];
-    if (pIdx < 0 || pIdx >= node.checklist.length) return;
-    final parentTask = node.checklist[pIdx];
+    node.flattenLegacyNestedChecklistIfNeeded();
+    final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
+      checkpointNode: node,
+      engineHint: _engineHint,
+      phase: widget.workbench.currentPhase,
+    );
+    if (stepIdx < 0 || stepIdx >= unifiedSteps.length) return;
+    final targetStep = unifiedSteps[stepIdx];
     final ctrl = TextEditingController();
+    bool preserveSingleStep = true;
     final action = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: bgSurface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(8),
-          side: BorderSide(color: borderBright),
-        ),
-        title: Text(
-          '✦ Tailor How-To Sub-Steps (Task ${(pIdx + 1).toString().padLeft(2, '0')})',
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-            color: textPrimary,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: bgSurface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+            side: BorderSide(color: borderBright),
           ),
-        ),
-        content: SizedBox(
-          width: 480,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Enter your exact Scene / Node / Script names for "${parentTask.text}" to rewrite Task ${(pIdx + 1).toString().padLeft(2, '0')} sub-steps:',
+          title: Text(
+            '✦ Tailor Step (${(stepIdx + 1).toString().padLeft(2, '0')})',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: textPrimary,
+            ),
+          ),
+          content: SizedBox(
+            width: 480,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    InkWell(
+                      key: const ValueKey('tailor_mode_single_step'),
+                      borderRadius: BorderRadius.circular(5),
+                      onTap: () =>
+                          setDialogState(() => preserveSingleStep = true),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: preserveSingleStep
+                              ? accentCyan.withValues(alpha: 0.14)
+                              : bgRecessed,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: preserveSingleStep
+                                ? accentCyan
+                                : borderSubtle,
+                          ),
+                        ),
+                        child: Text(
+                          'This step only',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: preserveSingleStep
+                                ? accentCyan
+                                : textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      key: const ValueKey('tailor_mode_split_steps'),
+                      borderRadius: BorderRadius.circular(5),
+                      onTap: () =>
+                          setDialogState(() => preserveSingleStep = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: !preserveSingleStep
+                              ? accentViolet.withValues(alpha: 0.14)
+                              : bgRecessed,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: !preserveSingleStep
+                                ? accentViolet
+                                : borderSubtle,
+                          ),
+                        ),
+                        child: Text(
+                          'Allow split (1–3 steps)',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: !preserveSingleStep
+                                ? accentViolet
+                                : textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  preserveSingleStep
+                      ? 'Enter your exact Scene / Node / Script names around "${targetStep.shortTitle}" to refine this step:'
+                      : 'Enter your exact Scene / Node / Script names around "${targetStep.shortTitle}" to refine or split into 1–3 steps:',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    height: 1.4,
+                    color: textSecondary,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  key: const ValueKey('tailor_howto_context_input'),
+                  controller: ctrl,
+                  autofocus: true,
+                  maxLines: 3,
+                  onSubmitted: (_) => Navigator.of(ctx).pop('tailor'),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    color: textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    hintText:
+                        'e.g., CharacterBody2D with RayCast2D HookRay and Line2D RopeVisual',
+                    hintStyle: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: textMuted,
+                    ),
+                    filled: true,
+                    fillColor: bgRecessed,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: borderSubtle),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop('cancel'),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              key: const ValueKey('confirm_tailor_howto_btn'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentEmerald,
+                foregroundColor:
+                    isDark ? const Color(0xFF06281E) : Colors.white,
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(ctx).pop('tailor'),
+              child: Text(
+                '✦ Tailor Steps',
                 style: GoogleFonts.inter(
                   fontSize: 12,
-                  height: 1.4,
-                  color: textSecondary,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 10),
-              TextField(
-                key: const ValueKey('tailor_howto_context_input'),
-                controller: ctrl,
-                autofocus: true,
-                maxLines: 3,
-                onSubmitted: (_) => Navigator.of(ctx).pop('tailor'),
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
-                  color: textPrimary,
-                ),
-                decoration: InputDecoration(
-                  hintText:
-                      'e.g., CharacterBody2D with RayCast2D HookRay and Line2D RopeVisual',
-                  hintStyle: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    color: textMuted,
-                  ),
-                  filled: true,
-                  fillColor: bgRecessed,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderSubtle),
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop('cancel'),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            key: const ValueKey('confirm_tailor_howto_btn'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentEmerald,
-              foregroundColor:
-                  isDark ? const Color(0xFF06281E) : Colors.white,
-              elevation: 0,
-            ),
-            onPressed: () => Navigator.of(ctx).pop('tailor'),
-            child: Text(
-              '✦ Tailor Sub-Steps',
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
       ),
     );
     if (!mounted || action != 'tailor') return;
@@ -369,18 +566,19 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
       featureId: feat.id,
       states: states,
       checkpointIndex: checkpointIndex,
-      taskIndex: pIdx,
+      taskIndex: stepIdx,
       userContext: contextText,
+      preserveSingleStep: preserveSingleStep,
     );
     if (!mounted) return;
-        _rebuild(() {});
+    _rebuild(() {});
     if (!ok) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: bgSurface,
         behavior: SnackBarBehavior.floating,
         content: Text(
-          'Tailored Task ${(pIdx + 1).toString().padLeft(2, '0')} How-To sub-steps to "$contextText" ✓',
+          'Tailored Step ${(stepIdx + 1).toString().padLeft(2, '0')} How-To steps to "$contextText" ✓',
           style: GoogleFonts.inter(
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -396,107 +594,43 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     TierDocument feat,
     List<FeatureStateNode> states,
     FeatureStateNode node,
-    int pIdx,
-    int sIdx,
+    int stepIdx,
   ) {
-    if (pIdx < 0 || pIdx >= node.checklist.length) return;
-    final parentTask = node.checklist[pIdx];
-    if (parentTask.children.isEmpty) {
-      TaskHowToBlueprint.resolve(
-        parentTask: parentTask,
-        taskIndex: pIdx,
-        checkpointNode: node,
-        engineHint: _engineHint,
-        phase: widget.workbench.currentPhase,
-      );
-    }
-    if (sIdx < 0 || sIdx >= parentTask.children.length) return;
+    node.flattenLegacyNestedChecklistIfNeeded();
+    final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
+      checkpointNode: node,
+      engineHint: _engineHint,
+      phase: widget.workbench.currentPhase,
+    );
+    if (stepIdx < 0 || stepIdx >= unifiedSteps.length) return;
     final wasDone = node.isCompleted;
-    final nextCompleted = !parentTask.children[sIdx].completed;
-    parentTask.children[sIdx].completed = nextCompleted;
-    parentTask.completed = parentTask.children.isNotEmpty &&
-        parentTask.children.every((c) => c.completed);
+    final nextCompleted = !unifiedSteps[stepIdx].subtask.completed;
+    unifiedSteps[stepIdx].subtask.completed = nextCompleted;
     final nowDone = node.isCompleted;
-    final curStepKey = '${node.id}_${pIdx}_$sIdx';
-    final nextIncompleteSubIdx = parentTask.children.indexWhere((c) => !c.completed);
+    final nextIncompleteIdx =
+        unifiedSteps.indexWhere((s) => !s.subtask.completed);
     _rebuild(() {
       final cpIdx = states.indexWhere((s) => s.id == node.id);
       if (cpIdx != -1) {
         _manualCheckpointFocusIndex = cpIdx;
         _manualCheckpointFocusFeatureId = feat.id;
       }
-      _selectedTaskIndexByCheckpoint[node.id] = pIdx;
       if (nextCompleted) {
-        _expandedSubStepKeys.remove(curStepKey);
-        if (widget.workbench.focusMode) {
-          _collapsedSubStepKeys.add(curStepKey);
-        }
-        if (nextIncompleteSubIdx != -1) {
-          final nextKey = '${node.id}_${pIdx}_$nextIncompleteSubIdx';
-          _selectedSubStepIndexByTask['${node.id}_$pIdx'] =
-              nextIncompleteSubIdx;
-          _collapsedSubStepKeys.remove(nextKey);
-          _expandedSubStepKeys.add(nextKey);
+        if (nextIncompleteIdx != -1) {
+          _playtestGateActiveCheckpoints.remove(node.id);
+          _selectedFlatStepIndexByCheckpoint[node.id] = nextIncompleteIdx;
         } else {
-          _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
+          _selectedFlatStepIndexByCheckpoint[node.id] = stepIdx;
+          _playtestGateActiveCheckpoints.add(node.id);
         }
       } else {
-        _collapsedSubStepKeys.remove(curStepKey);
-        _expandedSubStepKeys.add(curStepKey);
-        _selectedSubStepIndexByTask['${node.id}_$pIdx'] = sIdx;
+        _playtestGateActiveCheckpoints.remove(node.id);
+        _selectedFlatStepIndexByCheckpoint[node.id] = stepIdx;
       }
       if (!wasDone && nowDone) {
         _awaitingPlaytestVerification.add(node.id);
       } else if (!nowDone) {
         _awaitingPlaytestVerification.remove(node.id);
-      }
-    });
-    widget.workbench.updateFeatureStates(feat.id, states);
-  }
-
-  void _toggleTaskGroupCompletion(
-    TierDocument feat,
-    List<FeatureStateNode> states,
-    FeatureStateNode node,
-    int tIdx,
-  ) {
-    if (tIdx < 0 || tIdx >= node.checklist.length) return;
-    final task = node.checklist[tIdx];
-    if (task.children.isEmpty) {
-      TaskHowToBlueprint.resolve(
-        parentTask: task,
-        taskIndex: tIdx,
-        checkpointNode: node,
-        engineHint: _engineHint,
-        phase: widget.workbench.currentPhase,
-      );
-    }
-    final wasDone = node.isCompleted;
-    final allChildrenDone =
-        task.children.isNotEmpty && task.children.every((c) => c.completed);
-    final markDone = !(task.completed || allChildrenDone);
-    task.completed = markDone;
-    for (final c in task.children) {
-      c.completed = markDone;
-    }
-    final nowDone = node.isCompleted;
-    _rebuild(() {
-      if (!wasDone && nowDone) {
-        _awaitingPlaytestVerification.add(node.id);
-      } else if (!nowDone) {
-        _awaitingPlaytestVerification.remove(node.id);
-      }
-      final nextTaskIdx = node.checklist.indexWhere((t) => !t.completed);
-      if (markDone && nextTaskIdx != -1) {
-        _manualCheckpointFocusIndex = states.indexWhere((s) => s.id == node.id);
-        _manualCheckpointFocusFeatureId = feat.id;
-        _selectedTaskIndexByCheckpoint[node.id] = nextTaskIdx;
-        _selectedSubStepIndexByTask['${node.id}_$nextTaskIdx'] = 0;
-      } else {
-        _manualCheckpointFocusIndex = states.indexWhere((s) => s.id == node.id);
-        _manualCheckpointFocusFeatureId = feat.id;
-        _selectedTaskIndexByCheckpoint[node.id] = tIdx;
-        _selectedSubStepIndexByTask['${node.id}_$tIdx'] = 0;
       }
     });
     widget.workbench.updateFeatureStates(feat.id, states);
@@ -959,16 +1093,43 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                       onTap: () {
                                                         final targetDone =
                                                             !isPassed;
-                                                        for (final t in cpNode
-                                                            .checklist) {
-                                                          t.completed =
+                                                        cpNode.flattenLegacyNestedChecklistIfNeeded();
+                                                        for (final entry
+                                                            in cpNode.flatSteps) {
+                                                          entry.completed =
                                                               targetDone;
-                                                          for (final sub
-                                                              in t.children) {
-                                                            sub.completed =
-                                                                targetDone;
-                                                          }
                                                         }
+                                                        for (int gIdx = 0;
+                                                            gIdx <
+                                                                cpNode.edgeCases
+                                                                    .length;
+                                                            gIdx++) {
+                                                          cpNode.setGuardSignedOff(
+                                                            gIdx,
+                                                            cpNode.edgeCases[
+                                                                gIdx],
+                                                            targetDone,
+                                                          );
+                                                        }
+                                                        _rebuild(() {
+                                                          if (targetDone) {
+                                                            _awaitingPlaytestVerification
+                                                                .remove(
+                                                              cpNode.id,
+                                                            );
+                                                            _playtestGateActiveCheckpoints
+                                                                .remove(
+                                                              cpNode.id,
+                                                            );
+                                                          } else {
+                                                            _playtestGateActiveCheckpoints
+                                                                .remove(
+                                                              cpNode.id,
+                                                            );
+                                                            _selectedFlatStepIndexByCheckpoint[
+                                                                cpNode.id] = 0;
+                                                          }
+                                                        });
                                                         widget.workbench
                                                             .updateFeatureStates(
                                                           feat.id,
@@ -1148,6 +1309,33 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
     TierDocument feat,
     FeatureStateNode node,
   ) async {
+    final activeProjectFiles = widget.workbench.activeProjectGodotFiles;
+    final primaryAsset = (feat.sections['primary_asset'] ??
+            node.parameters['primarySharedScriptOrScene'] ??
+            '')
+        .trim();
+    final extractedScript =
+        widget.workbench.extractPrimaryScriptResPath(primaryAsset);
+    GodotVirtualFile? candidateFile;
+    if (extractedScript != null) {
+      candidateFile = widget.workbench.godotFileForResPath(extractedScript);
+    }
+    if (candidateFile == null && activeProjectFiles.isNotEmpty) {
+      final featLower = feat.title.toLowerCase();
+      final slugTokens = featLower
+          .split(RegExp(r'[^a-z0-9]+'))
+          .where((t) => t.length >= 3)
+          .toList();
+      for (final vf in activeProjectFiles) {
+        final lowerPath = vf.resPath.toLowerCase();
+        if (slugTokens.any(lowerPath.contains)) {
+          candidateFile = vf;
+          break;
+        }
+      }
+      candidateFile ??= activeProjectFiles.first;
+    }
+
     final codeCtrl = TextEditingController();
     final pasted = await showDialog<String>(
       context: context,
@@ -1173,13 +1361,87 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Paste your GDScript (.gd) or GDExtension C++ snippet to sync @export variable values and [GUARD] checks into "${node.cleanStageTitle}".',
+                'Load your active project file or paste a GDScript (.gd) / C++ snippet to sync @export values and [GUARD] checks into "${node.cleanStageTitle}".',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   color: textSecondary,
                   height: 1.4,
                 ),
               ),
+              if (candidateFile != null &&
+                  candidateFile.content.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    InkWell(
+                      key: const ValueKey('load_active_code_into_sync_btn'),
+                      borderRadius: BorderRadius.circular(5),
+                      onTap: () {
+                        codeCtrl.text = candidateFile!.content;
+                        codeCtrl.selection = TextSelection.collapsed(
+                          offset: codeCtrl.text.length,
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accentCyan.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: accentCyan.withValues(alpha: 0.45),
+                          ),
+                        ),
+                        child: Text(
+                          '↻ Load ${candidateFile.resPath}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: accentCyan,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (widget.workbench.isGodotFolderLinked)
+                      InkWell(
+                        key: const ValueKey('sync_modal_refresh_disk_btn'),
+                        borderRadius: BorderRadius.circular(5),
+                        onTap: () async {
+                          await widget.workbench.refreshLinkedGodotFolder();
+                          final updated = widget.workbench
+                              .godotFileForResPath(candidateFile!.resPath);
+                          if (updated != null) {
+                            codeCtrl.text = updated.content;
+                          }
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: bgRecessed,
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: borderSubtle),
+                          ),
+                          child: Text(
+                            'Pull Latest from Disk',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: textSecondary,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 12),
               TextField(
                 key: const ValueKey('sync_feature_code_input_field'),

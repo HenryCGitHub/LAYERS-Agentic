@@ -87,23 +87,17 @@ extension _ShellExportersExt on WorkbenchShell {
             if (cp.edgeCases.isNotEmpty) {
               sb.writeln('    - Guards: ${cp.edgeCases.join(' · ')}');
             }
-            for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
-              final task = cp.checklist[tIdx];
-              if (task.children.isEmpty) {
-                TaskHowToBlueprint.resolve(
-                  parentTask: task,
-                  taskIndex: tIdx,
-                  checkpointNode: cp,
-                  engineHint: engineHint,
-                  phase: workbench.currentPhase,
-                );
-              }
-              final tDone = task.completed ? 'x' : ' ';
-              sb.writeln('    - [$tDone] ${task.text}');
-              for (final sub in task.children) {
-                final sDone = sub.completed ? 'x' : ' ';
-                sb.writeln('      - [$sDone] ${sub.text}');
-              }
+            final steps = TaskHowToBlueprint.resolveUnifiedSteps(
+              checkpointNode: cp,
+              engineHint: engineHint,
+              phase: workbench.currentPhase,
+            );
+            for (final step in steps) {
+              final sDone = step.subtask.completed ? 'x' : ' ';
+              final badge = step.resolvedDockStage.badge;
+              sb.writeln(
+                '    - [$sDone] [$badge] **${step.shortTitle}** — ${step.instruction}',
+              );
             }
           }
         }

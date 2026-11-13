@@ -38,15 +38,42 @@ class ReleasePlannerAgent {
         .toList();
   }
 
+  static List<String> defaultDockStepTitles({
+    String? subject,
+    bool isFuturePhase = false,
+  }) {
+    final clean = (subject ?? '').trim();
+    if (isFuturePhase && clean.isNotEmpty) {
+      return <String>[
+        '$clean Data Resource',
+        '$clean Persistence & UI',
+        '$clean Bounds Guard',
+      ];
+    }
+    if (clean.isNotEmpty) {
+      return <String>[
+        '$clean Scene Nodes',
+        '$clean State Script',
+        '$clean Signals & Guard',
+      ];
+    }
+    return const <String>[
+      'Scene Nodes & Shape',
+      'Core Script & Input',
+      'Signals & State Guard',
+    ];
+  }
+
   /// Extracts a dynamic list of checkpoint task strings from either a unified `{role, title}`
   /// tool-call `tasks` array or a plain string `tasks` array, ordering tasks by build stage
-  /// (`stage_1_scene_or_data_foundation` -> `1..N stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`).
+  /// (`stage_1..3` or `editor_setup`/`inspector_setup`/`script_logic`/`wire_and_verify`).
   static List<String> extractCheckpointTasksFromMap(Map cMap) {
     final rawTasks = cMap['tasks'];
     if (rawTasks is List && rawTasks.isNotEmpty) {
-      final foundations = <String>[];
-      final actions = <String>[];
-      final guards = <String>[];
+      final editorSteps = <String>[];
+      final inspectorSteps = <String>[];
+      final scriptSteps = <String>[];
+      final wireAndGuardSteps = <String>[];
       final plainStrings = <String>[];
       for (final item in rawTasks) {
         if (item is Map) {
@@ -66,18 +93,27 @@ class ReleasePlannerAgent {
               ? '$title — $goal'
               : title;
           final role = (item['role'] ?? '').toString().trim().toLowerCase();
-          if (role.contains('stage_1') ||
+          if (role == 'editor_setup' ||
+              role == 'scene' ||
+              role.contains('stage_1') ||
               role.contains('foundation') ||
               role.contains('entity')) {
-            foundations.add(combined);
-          } else if (role.contains('stage_3') ||
+            editorSteps.add(combined);
+          } else if (role == 'inspector_setup' ||
+              role == 'inspector' ||
+              role == 'insp') {
+            inspectorSteps.add(combined);
+          } else if (role == 'wire_and_verify' ||
+              role == 'wire' ||
+              role == 'fix' ||
+              role.contains('stage_3') ||
               role.contains('guard') ||
               role.contains('feedback') ||
               role.contains('boundary') ||
               role.contains('verify')) {
-            guards.add(combined);
+            wireAndGuardSteps.add(combined);
           } else {
-            actions.add(combined);
+            scriptSteps.add(combined);
           }
         } else {
           final str = LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
@@ -88,7 +124,12 @@ class ReleasePlannerAgent {
           }
         }
       }
-      final roleOrdered = <String>[...foundations, ...actions, ...guards];
+      final roleOrdered = <String>[
+        ...editorSteps,
+        ...inspectorSteps,
+        ...scriptSteps,
+        ...wireAndGuardSteps,
+      ];
       if (roleOrdered.isNotEmpty) {
         return [...roleOrdered, ...plainStrings];
       }
@@ -2223,8 +2264,8 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
         corpus.contains('parkour') ||
         corpus.contains('jump') ||
         corpus.contains('run');
-    final task0Dur = _durationRegex.firstMatch(tasks[0])?.group(0)?.trim() ?? '(2h)';
-    final task1Dur = _durationRegex.firstMatch(tasks[1])?.group(0)?.trim() ?? '(2h)';
+    final task0Dur = _durationRegex.firstMatch(tasks[0])?.group(0)?.trim() ?? '';
+    final task1Dur = _durationRegex.firstMatch(tasks[1])?.group(0)?.trim() ?? '';
     final task1Core = tasks[1]
         .replaceFirst(_durationRegex, '')
         .replaceFirst(_setupWordRegex, 'Logic')
@@ -2232,9 +2273,10 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
         .trim();
 
     tasks[0] =
-        '${isCharacterFeature ? "Character Setup" : "Actor Setup"} $task0Dur';
+        '${isCharacterFeature ? "Character Setup" : "Actor Setup"}${task0Dur.isNotEmpty ? " $task0Dur" : ""}';
     if (!task1Core.toLowerCase().contains('input')) {
-      tasks[1] = 'Input & $task1Core $task1Dur';
+      tasks[1] =
+          'Input & $task1Core${task1Dur.isNotEmpty ? " $task1Dur" : ""}';
     }
     return tasks;
   }
@@ -3088,9 +3130,9 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
         'Enforce the state guard ($rawGuard) and update the on-screen feedback indicator.';
 
     return <String>[
-      '$task1Title — $task1Goal (2h)',
-      '$task2Title — $task2Goal (1h)',
-      '$task3Title — $task3Goal (1h)',
+      '$task1Title — $task1Goal',
+      '$task2Title — $task2Goal',
+      '$task3Title — $task3Goal',
     ];
   }
 
@@ -3291,11 +3333,9 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
                   playtestCriteria:
                       'Trigger ${ef.title} -> verify $versionTag upgrade behavior',
                   releaseVersion: versionTag,
-                  tasks: const [
-                    'Actor Setup (2h)',
-                    'State Logic (1h)',
-                    'State Guard (1h)',
-                  ],
+                  tasks: ReleasePlannerAgent.defaultDockStepTitles(
+                    subject: ef.title,
+                  ),
                 ),
               ],
             ),
@@ -4471,11 +4511,9 @@ class ReleaseExecutorAgent {
                       ? featBp.doneWhen
                       : 'Trigger $concreteFeatTitle -> verify $versionTag behavior in playtest',
                   releaseVersion: versionTag,
-                  tasks: const [
-                    'Actor Setup (2h)',
-                    'State Logic (1h)',
-                    'State Guard (1h)',
-                  ],
+                  tasks: ReleasePlannerAgent.defaultDockStepTitles(
+                    subject: concreteFeatTitle,
+                  ),
                   coveredScope: featBp.inScope,
                   tuningParams: featBp.tuningParams,
                   edgeCases: featBp.edgeCases,
@@ -4490,28 +4528,16 @@ class ReleaseExecutorAgent {
           }
           final nextOrder = stateNodes.length;
           final cpNumber = nextOrder + 1;
-          final effectiveTasks = cpBp.tasks.isNotEmpty
-              ? cpBp.tasks
-              : const [
-                  'Actor Setup (2h)',
-                  'State Logic (1h)',
-                  'State Guard (1h)',
-                ];
-          final checklist = <Subtask>[
-            for (int tIdx = 0; tIdx < effectiveTasks.length; tIdx++)
-              Subtask(
-                id: '${featId}_${versionTag}_cp${cpNumber}_t${tIdx + 1}',
-                text: effectiveTasks[tIdx],
-                completed: false,
-              ),
-          ];
+          final plannedSlices = cpBp.tasks
+              .map((t) => t.trim())
+              .where((t) => t.isNotEmpty)
+              .toList();
 
           final cpNode = FeatureStateNode(
             id: '${featId}_${versionTag}_cp_$cpNumber',
             name: 'Checkpoint $cpNumber: ${cpBp.title}',
             trigger: 'Playtest: ${cpBp.playtestCriteria}',
             order: nextOrder,
-            checklist: checklist,
             coveredScope: List<String>.from(cpBp.coveredScope),
             tuningParams: List<String>.from(cpBp.tuningParams),
             edgeCases: List<String>.from(cpBp.edgeCases),
@@ -4519,6 +4545,8 @@ class ReleaseExecutorAgent {
               'releaseVersion': versionTag,
               if (effectivePrimaryAsset.isNotEmpty)
                 'primarySharedScriptOrScene': effectivePrimaryAsset,
+              if (plannedSlices.isNotEmpty)
+                'plannedSlices': plannedSlices.join(' | '),
             },
           );
           final projDocForHint =
@@ -4544,15 +4572,11 @@ class ReleaseExecutorAgent {
               _ => ProductionPhase.prototype,
             },
           };
-          for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-            TaskHowToBlueprint.resolve(
-              parentTask: cpNode.checklist[tIdx],
-              taskIndex: tIdx,
-              checkpointNode: cpNode,
-              engineHint: engineHint,
-              phase: releasePhase,
-            );
-          }
+          TaskHowToBlueprint.populateDefaultUnifiedSteps(
+            cpNode,
+            engineHint: engineHint,
+            phase: releasePhase,
+          );
           stateNodes.add(cpNode);
         }
 
@@ -4815,11 +4839,9 @@ class ReleaseExecutorAgent {
                     ? featBp.doneWhen
                     : 'Trigger $concreteFeatTitle -> verify $versionTag behavior in playtest',
                 releaseVersion: versionTag,
-                tasks: const [
-                  'Actor Setup (2h)',
-                  'State Logic (1h)',
-                  'State Guard (1h)',
-                ],
+                tasks: ReleasePlannerAgent.defaultDockStepTitles(
+                  subject: concreteFeatTitle,
+                ),
                 coveredScope: featBp.inScope,
                 tuningParams: featBp.tuningParams,
                 edgeCases: featBp.edgeCases,
@@ -4830,28 +4852,16 @@ class ReleaseExecutorAgent {
       for (int cIdx = 0; cIdx < effectiveCheckpoints.length; cIdx++) {
         final cpBp = effectiveCheckpoints[cIdx];
         final cpNumber = cIdx + 1;
-        final effectiveTasks = cpBp.tasks.isNotEmpty
-            ? cpBp.tasks
-            : const [
-                'Actor Setup (2h)',
-                'State Logic (1h)',
-                'State Guard (1h)',
-              ];
-        final checklist = <Subtask>[
-          for (int tIdx = 0; tIdx < effectiveTasks.length; tIdx++)
-            Subtask(
-              id: '${featId}_${versionTag}_cp${cpNumber}_t${tIdx + 1}',
-              text: effectiveTasks[tIdx],
-              completed: false,
-            ),
-        ];
+        final plannedSlices = cpBp.tasks
+            .map((t) => t.trim())
+            .where((t) => t.isNotEmpty)
+            .toList();
 
         final cpNode = FeatureStateNode(
           id: '${featId}_${versionTag}_cp_$cpNumber',
           name: 'Checkpoint $cpNumber: ${cpBp.title}',
           trigger: 'Playtest: ${cpBp.playtestCriteria}',
           order: cIdx,
-          checklist: checklist,
           coveredScope: List<String>.from(cpBp.coveredScope),
           tuningParams: List<String>.from(cpBp.tuningParams),
           edgeCases: List<String>.from(cpBp.edgeCases),
@@ -4859,17 +4869,15 @@ class ReleaseExecutorAgent {
             'releaseVersion': versionTag,
             if (effectivePrimaryAsset.isNotEmpty)
               'primarySharedScriptOrScene': effectivePrimaryAsset,
+            if (plannedSlices.isNotEmpty)
+              'plannedSlices': plannedSlices.join(' | '),
           },
         );
-        for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-          TaskHowToBlueprint.resolve(
-            parentTask: cpNode.checklist[tIdx],
-            taskIndex: tIdx,
-            checkpointNode: cpNode,
-            engineHint: engineHint,
-            phase: releasePhase,
-          );
-        }
+        TaskHowToBlueprint.populateDefaultUnifiedSteps(
+          cpNode,
+          engineHint: engineHint,
+          phase: releasePhase,
+        );
         stateNodes.add(cpNode);
       }
 

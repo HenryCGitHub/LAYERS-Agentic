@@ -3,23 +3,76 @@ import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
 import '../models/tier_document.dart';
 
-/// Represents a single checkable "How-To" sub-step inside a Parent Task's walkthrough.
+/// Canonical Godot 4 workflow dock stage for a Unified Step inside a Feature Build Queue.
+enum GodotDockStage {
+  scene(
+    badge: 'SCENE',
+    fullLabel: 'SCENE TREE (.tscn)',
+    stepRole: 'editor_setup',
+    sortOrder: 0,
+  ),
+  inspector(
+    badge: 'INSP',
+    fullLabel: 'PROPERTY & LAYER SHEET',
+    stepRole: 'inspector_setup',
+    sortOrder: 1,
+  ),
+  code(
+    badge: 'CODE',
+    fullLabel: 'GDSCRIPT PATCH (.gd)',
+    stepRole: 'script_logic',
+    sortOrder: 2,
+  ),
+  wire(
+    badge: 'WIRE',
+    fullLabel: 'NODE SIGNALS & F6',
+    stepRole: 'wire_and_verify',
+    sortOrder: 3,
+  ),
+  fix(
+    badge: 'FIX',
+    fullLabel: 'ROOT-CAUSE [FIX]',
+    stepRole: 'fix',
+    sortOrder: 4,
+  ),
+  gate(
+    badge: 'GATE',
+    fullLabel: 'PLAYTEST SIGN-OFF',
+    stepRole: 'wire_and_verify',
+    sortOrder: 5,
+  );
+
+  const GodotDockStage({
+    required this.badge,
+    required this.fullLabel,
+    required this.stepRole,
+    required this.sortOrder,
+  });
+
+  final String badge;
+  final String fullLabel;
+  final String stepRole;
+  final int sortOrder;
+}
+
+/// Represents a single checkable "How-To" sub-step inside a Feature's Build Queue.
 class TaskHowToSubStep {
   final Subtask subtask;
-  final String stepNumberLabel; // e.g., "STEP 1.1 · CREATE SCENE & SCRIPT"
-  final String shortTitle;      // e.g., "Create player_character.tscn"
+  final String stepNumberLabel; // e.g., "01 · CREATE PLAYER SCENE"
+  final String shortTitle;      // e.g., "Build Player Dash Child Nodes"
   final String instruction;     // Concrete implementation instruction
   final String verifyResult;    // "✓ VERIFY BEFORE CHECKING [✓]" visual check
-  final String stepPath;        // e.g., "Scene Dock → res://scenes/characters/"
+  final String stepPath;        // e.g., "Scene Dock → res://scenes/player.tscn"
   final String codeFormula;     // Short GDScript diff / Inspector pipe table / node chain
-  final String explainConcept;  // Project-connected "🎯 Connects to your Spec & Next Step" note
-  final List<String> specChips; // Spec connection chips (e.g. ["Next: ...", "Spec: ..."])
-  final String quickFixPitfall; // Step-specific "🔧 Quick Fix / Common Pitfall" for the right footer
-  final int estimatedMinutes;   // Weighted minutes for this specific step (e.g., 15, 25, 65, 35)
-  final String etaLabel;        // Formatted step ETA (e.g., "15m", "25m", "1.1h")
+  final String explainConcept;  // Project-connected note
+  final List<String> specChips; // Spec connection chips
+  final String quickFixPitfall; // Step-specific pitfall hint
+  final int estimatedMinutes;   // Weighted minutes for this specific step
+  final String etaLabel;        // Formatted step ETA (e.g., "15m", "25m")
   final bool isGuardStep;
   final bool isEditorCheck;     // True when step checks Scene Tree / Inspector without Play mode
-  final String? stepRole;       // Optional 'editor_setup' | 'script_logic' | 'wire_and_verify'
+  final String? stepRole;       // 'editor_setup' | 'inspector_setup' | 'script_logic' | 'wire_and_verify' | 'fix'
+  final GodotDockStage? dockStage;
   final String? area1Hierarchy; // Optional AI-synthesized Area 1 (Scene Tree Hierarchy)
   final String? area2Inspector; // Optional AI-synthesized Area 2 (Inspector Bindings)
 
@@ -39,9 +92,22 @@ class TaskHowToSubStep {
     this.isGuardStep = false,
     this.isEditorCheck = false,
     this.stepRole,
+    this.dockStage,
     this.area1Hierarchy,
     this.area2Inspector,
   });
+
+  GodotDockStage get resolvedDockStage =>
+      dockStage ??
+      TaskHowToBlueprint.classifySubStepDockStage(
+        title: shortTitle.isNotEmpty ? shortTitle : subtask.text,
+        stepRole: stepRole,
+        area1Hierarchy: area1Hierarchy,
+        area2Inspector: area2Inspector,
+        codeFormula: codeFormula,
+        stepPath: stepPath,
+        instruction: instruction,
+      );
 }
 
 /// Resolves and caches the structured Parent Task metadata (`numLabel`, `layerTag`,
@@ -611,9 +677,35 @@ class TaskHowToBlueprint {
   static const String _verifyModeMarker = '\n[[VERIFY_MODE]]\n';
   static const String _stepRoleMarker = '\n[[STEP_ROLE]]\n';
 
+  static const Set<String> _kValidStepRoles = <String>{
+    'editor_setup',
+    'inspector_setup',
+    'script_logic',
+    'wire_and_verify',
+    'fix',
+  };
+
+  /// Maps raw AI/legacy `stepRole` or `dockStage` aliases onto canonical roles.
+  static String normalizeStepRole(String? rawRole) {
+    final sr = (rawRole ?? '').trim().toLowerCase();
+    if (_kValidStepRoles.contains(sr)) return sr;
+    return switch (sr) {
+      'scene' || 'scene_setup' || 'node_setup' => 'editor_setup',
+      'inspector' || 'input_setup' || 'properties' => 'inspector_setup',
+      'code' || 'input_handling' || 'physics' || 'logic' => 'script_logic',
+      'wire' ||
+      'wiring_and_feel' ||
+      'signal_wiring' ||
+      'verify' =>
+        'wire_and_verify',
+      'bugfix' || 'bug' => 'fix',
+      _ => '',
+    };
+  }
+
   /// Encodes optional AI-synthesized `area1Hierarchy` (Scene/Component tree),
   /// `area2Inspector` (Inspector/Details bindings), `verifyMode` (`'editor'` | `'playtest'`),
-  /// and `stepRole` (`'editor_setup'` | `'script_logic'` | `'wire_and_verify'`)
+  /// and `stepRole` (`'editor_setup'` | `'inspector_setup'` | `'script_logic'` | `'wire_and_verify'` | `'fix'`)
   /// inside `Subtask.specNotes` without altering existing Hive/JSON serialization schemas.
   static String encodeThreeAreaNotes({
     required String instruction,
@@ -627,11 +719,7 @@ class TaskHowToBlueprint {
     final a2 = (area2Inspector ?? '').trim();
     final vm = (verifyMode ?? '').trim().toLowerCase();
     final effectiveVm = (vm == 'editor' || vm == 'playtest') ? vm : '';
-    final sr = (stepRole ?? '').trim().toLowerCase();
-    final effectiveSr =
-        (sr == 'editor_setup' || sr == 'script_logic' || sr == 'wire_and_verify')
-            ? sr
-            : '';
+    final effectiveSr = normalizeStepRole(stepRole);
     if (a1.isEmpty &&
         a2.isEmpty &&
         effectiveVm.isEmpty &&
@@ -702,10 +790,8 @@ class TaskHowToBlueprint {
       a1 = working.substring(idx1 + _area1Marker.length).trim();
       working = working.substring(0, idx1);
     }
-    final validSr =
-        (sr == 'editor_setup' || sr == 'script_logic' || sr == 'wire_and_verify')
-            ? sr
-            : null;
+    final normalizedSr = normalizeStepRole(sr);
+    final validSr = normalizedSr.isNotEmpty ? normalizedSr : null;
     return (
       cleanInstruction: working.trim(),
       area1Hierarchy: (a1 != null && a1.isNotEmpty) ? a1 : null,
@@ -1908,6 +1994,473 @@ class TaskHowToBlueprint {
       blueprint: result,
     );
     return result;
+  }
+
+  /// Classifies a step into its primary Godot 4 workflow dock stage
+  /// (`scene`, `inspector`, `code`, `wire`, `fix`) for unified Single-List rendering.
+  static GodotDockStage classifySubStepDockStage({
+    required String title,
+    String? stepRole,
+    String? area1Hierarchy,
+    String? area2Inspector,
+    String? codeFormula,
+    String? stepPath,
+    String? instruction,
+  }) {
+    final upperTitle = title.trim().toUpperCase();
+    final lowerRole = (stepRole ?? '').trim().toLowerCase();
+    if (upperTitle.contains('[FIX]') || lowerRole == 'fix') {
+      return GodotDockStage.fix;
+    }
+    if (lowerRole == 'inspector_setup' || lowerRole == 'inspector') {
+      return GodotDockStage.inspector;
+    }
+    if (lowerRole == 'script_logic' || lowerRole == 'code') {
+      return GodotDockStage.code;
+    }
+
+    final hasHierarchy = (area1Hierarchy ?? '').trim().isNotEmpty;
+    final code = (codeFormula ?? '').trim();
+    final hasInspector = (area2Inspector ?? '').trim().isNotEmpty ||
+        (code.contains('|') && code.contains('---'));
+    final lowerPath = (stepPath ?? '').toLowerCase();
+    final lowerInstr = (instruction ?? '').toLowerCase();
+    final lowerTitle = title.toLowerCase();
+
+    if (lowerRole == 'editor_setup' || lowerRole == 'scene') {
+      if (!hasHierarchy &&
+          (hasInspector ||
+              lowerPath.contains('inspector') ||
+              lowerPath.contains('input map') ||
+              lowerTitle.contains('input map') ||
+              lowerTitle.contains('collision layer') ||
+              lowerTitle.contains('export'))) {
+        return GodotDockStage.inspector;
+      }
+      return GodotDockStage.scene;
+    }
+
+    final looksLikeCode = code.contains('func ') ||
+        code.contains('extends ') ||
+        code.contains('@export') ||
+        code.contains('@onready') ||
+        code.contains('var ');
+    final looksLikeSignalOrRun =
+        lowerPath.contains('node dock') ||
+        lowerPath.contains('signal') ||
+        (lowerInstr.contains('connect') && lowerInstr.contains('signal')) ||
+        code.contains('timeout()') ||
+        code.contains('pressed()') ||
+        code.contains('body_entered') ||
+        code.contains('-->') ||
+        code.contains('──►') ||
+        code.contains('─►') ||
+        lowerInstr.contains('f6') ||
+        lowerInstr.contains('f5') ||
+        lowerInstr.contains('run scene');
+
+    if (lowerRole == 'wire_and_verify' ||
+        lowerRole == 'wire' ||
+        lowerRole == 'wiring_and_feel' ||
+        lowerRole == 'signal_wiring' ||
+        lowerRole.startsWith('wir') ||
+        lowerRole.startsWith('signal')) {
+      if (!looksLikeCode || looksLikeSignalOrRun) {
+        return GodotDockStage.wire;
+      }
+      return GodotDockStage.code;
+    }
+
+    if (looksLikeSignalOrRun && !looksLikeCode) {
+      return GodotDockStage.wire;
+    }
+    if (hasInspector && !hasHierarchy && !looksLikeCode) {
+      return GodotDockStage.inspector;
+    }
+    if ((hasHierarchy ||
+            lowerPath.contains('scene dock') ||
+            lowerTitle.contains('.tscn') ||
+            lowerTitle.contains('child node')) &&
+        !looksLikeCode) {
+      return GodotDockStage.scene;
+    }
+    return GodotDockStage.code;
+  }
+
+  /// Stable sort putting steps in Godot dock execution order:
+  /// `SCENE` -> `INSP` -> `CODE` -> `WIRE` -> `FIX`.
+  static List<TaskHowToSubStep> orderUnifiedStepsByGodotDock(
+    List<TaskHowToSubStep> steps,
+  ) {
+    final indexed = steps.asMap().entries.toList();
+    indexed.sort((a, b) {
+      final orderA = a.value.resolvedDockStage.sortOrder;
+      final orderB = b.value.resolvedDockStage.sortOrder;
+      if (orderA != orderB) return orderA.compareTo(orderB);
+      return a.key.compareTo(b.key);
+    });
+    return indexed.map((e) => e.value).toList();
+  }
+
+  /// Stable sort putting raw persisted [Subtask] items in Godot dock execution
+  /// order: `SCENE` -> `INSP` -> `CODE` -> `WIRE` -> `FIX`.
+  static List<Subtask> orderSubtasksByGodotDock(List<Subtask> steps) {
+    final indexed = steps.asMap().entries.toList();
+    indexed.sort((a, b) {
+      final decA = decodeThreeAreaNotes(a.value.specNotes);
+      final decB = decodeThreeAreaNotes(b.value.specNotes);
+      final stageA = classifySubStepDockStage(
+        title: a.value.text,
+        stepRole: decA.stepRole,
+        area1Hierarchy: decA.area1Hierarchy,
+        area2Inspector: decA.area2Inspector,
+        codeFormula: a.value.codeSnippet,
+        stepPath: a.value.codeLanguage,
+        instruction: decA.cleanInstruction,
+      );
+      final stageB = classifySubStepDockStage(
+        title: b.value.text,
+        stepRole: decB.stepRole,
+        area1Hierarchy: decB.area1Hierarchy,
+        area2Inspector: decB.area2Inspector,
+        codeFormula: b.value.codeSnippet,
+        stepPath: b.value.codeLanguage,
+        instruction: decB.cleanInstruction,
+      );
+      final cmp = stageA.sortOrder.compareTo(stageB.sortOrder);
+      return cmp != 0 ? cmp : a.key.compareTo(b.key);
+    });
+    return indexed.map((e) => e.value).toList();
+  }
+
+  /// Resolves a [FeatureStateNode] checkpoint into a flat Single Feature Step List
+  /// (`BUILD QUEUE`), supporting both flat Unified Steps (`children.isEmpty`) and
+  /// legacy nested `parentTask.children` checkpoints transparently.
+  static List<TaskHowToSubStep> resolveUnifiedSteps({
+    required FeatureStateNode checkpointNode,
+    String? engineHint,
+    ProductionPhase? phase,
+  }) {
+    if (checkpointNode.checklist.isEmpty) return const [];
+
+    final effectivePhase = inferCheckpointPhase(
+      checkpointNode,
+      explicitPhase: phase,
+    );
+    final entries = checkpointNode.flatStepEntries;
+    final hasAnyStructuredStep = entries.any(
+      (e) =>
+          e.step.codeTargetFile == 'custom_snippet' ||
+          e.step.codeTargetFile == 'offline_default' ||
+          (e.step.specNotes ?? '').trim().isNotEmpty ||
+          (e.step.codeSnippet ?? '').trim().isNotEmpty,
+    );
+
+    // If legacy placeholder parent tasks exist without children or notes yet,
+    // resolve via temporary non-mutating copies into flat steps.
+    if (!hasAnyStructuredStep &&
+        checkpointNode.checklist.every((c) => c.children.isEmpty)) {
+      final collected = <TaskHowToSubStep>[];
+      for (int tIdx = 0; tIdx < checkpointNode.checklist.length; tIdx++) {
+        final clone = checkpointNode.checklist[tIdx].copyWith();
+        final bp = resolve(
+          parentTask: clone,
+          taskIndex: tIdx,
+          checkpointNode: checkpointNode,
+          engineHint: engineHint,
+          phase: effectivePhase,
+        );
+        collected.addAll(bp.subSteps);
+      }
+      final ordered = checkpointNode.parameters['manualStepOrder'] == 'true'
+          ? collected
+          : orderUnifiedStepsByGodotDock(collected);
+      return _renumberUnifiedSteps(ordered);
+    }
+
+    // Legacy nested checklists (with parentTask.children) that lack AI markers
+    // can still reuse per-task synthesized specs cleanly when needed.
+    final fallbackByStepId = <String, TaskHowToSubStep>{};
+    for (int tIdx = 0; tIdx < checkpointNode.checklist.length; tIdx++) {
+      final item = checkpointNode.checklist[tIdx];
+      if (item.children.isEmpty) continue;
+      final needsLegacyFallback = item.children.any(
+        (c) =>
+            c.codeTargetFile != 'custom_snippet' &&
+            (c.specNotes ?? '').trim().isEmpty,
+      );
+      if (needsLegacyFallback) {
+        final bp = resolve(
+          parentTask: item,
+          taskIndex: tIdx,
+          checkpointNode: checkpointNode,
+          engineHint: engineHint,
+          phase: effectivePhase,
+        );
+        for (final s in bp.subSteps) {
+          fallbackByStepId[s.subtask.id] = s;
+        }
+      }
+    }
+
+    final asset = resolveAssetName(
+      primarySharedAsset:
+          checkpointNode.parameters['primarySharedScriptOrScene'],
+      fallbackText: checkpointNode.name,
+    );
+    final minutesList = computeWeightedStepMinutes(
+      entries.length,
+      entries.length * 25,
+    );
+    final rawSteps = <TaskHowToSubStep>[];
+
+    for (int i = 0; i < entries.length; i++) {
+      final entry = entries[i];
+      final step = entry.step;
+      final fallback = fallbackByStepId[step.id];
+      if (fallback != null && step.codeTargetFile != 'custom_snippet') {
+        rawSteps.add(fallback);
+        continue;
+      }
+
+      final decoded = decodeThreeAreaNotes(step.specNotes);
+      final rawLabel = step.text.trim();
+      final shortTitle = formatTelegraphicStepTitle(rawLabel);
+      final instructionText = decoded.cleanInstruction.isNotEmpty
+          ? formatConciseStepInstruction(decoded.cleanInstruction)
+          : (fallback?.instruction ??
+              'Configure "$shortTitle" on ${asset.pascalName} and verify cleanly.');
+      final customVerify = (step.verification ?? '').trim();
+      final verifyText = formatConciseVerifySentence(
+        customVerify.isNotEmpty
+            ? customVerify
+            : (fallback?.verifyResult ??
+                '$shortTitle updates ${asset.pascalName} cleanly with 0 errors.'),
+      );
+      final customPath = (step.codeLanguage ?? '').trim();
+      final stepPath = customPath.isNotEmpty
+          ? customPath
+          : (fallback?.stepPath ?? 'res://scripts/${asset.snakeName}.gd');
+      final codeText = (step.codeSnippet ?? '').trim().isNotEmpty
+          ? step.codeSnippet!.trim()
+          : (decoded.area2Inspector ?? fallback?.codeFormula ?? '');
+
+      final dockStage = classifySubStepDockStage(
+        title: shortTitle,
+        stepRole: decoded.stepRole,
+        area1Hierarchy: decoded.area1Hierarchy,
+        area2Inspector: decoded.area2Inspector,
+        codeFormula: codeText,
+        stepPath: stepPath,
+        instruction: instructionText,
+      );
+
+      final mins = i < minutesList.length ? minutesList[i] : 20;
+      rawSteps.add(
+        TaskHowToSubStep(
+          subtask: step,
+          stepNumberLabel: '${(i + 1).toString().padLeft(2, '0')} · ${shortTitle.toUpperCase()}',
+          shortTitle: shortTitle,
+          instruction: instructionText,
+          verifyResult: verifyText,
+          stepPath: stepPath,
+          codeFormula: codeText,
+          explainConcept:
+              'Advances ${checkpointNode.cleanStageTitle} in Godot workflow order (${dockStage.badge}).',
+          specChips: [dockStage.badge, asset.pascalName],
+          quickFixPitfall: dockStage == GodotDockStage.scene
+              ? 'Match node names cleanly before attaching scripts or @onready references.'
+              : dockStage == GodotDockStage.inspector
+                  ? 'Confirm physics collision layers/masks match your Godot Project Contract.'
+                  : 'Ensure node paths and signal names match your Scene Tree.',
+          estimatedMinutes: mins,
+          etaLabel: formatStepEtaLabel(mins),
+          isGuardStep: dockStage == GodotDockStage.fix ||
+              rawLabel.toUpperCase().contains('[FIX]') ||
+              rawLabel.toLowerCase().contains('guard') ||
+              rawLabel.toLowerCase().contains('cooldown'),
+          isEditorCheck: decoded.verifyMode == 'editor' ||
+              dockStage == GodotDockStage.scene ||
+              dockStage == GodotDockStage.inspector,
+          stepRole: decoded.stepRole ?? dockStage.stepRole,
+          dockStage: dockStage,
+          area1Hierarchy: decoded.area1Hierarchy,
+          area2Inspector: decoded.area2Inspector,
+        ),
+      );
+    }
+
+    final shouldRespectOrder =
+        checkpointNode.parameters['manualStepOrder'] == 'true' ||
+            entries.any((e) => e.legacyParent != null) == false;
+    final ordered = shouldRespectOrder
+        ? rawSteps
+        : orderUnifiedStepsByGodotDock(rawSteps);
+    return _renumberUnifiedSteps(ordered);
+  }
+
+  static List<TaskHowToSubStep> _renumberUnifiedSteps(
+    List<TaskHowToSubStep> steps,
+  ) {
+    int numIdx = 1;
+    final out = <TaskHowToSubStep>[];
+    for (final s in steps) {
+      final dock = s.resolvedDockStage;
+      final prefix = dock == GodotDockStage.fix
+          ? 'FIX'
+          : (numIdx++).toString().padLeft(2, '0');
+      final title = s.shortTitle.isNotEmpty
+          ? s.shortTitle
+          : formatTelegraphicStepTitle(s.subtask.text);
+      out.add(
+        TaskHowToSubStep(
+          subtask: s.subtask,
+          stepNumberLabel: '$prefix · ${title.toUpperCase()}',
+          shortTitle: title,
+          instruction: s.instruction,
+          verifyResult: s.verifyResult,
+          stepPath: s.stepPath,
+          codeFormula: s.codeFormula,
+          explainConcept: s.explainConcept,
+          specChips: s.specChips,
+          quickFixPitfall: s.quickFixPitfall,
+          estimatedMinutes: s.estimatedMinutes,
+          etaLabel: s.etaLabel,
+          isGuardStep: s.isGuardStep,
+          isEditorCheck: s.isEditorCheck,
+          stepRole: s.stepRole ?? dock.stepRole,
+          dockStage: dock,
+          area1Hierarchy: s.area1Hierarchy,
+          area2Inspector: s.area2Inspector,
+        ),
+      );
+    }
+    return out;
+  }
+
+  /// Populates a newly created [checkpointNode] with 4 dock-ordered flat Unified
+  /// Steps (`SCENE` -> `INSP` -> `CODE` -> `WIRE`) immediately (even offline) so
+  /// there are zero nested `T1..T3` buckets before AI synthesis runs.
+  static void populateDefaultUnifiedSteps(
+    FeatureStateNode checkpointNode, {
+    String? engineHint,
+    ProductionPhase? phase,
+  }) {
+    if (checkpointNode.checklist.any(
+      (c) =>
+          c.children.isEmpty &&
+          (c.codeTargetFile == 'custom_snippet' ||
+              (c.specNotes ?? '').trim().isNotEmpty),
+    )) {
+      return;
+    }
+    final asset = resolveAssetName(
+      primarySharedAsset:
+          checkpointNode.parameters['primarySharedScriptOrScene'],
+      fallbackText:
+          '${checkpointNode.cleanStageTitle} ${checkpointNode.coveredScope.join(' ')}',
+    );
+    final pascal = asset.pascalName;
+    final snake = asset.snakeName;
+    final hintCorpus = [
+      engineHint ?? '',
+      checkpointNode.parameters['primarySharedScriptOrScene'] ?? '',
+      checkpointNode.cleanStageTitle,
+      ...checkpointNode.coveredScope,
+      ...checkpointNode.tuningParams,
+    ].join(' ').toLowerCase();
+    final is3D = RegExp(
+      r'\b(?:3d|first[- ]?person|third[- ]?person|vector3|characterbody3d|node3d|raycast3d|rigidbody3d|camera3d|meshinstance3d)\b',
+    ).hasMatch(hintCorpus);
+    final bodyType = is3D ? 'CharacterBody3D' : 'CharacterBody2D';
+    final collisionNode = is3D ? 'CollisionShape3D' : 'CollisionShape2D';
+    final capsuleShape = is3D ? 'CapsuleShape3D' : 'CapsuleShape2D';
+    final parsedVars = filterDeclaredGameplayVariables(checkpointNode.tuningParams);
+    final primaryVarName =
+        parsedVars.isNotEmpty ? parsedVars.first.name : 'move_speed';
+    final primaryVarVal = parsedVars.isNotEmpty && parsedVars.first.value.isNotEmpty
+        ? parsedVars.first.value.split(' ').first
+        : '240.0';
+    final guardText = checkpointNode.edgeCases.isNotEmpty
+        ? checkpointNode.edgeCases.first
+        : '[STATE GUARD] Prevent duplicate trigger while active';
+
+    final inspectorRows = <String>[
+      '| Node | Property | Value |',
+      '| --- | --- | --- |',
+      if (parsedVars.isEmpty)
+        '| $pascal | @export $primaryVarName | $primaryVarVal |',
+      for (final v in parsedVars.take(3))
+        '| $pascal | @export ${v.name} | ${v.value.isNotEmpty ? v.value : "1.0"} |',
+      '| Input Map | ${snake}_action | Space |',
+      '| $pascal | collision_mask | 1 |',
+    ].join('\n');
+
+    final playtestGoal = checkpointNode.playtestCondition;
+    checkpointNode.checklist = [
+      Subtask(
+        id: '${checkpointNode.id}_step_scene',
+        text: 'Build $pascal Scene Nodes',
+        codeLanguage: 'Scene Dock → res://scenes/$snake.tscn',
+        codeTargetFile: 'offline_default',
+        verification:
+            '$pascal appears in Scene Tree with $collisionNode and helper child nodes (0 errors).',
+        specNotes: encodeThreeAreaNotes(
+          instruction:
+              'Create res://scenes/$snake.tscn with root $bodyType "$pascal", $collisionNode, and StateTimer, then attach res://scripts/$snake.gd.',
+          area1Hierarchy:
+              '$pascal ($bodyType) 📜 $snake.gd\n├─ $collisionNode ($capsuleShape)\n└─ StateTimer (Timer)',
+          verifyMode: 'editor',
+          stepRole: 'editor_setup',
+        ),
+      ),
+      Subtask(
+        id: '${checkpointNode.id}_step_insp',
+        text: 'Set Layers, InputMap & Exports',
+        codeLanguage: 'Inspector & Project Settings',
+        codeTargetFile: 'offline_default',
+        verification:
+            'Input Map exposes ${snake}_action and Inspector shows tuned @export properties.',
+        codeSnippet: inspectorRows,
+        specNotes: encodeThreeAreaNotes(
+          instruction:
+              'Bind ${snake}_action in Project Settings → Input Map, set StateTimer.one_shot = true, and verify initial @export values.',
+          area2Inspector: inspectorRows,
+          verifyMode: 'editor',
+          stepRole: 'inspector_setup',
+        ),
+      ),
+      Subtask(
+        id: '${checkpointNode.id}_step_code',
+        text: 'Code $pascal Core & Guard Logic',
+        codeLanguage: 'res://scripts/$snake.gd',
+        codeTargetFile: 'offline_default',
+        codeSnippet:
+            'extends $bodyType\n\n@export var $primaryVarName: float = ${double.tryParse(primaryVarVal) != null ? primaryVarVal : '240.0'}\n@onready var state_timer: Timer = \$StateTimer\n\nfunc _physics_process(delta: float) -> void:\n    # Guard: $guardText\n    if Input.is_action_just_pressed("${snake}_action") and state_timer.is_stopped():\n        _activate_$snake()',
+        verification:
+            'Triggering ${snake}_action executes cleanly and obeys "$guardText".',
+        specNotes: encodeThreeAreaNotes(
+          instruction:
+              'Declare @export $primaryVarName and implement _activate_$snake() in res://scripts/$snake.gd with guard "$guardText".',
+          verifyMode: 'playtest',
+          stepRole: 'script_logic',
+        ),
+      ),
+      Subtask(
+        id: '${checkpointNode.id}_step_wire',
+        text: 'Connect Signals & Playtest (F6)',
+        codeLanguage: 'Node Dock → Signals & Run Scene (F6)',
+        codeTargetFile: 'offline_default',
+        codeSnippet: 'StateTimer.timeout() --> $pascal._on_state_timer_timeout()',
+        verification: playtestGoal,
+        specNotes: encodeThreeAreaNotes(
+          instruction:
+              'Connect StateTimer.timeout() to $pascal._on_state_timer_timeout() in the Node dock, then press F6 to test.',
+          verifyMode: 'playtest',
+          stepRole: 'wire_and_verify',
+        ),
+      ),
+    ];
   }
 
   /// Returns true when any active highlight token matches [searchableText]

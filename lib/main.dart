@@ -8,6 +8,7 @@ import 'models/feature_state.dart';
 import 'models/tier_document.dart';
 import 'providers/workbench_provider.dart';
 import 'screens/release_workbench_screen.dart';
+import 'screens/widgets/godot_workbench_modals.dart';
 import 'theme/app_theme.dart';
 import 'utils/markdown_exporter.dart';
 
@@ -441,6 +442,10 @@ class WorkbenchShell extends StatelessWidget {
                               _exportFullProjectSpec(context);
                             } else if (val == 'agents_md') {
                               _exportActiveReleaseAgentsMd(context);
+                            } else if (val == 'godot_files') {
+                              showGodotFilesAndSyncDialog(context, workbench);
+                            } else if (val == 'godot_contract') {
+                              showGodotContractDialog(context, workbench);
                             } else if (val == 'json_export') {
                               _exportActiveProjectJson(context);
                             } else if (val == 'json_import') {
@@ -448,6 +453,50 @@ class WorkbenchShell extends StatelessWidget {
                             }
                           },
                           itemBuilder: (ctx) => [
+                            PopupMenuItem<String>(
+                              value: 'godot_files',
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.folder_copy_outlined,
+                                    size: 13,
+                                    color: Color(0xFF38BDF8),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Godot Files, Cloud & Folder Sync',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            PopupMenuItem<String>(
+                              value: 'godot_contract',
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.tune_rounded,
+                                    size: 13,
+                                    color: textSecondary,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Godot 4 Project Contract',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             PopupMenuItem<String>(
                               value: 'spec',
                               child: Row(
@@ -551,9 +600,6 @@ class WorkbenchShell extends StatelessWidget {
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox.shrink(
-                          key: ValueKey('global_export_agents_md_btn'),
                         ),
                         const SizedBox(width: 4),
                       ],

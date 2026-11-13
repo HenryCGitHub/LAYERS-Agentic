@@ -3,15 +3,19 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
+import '../models/godot_virtual_file.dart';
 import '../models/tier_document.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
+import '../utils/godot_gdscript_guard.dart';
 import '../utils/section_text_utils.dart';
 import 'project_pitch_screen.dart';
 import 'widgets/godot_inspector_panel.dart';
+import 'widgets/godot_workbench_modals.dart';
 
 part 'workbench_engine_areas_card.dart';
 part 'workbench_modals_part.dart';
+part 'workbench_progressive_planner_part.dart';
 part 'workbench_task_and_playtest_modals_part.dart';
 part 'workbench_outliner_and_shell_part.dart';
 part 'workbench_checkpoint_workspace_part.dart';
@@ -39,9 +43,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   static final RegExp _assetTokenRegex = RegExp(
     r'\b(?:res://[A-Za-z0-9_./-]+\.(?:tscn|gd|tres)|[A-Za-z0-9_]+\.(?:tscn|gd|tres|h|cpp)|CharacterBody[23]D|RigidBody[23]D|StaticBody[23]D|CollisionShape[23]D|Area[23]D|Camera[23]D|Marker[23]D|MeshInstance3D|Sprite2D|CanvasLayer|Control|Timer|RayCast[23]D)\b',
   );
-  static final RegExp _treeChildRegex = RegExp(
-    r'[├└]─\s*([A-Za-z0-9_]+)\s*(?:\(([^)]+)\))?',
-  );
   static final RegExp _tuningVarDelimiterRegex = RegExp(r'[:=]');
   static String? _cachedSpecTokenKey;
   static Map<String, String> _cachedBaseTokens = const {};
@@ -50,14 +51,52 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   final Set<String> _awaitingPlaytestVerification = {};
   int? _manualCheckpointFocusIndex;
   String? _manualCheckpointFocusFeatureId;
-  final Map<String, int> _selectedTaskIndexByCheckpoint = {};
-  final Map<String, int> _selectedSubStepIndexByTask = {};
-  final Set<String> _collapsedSubStepKeys = {};
-  final Set<String> _expandedSubStepKeys = {};
+  final Map<String, int> _selectedFlatStepIndexByCheckpoint = {};
+  final Set<String> _playtestGateActiveCheckpoints = {};
+  bool _isCodeFileWorkspaceMode = false;
+  String? _selectedCodeFileResPath;
+  bool _isShowingStarterTscnInCodeMode = false;
+  bool _showAllProjectFilesInCodeMode = false;
   Set<String> _hoveredDoTokens = const {};
   String? _hoveredDoRowKey;
   double _outlinerWidth = 320.0;
-  final int _engineAreaFilter = 0;
+
+  int _resolveFlatStepIndex(
+    FeatureStateNode cpNode,
+    List<TaskHowToSubStep> unifiedSteps,
+  ) {
+    if (unifiedSteps.isEmpty) return 0;
+    final explicit = _selectedFlatStepIndexByCheckpoint[cpNode.id];
+    if (explicit != null && explicit >= 0 && explicit < unifiedSteps.length) {
+      return explicit;
+    }
+    final firstIncomplete =
+        unifiedSteps.indexWhere((s) => !s.subtask.completed);
+    return firstIncomplete != -1 ? firstIncomplete : 0;
+  }
+
+  bool _isPlaytestGateSelected(
+    FeatureStateNode cpNode,
+    List<TaskHowToSubStep> unifiedSteps,
+  ) {
+    if (_playtestGateActiveCheckpoints.contains(cpNode.id)) return true;
+    final allBuildDone =
+        unifiedSteps.isNotEmpty && unifiedSteps.every((s) => s.subtask.completed);
+    return allBuildDone && !_selectedFlatStepIndexByCheckpoint.containsKey(cpNode.id);
+  }
+
+  void _selectFlatStep(String checkpointId, int stepIndex) {
+    _rebuild(() {
+      _playtestGateActiveCheckpoints.remove(checkpointId);
+      _selectedFlatStepIndexByCheckpoint[checkpointId] = stepIndex;
+    });
+  }
+
+  void _openPlaytestGate(String checkpointId) {
+    _rebuild(() {
+      _playtestGateActiveCheckpoints.add(checkpointId);
+    });
+  }
   final Set<String> _collapsedBeatIds = {};
   String? _accordionInitReleaseId;
   String? _lastSyncedAccordionFeatureId;
@@ -76,24 +115,165 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   String? _activeStage2InlineEditKey;
   final TextEditingController _stage2InlineEditController =
       TextEditingController();
+  GodotDockStage _inlineAddStepStage = GodotDockStage.code;
   final Map<String, String> _customComponentPropertyOverrides = {};
   final TextEditingController _inboxCaptureCtrl = TextEditingController();
   String? _inlineBugDrawerNodeId;
   final TextEditingController _inlineBugInputCtrl = TextEditingController();
   String _outlinerSearchQuery = '';
   bool _isOutlinerSearchOpen = false;
+  bool _filterOutlinerTodoOnly = false;
   final TextEditingController _outlinerSearchController =
       TextEditingController();
+  String? _editingCodeFileResPath;
+  final TextEditingController _codeFileEditorCtrl = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_handleWorkbenchKeyEvent);
+  }
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_handleWorkbenchKeyEvent);
     _progressiveDirectiveCtrl.dispose();
     _progressiveNewFeatCtrl.dispose();
     _stage2InlineEditController.dispose();
     _inboxCaptureCtrl.dispose();
     _inlineBugInputCtrl.dispose();
     _outlinerSearchController.dispose();
+    _codeFileEditorCtrl.dispose();
     super.dispose();
+  }
+
+  bool _isEditableTextFocused() {
+    final focusCtx = FocusManager.instance.primaryFocus?.context;
+    if (focusCtx == null) return false;
+    if (focusCtx.widget is EditableText) return true;
+    return focusCtx.findAncestorStateOfType<EditableTextState>() != null;
+  }
+
+  bool _handleWorkbenchKeyEvent(KeyEvent event) {
+    if (!mounted || event is! KeyDownEvent) return false;
+    if (!HardwareKeyboard.instance.isAltPressed) return false;
+    if (_isEditableTextFocused()) return false;
+    if (ModalRoute.of(context)?.isCurrent == false) return false;
+    if (_isProgressiveModalOpen ||
+        widget.workbench.currentStage != WorkbenchStage.releaseWorkbench) {
+      return false;
+    }
+
+    final key = event.logicalKey;
+    final ctx = _resolveActiveWorkspaceContext();
+    if (ctx == null) return false;
+
+    if (key == LogicalKeyboardKey.backslash) {
+      _rebuild(() {
+        _isCodeFileWorkspaceMode = !_isCodeFileWorkspaceMode;
+      });
+      return true;
+    }
+    if (key == LogicalKeyboardKey.arrowUp) {
+      _retreatToPreviousStep(
+        ctx.states,
+        ctx.cpIndex,
+        ctx.node,
+        ctx.unifiedSteps,
+        ctx.activeStepIdx,
+        ctx.isPlaytestGate,
+      );
+      return true;
+    }
+    if (key == LogicalKeyboardKey.arrowDown) {
+      _browseToNextStep(
+        ctx.states,
+        ctx.cpIndex,
+        ctx.node,
+        ctx.unifiedSteps,
+        ctx.activeStepIdx,
+        ctx.isPlaytestGate,
+      );
+      return true;
+    }
+    if (key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.numpadEnter) {
+      _triggerPrimaryDoneAction(
+        feat: ctx.feat,
+        states: ctx.states,
+        node: ctx.node,
+        unifiedSteps: ctx.unifiedSteps,
+        activeStepIdx: ctx.activeStepIdx,
+        isPlaytestGate: ctx.isPlaytestGate,
+      );
+      return true;
+    }
+    return false;
+  }
+
+  int _resolveActiveCheckpointIndex(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+  ) {
+    if (states.isEmpty) return 0;
+    if (_manualCheckpointFocusFeatureId == feat.id &&
+        _manualCheckpointFocusIndex != null &&
+        _manualCheckpointFocusIndex! >= 0 &&
+        _manualCheckpointFocusIndex! < states.length) {
+      return _manualCheckpointFocusIndex!;
+    }
+    final activeVer = widget.workbench.activeReleaseVersionTag;
+    for (int i = 0; i < states.length; i++) {
+      final s = states[i];
+      if (s.releaseVersion != activeVer) continue;
+      final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
+      if (!s.isCompleted || awaitingPlaytest) {
+        return i;
+      }
+    }
+    final lastActiveVerIdx =
+        states.lastIndexWhere((s) => s.releaseVersion == activeVer);
+    if (lastActiveVerIdx != -1) return lastActiveVerIdx;
+    for (int i = 0; i < states.length; i++) {
+      final s = states[i];
+      if (!s.isCompleted || _awaitingPlaytestVerification.contains(s.id)) {
+        return i;
+      }
+    }
+    return states.length - 1;
+  }
+
+  ({
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    int cpIndex,
+    FeatureStateNode node,
+    List<TaskHowToSubStep> unifiedSteps,
+    int activeStepIdx,
+    bool isPlaytestGate,
+  })? _resolveActiveWorkspaceContext() {
+    final feat = widget.workbench.selectedFeature;
+    if (feat == null) return null;
+    final states = FeatureStateNode.getStatesForDocument(feat);
+    if (states.isEmpty) return null;
+    final cpIndex = _resolveActiveCheckpointIndex(feat, states);
+    final node = states[cpIndex];
+    final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
+      checkpointNode: node,
+      engineHint: _engineHint,
+      phase: widget.workbench.currentPhase,
+    );
+    final activeStepIdx = _resolveFlatStepIndex(node, unifiedSteps);
+    final isPlaytestGate = _isPlaytestGateSelected(node, unifiedSteps);
+    return (
+      feat: feat,
+      states: states,
+      cpIndex: cpIndex,
+      node: node,
+      unifiedSteps: unifiedSteps,
+      activeStepIdx: activeStepIdx,
+      isPlaytestGate: isPlaytestGate,
+    );
   }
 
   bool _featureMatchesOutlinerSearch(TierDocument feat, String rawQuery) {
@@ -155,8 +335,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       if (newIdx >= 0 && checkpointIndex < states.length) {
         final cpNode = states[checkpointIndex];
         _manualCheckpointFocusIndex = checkpointIndex;
-        _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
-        _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
+        _playtestGateActiveCheckpoints.remove(cpNode.id);
+        _selectedFlatStepIndexByCheckpoint[cpNode.id] = newIdx;
       }
     });
   }
@@ -190,7 +370,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Describe the viewport bug or feel issue to append a 3-step [FIX] task and [PLAYTEST GUARD]:',
+                'Describe the viewport bug or feel issue to append a [FIX] step and [PLAYTEST GUARD]:',
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   height: 1.4,
@@ -255,8 +435,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         final cpNode = states[checkpointIndex];
         _rebuild(() {
           _manualCheckpointFocusIndex = checkpointIndex;
-          _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
-          _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
+          _playtestGateActiveCheckpoints.remove(cpNode.id);
+          _selectedFlatStepIndexByCheckpoint[cpNode.id] = newIdx;
         });
       }
     }
@@ -568,16 +748,14 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   int _computeCheckpointRemainingMinutes(FeatureStateNode cpNode) {
     final hint = _engineHint;
     final phase = widget.workbench.currentPhase;
+    final steps = TaskHowToBlueprint.resolveUnifiedSteps(
+      checkpointNode: cpNode,
+      engineHint: hint,
+      phase: phase,
+    );
     int rem = 0;
-    for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-      final bp = TaskHowToBlueprint.resolve(
-        parentTask: cpNode.checklist[tIdx],
-        taskIndex: tIdx,
-        checkpointNode: cpNode,
-        engineHint: hint,
-        phase: phase,
-      );
-      rem += bp.remainingTaskMinutes;
+    for (final s in steps) {
+      if (!s.subtask.completed) rem += s.estimatedMinutes;
     }
     return rem;
   }

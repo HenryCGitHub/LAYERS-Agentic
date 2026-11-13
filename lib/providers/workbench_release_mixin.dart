@@ -493,2463 +493,6 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         stripNoPrefix: stripNoPrefix,
       );
 
-  void _updateSerializedReleaseBlueprintMetadata(
-    TierDocument doc, {
-    String? releaseDocId,
-    required String versionTag,
-    required String title,
-  }) {
-    final rawArchivedBp = doc.sections['release_blueprint_json'];
-    if (rawArchivedBp == null || rawArchivedBp.trim().isEmpty) return;
-    try {
-      final archivedMap = Map<String, dynamic>.from(
-        jsonDecode(rawArchivedBp) as Map,
-      );
-      if (releaseDocId != null) {
-        archivedMap['releaseDocId'] = releaseDocId;
-      }
-      archivedMap['releaseVersionTag'] = versionTag;
-      archivedMap['releaseTitle'] = title;
-      doc.sections['release_blueprint_json'] = jsonEncode(archivedMap);
-    } catch (_) {}
-  }
-
-  /// Evaluates how many Core Loop Epics (`activeReleaseBeats`) and `v0.1` Prototype Features
-  /// have received functional `MVP` coverage across built `ProductionPhase.mvp` releases.
-  /// An Epic only counts as complete (`coveredBeats++`) once ALL of its non-superseded
-  /// `v0.1` features have been upgraded beyond `v0.1`.
-  ({
-    int coveredBeats,
-    int totalBeats,
-    int upgradedProtoFeatures,
-    int totalProtoFeatures,
-    List<String> uncoveredBeatTitles,
-    List<String> unupgradedProtoFeatureTitles,
-    List<String> completedBeatCodes,
-    List<String> incompleteBeatCodes,
-    bool isComplete,
-  }) mvpBeatCoverage() {
-    final builtReleases =
-        projectReleases.where((r) => r.childrenIds.isNotEmpty).toList();
-    final protoVerTags = <String>{
-      'v0.1',
-      for (final r in builtReleases)
-        if (releasePhaseFor(r) == ProductionPhase.prototype)
-          releaseVersionTagFor(r).toLowerCase(),
-    };
-    final mvpVerTags = <String>{
-      for (final r in builtReleases)
-        if (releasePhaseFor(r) == ProductionPhase.mvp)
-          releaseVersionTagFor(r).toLowerCase(),
-    };
-    final beats = activeReleaseBeats;
-    int coveredBeats = 0;
-    int totalProtoFeatures = 0;
-    int upgradedProtoFeatures = 0;
-    final uncoveredBeatTitles = <String>[];
-    final unupgradedProtoFeatureTitles = <String>[];
-    final completedBeatCodes = <String>[];
-    final incompleteBeatCodes = <String>[];
-
-    bool featureHasMvpPass(TierDocument f) {
-      final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
-      final states = FeatureStateNode.getStatesForDocument(f);
-      final hasMvpCheckpoint = mvpVerTags.contains(originVer) ||
-          states.any(
-            (s) => mvpVerTags.contains(s.releaseVersion.toLowerCase()),
-          );
-      final upgradedPostProto = !protoVerTags.contains(originVer) ||
-          states.any(
-            (s) => !protoVerTags.contains(s.releaseVersion.toLowerCase()),
-          );
-      return (upgradedPostProto || hasMvpCheckpoint) && states.isNotEmpty;
-    }
-
-    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-      final b = beats[bIdx];
-      if (b.isFullProductionEpic) continue;
-      final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
-      final feats = featuresForBeat(b.id)
-          .where(
-            (f) =>
-                f.sections['lifecycle'] !=
-                FeatureLifecycleStatus.superseded.name,
-          )
-          .toList();
-      final beatHasAnyMvpPass = feats.any(featureHasMvpPass);
-      bool allFeaturesInBeatCovered = feats.isNotEmpty && beatHasAnyMvpPass;
-      for (final f in feats) {
-        totalProtoFeatures++;
-        final hasMvpPass = featureHasMvpPass(f);
-        final isStableCompletedInCoveredBeat =
-            beatHasAnyMvpPass && getDocumentProgress(f.id) >= 100;
-        if (hasMvpPass || isStableCompletedInCoveredBeat) {
-          upgradedProtoFeatures++;
-        } else {
-          allFeaturesInBeatCovered = false;
-          unupgradedProtoFeatureTitles.add('$eTag · ${f.title}');
-        }
-      }
-      if (allFeaturesInBeatCovered) {
-        coveredBeats++;
-        completedBeatCodes.add(eTag);
-      } else {
-        uncoveredBeatTitles.add('$eTag · ${b.title}');
-        incompleteBeatCodes.add(eTag);
-      }
-    }
-
-    final totalBeats = beats.where((b) => !b.isFullProductionEpic).length;
-    final isComplete = totalBeats > 0 && coveredBeats >= totalBeats;
-
-    return (
-      coveredBeats: coveredBeats,
-      totalBeats: totalBeats,
-      upgradedProtoFeatures: upgradedProtoFeatures,
-      totalProtoFeatures: totalProtoFeatures,
-      uncoveredBeatTitles: uncoveredBeatTitles,
-      unupgradedProtoFeatureTitles: unupgradedProtoFeatureTitles,
-      completedBeatCodes: completedBeatCodes,
-      incompleteBeatCodes: incompleteBeatCodes,
-      isComplete: isComplete,
-    );
-  }
-
-  /// Evaluates how many Core Loop Epics (`activeReleaseBeats`) and live Features have received
-  /// `Vertical Slice` polish coverage across built `ProductionPhase.verticalSlice` releases.
-  /// An Epic counts as complete (`polishedBeats++`) once it has received a Vertical Slice polish
-  /// checkpoint and all of its non-superseded features are either Vertical-Slice polished or
-  /// `100%` complete `STABLE ✓` features.
-  ({
-    int polishedBeats,
-    int totalBeats,
-    int polishedFeatures,
-    int totalFeatures,
-    List<String> unpolishedBeatTitles,
-    List<String> unpolishedFeatureTitles,
-    List<String> completedBeatCodes,
-    List<String> incompleteBeatCodes,
-    bool isComplete,
-  }) verticalSliceBeatCoverage() {
-    final builtReleases =
-        projectReleases.where((r) => r.childrenIds.isNotEmpty).toList();
-    final vsVerTags = <String>{
-      for (final r in builtReleases)
-        if (releasePhaseFor(r) == ProductionPhase.verticalSlice)
-          releaseVersionTagFor(r).toLowerCase(),
-    };
-    final beats = activeReleaseBeats;
-    int polishedBeats = 0;
-    int totalFeatures = 0;
-    int polishedFeatures = 0;
-    final unpolishedBeatTitles = <String>[];
-    final unpolishedFeatureTitles = <String>[];
-    final completedBeatCodes = <String>[];
-    final incompleteBeatCodes = <String>[];
-
-    bool featureHasVsPass(TierDocument f) {
-      final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
-      final states = FeatureStateNode.getStatesForDocument(f);
-      return vsVerTags.contains(originVer) ||
-          states.any(
-            (s) => vsVerTags.contains(s.releaseVersion.toLowerCase()),
-          );
-    }
-
-    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-      final b = beats[bIdx];
-      if (b.isFullProductionEpic) continue;
-      final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
-      final feats = featuresForBeat(b.id)
-          .where(
-            (f) =>
-                f.sections['lifecycle'] !=
-                FeatureLifecycleStatus.superseded.name,
-          )
-          .toList();
-      final beatHasAnyVsPass = feats.any(featureHasVsPass);
-      bool allFeaturesInBeatPolished = feats.isNotEmpty && beatHasAnyVsPass;
-      for (final f in feats) {
-        totalFeatures++;
-        final hasVsCheckpoint = featureHasVsPass(f);
-        final isStableCompletedInPolishedBeat =
-            beatHasAnyVsPass && getDocumentProgress(f.id) >= 100;
-        if (hasVsCheckpoint || isStableCompletedInPolishedBeat) {
-          polishedFeatures++;
-        } else {
-          allFeaturesInBeatPolished = false;
-          unpolishedFeatureTitles.add('$eTag · ${f.title}');
-        }
-      }
-      if (allFeaturesInBeatPolished) {
-        polishedBeats++;
-        completedBeatCodes.add(eTag);
-      } else {
-        unpolishedBeatTitles.add('$eTag · ${b.title}');
-        incompleteBeatCodes.add(eTag);
-      }
-    }
-
-    final totalBeats = beats.where((b) => !b.isFullProductionEpic).length;
-    final isComplete = totalBeats > 0 && polishedBeats >= totalBeats;
-
-    return (
-      polishedBeats: polishedBeats,
-      totalBeats: totalBeats,
-      polishedFeatures: polishedFeatures,
-      totalFeatures: totalFeatures,
-      unpolishedBeatTitles: unpolishedBeatTitles,
-      unpolishedFeatureTitles: unpolishedFeatureTitles,
-      completedBeatCodes: completedBeatCodes,
-      incompleteBeatCodes: incompleteBeatCodes,
-      isComplete: isComplete,
-    );
-  }
-
-  /// Version tag of the Act 2 Full-Game Skeleton release (`fpSkeleton: 'true'`), or `null` before it is built.
-  String? get fullProductionSkeletonVersionTag {
-    for (final r in projectReleases) {
-      if (r.childrenIds.isNotEmpty && r.sections['fpSkeleton'] == 'true') {
-        return releaseVersionTagFor(r).toLowerCase();
-      }
-    }
-    return null;
-  }
-
-  /// Evaluates `04 · Full Production` progress.
-  /// - Act 2 (Full Production Blueprint): counts only Full Production Epics (`act: fullProduction`).
-  ///   An Epic is covered once it receives a Production Pass after the Skeleton (same STABLE-sibling rule as MVP).
-  ///   `isReadyForLaunch` = Skeleton built and every Full Production Epic covered → next release is `v1.0` Launch.
-  /// - Legacy projects (Full Production built before Act 2, no tagged Epics) keep the old all-Epic coverage.
-  ({
-    int coveredBeats,
-    int totalBeats,
-    int remainingDeferredCount,
-    int openFixCount,
-    List<String> uncoveredBeatTitles,
-    List<String> remainingDeferredExclusions,
-    List<String> completedBeatCodes,
-    List<String> incompleteBeatCodes,
-    bool skeletonBuilt,
-    bool launchReleaseBuilt,
-    bool isLegacy,
-    bool isReadyForLaunch,
-  }) fullProductionCoverage() {
-    final builtReleases =
-        projectReleases.where((r) => r.childrenIds.isNotEmpty).toList();
-    final builtFullProd = builtReleases
-        .where((r) => releasePhaseFor(r) == ProductionPhase.fullProduction)
-        .toList();
-    final skeletonVer = fullProductionSkeletonVersionTag;
-    final launchReleaseBuilt =
-        builtFullProd.any((r) => r.sections['launchRelease'] == 'true');
-    final beats = activeReleaseBeats;
-    final hasFpEpics = beats.any((b) => b.isFullProductionEpic);
-    final isLegacy = builtFullProd.isNotEmpty && !hasFpEpics;
-    final prodOrVsVerTags = <String>{
-      for (final r in builtReleases)
-        if (releasePhaseFor(r) == ProductionPhase.fullProduction ||
-            releasePhaseFor(r) == ProductionPhase.verticalSlice ||
-            releasePhaseFor(r) == ProductionPhase.postLaunch)
-          releaseVersionTagFor(r).toLowerCase(),
-    };
-    int coveredBeats = 0;
-    int totalBeats = 0;
-    int openFixCount = 0;
-    final uncoveredBeatTitles = <String>[];
-    final completedBeatCodes = <String>[];
-    final incompleteBeatCodes = <String>[];
-    final activeFeatTitlesLower = <String>{};
-
-    bool featureHasProductionPass(TierDocument f) {
-      if (skeletonVer == null) return false;
-      final originVer = (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
-      if (originVer != skeletonVer) return true;
-      return FeatureStateNode.getStatesForDocument(f).any(
-        (s) => s.releaseVersion.toLowerCase() != skeletonVer,
-      );
-    }
-
-    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-      final b = beats[bIdx];
-      final eTag = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
-      final feats = featuresForBeat(b.id)
-          .where(
-            (f) =>
-                f.sections['lifecycle'] !=
-                FeatureLifecycleStatus.superseded.name,
-          )
-          .toList();
-      for (final f in feats) {
-        activeFeatTitlesLower.add(f.title.toLowerCase().trim());
-        for (final s in FeatureStateNode.getStatesForDocument(f)) {
-          for (final t in s.checklist) {
-            if (t.text.startsWith('[FIX]') && !t.completed) {
-              openFixCount++;
-            }
-          }
-        }
-      }
-
-      final bool beatCovered;
-      if (isLegacy) {
-        beatCovered = feats.any((f) {
-          final originVer =
-              (f.sections['originVersion'] ?? 'v0.1').toLowerCase();
-          final states = FeatureStateNode.getStatesForDocument(f);
-          return prodOrVsVerTags.contains(originVer) ||
-              states.any(
-                (s) => prodOrVsVerTags.contains(s.releaseVersion.toLowerCase()),
-              ) ||
-              getDocumentProgress(f.id) >= 100;
-        });
-      } else {
-        if (!b.isFullProductionEpic) continue;
-        final beatHasAnyPass = feats.any(featureHasProductionPass);
-        beatCovered = feats.isNotEmpty &&
-            beatHasAnyPass &&
-            feats.every(
-              (f) =>
-                  featureHasProductionPass(f) ||
-                  getDocumentProgress(f.id) >= 100,
-            );
-      }
-      totalBeats++;
-      if (beatCovered) {
-        coveredBeats++;
-        completedBeatCodes.add(eTag);
-      } else {
-        uncoveredBeatTitles.add('$eTag · ${b.title}');
-        incompleteBeatCodes.add(eTag);
-      }
-    }
-
-    final remainingDeferredExclusions = <String>[];
-    final proj = activeProject;
-    final rawEx = (proj?.sections['exclusions'] ?? '').trim();
-    if (rawEx.isNotEmpty) {
-      for (final line in rawEx.split('\n')) {
-        final clean = _stripExclusionPrefixes(line, stripNoPrefix: false);
-        if (clean.isEmpty) continue;
-        // Permanent exclusions stay excluded; deferred exclusions unlocked by Full Production count if not yet promoted
-        if (ReleaseBlueprint.isDeferredExclusionUnlockedInPhase(
-          clean,
-          ProductionPhase.fullProduction,
-        )) {
-          final shortTitle = _stripExclusionPrefixes(clean)
-              .split('—')
-              .first
-              .split(':')
-              .first
-              .toLowerCase()
-              .trim();
-          final alreadyPromoted = shortTitle.isNotEmpty &&
-              activeFeatTitlesLower.any(
-                (ft) => ft.contains(shortTitle) || shortTitle.contains(ft),
-              );
-          if (!alreadyPromoted) {
-            remainingDeferredExclusions.add(clean);
-          }
-        }
-      }
-    }
-
-    final allCovered = totalBeats > 0 && coveredBeats >= totalBeats;
-    final isReadyForLaunch = isLegacy
-        ? allCovered && openFixCount == 0
-        : skeletonVer != null && allCovered;
-
-    return (
-      coveredBeats: coveredBeats,
-      totalBeats: totalBeats,
-      remainingDeferredCount: remainingDeferredExclusions.length,
-      openFixCount: openFixCount,
-      uncoveredBeatTitles: uncoveredBeatTitles,
-      remainingDeferredExclusions: remainingDeferredExclusions,
-      completedBeatCodes: completedBeatCodes,
-      incompleteBeatCodes: incompleteBeatCodes,
-      skeletonBuilt: skeletonVer != null,
-      launchReleaseBuilt: launchReleaseBuilt,
-      isLegacy: isLegacy,
-      isReadyForLaunch: isReadyForLaunch,
-    );
-  }
-
-  /// True once the Vertical Slice is done (or a draft release is set to Full Production)
-  /// and the next step is defining the Act 2 Full Production Blueprint (no Full Production release built yet).
-  bool get needsFullProductionBlueprint {
-    final builtReleases =
-        projectReleases.where((r) => r.childrenIds.isNotEmpty).toList();
-    if (builtReleases.isEmpty) return false;
-    if (builtReleases.any(
-      (r) =>
-          releasePhaseFor(r) == ProductionPhase.fullProduction ||
-          releasePhaseFor(r) == ProductionPhase.postLaunch,
-    )) {
-      return false;
-    }
-    final activeDraftPhase =
-        (activeRelease != null && activeRelease!.childrenIds.isEmpty)
-            ? releasePhaseFor(activeRelease!)
-            : null;
-    return inferNextProgressivePhase() == ProductionPhase.fullProduction ||
-        activeDraftPhase == ProductionPhase.fullProduction;
-  }
-
-  /// Infers the natural next `ProductionPhase` (`prototype` -> multi-release `mvp` -> multi-release `verticalSlice` -> `fullProduction` -> `postLaunch`).
-  /// Act 2 stays in `fullProduction` (Skeleton -> Production Passes -> `v1.0` Launch) until the `v1.0` Launch Release
-  /// is 100% verified with `0` open `[FIX]` tasks, then graduates to `v1.1+` Post-Launch & Live Ops.
-  ProductionPhase inferNextProgressivePhase() {
-    final releases = projectReleases;
-    final builtReleases =
-        releases.where((r) => r.childrenIds.isNotEmpty).toList();
-    if (builtReleases.isEmpty) {
-      return ProductionPhase.prototype;
-    }
-    if (builtReleases.any(
-      (r) => releasePhaseFor(r) == ProductionPhase.postLaunch,
-    )) {
-      return ProductionPhase.postLaunch;
-    }
-    final builtFullProd = builtReleases
-        .where((r) => releasePhaseFor(r) == ProductionPhase.fullProduction)
-        .toList();
-    if (builtFullProd.isNotEmpty) {
-      final fpCov = fullProductionCoverage();
-      if (fpCov.isLegacy) {
-        final allFullProdVerified = builtFullProd.every(
-          (r) => getDocumentProgress(r.id) >= 100,
-        );
-        if (allFullProdVerified || fpCov.isReadyForLaunch) {
-          return ProductionPhase.postLaunch;
-        }
-        return ProductionPhase.fullProduction;
-      }
-      final launchRels =
-          builtFullProd.where((r) => r.sections['launchRelease'] == 'true');
-      if (launchRels.isNotEmpty &&
-          launchRels.every((r) => getDocumentProgress(r.id) >= 100) &&
-          fpCov.openFixCount == 0) {
-        return ProductionPhase.postLaunch;
-      }
-      return ProductionPhase.fullProduction;
-    }
-    final vsCov = verticalSliceBeatCoverage();
-    if (vsCov.isComplete) {
-      return ProductionPhase.fullProduction;
-    }
-    if (builtReleases.any(
-      (r) => releasePhaseFor(r) == ProductionPhase.verticalSlice,
-    )) {
-      return ProductionPhase.verticalSlice;
-    }
-    final mvpCov = mvpBeatCoverage();
-    if (mvpCov.isComplete) {
-      return ProductionPhase.verticalSlice;
-    }
-    return ProductionPhase.mvp;
-  }
-
-  /// True when the next Full Production release should be the `v1.0` Launch Release.
-  bool get isNextReleaseV1Launch {
-    if (inferNextProgressivePhase() != ProductionPhase.fullProduction) {
-      return false;
-    }
-    final cov = fullProductionCoverage();
-    return !cov.isLegacy && cov.isReadyForLaunch && !cov.launchReleaseBuilt;
-  }
-
-  /// Next Post-Launch version: highest existing `v1.N` minor + 1 (handles legacy `v1.x` Full Production tags).
-  String get _nextPostLaunchVersionTag {
-    int maxMinor = 0;
-    final v1Regex = RegExp(r'^v1\.(\d+)$');
-    for (final r in projectReleases) {
-      if (r.childrenIds.isEmpty) continue;
-      final m = v1Regex.firstMatch(releaseVersionTagFor(r).toLowerCase());
-      if (m != null) {
-        final minor = int.tryParse(m.group(1)!) ?? 0;
-        if (minor > maxMinor) maxMinor = minor;
-      }
-    }
-    return 'v1.${maxMinor + 1}';
-  }
-
-  ReleaseScope _releaseScopeForPhase(ProductionPhase phase) {
-    switch (phase) {
-      case ProductionPhase.prototype:
-        return ReleaseScope.prototype;
-      case ProductionPhase.mvp:
-        return ReleaseScope.mvp;
-      case ProductionPhase.verticalSlice:
-        return ReleaseScope.verticalSlice;
-      case ProductionPhase.fullProduction:
-      case ProductionPhase.postLaunch:
-        return ReleaseScope.fullProduction;
-    }
-  }
-
-  /// Allows the developer to switch the target `ProductionPhase` (`MVP`, `Vertical Slice`, `Full Production`, `Post-Launch`)
-  /// inside the Progressive Release Co-Pilot modal and re-synthesize the draft blueprint for that phase.
-  Future<void> setDraftReleasePhase(ProductionPhase targetPhase) async {
-    final relDoc = activeRelease;
-    final proj = activeProject;
-    if (relDoc == null || proj == null) return;
-    _currentPhase = targetPhase;
-    final targetScope = _releaseScopeForPhase(targetPhase);
-    relDoc.sections['phase'] = targetPhase.name;
-    relDoc.sections['releaseScope'] = targetScope.name;
-    relDoc.sections['agentReasoned'] = 'true';
-    relDoc.sections['phaseLockedByUser'] = 'true';
-    if (targetPhase == ProductionPhase.postLaunch) {
-      final existingPostCount = projectReleases
-          .where(
-            (r) =>
-                r.id != relDoc.id &&
-                releasePhaseFor(r) == ProductionPhase.postLaunch,
-          )
-          .length;
-      relDoc.sections['versionTag'] = _nextPostLaunchVersionTag;
-      relDoc.sections['postLaunchPass'] = '${existingPostCount + 1}';
-      relDoc.sections.remove('launchRelease');
-    } else if (targetPhase == ProductionPhase.fullProduction) {
-      relDoc.sections.remove('postLaunchPass');
-      final existingFullProdCount = projectReleases
-          .where(
-            (r) =>
-                r.id != relDoc.id &&
-                releasePhaseFor(r) == ProductionPhase.fullProduction,
-          )
-          .length;
-      final pass = existingFullProdCount + 1;
-      final idx = proj.childrenIds.indexOf(relDoc.id);
-      final isLaunch = isNextReleaseV1Launch;
-      relDoc.sections['versionTag'] = isLaunch
-          ? 'v1.0'
-          : 'v0.${idx >= 0 ? idx + 1 : proj.childrenIds.length}';
-      if (isLaunch) {
-        relDoc.sections['launchRelease'] = 'true';
-      } else {
-        relDoc.sections.remove('launchRelease');
-      }
-      relDoc.sections['fullProductionPass'] = '$pass';
-    } else {
-      relDoc.sections.remove('fullProductionPass');
-      relDoc.sections.remove('postLaunchPass');
-      relDoc.sections.remove('launchRelease');
-      final idx = proj.childrenIds.indexOf(relDoc.id);
-      if (idx >= 0) {
-        relDoc.sections['versionTag'] = 'v0.${idx + 1}';
-      }
-    }
-    final resolvedVerTag = relDoc.sections['versionTag'] ?? 'v0.2';
-    relDoc.title = '$resolvedVerTag: ${targetPhase.label}';
-    _persistDocument(relDoc);
-    _syncActiveProjectMetadata();
-    await openReleasePlanGate(
-      releaseId: relDoc.id,
-      transitionToGateStage: false,
-    );
-    if (_releaseBlueprint != null) {
-      _initialProgressiveTrack0BlueprintJson =
-          jsonEncode(_releaseBlueprint!.toJson());
-    }
-  }
-
-  /// Prunes any leftover unbuilt draft releases (once the project has at least one built release)
-  /// and sequentially re-packs all `v0.X` releases (`v0.1`, `v0.2`, ..., `v0.N`) so skipped
-  /// version gaps never occur.
-  void repackProjectReleasesSequentially(
-    TierDocument proj, {
-    bool pruneAllUnbuilt = false,
-    String? keepReleaseId,
-  }) {
-    final user = _authService.currentUser;
-
-    // 1. Deduplicate proj.childrenIds while keeping only existing release docs
-    final deduped = <String>[];
-    for (final id in proj.childrenIds) {
-      if (!deduped.contains(id) && documents.containsKey(id)) {
-        deduped.add(id);
-      }
-    }
-    proj.childrenIds = deduped;
-
-    // 2. If at least one built release exists, prune unbuilt draft releases
-    final hasBuiltRelease = proj.childrenIds.any(
-      (id) => documents[id]?.childrenIds.isNotEmpty ?? false,
-    );
-    if (hasBuiltRelease) {
-      final toRemove = <String>[];
-      for (final id in proj.childrenIds) {
-        final relDoc = documents[id];
-        if (relDoc == null) continue;
-        if (relDoc.childrenIds.isEmpty) {
-          final shouldKeep = !pruneAllUnbuilt && id == keepReleaseId;
-          if (!shouldKeep) {
-            toRemove.add(id);
-          }
-        }
-      }
-      for (final id in toRemove) {
-        proj.childrenIds.remove(id);
-        documents.remove(id);
-        LocalVaultService.deleteDocument(id);
-        if (user != null) {
-          _firestoreService.deleteDocument(uid: user.uid, docId: id);
-        }
-      }
-    }
-
-    // Remove any orphaned TierType.release documents belonging to this project
-    final activeSet = proj.childrenIds.toSet();
-    final orphanRelIds = documents.values
-        .where(
-          (d) =>
-              d.tier == TierType.release &&
-              d.parentId == proj.id &&
-              !activeSet.contains(d.id),
-        )
-        .map((d) => d.id)
-        .toList();
-    for (final orphanId in orphanRelIds) {
-      documents.remove(orphanId);
-      LocalVaultService.deleteDocument(orphanId);
-      if (user != null) {
-        _firestoreService.deleteDocument(uid: user.uid, docId: orphanId);
-      }
-    }
-
-    // 3. Re-pack remaining v0.X releases sequentially (1..N)
-    final versionRemap = <String, String>{};
-    bool anyChanged = false;
-
-    for (int i = 0; i < proj.childrenIds.length; i++) {
-      final seqNum = i + 1;
-      final oldRelId = proj.childrenIds[i];
-      final relDoc = documents[oldRelId];
-      if (relDoc == null) continue;
-
-      final currentVerTag = releaseVersionTagFor(relDoc);
-      final isActTwoOrLater =
-          relDoc.sections['phase'] == ProductionPhase.fullProduction.name ||
-          relDoc.sections['phase'] == ProductionPhase.postLaunch.name ||
-          relDoc.releaseScope == ReleaseScope.fullProduction ||
-          currentVerTag.toLowerCase().startsWith('v1.');
-      if (isActTwoOrLater) continue;
-
-      final expectedVer = 'v0.$seqNum';
-      final expectedId = proj.id == 'proj_main'
-          ? 'rel_v0_$seqNum'
-          : '${proj.id}_rel_v0_$seqNum';
-
-      bool docChanged = false;
-      if (currentVerTag != expectedVer &&
-          currentVerTag.toLowerCase().startsWith('v0.')) {
-        versionRemap[currentVerTag] = expectedVer;
-        docChanged = true;
-      }
-      if (relDoc.sections['versionTag'] != expectedVer) {
-        relDoc.sections['versionTag'] = expectedVer;
-        docChanged = true;
-      }
-      if (_minorVerRegex.hasMatch(relDoc.title)) {
-        final updatedTitle = relDoc.title.replaceAll(
-          _minorVerRegex,
-          expectedVer,
-        );
-        if (updatedTitle != relDoc.title) {
-          relDoc.title = updatedTitle;
-          docChanged = true;
-        }
-      }
-      final rawScope = relDoc.sections['scope'];
-      if (rawScope != null && _minorVerRegex.hasMatch(rawScope)) {
-        final updatedScope = rawScope.replaceAll(_minorVerRegex, expectedVer);
-        if (updatedScope != rawScope) {
-          relDoc.sections['scope'] = updatedScope;
-          docChanged = true;
-        }
-      }
-
-      if (oldRelId != expectedId &&
-          (!documents.containsKey(expectedId) ||
-              !proj.childrenIds.contains(expectedId))) {
-        final movedDoc = relDoc.copyWith(
-          id: expectedId,
-          sections: Map<String, String>.from(relDoc.sections),
-        );
-        _updateSerializedReleaseBlueprintMetadata(
-          movedDoc,
-          releaseDocId: expectedId,
-          versionTag: expectedVer,
-          title: movedDoc.title,
-        );
-        documents.remove(oldRelId);
-        LocalVaultService.deleteDocument(oldRelId);
-        if (user != null) {
-          _firestoreService.deleteDocument(uid: user.uid, docId: oldRelId);
-        }
-        documents[expectedId] = movedDoc;
-        _persistDocument(movedDoc);
-        proj.childrenIds[i] = expectedId;
-
-        if (_activeReleaseId == oldRelId) {
-          _activeReleaseId = expectedId;
-        }
-        if (proj.sections['active_release_id'] == oldRelId) {
-          proj.sections['active_release_id'] = expectedId;
-        }
-        if (_releaseBlueprint != null &&
-            _releaseBlueprint!.releaseDocId == oldRelId) {
-          _releaseBlueprint = ReleaseBlueprint(
-            releaseDocId: expectedId,
-            releaseTitle: movedDoc.title,
-            releaseVersionTag: expectedVer,
-            preset: _releaseBlueprint!.preset,
-            goal: _releaseBlueprint!.goal.replaceAll(
-              _minorVerRegex,
-              expectedVer,
-            ),
-            doneWhen: _releaseBlueprint!.doneWhen.replaceAll(
-              _minorVerRegex,
-              expectedVer,
-            ),
-            questions: _releaseBlueprint!.questions,
-            beats: _releaseBlueprint!.beats,
-            explicitExclusions: _releaseBlueprint!.explicitExclusions,
-            builtSoFar: _releaseBlueprint!.builtSoFar,
-            missingGaps: _releaseBlueprint!.missingGaps,
-            lastAgentReply: _releaseBlueprint!.lastAgentReply,
-          );
-        }
-        for (final doc in documents.values) {
-          if (doc.parentId == oldRelId) {
-            doc.parentId = expectedId;
-            _persistDocument(doc);
-          }
-        }
-        anyChanged = true;
-      } else if (docChanged) {
-        _updateSerializedReleaseBlueprintMetadata(
-          relDoc,
-          versionTag: expectedVer,
-          title: relDoc.title,
-        );
-        if (_releaseBlueprint != null &&
-            _releaseBlueprint!.releaseDocId == oldRelId) {
-          _releaseBlueprint!.releaseVersionTag = expectedVer;
-          _releaseBlueprint!.releaseTitle = relDoc.title;
-        }
-        _persistDocument(relDoc);
-        anyChanged = true;
-      }
-    }
-
-    // 3b. Deduplicate beatDoc.childrenIds across all Epics of the project so duplicate feature cards never appear
-    final projectBeatIdsForDedup = <String>{
-      for (final relId in proj.childrenIds)
-        ...?documents[relId]?.childrenIds,
-    };
-    for (final bId in projectBeatIdsForDedup) {
-      final beatDoc = documents[bId];
-      if (beatDoc == null || beatDoc.childrenIds.length <= 1) continue;
-      final dedupedFeatIds = <String>[];
-      for (final fid in beatDoc.childrenIds) {
-        if (!dedupedFeatIds.contains(fid) && documents.containsKey(fid)) {
-          dedupedFeatIds.add(fid);
-        }
-      }
-      if (dedupedFeatIds.length != beatDoc.childrenIds.length) {
-        beatDoc.childrenIds = dedupedFeatIds;
-        _persistDocument(beatDoc);
-        anyChanged = true;
-      }
-    }
-
-    // 4. Remap any FeatureStateNode checkpoint releaseVersion tags and blueprint items
-    if (versionRemap.isNotEmpty) {
-      final projectBeatIds = <String>{
-        for (final relId in proj.childrenIds)
-          ...?documents[relId]?.childrenIds,
-      };
-      for (final doc in documents.values) {
-        if (doc.tier == TierType.feature &&
-            doc.parentId != null &&
-            projectBeatIds.contains(doc.parentId)) {
-          final states = FeatureStateNode.getStatesForDocument(doc);
-          bool featStatesChanged = false;
-          for (final s in states) {
-            final mappedVer = versionRemap[s.releaseVersion];
-            if (mappedVer != null) {
-              s.parameters['releaseVersion'] = mappedVer;
-              featStatesChanged = true;
-            }
-          }
-          if (featStatesChanged) {
-            FeatureStateNode.saveStatesToDocument(doc, states);
-            _persistDocument(doc);
-          }
-        }
-      }
-      if (_releaseBlueprint != null) {
-        for (final beat in _releaseBlueprint!.beats) {
-          for (final feat in beat.features) {
-            final mappedOrigin = versionRemap[feat.originVersion];
-            if (mappedOrigin != null) {
-              feat.originVersion = mappedOrigin;
-            }
-            feat.checkpoints = [
-              for (final cp in feat.checkpoints)
-                versionRemap.containsKey(cp.releaseVersion)
-                    ? ProposedCheckpointBlueprint(
-                        title: cp.title,
-                        playtestCriteria: cp.playtestCriteria,
-                        tasks: cp.tasks,
-                        coveredScope: cp.coveredScope,
-                        tuningParams: cp.tuningParams,
-                        edgeCases: cp.edgeCases,
-                        releaseVersion: versionRemap[cp.releaseVersion]!,
-                      )
-                    : cp,
-            ];
-          }
-        }
-      }
-    }
-
-    if (proj.childrenIds.isNotEmpty &&
-        (_activeReleaseId == null ||
-            !proj.childrenIds.contains(_activeReleaseId))) {
-      _activeReleaseId = proj.childrenIds.last;
-      anyChanged = true;
-    }
-
-    if (anyChanged || versionRemap.isNotEmpty) {
-      _persistDocument(proj);
-    }
-  }
-
-  ({int index, String id}) _allocateNextReleaseIdAndIndex(TierDocument proj) {
-    repackProjectReleasesSequentially(proj, pruneAllUnbuilt: true);
-    final nextIndex = proj.childrenIds.length + 1;
-    final candidateId = proj.id == 'proj_main'
-        ? 'rel_v0_$nextIndex'
-        : '${proj.id}_rel_v0_$nextIndex';
-    return (index: nextIndex, id: candidateId);
-  }
-
-  /// Next progressive version tag (`v0.2`, `v0.3`, ... continuing through Act 2 Full Production,
-  /// `v1.0` for the Launch Release, then `v1.1+` in Post-Launch).
-  String get nextProgressiveVersionLabel {
-    final releases = projectReleases;
-    final builtReleases =
-        releases.where((r) => r.childrenIds.isNotEmpty).toList();
-    if (builtReleases.isNotEmpty) {
-      final nextPhase = inferNextProgressivePhase();
-      if (nextPhase == ProductionPhase.postLaunch) {
-        return _nextPostLaunchVersionTag;
-      }
-      if (nextPhase == ProductionPhase.fullProduction) {
-        if (isNextReleaseV1Launch) return 'v1.0';
-        if (fullProductionCoverage().isLegacy) {
-          return _nextPostLaunchVersionTag;
-        }
-      }
-    }
-    final builtCount = builtReleases.length;
-    final baseCount = builtCount > 0 ? builtCount : releases.length;
-    return 'v0.${baseCount + 1}';
-  }
-
-  // ===========================================================================
-  // ACT 2 · FULL PRODUCTION BLUEPRINT (Blueprint -> v0.N Skeleton -> Passes -> v1.0 Launch)
-  // ===========================================================================
-
-  /// The approved or in-progress Act 2 Full Production Blueprint persisted on the active project.
-  FullProductionBlueprint? get fullProductionBlueprint {
-    final raw = activeProject?.sections[FullProductionBlueprint.storageKey];
-    if (raw == null || raw.trim().isEmpty) return null;
-    try {
-      return FullProductionBlueprint.fromJson(
-        jsonDecode(raw) as Map<String, dynamic>,
-      );
-    } catch (_) {
-      return null;
-    }
-  }
-
-  bool get isDraftingFullProductionBlueprint =>
-      _isDraftingFullProductionBlueprint;
-
-  /// Saves edits to the Full Production Blueprint (before the Skeleton is built).
-  void updateFullProductionBlueprint(FullProductionBlueprint bp) {
-    final proj = activeProject;
-    if (proj == null) return;
-    proj.sections[FullProductionBlueprint.storageKey] = jsonEncode(bp.toJson());
-    _persistDocument(proj);
-    notifyListeners();
-  }
-
-  /// Inbox items scheduled for Full Production (not yet implemented).
-  List<FeatureInboxItem> get _fullProductionScheduledInboxItems => featureInboxItems
-      .where(
-        (i) =>
-            i.status != FeatureInboxStatus.implemented &&
-            i.releaseTimingMode != InboxReleaseTimingMode.now &&
-            i.targetFuturePhase.index <= ProductionPhase.fullProduction.index,
-      )
-      .toList();
-
-  /// Drafts the 6-section Full Production Blueprint with `gemini-flash-latest` (single pass).
-  Future<FullProductionBlueprint?> draftFullProductionBlueprint() async {
-    final proj = activeProject;
-    if (proj == null) return null;
-    _isDraftingFullProductionBlueprint = true;
-    notifyListeners();
-    try {
-      final conceptSummary = '''
-Concept Blueprint:
-- 01 Goal: "${SectionTextUtils.resolveGoal(proj.sections)}"
-- 02 Game Spec: ${proj.sections['game_spec'] ?? ''}
-- 03 Tech Spec: ${proj.sections['tech_spec'] ?? ''}
-- 04 Design Pillars: ${(proj.sections['design_pillars'] ?? '').replaceAll('\n', ' | ')}
-- 05 Trade-Offs: ${(proj.sections['trade_offs'] ?? '').replaceAll('\n', ' | ')}
-- 07 Out of Scope: ${(proj.sections['exclusions'] ?? '').replaceAll('\n', ' | ')}
-- 08 Done When: "${SectionTextUtils.resolveDoneWhen(proj.sections)}"''';
-      final treeLines = <String>[];
-      final beats = activeReleaseBeats;
-      for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-        final feats = featuresForBeat(beats[bIdx].id).map((f) {
-          final asset = (f.sections['primary_asset'] ?? '').trim();
-          return asset.isNotEmpty ? '${f.title} [$asset]' : f.title;
-        }).join(', ');
-        treeLines.add(
-          '- E${(bIdx + 1).toString().padLeft(2, '0')} ${beats[bIdx].title}: $feats',
-        );
-      }
-      final unlockedDeferred = fullProductionCoverage().remainingDeferredExclusions;
-      final drafted = await FullProductionBlueprintAgent.draft(
-        projectTitle: proj.title,
-        conceptSummary: conceptSummary,
-        liveTreeSummary: treeLines.join('\n'),
-        unlockedDeferredExclusions: unlockedDeferred,
-        scheduledInboxTitles: [
-          for (final i in _fullProductionScheduledInboxItems) i.featureTitle,
-        ],
-        apiKey: _apiKey,
-        modelName: _planningModel,
-        thinkingLevel: _thinkingLevel,
-      );
-      if (drafted == null) {
-        _setOfflineState();
-        return null;
-      }
-      _offlineErrorMessage = null;
-      updateFullProductionBlueprint(drafted);
-      return drafted;
-    } finally {
-      _isDraftingFullProductionBlueprint = false;
-      notifyListeners();
-    }
-  }
-
-  /// Approves the Full Production Blueprint and builds the `v0.N` Full-Game Skeleton release:
-  /// core Epics stay `STABLE ✓`, new Full Production Epics are planned in one full-blueprint pass
-  /// (always via `planRelease`, never section-by-section) and tagged `act: fullProduction` on execute.
-  Future<bool> approveFullProductionBlueprintAndBuildSkeleton() async {
-    final proj = activeProject;
-    final fpBp = fullProductionBlueprint;
-    if (proj == null || fpBp == null || !fpBp.isReadyToApprove) return false;
-    if (!GeminiAgentClient.hasKey(_apiKey)) {
-      _setOfflineState();
-      notifyListeners();
-      return false;
-    }
-
-    repackProjectReleasesSequentially(proj, pruneAllUnbuilt: true);
-    final existingBeats = List<TierDocument>.from(activeReleaseBeats);
-    final existingFeaturesByBeat = <String, List<TierDocument>>{
-      for (final b in existingBeats)
-        b.id: featuresForBeat(b.id, includeSuperseded: true),
-    };
-    final completedReleases = projectReleases
-        .where((r) => r.childrenIds.isNotEmpty)
-        .toList();
-    final allocated = _allocateNextReleaseIdAndIndex(proj);
-    final verTag = 'v0.${allocated.index}';
-    final relDoc = TierDocument(
-      id: allocated.id,
-      title: '$verTag: Full-Game Skeleton - Full Production',
-      tier: TierType.release,
-      parentId: proj.id,
-      sections: {
-        'versionTag': verTag,
-        'releaseScope': ReleaseScope.fullProduction.name,
-        'phase': ProductionPhase.fullProduction.name,
-        'fullProductionPass': '1',
-        'fpSkeleton': 'true',
-        'scope':
-            'Goal: ${fpBp.goal}\n\nIn Scope:\n${fpBp.fullGameLoop.map((l) => '• $l').join('\n')}\n\nDone When: ${fpBp.doneWhen}',
-      },
-    );
-    documents[relDoc.id] = relDoc;
-    _persistDocument(relDoc);
-    proj.childrenIds.add(relDoc.id);
-    _activeReleaseId = relDoc.id;
-    _currentPhase = ProductionPhase.fullProduction;
-    _currentStage = WorkbenchStage.releaseWorkbench;
-    _syncActiveProjectMetadata();
-
-    _isAgentBusy = true;
-    _agentProgressStep = 'Planning $verTag Full-Game Skeleton…';
-    notifyListeners();
-    ReleaseBlueprint? planned;
-    try {
-      planned = await ReleasePlannerAgent.planRelease(
-        projectDoc: proj,
-        releaseDoc: relDoc,
-        completedReleases: completedReleases,
-        existingBeats: existingBeats,
-        existingFeaturesByBeat: existingFeaturesByBeat,
-        apiKey: _apiKey,
-        modelName: _planningModel,
-        thinkingLevel: _thinkingLevel,
-        fullProductionBlueprint: fpBp,
-      );
-    } finally {
-      _isAgentBusy = false;
-      _agentProgressStep = null;
-    }
-    if (planned == null ||
-        !planned.beats.any(
-          (b) => !existingBeats.any((eb) => eb.id == b.id) &&
-              b.includedFeatures.isNotEmpty,
-        )) {
-      proj.childrenIds.remove(relDoc.id);
-      documents.remove(relDoc.id);
-      LocalVaultService.deleteDocument(relDoc.id);
-      _activeReleaseId = completedReleases.isNotEmpty
-          ? completedReleases.last.id
-          : null;
-      _syncActiveProjectMetadata();
-      _setOfflineState();
-      notifyListeners();
-      return false;
-    }
-    planned.releaseVersionTag = verTag;
-    relDoc.sections['release_blueprint_json'] = jsonEncode(planned.toJson());
-    _persistDocument(relDoc);
-    _releaseBlueprint = planned;
-    _offlineErrorMessage = null;
-    _markPromotedInboxItemsImplemented(fpBp.promotedSystems);
-    await approveAndExecuteReleasePlan();
-    return true;
-  }
-
-  /// Single source of truth: Inbox items promoted through `04 Promoted Systems` are marked implemented
-  /// so they are never auto-injected a second time.
-  void _markPromotedInboxItemsImplemented(List<String> promotedSystems) {
-    final promotedLower = [
-      for (final p in promotedSystems) p.toLowerCase().trim(),
-    ].where((p) => p.isNotEmpty).toList();
-    if (promotedLower.isEmpty) return;
-    final items = List<FeatureInboxItem>.from(featureInboxItems);
-    bool changed = false;
-    for (final item in items) {
-      if (item.status == FeatureInboxStatus.implemented) continue;
-      if (item.targetFuturePhase.index > ProductionPhase.fullProduction.index) {
-        continue;
-      }
-      final title = item.featureTitle.toLowerCase().trim();
-      if (title.isEmpty) continue;
-      if (promotedLower.any((p) => p == title || p.contains(title) || title.contains(p))) {
-        item.status = FeatureInboxStatus.implemented;
-        changed = true;
-      }
-    }
-    if (changed) _saveFeatureInboxItems(items);
-  }
-
-  /// Deterministic `v1.0` Launch Release blueprint: every feature stays `STABLE ✓` (open `[FIX]` tasks are
-  /// resolved in place) plus 1 `[NEW]` Release Build Export feature in the last Full Production Epic.
-  ReleaseBlueprint? _buildLaunchReleaseBlueprint(
-    TierDocument relDoc,
-    String verTag,
-    List<TierDocument> existingBeats,
-  ) {
-    if (existingBeats.isEmpty) return null;
-    final fpBp = fullProductionBlueprint;
-    final shipWhen = (fpBp?.doneWhen.trim().isNotEmpty ?? false)
-        ? fpBp!.doneWhen.trim()
-        : 'Launch standalone build → play from title screen to credits without crashes';
-    final lastFpIdx = existingBeats.lastIndexWhere((b) => b.isFullProductionEpic);
-    final hostIdx = lastFpIdx >= 0 ? lastFpIdx : existingBeats.length - 1;
-    const exportTuning = <String>[
-      'buildTargets: 1 platform',
-      'fullRunThroughs: 2 runs',
-    ];
-    const exportGuards = <String>[
-      '[STATE GUARD] Block ship while any [FIX] task is open',
-    ];
-    final beats = <ProposedBeatBlueprint>[];
-    for (int bIdx = 0; bIdx < existingBeats.length; bIdx++) {
-      final b = existingBeats[bIdx];
-      final feats = <ProposedFeatureBlueprint>[
-        for (final f in featuresForBeat(b.id, includeSuperseded: true))
-          ProposedFeatureBlueprint(
-            id: f.id,
-            title: f.title,
-            goal: SectionTextUtils.resolveGoal(f.sections),
-            doneWhen: SectionTextUtils.resolveDoneWhen(f.sections),
-            estimatedHours: 0,
-            included: !isFeatureSuperseded(f),
-            lifecycle: isFeatureSuperseded(f)
-                ? FeatureLifecycleStatus.superseded
-                : FeatureLifecycleStatus.stable,
-            originVersion: f.sections['originVersion'] ?? 'v0.1',
-            primarySharedScriptOrScene:
-                (f.sections['primary_asset'] ?? '').trim().isNotEmpty
-                    ? f.sections['primary_asset']!.trim()
-                    : null,
-            inScope: SectionTextUtils.resolveInScope(f.sections),
-          ),
-        if (bIdx == hostIdx)
-          ProposedFeatureBlueprint(
-            id: 'feat_${b.id}_${verTag.replaceAll('.', '_')}_release_export',
-            title: 'Release Build Export',
-            goal: '+Standalone export preset, +full run-through, +crash & save check',
-            doneWhen: shipWhen,
-            estimatedHours: 4,
-            included: true,
-            lifecycle: FeatureLifecycleStatus.newFeature,
-            originVersion: verTag,
-            inScope: const [
-              '+Standalone export preset & icon',
-              '+Full title-to-credits run-through',
-              '+Crash & save check',
-            ],
-            tuningParams: exportTuning,
-            edgeCases: exportGuards,
-            checkpoints: [
-              ProposedCheckpointBlueprint(
-                title: 'Release Build Export',
-                playtestCriteria: shipWhen,
-                releaseVersion: verTag,
-                tasks: const [
-                  'Export Preset & Icon (1h)',
-                  'Standalone Run-Through (2h)',
-                  'Crash & Save Check (1h)',
-                ],
-                coveredScope: const ['+Standalone export & run-through'],
-                tuningParams: exportTuning,
-                edgeCases: exportGuards,
-              ),
-            ],
-          ),
-      ];
-      beats.add(
-        ProposedBeatBlueprint(
-          id: b.id,
-          title: b.title,
-          goal: SectionTextUtils.resolveGoal(b.sections),
-          doneWhen: SectionTextUtils.resolveDoneWhen(b.sections),
-          features: feats,
-        ),
-      );
-    }
-    return ReleaseBlueprint(
-      releaseDocId: relDoc.id,
-      releaseTitle: '$verTag: Launch Release — Build Export & Ship Sweep',
-      releaseVersionTag: verTag,
-      preset: ReleaseScope.fullProduction,
-      goal: 'v1.0 Launch — Export the standalone build and clear every open [FIX] task.',
-      doneWhen: shipWhen,
-      questions: const [],
-      beats: beats,
-      explicitExclusions: fpBp?.permanentCuts ?? const [],
-    );
-  }
-
-  /// Prepares the next Progressive Release (`v0.2`, `v0.3+`) blueprint in-memory while keeping
-  /// the user inside `2. Workbench`, optionally applying a natural-language directive from the
-  /// Agentic Next-Release Co-Pilot.
-  Future<ReleaseBlueprint?> prepareProgressiveNextReleaseDraft({
-    String? agentDirective,
-  }) async {
-    _preModalReleaseIds = Set<String>.from(
-      activeProject?.childrenIds ?? const <String>[],
-    );
-    _preModalReleaseBlueprint = _releaseBlueprint;
-    _preModalFeatureInboxJson = activeProject?.sections['feature_inbox_json'];
-    _preModalExclusions = activeProject?.sections['exclusions'];
-    _preModalConceptExclusions = _conceptDraft != null
-        ? List<String>.from(_conceptDraft!.exclusions)
-        : null;
-    _preModalFeatureLifecycles = {
-      for (final d in documents.values.where((d) => d.tier == TierType.feature))
-        d.id: d.sections['lifecycle'],
-    };
-    await advanceToNextRelease(
-      transitionToGateStage: false,
-      agentReasonedProgressive: true,
-    );
-    _currentStage = WorkbenchStage.releaseWorkbench;
-    if (_releaseBlueprint == null ||
-        _releaseBlueprint!.releaseDocId != _activeReleaseId) {
-      notifyListeners();
-      return null;
-    }
-    _initialProgressiveTrack0BlueprintJson =
-        jsonEncode(_releaseBlueprint!.toJson());
-    if (agentDirective != null && agentDirective.trim().isNotEmpty) {
-      await sendReleasePlanChatMessage(agentDirective.trim());
-    }
-    notifyListeners();
-    return _releaseBlueprint;
-  }
-
-  /// Restores the initial Option 0 (`(Recommended)`) draft `ReleaseBlueprint` when the user clicks
-  /// back onto Option 0 after exploring Option 1 or Option 2 in the Progressive Release Co-Pilot.
-  void restoreInitialProgressiveDraftBlueprint() {
-    final raw = _initialProgressiveTrack0BlueprintJson;
-    if (raw == null || raw.trim().isEmpty) return;
-    try {
-      final restored = ReleaseBlueprint.fromJson(
-        jsonDecode(raw) as Map<String, dynamic>,
-      );
-      _releaseBlueprint = restored;
-      final proj = activeProject;
-      if (proj != null) {
-        if (_preModalFeatureInboxJson != null) {
-          proj.sections['feature_inbox_json'] = _preModalFeatureInboxJson!;
-        } else {
-          proj.sections.remove('feature_inbox_json');
-        }
-        _cachedInboxRawHash = null;
-        if (_preModalExclusions != null) {
-          proj.sections['exclusions'] = _preModalExclusions!;
-        } else {
-          proj.sections.remove('exclusions');
-        }
-        _persistDocument(proj);
-      }
-      if (_conceptDraft != null && _preModalConceptExclusions != null) {
-        _conceptDraft!.exclusions =
-            List<String>.from(_preModalConceptExclusions!);
-      }
-      final preLifecycles = _preModalFeatureLifecycles;
-      if (preLifecycles != null) {
-        for (final entry in preLifecycles.entries) {
-          final featDoc = documents[entry.key];
-          if (featDoc == null) continue;
-          if (entry.value != null) {
-            featDoc.sections['lifecycle'] = entry.value!;
-          } else {
-            featDoc.sections.remove('lifecycle');
-          }
-          if (entry.value != FeatureLifecycleStatus.superseded.name) {
-            featDoc.sections.remove('supersededInVersion');
-          }
-          _persistDocument(featDoc);
-        }
-      }
-      final relDoc = activeRelease;
-      if (relDoc != null && relDoc.id == restored.releaseDocId) {
-        relDoc.sections['release_blueprint_json'] = raw;
-        _persistDocument(relDoc);
-      }
-      _syncActiveProjectMetadata();
-      notifyListeners();
-    } catch (_) {}
-  }
-
-  static final RegExp _epicPrefixStripper = RegExp(
-    r'^(?:epic\s*\d+|beat\s*\d+|e0?\d+)\s*[:·—\-]\s*',
-    caseSensitive: false,
-  );
-  static final RegExp _leadingVerbStripper = RegExp(
-    r'^(?:build|create|implement|add|upgrade|extend|configure|wire|setup|set up|enable|establish|allow|support)\s+(?:the|a|an)?\s*',
-    caseSensitive: false,
-  );
-  static final RegExp _changelogInlineArticlesRegex = RegExp(
-    r'\b(?:a|an|the|your|our)\s+',
-    caseSensitive: false,
-  );
-  static final RegExp _changelogTrailingFillerRegex = RegExp(
-    r'\s+(?:in\s+(?:the\s+)?(?:arena|scene|level|game|viewport)|for\s+(?:the\s+)?player|on\s+screen)$',
-    caseSensitive: false,
-  );
-
-  String _shortBeatName(String rawTitle, int idx) {
-    final cleaned = rawTitle.replaceFirst(_epicPrefixStripper, '').trim();
-    return cleaned.isNotEmpty ? cleaned : 'Epic ${idx + 1}';
-  }
-
-  String _formatTelegraphicDeltaItem(String raw, {required bool isUpgrade}) {
-    var cleaned = raw
-        .trim()
-        .replaceFirst(RegExp(r'^\+\s*'), '')
-        .replaceFirst(_leadingVerbStripper, '')
-        .replaceFirst(_changelogTrailingFillerRegex, '')
-        .replaceAll(_changelogInlineArticlesRegex, '')
-        .replaceAll(RegExp(r'\.$'), '')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    if (cleaned.isEmpty) return '';
-    cleaned = cleaned[0].toUpperCase() + cleaned.substring(1);
-    return isUpgrade ? '+$cleaned' : cleaned;
-  }
-
-  /// Formats a feature's scope/goal into a concise **Telegraphic Changelog Delta (`+Delta`)** string for `UPGRADE`
-  /// features or a clean telegraphic phrase for `NEW` features.
-  String formatChangelogDeltaForFeature(ProposedFeatureBlueprint feat) {
-    final isUpg = feat.lifecycle == FeatureLifecycleStatus.upgrade;
-    final items = <String>[];
-    for (final raw in feat.inScope) {
-      final cleaned = _formatTelegraphicDeltaItem(raw, isUpgrade: isUpg);
-      if (cleaned.isNotEmpty &&
-          cleaned.replaceFirst('+', '').toLowerCase() !=
-              feat.title.toLowerCase()) {
-        items.add(cleaned);
-      }
-      if (items.length >= 2) break;
-    }
-    if (items.isNotEmpty) {
-      return items.join(', ');
-    }
-    final cleanGoal = _formatTelegraphicDeltaItem(feat.goal, isUpgrade: isUpg);
-    if (cleanGoal.isEmpty) {
-      return isUpg ? '+MVP functional upgrade & tuning' : feat.title;
-    }
-    return cleanGoal;
-  }
-
-  /// Generates the 3 selectable **EPICS** option cards for the Progressive Release Co-Pilot
-  /// directly from the remaining incomplete Epics (`E01..EN`), using:
-  /// - **BLUF** card titles (`E02 + E03 · <Epic Titles>`)
-  /// - **Telegraphic (`+`-joined)** card subtitles
-  /// - **BLUF** `GOAL:` (`<Bold Payoff> — <Concise Epic Scope>`)
-  /// - **Causal `Trigger → Result`** `✓ END GOAL:` (`<Action> → <Observable Screen Result>`)
-  List<({
-    String title,
-    String subtitle,
-    String blufHeadline,
-    String blufDetail,
-    String causalDoneWhen,
-    List<int> targetBeatIndices,
-    bool isRecommended,
-  })> epicFocusOptionsForBlueprint(ReleaseBlueprint bp) {
-    final totalBeats = bp.beats.length;
-    if (totalBeats == 0) return const [];
-
-    // Act 2 · v1.0 Launch Release: a single Launch Sweep card (no Epic slicing).
-    if (documents[bp.releaseDocId]?.sections['launchRelease'] == 'true') {
-      final hostIdx = bp.beats.indexWhere(
-        (b) => b.features.any((f) => f.included && !f.isStable && !f.isSuperseded),
-      );
-      final openFixes = fullProductionCoverage().openFixCount;
-      return [
-        (
-          title: 'v1.0 Launch Sweep',
-          subtitle:
-              'Release Build Export${openFixes > 0 ? ' + $openFixes open [FIX]' : ''}',
-          blufHeadline: 'v1.0 Launch',
-          blufDetail:
-              'Export the standalone build and clear every open [FIX] task.',
-          causalDoneWhen: bp.doneWhen,
-          targetBeatIndices: <int>[if (hostIdx >= 0) hostIdx],
-          isRecommended: true,
-        ),
-      ];
-    }
-
-    final phase = _currentPhase;
-    final isVs = phase == ProductionPhase.verticalSlice;
-    final isFp = phase == ProductionPhase.fullProduction;
-    final mvpCov = mvpBeatCoverage();
-    final vsCov = verticalSliceBeatCoverage();
-    final fpCov = isFp ? fullProductionCoverage() : null;
-    final incompleteCodes = (fpCov != null && !fpCov.isLegacy)
-        ? fpCov.incompleteBeatCodes.toSet()
-        : (isVs
-            ? vsCov.incompleteBeatCodes.toSet()
-            : mvpCov.incompleteBeatCodes.toSet());
-
-    final incompleteIndices = <int>[];
-    final initialActiveIndices = <int>[];
-    for (int i = 0; i < totalBeats; i++) {
-      final code = 'E${(i + 1).toString().padLeft(2, '0')}';
-      if (incompleteCodes.contains(code)) {
-        incompleteIndices.add(i);
-      }
-      final b = bp.beats[i];
-      if (b.features.any((f) => f.included && !f.isStable && !f.isSuperseded)) {
-        initialActiveIndices.add(i);
-      }
-    }
-
-    final fpEpicIndices = <int>[
-      if (fpCov != null && !fpCov.isLegacy)
-        for (int i = 0; i < totalBeats; i++)
-          if (documents[bp.beats[i].id]?.isFullProductionEpic ?? false) i,
-    ];
-    final availableIndices = incompleteIndices.isNotEmpty
-        ? incompleteIndices
-        : (fpEpicIndices.isNotEmpty
-            ? fpEpicIndices
-            : List<int>.generate(totalBeats, (i) => i));
-
-    // Card 0 (Recommended): initial active incomplete Epics (or first 1-2 available incomplete Epics)
-    final recIndices = initialActiveIndices.isNotEmpty
-        ? initialActiveIndices
-        : availableIndices.take(availableIndices.length >= 2 ? 2 : 1).toList();
-
-    // Card 1: Focused single-Epic option on the first available incomplete Epic
-    final firstSingleIdx = availableIndices.first;
-    final opt1Indices = (recIndices.length == 1 &&
-            recIndices.first == firstSingleIdx &&
-            availableIndices.length >= 2)
-        ? <int>[availableIndices[0], availableIndices[1]]
-        : <int>[firstSingleIdx];
-
-    // Card 2: Alternative incomplete Epic(s)
-    List<int> opt2Indices;
-    if (availableIndices.length >= 3) {
-      opt2Indices = <int>[availableIndices[1], availableIndices[2]];
-    } else if (availableIndices.length == 2) {
-      opt2Indices = <int>[availableIndices[1]];
-    } else if (totalBeats >= 2) {
-      final otherIdx = (firstSingleIdx + 1) % totalBeats;
-      opt2Indices = <int>[firstSingleIdx, otherIdx];
-    } else {
-      opt2Indices = <int>[0];
-    }
-
-    ({
-      String title,
-      String subtitle,
-      String blufHeadline,
-      String blufDetail,
-      String causalDoneWhen,
-      List<int> targetBeatIndices,
-      bool isRecommended,
-    }) buildCardConfig(
-      List<int> indices, {
-      required bool isRec,
-      required bool forceSingleLabel,
-    }) {
-      final codes = [
-        for (final i in indices) 'E${(i + 1).toString().padLeft(2, '0')}',
-      ];
-      final names = [
-        for (final i in indices) _shortBeatName(bp.beats[i].title, i),
-      ];
-      final codePrefix = forceSingleLabel && codes.length == 1
-          ? '${codes.first} Only'
-          : codes.join(' + ');
-      final joinedNames = names.take(2).join(' & ');
-      final cardTitle = '$codePrefix · $joinedNames';
-
-      final telegraphicTokens = <String>[];
-      for (final i in indices) {
-        for (final f in bp.beats[i].features) {
-          if (f.isSuperseded) continue;
-          telegraphicTokens.add(f.title);
-          if (telegraphicTokens.length >= 3) break;
-        }
-        if (telegraphicTokens.length >= 3) break;
-      }
-      final subtitle = telegraphicTokens.isNotEmpty
-          ? telegraphicTokens.join(' + ')
-          : names.join(' + ');
-
-      final phaseLabel = phase == ProductionPhase.verticalSlice
-          ? 'Vertical Slice polish'
-          : (phase == ProductionPhase.fullProduction
-              ? 'Full Production'
-              : 'MVP');
-      final epicPairsText = [
-        for (int k = 0; k < indices.length; k++) '${codes[k]} ${names[k]}',
-      ].join(' and ');
-
-      final blufHeadline = joinedNames;
-      final blufDetail = 'Complete $epicPairsText for $phaseLabel.';
-
-      final String causalDoneWhen;
-      if (isRec && bp.doneWhen.trim().isNotEmpty && bp.doneWhen.contains('→')) {
-        causalDoneWhen = bp.doneWhen.trim();
-      } else if (telegraphicTokens.length >= 2) {
-        causalDoneWhen =
-            'Trigger ${telegraphicTokens.first} in Play mode → verify ${telegraphicTokens.skip(1).join(" + ")} on screen';
-      } else {
-        causalDoneWhen =
-            'Playtest ${codes.join(" + ")} in Play mode → verify all $joinedNames mechanics respond without state locks';
-      }
-
-      return (
-        title: cardTitle,
-        subtitle: subtitle,
-        blufHeadline: blufHeadline,
-        blufDetail: blufDetail,
-        causalDoneWhen: causalDoneWhen,
-        targetBeatIndices: indices,
-        isRecommended: isRec,
-      );
-    }
-
-    return [
-      buildCardConfig(
-        recIndices,
-        isRec: true,
-        forceSingleLabel: false,
-      ),
-      buildCardConfig(
-        opt1Indices,
-        isRec: false,
-        forceSingleLabel: opt1Indices.length == 1,
-      ),
-      buildCardConfig(
-        opt2Indices,
-        isRec: false,
-        forceSingleLabel: opt2Indices.length == 1 && opt1Indices.length > 1,
-      ),
-    ];
-  }
-
-  /// Immediately switches the active whole Epics in `_releaseBlueprint` (`0ms`) when the user clicks
-  /// one of the 3 Epic option cards in the Progressive Release Co-Pilot.
-  void applyProgressiveEpicFocusOption(
-    int optionIndex,
-    List<int> targetBeatIndices,
-  ) {
-    if (optionIndex == 0) {
-      restoreInitialProgressiveDraftBlueprint();
-      return;
-    }
-    restoreInitialProgressiveDraftBlueprint();
-    final bp = _releaseBlueprint;
-    if (bp == null || bp.beats.isEmpty) return;
-
-    final verTag = bp.releaseVersionTag;
-    final targetSet = targetBeatIndices.toSet();
-    final options = epicFocusOptionsForBlueprint(bp);
-    final selectedOpt =
-        (optionIndex >= 0 && optionIndex < options.length) ? options[optionIndex] : null;
-
-    for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
-      final beat = bp.beats[bIdx];
-      final isTarget = targetSet.contains(bIdx);
-      for (final feat in beat.features) {
-        if (feat.isSuperseded) continue;
-        if (isTarget) {
-          if (feat.lifecycle == FeatureLifecycleStatus.stable) {
-            feat.lifecycle = FeatureLifecycleStatus.upgrade;
-            feat.included = true;
-            if (feat.estimatedHours <= 0) {
-              feat.estimatedHours = 4;
-            }
-            if (feat.checkpoints.isEmpty) {
-              feat.checkpoints = [
-                ProposedCheckpointBlueprint(
-                  title: '${feat.title} $verTag Upgrade',
-                  playtestCriteria:
-                      'Trigger ${feat.title} in Play mode → verify $verTag upgrade on screen',
-                  tasks: [
-                    '${feat.title} State Upgrade (2h)',
-                    '${feat.title} Action & Feel Extension (1h)',
-                    '${feat.title} Bounds & State Guard (1h)',
-                  ],
-                  coveredScope: feat.inScope.isNotEmpty
-                      ? List<String>.from(feat.inScope)
-                      : ['${feat.title} $verTag upgrade'],
-                  tuningParams: List<String>.from(feat.tuningParams),
-                  edgeCases: List<String>.from(feat.edgeCases),
-                  releaseVersion: verTag,
-                ),
-              ];
-            }
-          } else {
-            feat.included = true;
-          }
-        } else {
-          if (feat.lifecycle == FeatureLifecycleStatus.upgrade) {
-            feat.lifecycle = FeatureLifecycleStatus.stable;
-            feat.estimatedHours = 0;
-            feat.included = true;
-          } else if (feat.lifecycle == FeatureLifecycleStatus.newFeature) {
-            feat.included = false;
-          }
-        }
-      }
-    }
-
-    if (selectedOpt != null) {
-      bp.releaseTitle = '$verTag: ${selectedOpt.blufHeadline}';
-      bp.goal = '${selectedOpt.blufHeadline} — ${selectedOpt.blufDetail}';
-      bp.doneWhen = selectedOpt.causalDoneWhen;
-      final relDoc = activeRelease;
-      if (relDoc != null && relDoc.id == bp.releaseDocId) {
-        relDoc.title = bp.releaseTitle;
-        relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
-        _persistDocument(relDoc);
-      }
-    }
-    _syncActiveProjectMetadata();
-    notifyListeners();
-  }
-
-  /// Restores the active release, blueprint, and production phase if the user cancels (or fails offline in)
-  /// the Progressive Next Release modal, and removes any newly created unbuilt draft release documents.
-  void restoreActiveReleaseAfterCancel(
-    String? previousReleaseId,
-    ProductionPhase previousPhase,
-  ) {
-    _progressivePlanGeneration++;
-    _isSynthesizingProgressiveFocus = false;
-    _synthesizingProgressiveBeatId = null;
-    _queuedProgressiveBeatIds.clear();
-    final proj = activeProject;
-    final preIds = _preModalReleaseIds;
-    if (proj != null && preIds != null) {
-      final addedUnbuiltIds = proj.childrenIds
-          .where((id) {
-            if (preIds.contains(id)) return false;
-            final relDoc = documents[id];
-            return relDoc != null && relDoc.childrenIds.isEmpty;
-          })
-          .toList();
-      final user = _authService.currentUser;
-      for (final id in addedUnbuiltIds) {
-        proj.childrenIds.remove(id);
-        documents.remove(id);
-        LocalVaultService.deleteDocument(id);
-        if (user != null) {
-          _firestoreService.deleteDocument(uid: user.uid, docId: id);
-        }
-      }
-    }
-    if (proj != null) {
-      if (_preModalFeatureInboxJson != null) {
-        proj.sections['feature_inbox_json'] = _preModalFeatureInboxJson!;
-      } else {
-        proj.sections.remove('feature_inbox_json');
-      }
-      _cachedInboxRawHash = null;
-      if (_preModalExclusions != null) {
-        proj.sections['exclusions'] = _preModalExclusions!;
-      } else {
-        proj.sections.remove('exclusions');
-      }
-    }
-    if (_conceptDraft != null && _preModalConceptExclusions != null) {
-      _conceptDraft!.exclusions =
-          List<String>.from(_preModalConceptExclusions!);
-    }
-    final preLifecycles = _preModalFeatureLifecycles;
-    if (preLifecycles != null) {
-      for (final entry in preLifecycles.entries) {
-        final featDoc = documents[entry.key];
-        if (featDoc == null) continue;
-        if (entry.value != null) {
-          featDoc.sections['lifecycle'] = entry.value!;
-        } else {
-          featDoc.sections.remove('lifecycle');
-        }
-        if (entry.value != FeatureLifecycleStatus.superseded.name) {
-          featDoc.sections.remove('supersededInVersion');
-        }
-        _persistDocument(featDoc);
-      }
-    }
-    if (_preModalReleaseBlueprint != null) {
-      _releaseBlueprint = _preModalReleaseBlueprint;
-    }
-    _preModalReleaseIds = null;
-    _preModalReleaseBlueprint = null;
-    _preModalFeatureInboxJson = null;
-    _preModalExclusions = null;
-    _preModalConceptExclusions = null;
-    _preModalFeatureLifecycles = null;
-    if (previousReleaseId != null && documents.containsKey(previousReleaseId)) {
-      _activeReleaseId = previousReleaseId;
-    }
-    if (proj != null) {
-      repackProjectReleasesSequentially(
-        proj,
-        keepReleaseId: _activeReleaseId,
-      );
-    }
-    _currentPhase = previousPhase;
-    _syncActiveProjectMetadata();
-    notifyListeners();
-  }
-
-  /// Executes the prepared (or newly synthesized) next Progressive Release (`v0.2`, `v0.3+`)
-  /// directly into `2. Workbench`.
-  Future<void> buildProgressiveNextRelease({String? agentDirective}) async {
-    final currentBp = _releaseBlueprint;
-    final activeRel = activeRelease;
-    if (currentBp == null ||
-        (activeRel != null &&
-            currentBp.releaseDocId == activeRel.id &&
-            activeRel.childrenIds.isNotEmpty)) {
-      await prepareProgressiveNextReleaseDraft(agentDirective: agentDirective);
-    } else if (agentDirective != null && agentDirective.trim().isNotEmpty) {
-      await sendReleasePlanChatMessage(agentDirective.trim());
-    }
-    if (_releaseBlueprint != null) {
-      await approveAndExecuteReleasePlan();
-    }
-  }
-
-  /// Synthesizes the Release Blueprint for the active Release.
-  Future<void> openReleasePlanGate({
-    String? releaseId,
-    bool transitionToGateStage = false,
-  }) async {
-    if (releaseId != null) {
-      _activeReleaseId = releaseId;
-    }
-    final existingProj = activeProject;
-    if (_conceptDraft != null &&
-        (existingProj == null || existingProj.childrenIds.isEmpty)) {
-      _commitConceptToVault(_conceptDraft!, syncBuiltWorkbench: false);
-    }
-
-    final proj = activeProject;
-    if (proj == null) return;
-
-    final targetRelId = releaseId ??
-        _activeReleaseId ??
-        (proj.childrenIds.isNotEmpty ? proj.childrenIds.first : null);
-    if (targetRelId == null) return;
-    _activeReleaseId = targetRelId;
-
-    // Collect existing live Beats & Features from prior releases (never from targetRelId itself,
-    // and never when planning the initial v0.1 release) so v0.1 starts clean at 0% and v0.2+ preserves the single live game tree!
-    final isFirstPrototypeRelease =
-        proj.childrenIds.isEmpty || proj.childrenIds.first == targetRelId;
-    final existingBeats = <TierDocument>[];
-    final existingFeaturesByBeat = <String, List<TierDocument>>{};
-    if (!isFirstPrototypeRelease) {
-      for (final rel in projectReleases) {
-        if (rel.id == targetRelId) continue;
-        if (rel.childrenIds.isNotEmpty) {
-          for (final beatId in rel.childrenIds) {
-            final bDoc = documents[beatId];
-            if (bDoc != null && !existingBeats.any((b) => b.id == bDoc.id)) {
-              existingBeats.add(bDoc);
-              existingFeaturesByBeat[bDoc.id] = featuresForBeat(
-                bDoc.id,
-                includeSuperseded: true,
-              );
-            }
-          }
-        }
-      }
-    }
-
-    // Capture any features deferred (unchecked) across all prior Release Plan Gates (not yet built)
-    // so they automatically carry over into the next release's Beat, and archive the prior ReleaseBlueprint on its own Release doc!
-    final deferredByBeatIndex = <int, List<ProposedFeatureBlueprint>>{};
-    final priorBp = _releaseBlueprint;
-    if (priorBp != null) {
-      final priorRelDoc = documents[priorBp.releaseDocId];
-      if (priorRelDoc != null) {
-        priorRelDoc.sections['release_blueprint_json'] =
-            _encodeCompactArchivedReleaseBlueprint(priorBp);
-        _persistDocument(priorRelDoc);
-      }
-    }
-    final builtFeatureTitleSet = <String>{
-      for (final featList in existingFeaturesByBeat.values)
-        for (final ef in featList) ef.title.toLowerCase().trim(),
-    };
-    final priorBlueprintsToScan = <ReleaseBlueprint>[
-      for (final rel in projectReleases)
-        if (rel.id != targetRelId && rel.childrenIds.isNotEmpty)
-          if (releaseBlueprintFor(rel.id) != null) releaseBlueprintFor(rel.id)!,
-      if (priorBp != null && priorBp.releaseDocId != targetRelId) priorBp,
-    ];
-    final seenDeferredByBeat = <int, Set<String>>{};
-    for (final scannedBp in priorBlueprintsToScan) {
-      for (int bIdx = 0; bIdx < scannedBp.beats.length; bIdx++) {
-        final seenTitles = seenDeferredByBeat.putIfAbsent(bIdx, () => <String>{});
-        final deferredInBeat = deferredByBeatIndex.putIfAbsent(
-          bIdx,
-          () => <ProposedFeatureBlueprint>[],
-        );
-        for (final df in scannedBp.beats[bIdx].deferredFeatures) {
-          final normTitle = df.title.toLowerCase().trim();
-          if (normTitle.isNotEmpty &&
-              !builtFeatureTitleSet.contains(normTitle) &&
-              seenTitles.add(normTitle)) {
-            deferredInBeat.add(df);
-          }
-        }
-      }
-    }
-    deferredByBeatIndex.removeWhere((_, list) => list.isEmpty);
-
-    _activeReleaseId = targetRelId;
-    final relDoc = documents[targetRelId];
-    if (relDoc == null) return;
-    _syncCurrentPhaseFromRelease(relDoc);
-
-    _stepQueueGeneration++;
-    _progressivePlanGeneration++;
-    final int planGeneration = _progressivePlanGeneration;
-    _pendingFeatureStepQueue.clear();
-    final verTag = releaseVersionTagFor(relDoc);
-    relDoc.sections['versionTag'] = verTag;
-
-    // Fast Path 0: `v1.0` Launch Release is deterministic (no AI call): STABLE tree + Release Build Export.
-    if (relDoc.sections['launchRelease'] == 'true' && existingBeats.isNotEmpty) {
-      final launchBp = _buildLaunchReleaseBlueprint(relDoc, verTag, existingBeats);
-      if (launchBp != null) {
-        relDoc.title = launchBp.releaseTitle;
-        relDoc.sections['release_blueprint_json'] = jsonEncode(launchBp.toJson());
-        _persistDocument(relDoc);
-        _releaseBlueprint = launchBp;
-        _offlineErrorMessage = null;
-        if (transitionToGateStage) {
-          _currentStage = WorkbenchStage.releaseWorkbench;
-        }
-        _syncActiveProjectMetadata();
-        notifyListeners();
-        return;
-      }
-    }
-
-    _releaseBlueprint = null;
-    _isAgentBusy = true;
-    final displayPlanModel = _planningModel;
-    _agentProgressStep =
-        'Synthesizing $verTag Release Architecture ($displayPlanModel)...';
-
-    // Step 0 (`0ms` Live-Tree Skeleton): When opening a Progressive Release (`v0.2+`) in live mode,
-    // immediately populate `_releaseBlueprint` with the existing `E01..EN` Epics and `STABLE` features
-    // so the 3-Step Progressive Release canvas opens in `0ms` while Section 1 and Section 2 stream in.
-    if (!isFirstPrototypeRelease &&
-        existingBeats.isNotEmpty &&
-        GeminiAgentClient.hasKey(_apiKey) &&
-        GeminiAgentClient.testMockResponder == null) {
-      final skeletonBp =
-          ReleasePlannerAgent.buildProgressiveLiveTreeSkeletonBlueprint(
-        projectDoc: proj,
-        releaseDoc: relDoc,
-        existingBeats: existingBeats,
-        existingFeaturesByBeat: existingFeaturesByBeat,
-        deferredByBeatIndex: deferredByBeatIndex,
-      );
-      if (skeletonBp != null) {
-        _injectDueScheduledInboxItemsIntoBlueprint(skeletonBp, _currentPhase);
-        _releaseBlueprint = skeletonBp;
-        _isSynthesizingProgressiveFocus = false;
-        _synthesizingProgressiveBeatId = null;
-        _queuedProgressiveBeatIds.clear();
-        final initialCards = epicFocusOptionsForBlueprint(skeletonBp);
-        final initialRec = initialCards.isNotEmpty ? initialCards.first : null;
-        final rawTargetEpicIdx = relDoc.sections['targetEpicIndex'];
-        final isAgentReasoned = relDoc.sections['agentReasoned'] == 'true';
-        final explicitIdx = !isAgentReasoned && rawTargetEpicIdx != null
-            ? int.tryParse(rawTargetEpicIdx)
-            : null;
-        final initialTargetIndices = (explicitIdx != null &&
-                explicitIdx >= 0 &&
-                explicitIdx < existingBeats.length)
-            ? <int>[explicitIdx]
-            : (initialRec != null && initialRec.targetBeatIndices.isNotEmpty
-                ? initialRec.targetBeatIndices
-                : <int>[0]);
-        for (final idx in initialTargetIndices) {
-          if (idx >= 0 && idx < skeletonBp.beats.length) {
-            _queuedProgressiveBeatIds.add(skeletonBp.beats[idx].id);
-          }
-        }
-        _agentProgressStep = 'Planning $verTag Epic upgrades…';
-      }
-    }
-    notifyListeners();
-
-    try {
-      final completedPriorReleases = projectReleases
-          .where((r) => r.id != targetRelId && r.childrenIds.isNotEmpty)
-          .toList();
-      final ReleaseBlueprint? planned;
-      if (!isFirstPrototypeRelease &&
-          existingBeats.isNotEmpty &&
-          GeminiAgentClient.testMockResponder == null) {
-        planned = await planProgressiveReleaseSectionBySection(
-          projectDoc: proj,
-          releaseDoc: relDoc,
-          completedReleases: completedPriorReleases,
-          existingBeats: existingBeats,
-          existingFeaturesByBeat: existingFeaturesByBeat,
-          deferredByBeatIndex: deferredByBeatIndex,
-          generation: planGeneration,
-        );
-      } else {
-        planned = await ReleasePlannerAgent.planRelease(
-          projectDoc: proj,
-          releaseDoc: relDoc,
-          completedReleases: completedPriorReleases,
-          existingBeats: existingBeats,
-          existingFeaturesByBeat: existingFeaturesByBeat,
-          deferredByBeatIndex: deferredByBeatIndex,
-          apiKey: _apiKey,
-          modelName: _planningModel,
-          thinkingLevel: _thinkingLevel,
-        );
-      }
-      if (planGeneration != _progressivePlanGeneration) return;
-      if (planned != null) {
-        if (planned.releaseTitle.isNotEmpty &&
-            planned.releaseTitle != relDoc.title) {
-          relDoc.title = planned.releaseTitle;
-        }
-        relDoc.sections.remove('used_baseline_fallback');
-        relDoc.sections['versionTag'] = verTag;
-        _syncCurrentPhaseFromRelease(relDoc);
-        if (!isFirstPrototypeRelease) {
-          _injectDueScheduledInboxItemsIntoBlueprint(planned, _currentPhase);
-        }
-        relDoc.sections['release_blueprint_json'] =
-            jsonEncode(planned.toJson());
-        _persistDocument(relDoc);
-        _releaseBlueprint = planned;
-        _offlineErrorMessage = null;
-        if (transitionToGateStage) {
-          _currentStage = WorkbenchStage.releaseWorkbench;
-        }
-        _syncActiveProjectMetadata();
-      } else {
-        _releaseBlueprint = null;
-        if (!isFirstPrototypeRelease && existingBeats.isNotEmpty) {
-          final fallbackProgressive =
-              ReleasePlannerAgent.buildImmediateProgressiveBaselineBlueprint(
-            projectDoc: proj,
-            releaseDoc: relDoc,
-            existingBeats: existingBeats,
-            existingFeaturesByBeat: existingFeaturesByBeat,
-            deferredByBeatIndex: deferredByBeatIndex,
-          );
-          if (fallbackProgressive != null) {
-            _injectDueScheduledInboxItemsIntoBlueprint(
-              fallbackProgressive,
-              _currentPhase,
-            );
-            relDoc.sections['used_baseline_fallback'] = 'true';
-            relDoc.sections['release_blueprint_json'] =
-                jsonEncode(fallbackProgressive.toJson());
-            _persistDocument(relDoc);
-            _releaseBlueprint = fallbackProgressive;
-            _syncActiveProjectMetadata();
-          }
-        } else if (isFirstPrototypeRelease &&
-            GeminiAgentClient.hasKey(_apiKey)) {
-          final fallbackInitial =
-              ReleasePlannerAgent.buildImmediateInitialBaselineBlueprint(
-            projectDoc: proj,
-            releaseDoc: relDoc,
-          );
-          if (fallbackInitial != null) {
-            relDoc.sections['used_baseline_fallback'] = 'true';
-            relDoc.sections['versionTag'] = verTag;
-            relDoc.sections['release_blueprint_json'] =
-                jsonEncode(fallbackInitial.toJson());
-            _persistDocument(relDoc);
-            _releaseBlueprint = fallbackInitial;
-            _syncActiveProjectMetadata();
-          }
-        }
-        if (_releaseBlueprint == null) {
-          _setOfflineState();
-        }
-      }
-    } finally {
-      if (planGeneration == _progressivePlanGeneration) {
-        _isSynthesizingProgressiveFocus = false;
-        _synthesizingProgressiveBeatId = null;
-        _queuedProgressiveBeatIds.clear();
-        _isAgentBusy = false;
-        _agentProgressStep = null;
-        notifyListeners();
-      }
-    }
-  }
-
-  /// Section-by-Section Progressive Release Orchestrator (`Step 0: 0ms Live-Tree Skeleton & Deterministic Section 1` ->
-  /// `Pass 2: Section 2 Target Epics One-by-One`).
-  Future<ReleaseBlueprint?> planProgressiveReleaseSectionBySection({
-    required TierDocument projectDoc,
-    required TierDocument releaseDoc,
-    required List<TierDocument> completedReleases,
-    required List<TierDocument> existingBeats,
-    required Map<String, List<TierDocument>> existingFeaturesByBeat,
-    required Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex,
-    bool isBackgroundPrewarm = false,
-    int? generation,
-  }) async {
-    if (!GeminiAgentClient.hasKey(_apiKey) || existingBeats.isEmpty) {
-      return null;
-    }
-    bool isCancelled() =>
-        !isBackgroundPrewarm &&
-        generation != null &&
-        generation != _progressivePlanGeneration;
-    final verTag = releaseVersionTagFor(releaseDoc);
-    final workingBp = (!isBackgroundPrewarm &&
-            _releaseBlueprint != null &&
-            _releaseBlueprint!.releaseDocId == releaseDoc.id)
-        ? _releaseBlueprint!
-        : ReleasePlannerAgent.buildProgressiveLiveTreeSkeletonBlueprint(
-            projectDoc: projectDoc,
-            releaseDoc: releaseDoc,
-            existingBeats: existingBeats,
-            existingFeaturesByBeat: existingFeaturesByBeat,
-            deferredByBeatIndex: deferredByBeatIndex,
-          );
-    if (workingBp == null) return null;
-
-    // Pass 1 (0ms Deterministic Section 1): Seed `1. Choose v0.X Focus`, `GOAL`, `END GOAL`, & 3 Epic Option Cards
-    final epicCards = epicFocusOptionsForBlueprint(workingBp);
-    final recCard = epicCards.isNotEmpty ? epicCards.first : null;
-    final rawTargetEpicIdx = releaseDoc.sections['targetEpicIndex'];
-    final isAgentReasoned = releaseDoc.sections['agentReasoned'] == 'true';
-    final explicitIdx = !isAgentReasoned && rawTargetEpicIdx != null
-        ? int.tryParse(rawTargetEpicIdx)
-        : null;
-    final targetEpicIndices = (explicitIdx != null &&
-            explicitIdx >= 0 &&
-            explicitIdx < existingBeats.length)
-        ? <int>[explicitIdx]
-        : (recCard != null && recCard.targetBeatIndices.isNotEmpty
-            ? recCard.targetBeatIndices
-            : <int>[0]);
-
-    if (recCard != null) {
-      workingBp.releaseTitle = '$verTag: ${recCard.blufHeadline}';
-      releaseDoc.title = workingBp.releaseTitle;
-      workingBp.goal = '${recCard.blufHeadline} — ${recCard.blufDetail}';
-      workingBp.doneWhen = recCard.causalDoneWhen;
-      workingBp.questions = [
-        AgentQuestion(
-          id: 'rel_q_1',
-          question: 'Which available Epics should $verTag build?',
-          options: [
-            for (final c in epicCards)
-              '${c.isRecommended ? "(Recommended) " : ""}${c.title}: ${c.subtitle}',
-          ],
-        ),
-      ];
-    }
-    workingBp.missingGaps = [
-      for (final idx in targetEpicIndices)
-        if (idx >= 0 && idx < existingBeats.length)
-          'E${(idx + 1).toString().padLeft(2, '0')}: Complete ${existingBeats[idx].title} for ${_currentPhase.shortName}',
-    ];
-
-    if (!isBackgroundPrewarm) {
-      _releaseBlueprint = workingBp;
-      _isSynthesizingProgressiveFocus = false;
-      _synthesizingProgressiveBeatId = null;
-      _queuedProgressiveBeatIds.clear();
-      for (final idx in targetEpicIndices) {
-        if (idx >= 0 && idx < workingBp.beats.length) {
-          _queuedProgressiveBeatIds.add(workingBp.beats[idx].id);
-        }
-      }
-      notifyListeners();
-    }
-
-    // Pass 2 (Epic-by-Epic): Synthesize Section 2 (`2. Epics & Features in v0.X`) one target Epic at a time
-    final alreadyPlannedChanges = <String>[];
-    for (final bIdx in targetEpicIndices) {
-      if (isCancelled()) return null;
-      if (bIdx < 0 ||
-          bIdx >= existingBeats.length ||
-          bIdx >= workingBp.beats.length) {
-        continue;
-      }
-      final eb = existingBeats[bIdx];
-      final eCode = 'E${(bIdx + 1).toString().padLeft(2, '0')}';
-      if (!isBackgroundPrewarm) {
-        _queuedProgressiveBeatIds.remove(eb.id);
-        _synthesizingProgressiveBeatId = eb.id;
-        _agentProgressStep = 'Synthesizing $eCode (${eb.title}) upgrades…';
-        notifyListeners();
-      }
-
-      final updatedBeat = await ReleasePlannerAgent.planProgressiveEpicChanges(
-        projectDoc: projectDoc,
-        releaseDoc: releaseDoc,
-        epicDoc: eb,
-        epicIndex: bIdx,
-        totalEpicsCount: existingBeats.length,
-        existingFeaturesInEpic:
-            existingFeaturesByBeat[eb.id] ?? const <TierDocument>[],
-        queuedDeferredInEpic:
-            deferredByBeatIndex[bIdx] ?? const <ProposedFeatureBlueprint>[],
-        section1Goal: workingBp.goal,
-        section1DoneWhen: workingBp.doneWhen,
-        missingGaps: workingBp.missingGaps,
-        alreadyPlannedChanges: alreadyPlannedChanges,
-        apiKey: _apiKey,
-        modelName: _conversationModel,
-        thinkingLevel: 'LOW',
-      );
-      if (isCancelled()) return null;
-      if (updatedBeat != null) {
-        workingBp.beats[bIdx] = updatedBeat;
-        for (final f in updatedBeat.features) {
-          if (!f.isStable && !f.isSuperseded) {
-            alreadyPlannedChanges.add(f.title);
-          }
-        }
-        if (!isBackgroundPrewarm) {
-          _injectDueScheduledInboxItemsIntoBlueprint(workingBp, _currentPhase);
-          notifyListeners();
-        }
-      }
-    }
-
-    if (!isBackgroundPrewarm) {
-      _synthesizingProgressiveBeatId = null;
-      _queuedProgressiveBeatIds.clear();
-    }
-
-    final hasAnyActiveChange = workingBp.beats.any(
-      (b) => b.features.any((f) => !f.isStable && !f.isSuperseded),
-    );
-    if (!hasAnyActiveChange) return null;
-    final refreshedCards = epicFocusOptionsForBlueprint(workingBp);
-    if (refreshedCards.isNotEmpty) {
-      final refreshedRec = refreshedCards.first;
-      workingBp.goal =
-          '${refreshedRec.blufHeadline} — ${refreshedRec.blufDetail}';
-      workingBp.doneWhen = refreshedRec.causalDoneWhen;
-    }
-    return workingBp;
-  }
-
-  /// Sends a user turn in the Stage 2 Release Plan Gate Chat to refine Beats, Features, or Scope.
-  Future<void> sendReleasePlanChatMessage(String message) async {
-    final bp = _releaseBlueprint;
-    if (bp == null || message.trim().isEmpty) return;
-
-    _isAgentBusy = true;
-    _agentProgressStep =
-        'Refining Release Plan ($_conversationModel)...';
-    notifyListeners();
-
-    try {
-      final ok = await ReleasePlannerAgent.sendReleasePlanChatTurn(
-        blueprint: bp,
-        userMessage: message,
-        projectDoc: activeProject,
-        apiKey: _apiKey,
-        modelName: _conversationModel,
-        thinkingLevel: _thinkingLevel,
-      );
-      if (ok) {
-        _injectDueScheduledInboxItemsIntoBlueprint(bp, _currentPhase);
-        final relDoc = activeRelease;
-        if (relDoc != null) {
-          if (bp.releaseTitle.trim().isNotEmpty &&
-              bp.releaseTitle != relDoc.title) {
-            relDoc.title = bp.releaseTitle;
-          }
-          relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
-          _persistDocument(relDoc);
-        }
-        _offlineErrorMessage = null;
-        _syncActiveProjectMetadata();
-      } else {
-        _setOfflineState();
-      }
-    } finally {
-      _isAgentBusy = false;
-      _agentProgressStep = null;
-      notifyListeners();
-    }
-  }
-
-  /// Toggles whether a proposed Feature in the Release Plan Gate is kept in scope or deferred to Out of Scope.
-  void toggleProposedFeatureScope(
-    String beatId,
-    String featureId,
-    bool included,
-  ) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    for (final beat in bp.beats) {
-      if (beat.id == beatId) {
-        for (final feat in beat.features) {
-          if (feat.id == featureId) {
-            feat.included = included;
-            _syncActiveProjectMetadata();
-            notifyListeners();
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  /// Toggles an existing Feature in the Progressive Release Planner between `UPGRADE` (`+4h` delta checkpoint)
-  /// and `STABLE ✓` (`0h`, locked at 100%).
-  void toggleProposedFeatureUpgradeOrStable(
-    String beatId,
-    String featureId,
-  ) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    final verTag = bp.releaseVersionTag;
-    for (final beat in bp.beats) {
-      if (beat.id == beatId) {
-        for (final feat in beat.features) {
-          if (feat.id == featureId) {
-            if (feat.lifecycle == FeatureLifecycleStatus.upgrade) {
-              feat.lifecycle = FeatureLifecycleStatus.stable;
-              feat.estimatedHours = 0;
-              feat.included = true;
-            } else {
-              feat.lifecycle = FeatureLifecycleStatus.upgrade;
-              feat.included = true;
-              if (feat.estimatedHours <= 0) {
-                feat.estimatedHours = 4;
-              }
-              if (feat.checkpoints.isEmpty) {
-                feat.checkpoints = [
-                  ProposedCheckpointBlueprint(
-                    title: '${feat.title} $verTag Upgrade',
-                    playtestCriteria:
-                        'Trigger ${feat.title} in playtest -> verify $verTag upgrade and polish',
-                    tasks: [
-                      'Component & State Upgrade (2h)',
-                      'Logic & Feel Extension (1h)',
-                      'State & Bounds Guard (1h)',
-                    ],
-                    coveredScope: feat.inScope.isNotEmpty
-                        ? List<String>.from(feat.inScope)
-                        : ['${feat.title} $verTag upgrade'],
-                    tuningParams: List<String>.from(feat.tuningParams),
-                    edgeCases: List<String>.from(feat.edgeCases),
-                    releaseVersion: verTag,
-                  ),
-                ];
-              }
-            }
-            _syncActiveProjectMetadata();
-            notifyListeners();
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  /// Toggles an existing Feature in the Progressive Release Planner between `SUPERSEDED` (archived testbed)
-  /// and `STABLE ✓` / `UPGRADE`.
-  void toggleProposedFeatureSuperseded(
-    String beatId,
-    String featureId,
-  ) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return;
-    for (final beat in bp.beats) {
-      if (beat.id == beatId) {
-        for (final feat in beat.features) {
-          if (feat.id == featureId) {
-            if (feat.lifecycle == FeatureLifecycleStatus.superseded) {
-              feat.lifecycle = FeatureLifecycleStatus.stable;
-              feat.included = true;
-              feat.estimatedHours = 0;
-            } else {
-              feat.lifecycle = FeatureLifecycleStatus.superseded;
-              feat.included = false;
-              feat.estimatedHours = 0;
-            }
-            // Sync live document if already built
-            final liveDoc = documents[featureId];
-            if (liveDoc != null && liveDoc.tier == TierType.feature) {
-              liveDoc.sections['lifecycle'] = feat.lifecycle.name;
-              if (feat.lifecycle == FeatureLifecycleStatus.superseded) {
-                liveDoc.sections['supersededInVersion'] = bp.releaseVersionTag;
-              } else {
-                liveDoc.sections.remove('supersededInVersion');
-              }
-              _persistDocument(liveDoc);
-            }
-            _syncActiveProjectMetadata();
-            notifyListeners();
-            return;
-          }
-        }
-      }
-    }
-  }
-
-  /// 1-Click Feature Pivot / Supersede (`01 Prototype` -> `02 MVP`+):
-  /// Archives a live Feature into `Superseded Testbeds Archive` (`FeatureLifecycleStatus.superseded`)
-  /// when a playtest proves the mechanic should be cut/pivoted, or restores an archived Feature back into active scope.
-  bool toggleSupersedeFeature(
-    String featureId, {
-    String? pivotReason,
-  }) {
-    final featDoc = documents[featureId];
-    if (featDoc == null || featDoc.tier != TierType.feature) return false;
-    final activeVer = activeReleaseVersionTag;
-    final wasSuperseded =
-        featDoc.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name;
-
-    if (wasSuperseded) {
-      final originVer = (featDoc.sections['originVersion'] ?? activeVer).trim();
-      final restoredLifecycle = originVer == activeVer
-          ? FeatureLifecycleStatus.newFeature
-          : FeatureLifecycleStatus.upgrade;
-      featDoc.sections['lifecycle'] = restoredLifecycle.name;
-      featDoc.sections['activeReleaseVersion'] = activeVer;
-      featDoc.sections.remove('supersededInVersion');
-      featDoc.sections.remove('pivotReason');
-      featDoc.sections.remove('pivot_reason');
-      _persistDocument(featDoc);
-
-      final parentBeatId = featDoc.parentId;
-      if (parentBeatId != null) {
-        final beatDoc = documents[parentBeatId];
-        if (beatDoc != null && !beatDoc.childrenIds.contains(featureId)) {
-          beatDoc.childrenIds.add(featureId);
-          _persistDocument(beatDoc);
-        }
-      }
-
-      final bp = _releaseBlueprint;
-      if (bp != null) {
-        for (final b in bp.beats) {
-          for (final f in b.features) {
-            if (f.id == featureId ||
-                f.title.toLowerCase().trim() ==
-                    featDoc.title.toLowerCase().trim()) {
-              f.lifecycle = restoredLifecycle;
-              f.included = true;
-              if (f.estimatedHours <= 0) f.estimatedHours = 4;
-            }
-          }
-        }
-      }
-
-      if (_releaseViewFilter == 'archived' && supersededFeatures.isEmpty) {
-        _releaseViewFilter = 'active';
-        _selectedFeatureId = featureId;
-        if (featDoc.parentId != null) {
-          _selectedBeatId = featDoc.parentId;
-        }
-      }
-    } else {
-      featDoc.sections['lifecycle'] = FeatureLifecycleStatus.superseded.name;
-      featDoc.sections['supersededInVersion'] = activeVer;
-      if (pivotReason != null && pivotReason.trim().isNotEmpty) {
-        final cleanReason = pivotReason.trim();
-        featDoc.sections['pivotReason'] = cleanReason;
-        featDoc.sections['pivot_reason'] = cleanReason;
-      }
-      _persistDocument(featDoc);
-
-      final bp = _releaseBlueprint;
-      if (bp != null) {
-        for (final b in bp.beats) {
-          for (final f in b.features) {
-            if (f.id == featureId ||
-                f.title.toLowerCase().trim() ==
-                    featDoc.title.toLowerCase().trim()) {
-              f.lifecycle = FeatureLifecycleStatus.superseded;
-              f.included = false;
-              f.estimatedHours = 0;
-            }
-          }
-        }
-      }
-
-      if (_selectedFeatureId == featureId && _releaseViewFilter != 'archived') {
-        _selectFirstIncompleteFeatureInActiveRelease();
-      }
-    }
-
-    _syncActiveProjectMetadata();
-    notifyListeners();
-    return !wasSuperseded;
-  }
-
-  /// Adds a custom `+ NEW` feature to a Beat inside the Progressive Release Planner (`_releaseBlueprint`).
-  ProposedFeatureBlueprint? addCustomFeatureToProposedBeat(
-    String beatId,
-    String rawTitle, {
-    String? customGoal,
-  }) {
-    final bp = _releaseBlueprint;
-    final cleanTitle = rawTitle.replaceFirst(_noPrefixRegex, '').trim();
-    if (bp == null || cleanTitle.isEmpty) return null;
-    final verTag = bp.releaseVersionTag;
-    for (int bIdx = 0; bIdx < bp.beats.length; bIdx++) {
-      final beat = bp.beats[bIdx];
-      if (beat.id == beatId) {
-        final newFeatId =
-            'feat_${verTag}_${bIdx + 1}_${beat.features.length + 1}';
-        final goalText = (customGoal != null && customGoal.trim().isNotEmpty)
-            ? customGoal.trim()
-            : 'Build $cleanTitle inside ${beat.title} for $verTag.';
-        final created = ProposedFeatureBlueprint(
-          id: newFeatId,
-          title: cleanTitle,
-          goal: goalText,
-          doneWhen: 'Playtester verifies $cleanTitle in the arena.',
-          estimatedHours: 4,
-          included: true,
-          lifecycle: FeatureLifecycleStatus.newFeature,
-          originVersion: verTag,
-          inScope: ['$cleanTitle core setup & feedback'],
-          outOfScope: const [],
-          tuningParams: const ['responseWindowSec: 0.25 s'],
-          edgeCases: const ['[STATE GUARD] Prevent duplicate trigger while active'],
-          checkpoints: [
-            ProposedCheckpointBlueprint(
-              title: '$cleanTitle Core',
-              playtestCriteria:
-                  'Trigger $cleanTitle in playtest -> responds cleanly on screen',
-              tasks: const [
-                'Actor & Component Setup (2h)',
-                'Input & Core Logic (1h)',
-                'State & Cooldown Guard (1h)',
-              ],
-              coveredScope: ['$cleanTitle core setup & feedback'],
-              tuningParams: const ['responseWindowSec: 0.25 s'],
-              edgeCases: const [
-                '[STATE GUARD] Prevent duplicate trigger while active',
-              ],
-              releaseVersion: verTag,
-            ),
-          ],
-        );
-        beat.features.add(created);
-        _syncActiveProjectMetadata();
-        notifyListeners();
-        if (GeminiAgentClient.hasKey(_apiKey) ||
-            GeminiAgentClient.testMockResponder != null) {
-          _enrichProposedBlueprintFeatureWithAi(
-            beatId: beat.id,
-            featureId: created.id,
-            beatTitle: beat.title,
-            preserveCustomGoal:
-                customGoal != null && customGoal.trim().isNotEmpty,
-          );
-        }
-        return created;
-      }
-    }
-    return null;
-  }
 
   /// Builds a DRY, pre-formatted compact project spec context block (Game Spec, Tech Spec,
   /// 2D/3D Dimension Rule, Design Pillars, and Trade-Offs) shared across all Stage 2 Workbench AI tools.
@@ -3303,9 +846,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     final playtestGate =
         'Trigger $featTitle in the test scene -> $epicTitle responds cleanly';
     final starterTasks = <String>[
-      'Create actor/node structure and base properties for $featTitle (2h)',
-      'Implement core state transitions and player input for $featTitle (1h)',
-      'Hook visual/audio feedback cues and state guard for $featTitle (1h)',
+      ...ReleasePlannerAgent.defaultDockStepTitles(subject: featTitle),
     ];
     final starterGuards = <String>[
       '[STATE GUARD] Block duplicate $featTitle activation while active',
@@ -3315,28 +856,19 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       name: 'Checkpoint 1: $featTitle',
       trigger: 'Playtest: $playtestGate',
       order: 0,
-      checklist: [
-        for (int tIdx = 0; tIdx < starterTasks.length; tIdx++)
-          Subtask(
-            id: '${featId}_t_${tIdx + 1}',
-            text: starterTasks[tIdx],
-            completed: false,
-          ),
-      ],
       coveredScope: [featTitle],
       tuningParams: const ['cooldown: 0.4 s', 'speed: 1.0 x'],
       edgeCases: starterGuards,
-      parameters: {'releaseVersion': versionTag},
+      parameters: {
+        'releaseVersion': versionTag,
+        'plannedSlices': starterTasks.join(' | '),
+      },
     );
-    for (int tIdx = 0; tIdx < stateNode.checklist.length; tIdx++) {
-      TaskHowToBlueprint.resolve(
-        parentTask: stateNode.checklist[tIdx],
-        taskIndex: tIdx,
-        checkpointNode: stateNode,
-        engineHint: _activeEngineHint,
-        phase: _currentPhase,
-      );
-    }
+    TaskHowToBlueprint.populateDefaultUnifiedSteps(
+      stateNode,
+      engineHint: _activeEngineHint,
+      phase: _currentPhase,
+    );
 
     final featDoc = TierDocument(
       id: featId,
@@ -3471,9 +1003,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     );
 
     final starterTasks = <String>[
-      'Create actor/node structure and base properties for $cleanTitle (2h)',
-      'Implement core state transitions and player input for $cleanTitle (1h)',
-      'Hook visual/audio feedback cues and state guard for $cleanTitle (1h)',
+      ...ReleasePlannerAgent.defaultDockStepTitles(subject: cleanTitle),
     ];
     final starterGuards = <String>[
       '[STATE GUARD] Block duplicate $cleanTitle activation while active',
@@ -3483,28 +1013,19 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       name: 'Checkpoint 1: $cleanTitle',
       trigger: 'Playtest: Trigger $cleanTitle in the test arena',
       order: 0,
-      checklist: [
-        for (int tIdx = 0; tIdx < starterTasks.length; tIdx++)
-          Subtask(
-            id: '${featId}_t_${tIdx + 1}',
-            text: starterTasks[tIdx],
-            completed: false,
-          ),
-      ],
       coveredScope: [cleanTitle],
       tuningParams: const ['cooldown: 0.4 s', 'speed: 1.0 x'],
       edgeCases: starterGuards,
-      parameters: {'releaseVersion': versionTag},
+      parameters: {
+        'releaseVersion': versionTag,
+        'plannedSlices': starterTasks.join(' | '),
+      },
     );
-    for (int tIdx = 0; tIdx < stateNode.checklist.length; tIdx++) {
-      TaskHowToBlueprint.resolve(
-        parentTask: stateNode.checklist[tIdx],
-        taskIndex: tIdx,
-        checkpointNode: stateNode,
-        engineHint: _activeEngineHint,
-        phase: _currentPhase,
-      );
-    }
+    TaskHowToBlueprint.populateDefaultUnifiedSteps(
+      stateNode,
+      engineHint: _activeEngineHint,
+      phase: _currentPhase,
+    );
 
     FeatureStateNode.saveStatesToDocument(featDoc, [stateNode]);
     documents[featId] = featDoc;
@@ -3662,14 +1183,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           featureTitle: featDoc.title,
           beatTitle: beatTitle,
         );
-        cp.checklist = [
-          for (int i = 0; i < normalizedTasks.length; i++)
-            Subtask(
-              id: '${featureId}_ai_t${i + 1}',
-              text: normalizedTasks[i],
-              completed: false,
-            ),
-        ];
+        cp.parameters['plannedSlices'] = normalizedTasks.join(' | ');
       }
       if (rawTuning is List && rawTuning.isNotEmpty) {
         cp.tuningParams =
@@ -3717,15 +1231,12 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           _persistDocument(relDoc);
         }
       }
-      for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
-        TaskHowToBlueprint.resolve(
-          parentTask: cp.checklist[tIdx],
-          taskIndex: tIdx,
-          checkpointNode: cp,
-          engineHint: _activeEngineHint,
-          phase: _currentPhase,
-        );
-      }
+      cp.checklist = [];
+      TaskHowToBlueprint.populateDefaultUnifiedSteps(
+        cp,
+        engineHint: _activeEngineHint,
+        phase: _currentPhase,
+      );
       updateFeatureStates(featureId, states);
       }
     } finally {
@@ -3734,84 +1245,147 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     await synthesizeFeatureHowToStepsWithAi(featureId, forceRefresh: true);
   }
 
-  /// Appends a single new Build Task to a Checkpoint in `2. Workbench`, resolves its initial
-  /// deterministic sub-steps, syncs `_releaseBlueprint`, and tailors ONLY the newly added task
-  /// via `tailorTaskHowToSubSteps` so existing tasks `1..N-1` are never overwritten.
-  int addBuildTaskToCheckpointWithAi({
+  /// Appends a single flat Unified Step onto a Checkpoint's Build Queue (`cpNode.checklist`),
+  /// optionally tailoring ONLY that step via AI when online without disturbing existing steps.
+  int addUnifiedStepToCheckpoint({
     required String featureId,
     required List<FeatureStateNode> states,
     required int checkpointIndex,
-    required String rawTaskTitle,
+    required String title,
+    GodotDockStage dockStage = GodotDockStage.code,
+    String? instruction,
+    String? stepPath,
+    String? codeSnippet,
+    String? verifyResult,
+    bool tailorWithAi = true,
   }) {
-    final trimmed = rawTaskTitle.trim();
+    final trimmed = title.trim();
     if (trimmed.isEmpty ||
         checkpointIndex < 0 ||
         checkpointIndex >= states.length) {
       return -1;
     }
-    final hasExplicitHours =
-        RegExp(r'\(\d+\s*h\)', caseSensitive: false).hasMatch(trimmed);
-    final taskText = hasExplicitHours ? trimmed : '$trimmed (2h)';
     final cpNode = states[checkpointIndex];
-    final newTask = Subtask(
-      id: 'task_${DateTime.now().millisecondsSinceEpoch}',
-      text: taskText,
+    cpNode.flattenLegacyNestedChecklistIfNeeded();
+    final primaryAsset = (cpNode.parameters['primarySharedScriptOrScene'] ??
+            documents[featureId]?.sections['primary_asset'] ??
+            '')
+        .trim();
+    final step = Subtask(
+      id: generateUniqueId('step'),
+      text: trimmed,
       completed: false,
+      codeTargetFile: 'custom_snippet',
+      codeLanguage: stepPath?.trim().isNotEmpty == true
+          ? stepPath!.trim()
+          : (primaryAsset.isNotEmpty
+              ? primaryAsset
+              : (dockStage == GodotDockStage.scene
+                  ? 'Scene Dock (.tscn)'
+                  : dockStage == GodotDockStage.inspector
+                      ? 'Inspector & Project Settings'
+                      : dockStage == GodotDockStage.wire
+                          ? 'Node Dock → Signals'
+                          : 'GDScript Editor (.gd)')),
+      codeSnippet: codeSnippet ?? '',
+      verification: verifyResult?.trim().isNotEmpty == true
+          ? verifyResult!.trim()
+          : '$trimmed responds cleanly with 0 console errors.',
+      specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
+        instruction: instruction?.trim().isNotEmpty == true
+            ? instruction!.trim()
+            : 'Implement "$trimmed" inside the active Godot dock.',
+        verifyMode: (dockStage == GodotDockStage.scene ||
+                dockStage == GodotDockStage.inspector)
+            ? 'editor'
+            : 'playtest',
+        stepRole: dockStage.stepRole,
+      ),
     );
-    cpNode.checklist.add(newTask);
+    cpNode.checklist.add(step);
+    cpNode.parameters['manualStepOrder'] = 'true';
     final newIdx = cpNode.checklist.length - 1;
-    TaskHowToBlueprint.resolve(
-      parentTask: newTask,
-      taskIndex: newIdx,
-      checkpointNode: cpNode,
-      engineHint: _activeEngineHint,
-      phase: _currentPhase,
-    );
+    TaskHowToBlueprint.clearCache();
     updateFeatureStates(featureId, states);
 
-    final bp = _releaseBlueprint;
-    if (bp != null) {
-      for (final b in bp.beats) {
-        for (final f in b.features) {
-          if (f.id == featureId &&
-              checkpointIndex < f.checkpoints.length) {
-            final cpBp = f.checkpoints[checkpointIndex];
-            f.checkpoints[checkpointIndex] = ProposedCheckpointBlueprint(
-              title: cpBp.title,
-              playtestCriteria: cpBp.playtestCriteria,
-              tasks: [for (final t in cpNode.checklist) t.text],
-              coveredScope: cpBp.coveredScope,
-              tuningParams: cpBp.tuningParams,
-              edgeCases: cpBp.edgeCases,
-              releaseVersion: cpBp.releaseVersion,
-            );
-          }
-        }
-      }
-      final relDoc = activeRelease;
-      if (relDoc != null) {
-        relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
-        _persistDocument(relDoc);
-      }
-    }
-
-    if (GeminiAgentClient.hasKey(_apiKey) ||
-        GeminiAgentClient.testMockResponder != null) {
+    if (tailorWithAi &&
+        (GeminiAgentClient.hasKey(_apiKey) ||
+            GeminiAgentClient.testMockResponder != null)) {
       final featDoc = documents[featureId];
-      final primaryAsset =
-          (featDoc?.sections['primary_asset'] ?? '').trim();
       final contextDesc = primaryAsset.isNotEmpty
-          ? 'Implement "$taskText" on shared asset $primaryAsset'
-          : 'Implement "$taskText" for ${featDoc?.title ?? cpNode.cleanStageTitle}';
+          ? 'Implement "$trimmed" on shared asset $primaryAsset'
+          : 'Implement "$trimmed" for ${featDoc?.title ?? cpNode.cleanStageTitle}';
       tailorTaskHowToSubSteps(
         featureId: featureId,
         states: states,
         checkpointIndex: checkpointIndex,
         taskIndex: newIdx,
         userContext: contextDesc,
+        preserveSingleStep: true,
       );
     }
     return newIdx;
+  }
+
+  /// Reorders a Unified Step cleanly inside a Checkpoint Build Queue (`cpNode.checklist`).
+  bool reorderCheckpointStep({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required int oldIndex,
+    required int newIndex,
+  }) {
+    if (checkpointIndex < 0 || checkpointIndex >= states.length) return false;
+    final cpNode = states[checkpointIndex];
+    cpNode.flattenLegacyNestedChecklistIfNeeded();
+    if (oldIndex < 0 ||
+        oldIndex >= cpNode.checklist.length ||
+        newIndex < 0 ||
+        newIndex >= cpNode.checklist.length ||
+        oldIndex == newIndex) {
+      return false;
+    }
+    final moved = cpNode.checklist.removeAt(oldIndex);
+    cpNode.checklist.insert(newIndex, moved);
+    cpNode.parameters['manualStepOrder'] = 'true';
+    TaskHowToBlueprint.clearCache();
+    updateFeatureStates(featureId, states);
+    return true;
+  }
+
+  /// Removes a step at [stepIndex] from a Checkpoint Build Queue.
+  bool removeCheckpointStep({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required int stepIndex,
+  }) {
+    if (checkpointIndex < 0 || checkpointIndex >= states.length) return false;
+    final cpNode = states[checkpointIndex];
+    cpNode.flattenLegacyNestedChecklistIfNeeded();
+    if (stepIndex < 0 || stepIndex >= cpNode.checklist.length) return false;
+    cpNode.checklist.removeAt(stepIndex);
+    cpNode.parameters['manualStepOrder'] = 'true';
+    TaskHowToBlueprint.clearCache();
+    updateFeatureStates(featureId, states);
+    return true;
+  }
+
+  /// Backwards-compatible wrapper that appends a new Unified Step directly to
+  /// a Checkpoint Build Queue and tailors it via AI when available.
+  int addBuildTaskToCheckpointWithAi({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required String rawTaskTitle,
+  }) {
+    return addUnifiedStepToCheckpoint(
+      featureId: featureId,
+      states: states,
+      checkpointIndex: checkpointIndex,
+      title: rawTaskTitle,
+      tailorWithAi: true,
+    );
   }
 
   /// Renames an active Feature document directly inside `2. Workbench` and syncs `_releaseBlueprint`.
@@ -3897,11 +1471,148 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     return true;
   }
 
+  /// Shared parser converting AI-emitted step objects into flat Unified [Subtask] items.
+  List<Subtask> _buildUnifiedSubtasksFromRawMaps(
+    List<dynamic> rawSteps, {
+    required String idPrefix,
+    required List<Subtask> existingSteps,
+    Set<String>? seenScriptLines,
+    String? forcedStepRole,
+    String? defaultStepPath,
+  }) {
+    final orderedSteps =
+        WorkbenchReleaseMixin.enforceIntraTaskEditorBeforeScriptOrder(rawSteps);
+    final trackedLines = seenScriptLines ?? <String>{};
+    final out = <Subtask>[];
+
+    for (int i = 0; i < orderedSteps.length; i++) {
+      final item = orderedSteps[i];
+      final rawTitle =
+          (item['title'] ?? item['shortTitle'] ?? '').toString().trim();
+      var title = rawTitle.replaceFirst(_stepHeaderPrefixRegex, '').trim();
+      if (forcedStepRole == 'fix' &&
+          title.isNotEmpty &&
+          !title.toUpperCase().startsWith('[FIX]')) {
+        title = '[FIX] $title';
+      }
+      final path = (item['stepPath'] ?? '').toString().trim();
+      final instr = (item['instruction'] ?? item['doInstruction'] ?? '')
+          .toString()
+          .trim();
+      final area1 = (item['area1Hierarchy'] ?? '').toString().trim();
+      final area2 = (item['area2Inspector'] ?? '').toString().trim();
+      var code = (item['codeFormula'] ?? item['codeSnapshot'] ?? '')
+          .toString()
+          .trim();
+
+      final rawPlacementRows = item['placementRows'];
+      if (code.isEmpty && rawPlacementRows is List && rawPlacementRows.isNotEmpty) {
+        final tbl = <String>[
+          '| Node / Category | Property | Value |',
+          '| --- | --- | --- |',
+        ];
+        for (final row in rawPlacementRows.whereType<Map>()) {
+          final actor = (row['actor'] ?? row['target'] ?? '').toString().trim();
+          final prop = (row['property'] ?? row['key'] ?? '').toString().trim();
+          final val = (row['value'] ?? '').toString().trim();
+          if (actor.isNotEmpty || prop.isNotEmpty || val.isNotEmpty) {
+            tbl.add('| $actor | $prop | $val |');
+          }
+        }
+        if (tbl.length > 2) code = tbl.join('\n');
+      }
+
+      if (code.isNotEmpty &&
+          !code.startsWith('|') &&
+          !code.contains('──►') &&
+          !code.contains('-->')) {
+        final rawLines = code.split('\n');
+        final alreadyHasDiff = rawLines.any(
+          (l) => l.startsWith('+') && !l.startsWith('++'),
+        );
+        if (!alreadyHasDiff) {
+          final diffedLines = <String>[];
+          final hadPriorLines = trackedLines.isNotEmpty;
+          for (final l in rawLines) {
+            final trimmedLine = l.trim();
+            if (trimmedLine.isEmpty ||
+                trimmedLine == '{' ||
+                trimmedLine == '}' ||
+                trimmedLine == '};' ||
+                trimmedLine.startsWith('#') ||
+                trimmedLine.startsWith('//')) {
+              diffedLines.add(l);
+              continue;
+            }
+            if (hadPriorLines && !trackedLines.contains(trimmedLine)) {
+              diffedLines.add('+ $l');
+            } else {
+              diffedLines.add(l);
+            }
+            trackedLines.add(trimmedLine);
+          }
+          code = diffedLines.join('\n');
+        } else {
+          for (final l in rawLines) {
+            final clean = l.startsWith('+') ? l.substring(1).trim() : l.trim();
+            if (clean.isNotEmpty) trackedLines.add(clean);
+          }
+        }
+      }
+
+      final verify = (item['verifyResult'] ?? '').toString().trim();
+      final verifyMode = item['verifyMode']?.toString().trim();
+      final rawRole = TaskHowToBlueprint.normalizeStepRole(
+        item['stepRole']?.toString(),
+      );
+      final rawDock = TaskHowToBlueprint.normalizeStepRole(
+        item['dockStage']?.toString(),
+      );
+      final effectiveRole =
+          (forcedStepRole != null && forcedStepRole.isNotEmpty)
+              ? forcedStepRole
+              : (rawRole.isNotEmpty ? rawRole : rawDock);
+      if (instr.isEmpty && code.isEmpty && title.isEmpty) continue;
+
+      final existingMatch = existingSteps.where(
+        (s) =>
+            title.isNotEmpty &&
+            s.text.trim().toLowerCase() == title.toLowerCase(),
+      );
+      final prevDone = existingMatch.isNotEmpty
+          ? existingMatch.first.completed
+          : (i < existingSteps.length ? existingSteps[i].completed : false);
+      final preservedId =
+          i < existingSteps.length && existingSteps[i].id.isNotEmpty
+              ? existingSteps[i].id
+              : '${idPrefix}_s_${i + 1}';
+
+      out.add(
+        Subtask(
+          id: preservedId,
+          text: title.isNotEmpty ? title : 'Implement Step ${i + 1}',
+          specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
+            instruction: instr,
+            area1Hierarchy: area1,
+            area2Inspector: area2,
+            verifyMode: verifyMode,
+            stepRole: effectiveRole,
+          ),
+          codeSnippet: code,
+          codeLanguage: path.isNotEmpty ? path : (defaultStepPath ?? ''),
+          verification: verify,
+          codeTargetFile: 'custom_snippet',
+          completed: prevDone,
+        ),
+      );
+    }
+    return out;
+  }
+
   /// Logs a Playtest Issue on a Checkpoint in `2. Workbench`:
-  /// 1. Appends a `[FIX] <issueDescription> (1h)` Parent Task to `cpNode.checklist` with
-  ///    3 checkable, engine-aware debug/fix How-To Sub-Steps.
-  /// 2. Appends `[PLAYTEST GUARD] <issueDescription>` to `cpNode.edgeCases`.
-  /// Returns the index of the newly created `[FIX]` Parent Task.
+  /// 1. Appends 1 cohesive flat `[FIX] <issueDescription>` Unified Step to `cpNode.checklist`.
+  /// 2. Appends `[PLAYTEST GUARD] <issueDescription>` to `cpNode.edgeCases` and resets `isPlaytestPassed`.
+  /// Returns the index of the newly appended `[FIX]` Unified Step.
   int logPlaytestIssueOnCheckpoint({
     required String featureId,
     required List<FeatureStateNode> states,
@@ -3915,88 +1626,87 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       return -1;
     }
     final cpNode = states[checkpointIndex];
-    final newTaskIndex = cpNode.checklist.length;
-    final taskNum = newTaskIndex + 1;
+    cpNode.flattenLegacyNestedChecklistIfNeeded();
+    final newFixStepIndex = cpNode.checklist.length;
     final featDoc = documents[featureId];
     final featTitle = featDoc?.title ?? cpNode.cleanStageTitle;
 
     String explicitScript = '';
-    for (final existingTask in cpNode.checklist) {
-      for (final sub in existingTask.children) {
-        final candidate = (sub.codeLanguage ?? '').trim();
-        if (candidate.isNotEmpty &&
-            candidate != 'custom_snippet' &&
-            (candidate.endsWith('.gd') ||
-                candidate.endsWith('.tscn') ||
-                candidate.endsWith('.tres') ||
-                candidate.endsWith('.cpp') ||
-                candidate.endsWith('.h') ||
-                candidate.startsWith('res://'))) {
-          explicitScript = candidate;
-          break;
-        }
+    for (final entry in FeatureStateNode.iterStepEntries(cpNode)) {
+      final candidate = (entry.step.codeLanguage ?? '').trim();
+      final extracted = extractPrimaryScriptResPath(candidate);
+      if (extracted != null && extracted.isNotEmpty) {
+        explicitScript = extracted;
+        break;
       }
-      if (explicitScript.isNotEmpty) break;
+      if (candidate.isNotEmpty &&
+          candidate != 'custom_snippet' &&
+          !candidate.endsWith('.tscn') &&
+          (candidate.endsWith('.gd') ||
+              candidate.endsWith('.cpp') ||
+              candidate.endsWith('.h') ||
+              candidate.endsWith('.cs'))) {
+        explicitScript = candidate;
+        break;
+      }
     }
     if (explicitScript.isEmpty) {
-      explicitScript = (featDoc?.sections['primary_asset'] ??
+      final metaAsset = (featDoc?.sections['primary_asset'] ??
               cpNode.parameters['primarySharedScriptOrScene'] ??
               '')
           .trim();
+      explicitScript = extractPrimaryScriptResPath(metaAsset) ?? '';
+      if (explicitScript.isEmpty &&
+          metaAsset.isNotEmpty &&
+          !metaAsset.endsWith('.tscn') &&
+          (metaAsset.endsWith('.gd') ||
+              metaAsset.endsWith('.cpp') ||
+              metaAsset.endsWith('.h') ||
+              metaAsset.endsWith('.cs'))) {
+        explicitScript = metaAsset;
+      }
     }
+    final traceMatch = GodotGdscriptGuard.parseDebuggerTrace(cleanIssue);
     final derivedAsset = TaskHowToBlueprint.deriveConcreteAssetName(featTitle);
     final snakeName = derivedAsset.snakeName.isNotEmpty
         ? derivedAsset.snakeName
         : 'gameplay_feature';
-    final defaultScriptPath =
-        explicitScript.isNotEmpty ? explicitScript : 'res://scripts/$snakeName.gd';
+    final defaultScriptPath = traceMatch != null
+        ? (traceMatch.lineNumber != null
+            ? '${traceMatch.resPath}:${traceMatch.lineNumber}'
+            : traceMatch.resPath)
+        : (explicitScript.isNotEmpty
+            ? explicitScript
+            : 'res://scripts/$snakeName.gd');
     final primaryTune = cpNode.tuningParams.isNotEmpty
         ? cpNode.tuningParams.first
         : 'threshold: 1.0';
 
-    final fixTask = Subtask(
-      id: generateUniqueId('fix_task'),
-      text: '[FIX] $cleanIssue (1h)',
+    final fixStep = Subtask(
+      id: generateUniqueId('fix_step'),
+      text: '[FIX] $cleanIssue',
       completed: false,
-      children: [
-        Subtask(
-          id: generateUniqueId('fix_sub_1'),
-          text: 'STEP $taskNum.1 · REPRODUCE & INSPECT PLAYTEST ISSUE',
-          specNotes:
-              'Trigger "$cleanIssue" in F6 Run Scene and inspect live @export values ($primaryTune).',
-          codeLanguage: defaultScriptPath,
-          codeTargetFile: 'custom_snippet',
-          codeSnippet:
-              '# Inspect live state when "$cleanIssue" occurs\npush_warning("[PLAYTEST FIX] $cleanIssue | $primaryTune")',
-        ),
-        Subtask(
-          id: generateUniqueId('fix_sub_2'),
-          text: 'STEP $taskNum.2 · APPLY FIX & CLAMP TUNING BOUNDS',
-          specNotes:
-              'Adjust the handler/physics logic and clamp $primaryTune so "$cleanIssue" cannot happen.',
-          codeLanguage: defaultScriptPath,
-          codeTargetFile: 'custom_snippet',
-          codeSnippet:
-              '# Enforce boundary check for: $cleanIssue\n# Active tuning: $primaryTune',
-        ),
-        Subtask(
-          id: generateUniqueId('fix_sub_3'),
-          text: 'STEP $taskNum.3 · VERIFY PLAYTEST GUARD IN SCENE (F6)',
-          specNotes:
-              'Re-run the checkpoint playtest gate ("${cpNode.playtestCondition}") 3 times with F6 to confirm "$cleanIssue" is resolved.',
-          codeLanguage: defaultScriptPath,
-          codeTargetFile: 'custom_snippet',
-          codeSnippet:
-              '# Verify guard in F6 Run Scene: [PLAYTEST GUARD] $cleanIssue',
-        ),
-      ],
+      codeLanguage: defaultScriptPath,
+      codeTargetFile: 'custom_snippet',
+      codeSnippet:
+          '# Root-cause fix target: $cleanIssue\n+ push_warning("[PLAYTEST FIX] Clamp $primaryTune safely")',
+      verification:
+          'Re-run "${cpNode.playtestCondition}" with F6 -> $cleanIssue no longer reproduces.',
+      specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
+        instruction:
+            'Inspect $defaultScriptPath and add a guard/clamp ($primaryTune) so "$cleanIssue" cannot happen.',
+        verifyMode: 'playtest',
+        stepRole: 'fix',
+      ),
     );
 
-    cpNode.checklist.add(fixTask);
+    cpNode.checklist.add(fixStep);
+    cpNode.isPlaytestPassed = false;
     final guardText = '[PLAYTEST GUARD] $cleanIssue';
     if (!cpNode.edgeCases.contains(guardText)) {
       cpNode.edgeCases = [...cpNode.edgeCases, guardText];
     }
+    TaskHowToBlueprint.clearCache();
     updateFeatureStates(featureId, states);
     if (GeminiAgentClient.hasKey(_apiKey) ||
         GeminiAgentClient.testMockResponder != null) {
@@ -4004,14 +1714,14 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         featureId: featureId,
         states: states,
         checkpointIndex: checkpointIndex,
-        fixTaskIndex: newTaskIndex,
+        fixTaskIndex: newFixStepIndex,
         issueDescription: cleanIssue,
       );
     } else {
       _setOfflineState();
       notifyListeners();
     }
-    return newTaskIndex;
+    return newFixStepIndex;
   }
 
   Future<void> _enrichPlaytestFixWithAi({
@@ -4024,10 +1734,9 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     if (checkpointIndex < 0 || checkpointIndex >= states.length) return;
     final cpNode = states[checkpointIndex];
     if (fixTaskIndex < 0 || fixTaskIndex >= cpNode.checklist.length) return;
-    final fixTask = cpNode.checklist[fixTaskIndex];
+    final fixStep = cpNode.checklist[fixTaskIndex];
     final featTitle = documents[featureId]?.title ?? cpNode.cleanStageTitle;
     final engineLabel = _activeEngineLabel;
-    final taskNum = fixTaskIndex + 1;
 
     _synthesizingFeatureIds.add(featureId);
     notifyListeners();
@@ -4035,17 +1744,12 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       final specContext = _buildCompactWorkbenchSpecContext(
         singleLineProjectSpecsHeader: true,
       );
-      final existingTasksSummary = [
+      final existingStepsSummary = [
         for (int i = 0; i < fixTaskIndex; i++)
           () {
-            final t = cpNode.checklist[i];
-            final firstPath = t.children
-                .map((s) => (s.codeLanguage ?? '').trim())
-                .firstWhere(
-                  (p) => p.isNotEmpty && p != 'custom_snippet',
-                  orElse: () => '',
-                );
-            return 'Task ${i + 1}: "${t.text}"${firstPath.isNotEmpty ? ' ($firstPath)' : ''}';
+            final s = cpNode.checklist[i];
+            final path = (s.codeLanguage ?? '').trim();
+            return 'Step ${i + 1}: "${s.text}"${path.isNotEmpty ? ' ($path)' : ''}';
           }(),
       ].join(' | ');
 
@@ -4062,16 +1766,12 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       );
       final codeExcerptLines = <String>[];
       for (int i = 0; i < fixTaskIndex && codeExcerptLines.length < 24; i++) {
-        final t = cpNode.checklist[i];
-        for (final sub in t.children) {
-          final rawCode = (sub.codeSnippet ?? '').trim();
-          if (rawCode.isEmpty) continue;
-          for (final line in rawCode.split('\n')) {
-            final trimmedLine = line.trimRight();
-            if (trimmedLine.trim().isEmpty) continue;
-            codeExcerptLines.add(trimmedLine);
-            if (codeExcerptLines.length >= 24) break;
-          }
+        final rawCode = (cpNode.checklist[i].codeSnippet ?? '').trim();
+        if (rawCode.isEmpty) continue;
+        for (final line in rawCode.split('\n')) {
+          final trimmedLine = line.trimRight();
+          if (trimmedLine.trim().isEmpty) continue;
+          codeExcerptLines.add(trimmedLine);
           if (codeExcerptLines.length >= 24) break;
         }
       }
@@ -4079,87 +1779,61 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           ? 'Current Feature Script / Graph Excerpt (patch exact functions & variables below):\n${codeExcerptLines.join('\n')}\n'
           : '';
 
+      final traceMatch = GodotGdscriptGuard.parseDebuggerTrace(issueDescription);
+      final godotFixContext = buildPromptGodotContext(
+        primaryAssetHint: traceMatch?.resPath ?? primaryAsset,
+        fallbackScriptPath: primaryAsset,
+      );
+      final traceHintLine = traceMatch != null
+          ? 'Parsed Godot Debugger Trace: ${traceMatch.summaryChipLabel}\n'
+          : '';
+
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
-Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and synthesize the exact number of concrete engine fix steps needed to resolve and verify it:
-$specContext$primaryAssetLine${existingTasksSummary.isNotEmpty ? 'Existing Checkpoint Tasks & Scripts (patch these exact assets; do not invent duplicate scripts): $existingTasksSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}$existingCodeExcerptBlock
+Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and return 1 cohesive root-cause [FIX] step (or 2 if Scene + Script both need edits):
+$specContext$primaryAssetLine$traceHintLine${godotFixContext.isNotEmpty ? '$godotFixContext\n' : ''}${existingStepsSummary.isNotEmpty ? 'Existing Checkpoint Steps & Scripts (patch these exact assets): $existingStepsSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}$existingCodeExcerptBlock
 Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}
 
-Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 through Step $taskNum.N).''';
+Include surgical `scriptPatches` (`resPath`, `targetBlock`, `replaceBlock`) when modifying an existing `.gd` script. Call `commit_playtest_fix`.''';
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _planningModel,
-        thinkingLevel: _thinkingLevel,
+        thinkingLevel: effectiveGodotCodeThinkingLevel,
         temperature: 0.3,
         functionDeclarations: const [commitPlaytestFixTool],
       );
       if (json == null) return;
       final aiFixTitle = json['fixTaskTitle']?.toString().trim() ?? '';
-      if (aiFixTitle.isNotEmpty) {
-        final withPrefix = aiFixTitle.startsWith('[FIX]')
-            ? aiFixTitle
-            : '[FIX] $aiFixTitle';
-        fixTask.text = RegExp(r'\(\s*\d+(?:\.\d+)?\s*[hm]\s*\)\s*$')
-                .hasMatch(withPrefix)
-            ? withPrefix
-            : '$withPrefix (1h)';
-      }
       final rawSteps = json['steps'];
       if (rawSteps is List && rawSteps.isNotEmpty) {
-        final orderedFixSteps =
-            WorkbenchReleaseMixin.enforceIntraTaskEditorBeforeScriptOrder(
+        final parsedFixSteps = _buildUnifiedSubtasksFromRawMaps(
           rawSteps,
+          idPrefix: fixStep.id,
+          existingSteps: [fixStep],
+          forcedStepRole: 'fix',
+          defaultStepPath: traceMatch?.resPath ?? primaryAsset,
         );
-        final updatedSubs = <Subtask>[];
-        for (int i = 0; i < orderedFixSteps.length; i++) {
-          final item = orderedFixSteps[i];
-          final title =
-              (item['title'] ?? item['shortTitle'])?.toString().trim() ?? '';
-          final path = item['stepPath']?.toString().trim() ?? '';
-          final instr = (item['instruction'] ?? item['doInstruction'])
-                  ?.toString()
-                  .trim() ??
-              '';
-          final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
-          final area2 = item['area2Inspector']?.toString().trim() ?? '';
-          final code = item['codeFormula']?.toString().trim() ?? '';
-          final verify = item['verifyResult']?.toString().trim() ?? '';
-          final verifyMode = item['verifyMode']?.toString().trim();
-          final stepRole = item['stepRole']?.toString().trim();
-          final prevDone = i < fixTask.children.length
-              ? fixTask.children[i].completed
-              : false;
-          final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
-            instruction: instr,
-            area1Hierarchy: area1,
-            area2Inspector: area2,
-            verifyMode: verifyMode,
-            stepRole: stepRole,
-          );
-          updatedSubs.add(
-            Subtask(
-              id: i < fixTask.children.length
-                  ? fixTask.children[i].id
-                  : generateUniqueId('fix_ai_sub_${i + 1}'),
-              text: title.isNotEmpty
-                  ? title
-                  : 'STEP $taskNum.${i + 1} · APPLY ROOT-CAUSE FIX ${i + 1}',
-              specNotes: encodedNotes,
-              codeSnippet: code,
-              codeLanguage: path,
-              verification: verify,
-              codeTargetFile: 'custom_snippet',
-              completed: prevDone,
-            ),
+        if (parsedFixSteps.isNotEmpty) {
+          if (aiFixTitle.isNotEmpty) {
+            final cleanAiTitle = aiFixTitle.startsWith('[FIX]')
+                ? aiFixTitle
+                : '[FIX] $aiFixTitle';
+            parsedFixSteps.first.text = cleanAiTitle;
+          }
+          cpNode.checklist.replaceRange(
+            fixTaskIndex,
+            fixTaskIndex + 1,
+            parsedFixSteps,
           );
         }
-        if (updatedSubs.isNotEmpty) {
-          fixTask.children = updatedSubs;
-        }
+      } else if (aiFixTitle.isNotEmpty) {
+        fixStep.text =
+            aiFixTitle.startsWith('[FIX]') ? aiFixTitle : '[FIX] $aiFixTitle';
       }
+
       final rawTuningUpdates = json['tuningUpdates'];
       if (rawTuningUpdates is List && rawTuningUpdates.isNotEmpty) {
         final updatedTuning = List<String>.from(cpNode.tuningParams);
@@ -4205,6 +1879,12 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
         }
         cpNode.edgeCases = updatedGuards;
       }
+      applyAiScriptPatchesResponse(
+        json['scriptPatches'],
+        fallbackResPath: traceMatch?.resPath ?? primaryAsset,
+        featureId: featureId,
+        releaseVersion: cpNode.releaseVersion,
+      );
       TaskHowToBlueprint.clearCache();
       updateFeatureStates(featureId, states);
     } finally {
@@ -4218,15 +1898,15 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
     }
   }
 
-  /// Tailors the checkable How-To sub-steps (`Step X.1` through `Step X.N`) for a specific
-  /// Parent Task in `2. Workbench` using Gemini AI (`gemini-flash-latest`).
-  /// Returns `true` if AI sub-steps were synthesized and applied, or `false` if offline/failed.
+  /// Tailors a specific Unified Step (or splices refined steps) inside a Checkpoint's
+  /// Single Feature Step List using Gemini AI.
   Future<bool> tailorTaskHowToSubSteps({
     required String featureId,
     required List<FeatureStateNode> states,
     required int checkpointIndex,
     required int taskIndex,
     required String userContext,
+    bool preserveSingleStep = false,
   }) async {
     final cleanContext = userContext.trim();
     if (cleanContext.isEmpty ||
@@ -4235,21 +1915,12 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
       return false;
     }
     final cpNode = states[checkpointIndex];
+    cpNode.flattenLegacyNestedChecklistIfNeeded();
     if (taskIndex < 0 || taskIndex >= cpNode.checklist.length) return false;
-    final parentTask = cpNode.checklist[taskIndex];
+    final targetStep = cpNode.checklist[taskIndex];
     final featDoc = documents[featureId];
-    final engineHint = _activeEngineHint;
     final engineLabel = _activeEngineLabel;
-    final taskNum = taskIndex + 1;
-
-    // Ensure children are initialized first
-    TaskHowToBlueprint.resolve(
-      parentTask: parentTask,
-      taskIndex: taskIndex,
-      checkpointNode: cpNode,
-      engineHint: engineHint,
-      phase: _currentPhase,
-    );
+    final stepNum = taskIndex + 1;
 
     if (!GeminiAgentClient.hasKey(_apiKey)) {
       _setOfflineState();
@@ -4265,19 +1936,11 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
       final featGoal = featDoc != null
           ? SectionTextUtils.resolveGoal(featDoc.sections).trim()
           : '';
-      final siblingTasksSummary = [
+      final siblingStepsSummary = [
         for (int sIdx = 0; sIdx < cpNode.checklist.length; sIdx++)
           if (sIdx != taskIndex)
-            () {
-              final st = cpNode.checklist[sIdx];
-              final firstPath = st.children
-                  .map((s) => (s.codeLanguage ?? '').trim())
-                  .firstWhere(
-                    (p) => p.isNotEmpty && p != 'custom_snippet',
-                    orElse: () => '',
-                  );
-              return 'Task ${sIdx + 1}: "${st.text}"${firstPath.isNotEmpty ? ' ($firstPath)' : ''}';
-            }(),
+            'Step ${sIdx + 1}: "${cpNode.checklist[sIdx].text}"'
+            '${(cpNode.checklist[sIdx].codeLanguage ?? '').trim().isNotEmpty ? ' (${cpNode.checklist[sIdx].codeLanguage!.trim()})' : ''}',
       ].join(' | ');
 
       final primaryAsset = (cpNode.parameters['primarySharedScriptOrScene'] ??
@@ -4293,17 +1956,17 @@ Call `commit_playtest_fix` with the sequential fix steps (Step $taskNum.1 throug
       );
 
       final prompt = '''
-You are a senior game engine programmer assisting with a concrete implementation task.
+You are a senior game engine programmer assisting with a concrete implementation step.
 Engine: $engineLabel
 ${specContext}Feature: "${featDoc?.title ?? cpNode.name}"${featGoal.isNotEmpty ? ' (Goal: $featGoal)' : ''}
 Playtest Gate: "${cpNode.playtestCondition}"
-Target Task ($taskNum of ${cpNode.checklist.length}): "${parentTask.text}"
-$primaryAssetLine${siblingTasksSummary.isNotEmpty ? 'Sibling Tasks in Same Checkpoint (do not duplicate their work; stay on the same shared asset): $siblingTasksSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
+Target Step ($stepNum of ${cpNode.checklist.length}): "${targetStep.text}"
+$primaryAssetLine${siblingStepsSummary.isNotEmpty ? 'Sibling Steps in Same Feature (do not duplicate their work; stay on the same shared asset): $siblingStepsSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Edge-Case Guards: ${cpNode.edgeCases.join(', ')}
 Developer's Exact Scene / Node / Script Setup: "$cleanContext"
 
-Break this task down into the exact number of checkable How-To Sub-Steps (Step $taskNum.1 through Step $taskNum.N — e.g., 3 steps for a simple hook/guard task or up to 6 steps for a multi-part mechanic) specifically using the developer's node/script names from "$cleanContext".
-Call `commit_tailored_task_substeps` with the tailored sub-steps.
+${preserveSingleStep ? 'Tailor this single step (return EXACTLY 1 refined step in subSteps[]) specifically using the developer\'s node/script names from "$cleanContext".' : 'Tailor this step (return 1 refined step, or 2–3 if splitting is clearer) specifically using the developer\'s node/script names from "$cleanContext".'}
+Call `commit_tailored_task_substeps` with the tailored steps.
 ''';
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
@@ -4321,55 +1984,24 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         }
         cpNode.parameters['primarySharedScriptOrScene'] = tailoredPrimaryAsset;
       }
-      final rawSubs = json?['subSteps'];
+      final rawSubs = json?['subSteps'] ?? json?['steps'];
       if (rawSubs is List && rawSubs.isNotEmpty) {
-        final orderedSubs =
-            WorkbenchReleaseMixin.enforceIntraTaskEditorBeforeScriptOrder(
-          rawSubs,
+        final effectiveRawSubs = preserveSingleStep
+            ? [rawSubs.first]
+            : rawSubs;
+        final tailoredSteps = _buildUnifiedSubtasksFromRawMaps(
+          effectiveRawSubs,
+          idPrefix: targetStep.id,
+          existingSteps: [targetStep],
+          defaultStepPath: primaryAsset,
         );
-        final newChildren = <Subtask>[];
-        for (int i = 0; i < orderedSubs.length; i++) {
-          final item = orderedSubs[i];
-          final t =
-              (item['title'] ?? item['shortTitle'] ?? '').toString().trim();
-          final path = (item['stepPath'] ?? '').toString().trim();
-          final instr = (item['instruction'] ?? item['doInstruction'] ?? '')
-              .toString()
-              .trim();
-          final area1 = (item['area1Hierarchy'] ?? '').toString().trim();
-          final area2 = (item['area2Inspector'] ?? '').toString().trim();
-          final code = (item['codeFormula'] ?? '').toString().trim();
-          final verify = (item['verifyResult'] ?? '').toString().trim();
-          final verifyMode = item['verifyMode']?.toString().trim();
-          final stepRole = item['stepRole']?.toString().trim();
-          final prevDone = i < parentTask.children.length
-              ? parentTask.children[i].completed
-              : parentTask.completed;
-          final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
-            instruction: instr,
-            area1Hierarchy: area1,
-            area2Inspector: area2,
-            verifyMode: verifyMode,
-            stepRole: stepRole,
-          );
-          newChildren.add(
-            Subtask(
-              id: '${parentTask.id}_sub_${i + 1}',
-              text: t.isNotEmpty
-                  ? t
-                  : 'STEP $taskNum.${i + 1} · IMPLEMENT STEP ${i + 1}',
-              specNotes: encodedNotes,
-              codeSnippet: code,
-              codeLanguage: path,
-              verification: verify,
-              codeTargetFile: 'custom_snippet',
-              completed: prevDone,
-            ),
-          );
-        }
-        if (newChildren.isNotEmpty) {
+        if (tailoredSteps.isNotEmpty) {
           _offlineErrorMessage = null;
-          parentTask.children = newChildren;
+          cpNode.checklist.replaceRange(
+            taskIndex,
+            taskIndex + 1,
+            tailoredSteps,
+          );
           TaskHowToBlueprint.clearCache();
           updateFeatureStates(featureId, states);
           return true;
@@ -4615,12 +2247,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
     final activeCp =
         states.where((s) => s.releaseVersion == activeVer).lastOrNull ??
             states.last;
-    return activeCp.checklist.isNotEmpty &&
-        activeCp.checklist.every(
-          (t) =>
-              t.children.isNotEmpty &&
-              t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
-        );
+    return activeCp.hasAllStepsSynthesized;
   }
 
   bool isFeatureWaitingForStepsInLiveMode(String featureId) {
@@ -4717,106 +2344,108 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
   }
 
   /// Native Gemini Tool (`functionDeclarations`) for Stage 2 3-Area How-To synthesis (`synthesizeFeatureHowToStepsWithAi`).
-  /// Enforces a single shared `primarySharedScriptOrScene` across all tasks and polymorphic Godot 4 step payloads.
-  static const Map<String, dynamic> commitFeatureHowToStepsTool = {
-    'name': 'commit_feature_howto_steps',
+  static const Map<String, dynamic> _scriptPatchesToolProperty = {
+    'type': 'ARRAY',
     'description':
-        'Commits concrete, Godot 4 Native How-To sub-steps (Scene Tree & Inspector Tables, Living Incremental GDScript Diffs, and Node Signal Connections) for every task in the active Feature checkpoint on one shared scene/script.',
-    'parameters': {
+        'Optional surgical GDScript patch hunks applied to cumulative res:// .gd files. Use targetBlock="" to initialize a new script, or supply an exact existing targetBlock to replace/extend without rewriting unrelated code.',
+    'items': {
       'type': 'OBJECT',
-      'required': ['primarySharedScriptOrScene', 'tasks'],
+      'required': ['resPath', 'targetBlock', 'replaceBlock'],
       'properties': {
-        'primarySharedScriptOrScene': {
-          'type': 'STRING',
-          'description':
-              'The single shared Godot 4 scene (.tscn) and GDScript (.gd) used across Task 1..N (e.g., "res://scenes/player_character.tscn · res://scripts/player_character.gd", "res://scenes/hud.tscn · res://scripts/hud.gd", or "res://scenes/levels/arena.tscn").',
-        },
-        'tasks': {
-          'type': 'ARRAY',
-          'items': {
-            'type': 'OBJECT',
-            'required': ['taskIndex', 'subSteps'],
-            'properties': {
-              'taskIndex': {'type': 'INTEGER'},
-              'taskTitle': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
-              },
-              'subSteps': {
-                'type': 'ARRAY',
-                'items': {
-                  'type': 'OBJECT',
-                  'required': [
-                    'title',
-                    'stepPath',
-                    'instruction',
-                    'area1Hierarchy',
-                    'area2Inspector',
-                    'codeFormula',
-                    'verifyResult',
-                  ],
-                  'properties': {
-                    'stepRole': {
-                      'type': 'STRING',
-                      'enum': LayersTextStyleGuide.stepPhaseRoleEnum,
-                      'description':
-                          LayersTextStyleGuide.stepPhaseRoleSchemaDesc,
-                    },
-                    'title': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.runbookStepTitleSchemaDesc,
-                    },
-                    'stepPath': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.runbookStepPathSchemaDesc,
-                    },
-                    'instruction': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.runbookInstructionSchemaDesc,
-                    },
-                    'area1Hierarchy': {
-                      'type': 'STRING',
-                      'description':
-                          'Optional Godot Scene Tree hierarchy using ├─ / └─ ONLY when adding a new child node in this step ("" when reusing the feature Scene Tree).',
-                    },
-                    'area2Inspector': {
-                      'type': 'STRING',
-                      'description':
-                          'Godot Inspector property delta ONLY when modifying values in this step ("Property: Value | Property2: Value2"; "" when already in an Inspector pipe table).',
-                    },
-                    'codeFormula': {
-                      'type': 'STRING',
-                      'description':
-                          'Polymorphic Godot 4 payload by stepRole: (1) On stepRole="editor_setup" (Scene Tree nodes, Inspector properties, Input Map, Project Settings, Level placement), ALWAYS emit a Markdown pipe table ("| Node / Category | Property | Value |", e.g. "| DashTimer > Timer | Wait Time | 0.2 |"). (2) On stepRole="script_logic", emit a Living Incremental GDScript (.gd) diff keeping existing extends/class_name/@export/func header lines plain for context and prefixing EVERY new/modified line with "+ ". (3) On stepRole="wire_and_verify", emit Node Signal Connections ("[Node.signal_name] ──► [_on_handler()]") or F6 Run Scene checks.',
-                    },
-                    'verifyMode': {
-                      'type': 'STRING',
-                      'enum': LayersTextStyleGuide.verifyModeEnum,
-                      'description': LayersTextStyleGuide.verifyModeSchemaDesc,
-                    },
-                    'verifyResult': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.stepVerifyResultSchemaDesc,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
+        'resPath': {'type': 'STRING'},
+        'targetBlock': {'type': 'STRING'},
+        'replaceBlock': {'type': 'STRING'},
+        'note': {'type': 'STRING'},
       },
     },
   };
 
-  /// Native Gemini Tool (`functionDeclarations`) for Stage 2 Single-Task "Tailor Steps" (`tailorTaskHowToSubSteps`).
+  static const Map<String, dynamic> _stepObjectToolProperty = {
+    'type': 'OBJECT',
+    'required': [
+      'title',
+      'stepPath',
+      'instruction',
+      'area1Hierarchy',
+      'area2Inspector',
+      'codeFormula',
+      'verifyResult',
+    ],
+    'properties': {
+      'stepRole': {
+        'type': 'STRING',
+        'enum': LayersTextStyleGuide.stepPhaseRoleEnum,
+        'description': LayersTextStyleGuide.stepPhaseRoleSchemaDesc,
+      },
+      'title': {
+        'type': 'STRING',
+        'description': LayersTextStyleGuide.runbookStepTitleSchemaDesc,
+      },
+      'stepPath': {
+        'type': 'STRING',
+        'description': LayersTextStyleGuide.runbookStepPathSchemaDesc,
+      },
+      'instruction': {
+        'type': 'STRING',
+        'description': LayersTextStyleGuide.runbookInstructionSchemaDesc,
+      },
+      'area1Hierarchy': {
+        'type': 'STRING',
+        'description':
+            'Optional Godot Scene Tree hierarchy using ├─ / └─ ONLY when adding or editing nodes in this step ("" when unchanged).',
+      },
+      'area2Inspector': {
+        'type': 'STRING',
+        'description':
+            'Godot Inspector property delta ONLY when modifying values in this step ("Property: Value | Property2: Value2"; "" when already in an Inspector pipe table).',
+      },
+      'codeFormula': {
+        'type': 'STRING',
+        'description':
+            'Polymorphic Godot 4 payload by stepRole: (1) On stepRole="editor_setup" or "inspector_setup" (Scene Tree nodes, Inspector properties, Collision Layers/Masks, Input Map, Project Settings, Level placement), emit a Markdown pipe table ("| Node / Category | Property | Value |", e.g. "| DashTimer > Timer | Wait Time | 0.2 |"). (2) On stepRole="script_logic" or "fix", emit a Living Incremental GDScript (.gd) diff keeping existing extends/class_name/@export/func header lines plain for context and prefixing EVERY new/modified line with "+ ". (3) On stepRole="wire_and_verify", emit Node Signal Connections ("[Node.signal_name] ──► [_on_handler()]") or F6 Run Scene checks.',
+      },
+      'verifyMode': {
+        'type': 'STRING',
+        'enum': LayersTextStyleGuide.verifyModeEnum,
+        'description': LayersTextStyleGuide.verifyModeSchemaDesc,
+      },
+      'verifyResult': {
+        'type': 'STRING',
+        'description': LayersTextStyleGuide.stepVerifyResultSchemaDesc,
+      },
+    },
+  };
+
+  /// Enforces a single shared `primarySharedScriptOrScene` and flat Godot-dock-ordered Build Queue (`steps[]`).
+  static const Map<String, dynamic> commitFeatureHowToStepsTool = {
+    'name': 'commit_feature_howto_steps',
+    'description':
+        'Commits ONE flat, Godot-dock-ordered Single Feature Step List (`steps[]`: SCENE -> INSP -> CODE -> WIRE) for the active Feature checkpoint on one shared scene/script.',
+    'parameters': {
+      'type': 'OBJECT',
+      'required': ['primarySharedScriptOrScene', 'steps'],
+      'properties': {
+        'primarySharedScriptOrScene': {
+          'type': 'STRING',
+          'description':
+              'The single shared Godot 4 scene (.tscn) and GDScript (.gd) used across the feature (e.g., "res://scenes/player_character.tscn · res://scripts/player_character.gd", "res://scenes/hud.tscn · res://scripts/hud.gd", or "res://scenes/levels/arena.tscn").',
+        },
+        'steps': {
+          'type': 'ARRAY',
+          'description':
+              'Flat Single Feature Step List (3–7 cohesive steps) ordered by Godot dock workflow: editor_setup (SCENE) -> inspector_setup (INSP) -> script_logic (CODE) -> wire_and_verify (WIRE).',
+          'items': _stepObjectToolProperty,
+        },
+        'scriptPatches': _scriptPatchesToolProperty,
+      },
+    },
+  };
+
+  /// Native Gemini Tool (`functionDeclarations`) for Stage 2 Single-Step "Tailor Steps" (`tailorTaskHowToSubSteps`).
   static const Map<String, dynamic> commitTailoredTaskSubStepsTool = {
     'name': 'commit_tailored_task_substeps',
     'description':
-        'Commits tailored 3-Area How-To sub-steps for a single target task using the developer\'s exact scene/node/script names.',
+        'Commits tailored Godot 4 step(s) for a single target Build Queue step using the developer\'s exact scene/node/script names.',
     'parameters': {
       'type': 'OBJECT',
       'required': ['subSteps'],
@@ -4828,51 +2457,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         },
         'subSteps': {
           'type': 'ARRAY',
-          'items': {
-            'type': 'OBJECT',
-            'required': [
-              'title',
-              'stepPath',
-              'instruction',
-              'area1Hierarchy',
-              'area2Inspector',
-              'codeFormula',
-              'verifyResult',
-            ],
-            'properties': {
-              'stepRole': {
-                'type': 'STRING',
-                'enum': LayersTextStyleGuide.stepPhaseRoleEnum,
-                'description': LayersTextStyleGuide.stepPhaseRoleSchemaDesc,
-              },
-              'title': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.runbookStepTitleSchemaDesc,
-              },
-              'stepPath': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.runbookStepPathSchemaDesc,
-              },
-              'instruction': {
-                'type': 'STRING',
-                'description':
-                    LayersTextStyleGuide.runbookInstructionSchemaDesc,
-              },
-              'area1Hierarchy': {'type': 'STRING'},
-              'area2Inspector': {'type': 'STRING'},
-              'codeFormula': {'type': 'STRING'},
-              'verifyMode': {
-                'type': 'STRING',
-                'enum': LayersTextStyleGuide.verifyModeEnum,
-                'description': LayersTextStyleGuide.verifyModeSchemaDesc,
-              },
-              'verifyResult': {
-                'type': 'STRING',
-                'description':
-                    LayersTextStyleGuide.stepVerifyResultSchemaDesc,
-              },
-            },
-          },
+          'items': _stepObjectToolProperty,
         },
       },
     },
@@ -4882,7 +2467,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
   static const Map<String, dynamic> commitPlaytestFixTool = {
     'name': 'commit_playtest_fix',
     'description':
-        'Commits a root-cause playtest bug fix with a concise [FIX] task title, optional tuning updates, a [PLAYTEST GUARD] rule, and sequential 3-Area engine fix steps.',
+        'Commits a root-cause playtest bug fix with a concise [FIX] step title, optional tuning updates, a [PLAYTEST GUARD] rule, and sequential Godot 4 fix steps.',
     'parameters': {
       'type': 'OBJECT',
       'required': ['playtestGuard', 'steps'],
@@ -4890,7 +2475,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         'fixTaskTitle': {
           'type': 'STRING',
           'description':
-              'Optional concise 2-4 word Title-Case fix task title (e.g., "[FIX] Wall Clip Clamp").',
+              'Optional concise 2-4 word Title-Case fix step title (e.g., "[FIX] Wall Clip Clamp").',
         },
         'playtestGuard': {
           'type': 'STRING',
@@ -4911,52 +2496,9 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         },
         'steps': {
           'type': 'ARRAY',
-          'items': {
-            'type': 'OBJECT',
-            'required': [
-              'title',
-              'stepPath',
-              'instruction',
-              'area1Hierarchy',
-              'area2Inspector',
-              'codeFormula',
-              'verifyResult',
-            ],
-            'properties': {
-              'stepRole': {
-                'type': 'STRING',
-                'enum': LayersTextStyleGuide.stepPhaseRoleEnum,
-                'description': LayersTextStyleGuide.stepPhaseRoleSchemaDesc,
-              },
-              'title': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.runbookStepTitleSchemaDesc,
-              },
-              'stepPath': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.runbookStepPathSchemaDesc,
-              },
-              'instruction': {
-                'type': 'STRING',
-                'description':
-                    LayersTextStyleGuide.runbookInstructionSchemaDesc,
-              },
-              'area1Hierarchy': {'type': 'STRING'},
-              'area2Inspector': {'type': 'STRING'},
-              'codeFormula': {'type': 'STRING'},
-              'verifyMode': {
-                'type': 'STRING',
-                'enum': LayersTextStyleGuide.verifyModeEnum,
-                'description': LayersTextStyleGuide.verifyModeSchemaDesc,
-              },
-              'verifyResult': {
-                'type': 'STRING',
-                'description':
-                    LayersTextStyleGuide.stepVerifyResultSchemaDesc,
-              },
-            },
-          },
+          'items': _stepObjectToolProperty,
         },
+        'scriptPatches': _scriptPatchesToolProperty,
       },
     },
   };
@@ -5000,7 +2542,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         'tasks': {
           'type': 'ARRAY',
           'description':
-              'Sequential tasks ordered from stage_1_scene_or_data_foundation -> stage_2_mechanic_logic (1..N) -> stage_3_state_and_playtest_verify.',
+              'Sequential build steps ordered from editor_setup (Scene Tree) -> inspector_setup (Properties) -> script_logic (Code) -> wire_and_verify (Signals & F6 Playtest).',
           'items': {
             'type': 'OBJECT',
             'required': ['role', 'title'],
@@ -5008,9 +2550,10 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               'role': {
                 'type': 'STRING',
                 'enum': [
-                  'stage_1_scene_or_data_foundation',
-                  'stage_2_mechanic_logic',
-                  'stage_3_state_and_playtest_verify',
+                  'editor_setup',
+                  'inspector_setup',
+                  'script_logic',
+                  'wire_and_verify',
                 ],
               },
               'title': {
@@ -5121,7 +2664,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         'tasks': {
           'type': 'ARRAY',
           'description':
-              'Sequential tasks ordered from stage_1_scene_or_data_foundation -> stage_2_mechanic_logic (1..N) -> stage_3_state_and_playtest_verify.',
+              'Sequential build steps ordered from editor_setup (Scene Tree) -> inspector_setup (Properties) -> script_logic (Code) -> wire_and_verify (Signals & F6 Playtest).',
           'items': {
             'type': 'OBJECT',
             'required': ['role', 'title'],
@@ -5129,9 +2672,10 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               'role': {
                 'type': 'STRING',
                 'enum': [
-                  'stage_1_scene_or_data_foundation',
-                  'stage_2_mechanic_logic',
-                  'stage_3_state_and_playtest_verify',
+                  'editor_setup',
+                  'inspector_setup',
+                  'script_logic',
+                  'wire_and_verify',
                 ],
               },
               'title': {
@@ -5169,7 +2713,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         'futureTasks': {
           'type': 'ARRAY',
           'description':
-              'Future-phase upgrade tasks ordered from stage_1_scene_or_data_foundation -> stage_2_mechanic_logic (1..N) -> stage_3_state_and_playtest_verify.',
+              'Future-phase build steps ordered from editor_setup (Scene Tree) -> inspector_setup (Properties) -> script_logic (Code) -> wire_and_verify (Signals & F6 Playtest).',
           'items': {
             'type': 'OBJECT',
             'required': ['role', 'title'],
@@ -5177,9 +2721,10 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
               'role': {
                 'type': 'STRING',
                 'enum': [
-                  'stage_1_scene_or_data_foundation',
-                  'stage_2_mechanic_logic',
-                  'stage_3_state_and_playtest_verify',
+                  'editor_setup',
+                  'inspector_setup',
+                  'script_logic',
+                  'wire_and_verify',
                 ],
               },
               'title': {
@@ -5265,7 +2810,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
 
     for (int i = 0; i < effectiveEnd; i++) {
       final cp = states[i];
-      final shortTasks = cp.checklist
+      final shortTasks = cp.flatSteps
           .map((t) => LayersTextStyleGuide.formatConciseTaskTitle(t.text))
           .where((s) => s.isNotEmpty)
           .take(3)
@@ -5287,27 +2832,25 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
         if (cleanG.isNotEmpty) guardItems.add(cleanG);
       }
 
-      for (final task in cp.checklist) {
-        for (final sub in task.children) {
-          final decoded =
-              TaskHowToBlueprint.decodeThreeAreaNotes(sub.specNotes);
-          final area1Text = decoded.area1Hierarchy?.trim() ?? '';
-          if (area1Text.isNotEmpty) {
-            for (final rawLine in area1Text.split('\n')) {
-              final cleanNode =
-                  rawLine.replaceAll(_treeGlyphPrefixRegex, '').trim();
-              if (cleanNode.isNotEmpty) {
-                hierarchyNodes.add(cleanNode);
-              }
+      for (final sub in cp.flatSteps) {
+        final decoded =
+            TaskHowToBlueprint.decodeThreeAreaNotes(sub.specNotes);
+        final area1Text = decoded.area1Hierarchy?.trim() ?? '';
+        if (area1Text.isNotEmpty) {
+          for (final rawLine in area1Text.split('\n')) {
+            final cleanNode =
+                rawLine.replaceAll(_treeGlyphPrefixRegex, '').trim();
+            if (cleanNode.isNotEmpty) {
+              hierarchyNodes.add(cleanNode);
             }
           }
-          final snippet = sub.codeSnippet ?? '';
-          if (snippet.isNotEmpty) {
-            for (final m in _scriptSymbolRegex.allMatches(snippet)) {
-              final sym = m.group(1)?.trim() ?? '';
-              if (sym.isNotEmpty) {
-                scriptSymbols.add(sym);
-              }
+        }
+        final snippet = sub.codeSnippet ?? '';
+        if (snippet.isNotEmpty) {
+          for (final m in _scriptSymbolRegex.allMatches(snippet)) {
+            final sym = m.group(1)?.trim() ?? '';
+            if (sym.isNotEmpty) {
+              scriptSymbols.add(sym);
             }
           }
         }
@@ -5371,55 +2914,54 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
           if (clean.isNotEmpty) tuningTokens.add(clean);
         }
       }
-      for (final task in cp.checklist) {
-        for (final sub in task.children) {
-          if (sub.codeTargetFile != 'custom_snippet') continue;
-          final stepPath = (sub.codeLanguage ?? '').trim();
-          if (stepPath.isNotEmpty && stepPath != 'custom_snippet') {
-            pathTokens.add(stepPath);
-            for (final m in _ledgerAssetTokenRegex.allMatches(stepPath)) {
-              assetTokens.add(m.group(0)!);
-            }
-          }
-          final decoded =
-              TaskHowToBlueprint.decodeThreeAreaNotes(sub.specNotes);
-          final area1Text = decoded.area1Hierarchy?.trim() ?? '';
-          if (area1Text.isNotEmpty) {
-            final areaLines = area1Text.split('\n');
-            final rootLine = areaLines.first
-                .replaceAll(_treeGlyphPrefixRegex, '')
-                .trim();
-            if (rootLine.isNotEmpty) {
-              assetTokens.add(rootLine);
-            }
-            for (final rawLine in areaLines) {
-              final cleanNode =
-                  rawLine.replaceAll(_treeGlyphPrefixRegex, '').trim();
-              if (cleanNode.isNotEmpty) {
-                hierarchyNodes.add(cleanNode);
-              }
-            }
-          }
-          final snippet = sub.codeSnippet ?? '';
-          if (snippet.isNotEmpty) {
-            for (final m in _scriptSymbolRegex.allMatches(snippet)) {
-              final sym = (m.group(1) ?? '').trim();
-              if (sym.isNotEmpty) scriptSymbols.add(sym);
-            }
-          }
-          final combinedText =
-              '${sub.text} ${decoded.cleanInstruction} $snippet';
-          for (final m in _ledgerAssetTokenRegex.allMatches(combinedText)) {
+      for (final sub in cp.flatSteps) {
+        if (sub.codeTargetFile != 'custom_snippet') continue;
+        final stepPath = (sub.codeLanguage ?? '').trim();
+        if (stepPath.isNotEmpty && stepPath != 'custom_snippet') {
+          pathTokens.add(stepPath);
+          for (final m in _ledgerAssetTokenRegex.allMatches(stepPath)) {
             assetTokens.add(m.group(0)!);
           }
+        }
+        final decoded =
+            TaskHowToBlueprint.decodeThreeAreaNotes(sub.specNotes);
+        final area1Text = decoded.area1Hierarchy?.trim() ?? '';
+        if (area1Text.isNotEmpty) {
+          final areaLines = area1Text.split('\n');
+          final rootLine = areaLines.first
+              .replaceAll(_treeGlyphPrefixRegex, '')
+              .trim();
+          if (rootLine.isNotEmpty) {
+            assetTokens.add(rootLine);
+          }
+          for (final rawLine in areaLines) {
+            final cleanNode =
+                rawLine.replaceAll(_treeGlyphPrefixRegex, '').trim();
+            if (cleanNode.isNotEmpty) {
+              hierarchyNodes.add(cleanNode);
+            }
+          }
+        }
+        final snippet = sub.codeSnippet ?? '';
+        if (snippet.isNotEmpty) {
+          for (final m in _scriptSymbolRegex.allMatches(snippet)) {
+            final sym = (m.group(1) ?? '').trim();
+            if (sym.isNotEmpty) scriptSymbols.add(sym);
+          }
+        }
+        final combinedText =
+            '${sub.text} ${decoded.cleanInstruction} $snippet';
+        for (final m in _ledgerAssetTokenRegex.allMatches(combinedText)) {
+          assetTokens.add(m.group(0)!);
         }
       }
     }
 
     if (assetTokens.isEmpty) {
-      final firstTaskSource = (states.isNotEmpty &&
-              states.first.checklist.isNotEmpty)
-          ? '${states.first.checklist.first.text} ${featDoc.title}'
+      final firstEntries =
+          states.isNotEmpty ? states.first.flatSteps : const <Subtask>[];
+      final firstTaskSource = firstEntries.isNotEmpty
+          ? '${firstEntries.first.text} ${featDoc.title}'
           : featDoc.title;
       final derivedAsset =
           TaskHowToBlueprint.deriveConcreteAssetName(firstTaskSource);
@@ -5504,29 +3046,31 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
     }
     final effectiveCpIndex = cpIndex >= 0 ? cpIndex : 0;
     final cpNode = states[effectiveCpIndex];
-    if (cpNode.checklist.isEmpty) return;
+    cpNode.flattenLegacyNestedChecklistIfNeeded();
+    final rawPlannedSlices = (cpNode.parameters['plannedSlices'] ?? '').trim();
+    if (cpNode.checklist.isEmpty && rawPlannedSlices.isEmpty) return;
 
     if (!forceRefresh && _aiSynthesizedFeatureSteps.contains(synthKey)) {
       return;
     }
 
-    // Skip if already customized with custom_snippet across ALL tasks (unless forceRefresh)
-    final alreadyCustom = cpNode.checklist.every(
-      (t) =>
-          t.children.isNotEmpty &&
-          t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
-    );
+    // Skip if already customized with custom_snippet across ALL steps (unless forceRefresh)
+    final alreadyCustom = cpNode.hasAllStepsSynthesized;
     if (!forceRefresh && alreadyCustom) {
       _failedStepSynthesisFeatureIds.remove(featureId);
       _aiSynthesizedFeatureSteps.add(synthKey);
       return;
     }
 
-    for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-      TaskHowToBlueprint.resolve(
-        parentTask: cpNode.checklist[tIdx],
-        taskIndex: tIdx,
-        checkpointNode: cpNode,
+    final existingStepHints = cpNode.flatSteps
+        .map((s) => s.text.trim())
+        .where((s) => s.isNotEmpty && !s.startsWith('STEP '))
+        .toList();
+    if (cpNode.flatSteps
+        .where((s) => s.codeTargetFile == 'custom_snippet')
+        .isEmpty) {
+      TaskHowToBlueprint.populateDefaultUnifiedSteps(
+        cpNode,
         engineHint: engineHint,
         phase: _currentPhase,
       );
@@ -5537,12 +3081,19 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
 
     try {
       final projTitle = activeProject?.title ?? 'Game Prototype';
-      final taskSummaries = <String>[];
-      for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-        taskSummaries.add(
-          'Task ${tIdx + 1} (taskIndex: $tIdx): "${cpNode.checklist[tIdx].text}"',
-        );
-      }
+      final sliceHints = rawPlannedSlices.isNotEmpty
+          ? rawPlannedSlices
+              .split('|')
+              .map((s) => s.trim())
+              .where((s) => s.isNotEmpty)
+              .toList()
+          : (existingStepHints.isNotEmpty
+              ? existingStepHints
+              : cpNode.coveredScope.take(4).toList());
+      final sliceSummaries = <String>[
+        for (int sIdx = 0; sIdx < sliceHints.length; sIdx++)
+          '${sIdx + 1}. "${sliceHints[sIdx]}"',
+      ];
 
       // Determine project-wide feature build order so the agent knows what assets already exist vs. must be created first
       final allReleaseFeatures = <TierDocument>[
@@ -5615,7 +3166,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
           ? 'PlayerSpawn Marker node above the floor instancing player_character.tscn'
           : 'temporary test RigidBody + CollisionShape node above the floor in the main scene so F6 Run Scene spawns a testable body';
       final projectBuildStateContext = isGreenfieldFirstFeature
-          ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Setup). On Task 1, explicitly instruct how to set up ${currentArchetype == 'level' ? 'the Godot Level Scene (.tscn) & Scene Tree geometry' : (currentArchetype == 'character' ? 'the Player Character Scene (.tscn) & Script (.gd)' : (currentArchetype == 'ui' ? 'the Godot Control / CanvasLayer HUD Scene (.tscn)' : 'the Godot Feature Scene (.tscn) & Script (.gd)'))} ($engineAssetHint), specify its exact `res://` folder path, and ${needsFirstFeaturePlayerBootstrap ? 'include placing a $playerBootstrapLabel so pressing F6 spawns cleanly onto the floor.' : 'explain how to instance or attach it inside the main scene.'}'
+          ? 'Project Build State: FIRST ${currentArchetype.toUpperCase()} FEATURE IN PROJECT (Greenfield Setup). On the first SCENE step, explicitly instruct how to set up ${currentArchetype == 'level' ? 'the Godot Level Scene (.tscn) & Scene Tree geometry' : (currentArchetype == 'character' ? 'the Player Character Scene (.tscn) & Script (.gd)' : (currentArchetype == 'ui' ? 'the Godot Control / CanvasLayer HUD Scene (.tscn)' : 'the Godot Feature Scene (.tscn) & Script (.gd)'))} ($engineAssetHint), specify its exact `res://` folder path, and ${needsFirstFeaturePlayerBootstrap ? 'include placing a $playerBootstrapLabel so pressing F6 spawns cleanly onto the floor.' : 'explain how to instance or attach it inside the main scene.'}'
           : 'Project Build State: Feature #${featOrderIdx + 1} in the release (preceded by: $compactPrecedingSummary). Reuse and extend existing `res://scenes/` & `res://scripts/` files ($engineAssetHint) for player-attached mechanics, or create this feature\'s dedicated `.tscn`/`.gd` and connect signals to the player.';
 
       // Build Project-Wide Cross-Epic Asset & Symbol Registry (`< 220 tokens`, max 12 entries):
@@ -5760,7 +3311,7 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
 
       final phaseInstructionBlock = switch (_currentPhase) {
         ProductionPhase.prototype =>
-          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes (BoxShape3D / CapsuleShape3D / RectangleShape2D), greybox meshes/ColorRect sprites, and direct Inspector `@export` variables.\n- Focus strictly on proving the core mechanic feel and F6 Run Scene loop.\n- Keep greybox steps lean and cohesive (~2-3 sub-steps per task, ~6-9 total steps per feature; avoid 20-step bloat).',
+          'ACTIVE PRODUCTION PHASE: 01 · PROTOTYPE (GREYBOX TESTBED)\n- Use primitive collision shapes (BoxShape3D / CapsuleShape3D / RectangleShape2D), greybox meshes/ColorRect sprites, and direct Inspector `@export` variables.\n- Focus strictly on proving the core mechanic feel and F6 Run Scene loop.\n- Keep greybox steps lean and cohesive (~3–6 total steps in 1 flat dock-ordered queue; avoid bloat).',
         ProductionPhase.mvp =>
           'ACTIVE PRODUCTION PHASE: 02 · MVP (FUNCTIONAL DELTA UPGRADE)\n- Extend the existing v0.1 `.tscn` scene and `.gd` script in-place (NEVER recreate from scratch).\n- Wire cross-system signals, HUD counters, or progression loops.',
         ProductionPhase.verticalSlice =>
@@ -5790,51 +3341,50 @@ Call `commit_tailored_task_substeps` with the tailored sub-steps.
 
       final codeFormulaModeGuide = currentArchetype == 'level'
           ? 'a clean Markdown Godot Level Scene Placement & Inspector Table (e.g.\n| Node (Type) | Property / Transform | Value |\n| --- | --- | --- |\n| ArenaFloor (StaticBody3D) | Position / Size | Vector3(0, 0, 0) / Vector3(20, 0.5, 20) |\n| PlayerSpawn (Marker3D) | Position | Vector3(0, 2, 0) |\n). Do NOT write runtime `_ready()` code just to place static blockout floors/walls, use meters/pixels matching 3D/2D dimension, and pre-calculate literal numeric Position/Size values from Active Tuning Parameters'
-          : 'STRICT CONFIG vs. DIFF vs. SIGNAL SPLIT BY `stepRole`: (A) When `stepRole == "editor_setup"` (creating `.tscn` child nodes, Inspector properties like `Motion Mode`, `Position`, `Radius`, Collision Layers/Masks, Project Settings, or `Input Map` actions), ALWAYS emit a clean Markdown Inspector / Input Map pipe table (`| Node / Category | Property | Value |`, e.g. `| CharacterBody3D > Motion Mode | Motion Mode | Grounded |` or `| DashTimer > Timer | Wait Time | 0.2 |` or `| Input Map > dash | Key | Shift |`) and NEVER emit runtime `_ready()` property setters! (B) When `stepRole == "script_logic"`, emit 3-8 lines of Living Incremental GDScript (`.gd`) keeping existing `extends` / `@export` / `func` signature context lines plain and prefixing EVERY new or modified line added in THIS step with `+ ` (e.g. `+ @export var dash_speed: float = 18.0\n+ func _trigger_dash() -> void:`${usesGdExtension ? '; for native performance hotspots show clean GDExtension C++ (.hpp/.cpp) with `+ ` on added lines' : ''}). (C) When `stepRole == "wire_and_verify"`, emit Godot Node Signal connections (`[Node.signal_name] ──► [_on_handler_method()]`) or concise F6 Run Scene debug checks';
+          : 'STRICT CONFIG vs. DIFF vs. SIGNAL SPLIT BY `stepRole`: (A) When `stepRole == "editor_setup"` or `"inspector_setup"` (creating `.tscn` child nodes, Inspector properties like `Motion Mode`, `Position`, `Radius`, Collision Layers/Masks, Project Settings, or `Input Map` actions), ALWAYS emit a clean Markdown Inspector / Input Map pipe table (`| Node / Category | Property | Value |`, e.g. `| CharacterBody3D > Motion Mode | Motion Mode | Grounded |` or `| DashTimer > Timer | Wait Time | 0.2 |` or `| Input Map > dash | Key | Shift |`) and NEVER emit runtime `_ready()` property setters! (B) When `stepRole == "script_logic"`, emit 3-8 lines of Living Incremental GDScript (`.gd`) keeping existing `extends` / `@export` / `func` signature context lines plain and prefixing EVERY new or modified line added in THIS step with `+ ` (e.g. `+ @export var dash_speed: float = 18.0\n+ func _trigger_dash() -> void:`${usesGdExtension ? '; for native performance hotspots show clean GDExtension C++ (.hpp/.cpp) with `+ ` on added lines' : ''}). (C) When `stepRole == "wire_and_verify"`, emit Godot Node Signal connections (`[Node.signal_name] ──► [_on_handler_method()]`) or concise F6 Run Scene debug checks';
+
+      final godotStepContext = buildPromptGodotContext(
+        primaryAssetHint: existingPrimaryAsset,
+        fallbackScriptPath: engineAssetHint,
+      );
 
       final prompt = '''
 You are the Principal Godot 4 Architect ($targetEngineMode) for "$projTitle".
-Synthesize concise, zero-repetition 3-Area Engine How-To steps using native Godot 4 terminology (`FileSystem`, `Scene Tree`, `Inspector`, `Node -> Signals`, `GDScript Editor`, `Input Map`, `Project Settings`, `@export`, `@onready`, `F6 Run Current Scene`) for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
+Synthesize ONE flat, Godot-dock-ordered Single Feature Step List (`steps[]`: 3–7 cohesive steps) using native Godot 4 terminology (`FileSystem`, `Scene Tree`, `Inspector`, `Node -> Signals`, `GDScript Editor`, `Input Map`, `Project Settings`, `@export`, `@onready`, `F6 Run Current Scene`) for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
 ${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}${featureOwnScopeBlock.isNotEmpty ? '$featureOwnScopeBlock\n' : ''}$phaseInstructionBlock
 $projectBuildStateContext
-${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Epic-Scoped & Root Project Anchors — reuse exact Scene/Script & `@export` Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
+${godotStepContext.isNotEmpty ? '$godotStepContext\n' : ''}${cumulativeLedgerLines.isNotEmpty ? 'CUMULATIVE PROJECT LEDGER (Epic-Scoped & Root Project Anchors — reuse exact Scene/Script & `@export` Variable names):\n${cumulativeLedgerLines.join('\n')}' : ''}
 ${sameEpicSiblingBoundaryLines.isNotEmpty ? sameEpicSiblingBoundaryLines.join('\n') : ''}
 ${coreSystemsReferenceLines.isNotEmpty ? 'CORE SYSTEMS REFERENCE (finished STABLE core scripts — plug into these, NEVER rebuild them):\n${coreSystemsReferenceLines.join('\n')}' : ''}
-Tasks:
-${taskSummaries.join('\n')}
+Planned Feature Slices / Scope Targets:
+${sliceSummaries.isNotEmpty ? sliceSummaries.join('\n') : '- "${feat.title}"'}
 Active Tuning Parameters (MUST use exact variable names): ${cpNode.tuningParams.join(', ')}
-Active Guards (MUST enforce in code without raw [TAG] brackets in prose): ${cleanEdgeCases.join(', ')}
+Active Guards (MUST enforce in code and cover without raw [TAG] brackets in prose): ${cleanEdgeCases.join(', ')}
 ${priorCheckpointSnapshot.isNotEmpty ? 'Previous Checkpoints Structural Snapshot (extend existing nodes & functions in-place):\n$priorCheckpointSnapshot' : ''}
 
-CRITICAL MULTI-TASK CONTINUITY & ORDERING RULES:
-- ONE SHARED ASSET ACROSS ALL TASKS: Choose ONE primary scene/script pair for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway test scene/script in Task 1 just to replace it in Task 2, and NEVER use the word "canonical" in step titles or instructions.
-- INTRA-TASK ENGINE CAUSAL ORDERING (`editor_setup` -> `script_logic` -> `wire_and_verify`):
-  * Inside EVERY task, set `stepRole` so engine prerequisites come strictly BEFORE code that references them:
-    1) `editor_setup` FIRST: Create/attach Godot Scene Tree child nodes (`area1Hierarchy`), Input Map actions, Collision Layers/Masks, or Inspector bindings (`area2Inspector`) BEFORE any GDScript step calls `\$NodeName`, `@onready`, `get_node`, or `Input.is_action_*`.
-    2) `script_logic` SECOND: Declare `@export var` tuning variables and write the handler/physics method incrementally on the shared `.gd` script (Task 2..N MUST extend the variables and functions created in Task 1—never paste conflicting duplicate class definitions).
-    3) `wire_and_verify` LAST: Connect Godot Node Signals (`[Node.signal_name] ──► [_on_handler()]`) or instance the `.tscn` in the main scene and verify with `F6`.
+CRITICAL SINGLE FEATURE STEP LIST RULES (`SCENE -> INSP -> CODE -> WIRE`):
+- ONE SHARED ASSET ACROSS ALL STEPS: Choose ONE primary scene/script pair for "${feat.title}" matching $targetEngineMode ($engineAssetHint). NEVER create a throwaway test scene/script in Step 1 just to replace it later, and NEVER use the word "canonical" in step titles or instructions.
+- STRICT GODOT-DOCK GROUPED STEP ORDER (3–7 cohesive steps total — NEVER repeat `SCENE -> CODE -> WIRE` per micro-slice):
+  1) `editor_setup` (`SCENE`) FIRST: Build/attach ALL needed `.tscn` child nodes (`area1Hierarchy`) BEFORE any Inspector tuning or GDScript references `\$NodeName` / `@onready`.
+  2) `inspector_setup` (`INSP`) SECOND: Configure Collision Layers/Masks, Inspector properties (`area2Inspector`), or `Input Map` actions in 1 focused step.
+  3) `script_logic` (`CODE`) THIRD: Declare `@export var` tuning variables (`${cpNode.tuningParams.join(', ')}`) and implement the core GDScript behavior & state guards (${cleanEdgeCases.join(', ')}) incrementally in 1–2 focused steps on the shared `.gd` script.
+  4) `wire_and_verify` (`WIRE`) LAST: Connect Godot Node Signals (`[Node.signal_name] ──► [_on_handler()]`), hook visual/audio feedback cues or main-scene placement, and verify with `F6`.
 - HONEST DUAL-MODE CHECKS (`verifyMode: "editor"` vs `"playtest"`):
-  * Set `verifyMode: "editor"` on intermediate structural/declaration steps where pressing F6 cannot yet test runtime behavior (e.g. creating an Input Map action, attaching a `Timer` node, declaring `@export` variables)—write an honest Editor check (`"Inspect Scene Tree → DashTimer appears under PlayerCharacter"`).
-  * Set `verifyMode: "playtest"` ONLY once runtime wiring is runnable with `F6` (`"Press Shift in F6 → Player dashes forward"`). The final step of a runnable task should use `"playtest"`.
-- STRICT TASK-ROLE ALIGNMENT & NON-OVERLAPPING SLICES (ACROSS ALL ${cpNode.checklist.length} TASKS):
-  * Return ALL ${cpNode.checklist.length} tasks (`taskIndex: 0..${cpNode.checklist.length - 1}`)—never omit a task.
-  * Each task MUST own a strictly non-overlapping slice of the feature—NEVER implement Task 2's perimeter walls or logic inside Task 1.
-  * First Task (Task 1) builds ONLY the primary floor/scene/node/character foundation in the `.tscn` scene.
-  * Middle Task(s) (Tasks 2..${cpNode.checklist.length > 2 ? cpNode.checklist.length - 1 : 2}) add secondary structural bounds or wire the core mechanic velocity, interaction, or simulation math inside that same script using ${cpNode.tuningParams.join(', ')}.
-  * Final Task (Task ${cpNode.checklist.length}) stays on that same scene/script to add a concrete trigger Area, state guard, clamp, or observable feedback cue (${cleanEdgeCases.join(', ')})—NEVER emit a passive "Verification" or "Testing" task title.
+  * Set `verifyMode: "editor"` on structural/Inspector/declaration steps where pressing F6 cannot yet test runtime behavior (`"Inspect Scene Tree → DashTimer appears under PlayerCharacter"`).
+  * Set `verifyMode: "playtest"` once runtime wiring is runnable with `F6` (`"Press Shift in F6 → Player dashes forward"`).
+- FORMATTING:
+  * In `area2Inspector`, list ONLY the 1–3 properties modified in THIS step.
+  * In `instruction` (DO), ALWAYS emit 2-4 short newline-separated imperative micro-actions (`- <Dock/Node> → <Command Verb + Exact Value>`), never a prose paragraph.
+  * In `codeFormula`, emit $codeFormulaModeGuide.
+  * Whenever modifying or initializing a `.gd` file, also emit `scriptPatches` (`resPath`, `targetBlock`, `replaceBlock`) so the cumulative script updates cleanly without overwriting unrelated code.
 
-For each task (taskIndex: 0..${cpNode.checklist.length - 1}), include a concise mechanic-specific "taskTitle" (2-4 Title-Case words naming the exact scene node, UI control, data resource, or gameplay calculation—never generic phrases like "Body & Collision", "Action & Math", "Cue & Boundary Clamp", or passive "Verification" titles) and return the sequential 3-Area sub-steps needed to implement and verify that task (zero artificial step count limits; in 01 · PROTOTYPE prefer 2-3 cohesive sub-steps per task so greybox features stay around 6-9 total steps):
-- In `area2Inspector`, list ONLY the 1-3 properties modified in THIS specific task's node (never dump unrelated properties across tasks).
-- In `instruction` (DO), ALWAYS emit 2-4 short newline-separated imperative micro-actions (`- <Dock/Node> → <Command Verb + Exact Value>`) for a scannable Godot 4 Editor Guide Book, never a prose sentence or paragraph.
-- In `codeFormula`, emit $codeFormulaModeGuide.
-
-Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each task.''';
+Call `commit_feature_howto_steps` with `primarySharedScriptOrScene`, the flat dock-ordered `steps[]` array, and `scriptPatches`.''';
 
       final json = await GeminiAgentClient.generateJson(
         prompt: prompt,
         apiKey: _apiKey,
         preferredModel: _conversationModel,
-        thinkingLevel: _thinkingLevel,
+        thinkingLevel: effectiveGodotCodeThinkingLevel,
         temperature: 0.25,
         functionDeclarations: const [commitFeatureHowToStepsTool],
       );
@@ -5847,266 +3397,68 @@ Call `commit_feature_howto_steps` with the sequential 3-Area sub-steps for each 
         primaryAsset = existingPrimaryAsset;
         cpNode.parameters['primarySharedScriptOrScene'] = existingPrimaryAsset;
       }
-      final rawTasks = json?['tasks'];
-      if (rawTasks is! List || rawTasks.isEmpty) {
+      applyAiScriptPatchesResponse(
+        json?['scriptPatches'],
+        fallbackResPath: primaryAsset.isNotEmpty ? primaryAsset : engineAssetHint,
+        featureId: featureId,
+        releaseVersion: cpNode.releaseVersion,
+      );
+      final rawStepMaps = <dynamic>[];
+      final directSteps = json?['steps'];
+      if (directSteps is List && directSteps.isNotEmpty) {
+        rawStepMaps.addAll(directSteps);
+      } else {
+        // Backward compatibility for test mocks returning legacy `tasks[].subSteps[]`.
+        final legacyTasks = json?['tasks'];
+        if (legacyTasks is List && legacyTasks.isNotEmpty) {
+          for (final rawTask in legacyTasks.whereType<Map>()) {
+            final subs = rawTask['subSteps'];
+            if (subs is List && subs.isNotEmpty) {
+              rawStepMaps.addAll(subs);
+            }
+          }
+        }
+      }
+
+      if (rawStepMaps.isEmpty) {
         _failedStepSynthesisFeatureIds.add(featureId);
         return;
       }
 
-      bool applyParsedTasksList(
-        List<dynamic> incomingTasks, {
-        Set<int>? allowedIndices,
-        List<int>? fallbackTargetIndices,
-      }) {
-        final parsedIndices = incomingTasks
-            .whereType<Map>()
-            .map((t) => int.tryParse(t['taskIndex']?.toString() ?? '') ?? -1)
-            .where((idx) => idx >= 0)
-            .toList();
-        final isOneBased = fallbackTargetIndices == null &&
-            parsedIndices.isNotEmpty &&
-            !parsedIndices.contains(0) &&
-            parsedIndices.every(
-              (idx) => idx >= 1 && idx <= cpNode.checklist.length,
-            );
-        final useDirectPositional = fallbackTargetIndices == null &&
-            incomingTasks.length == cpNode.checklist.length;
-
-        bool appliedAny = false;
-        final seenScriptLines = <String>{};
-        for (int listIdx = 0; listIdx < incomingTasks.length; listIdx++) {
-          final rawTask = incomingTasks[listIdx];
-          if (rawTask is! Map) continue;
-          final rawIdx =
-              int.tryParse(rawTask['taskIndex']?.toString() ?? '') ?? -1;
-          int tIdx;
-          if (useDirectPositional) {
-            tIdx = listIdx;
-          } else if (rawIdx >= 0) {
-            tIdx = isOneBased ? rawIdx - 1 : rawIdx;
-          } else if (fallbackTargetIndices != null &&
-              listIdx < fallbackTargetIndices.length) {
-            tIdx = fallbackTargetIndices[listIdx];
-          } else {
-            tIdx = listIdx;
-          }
-          if (tIdx < 0 || tIdx >= cpNode.checklist.length) continue;
-          if (allowedIndices != null && !allowedIndices.contains(tIdx)) {
-            continue;
-          }
-          final parentTask = cpNode.checklist[tIdx];
-          if (LayersTextStyleGuide.isLegacyTemplateTaskTitle(parentTask.text)) {
-            final aiTaskTitle =
-                LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
-              (rawTask['taskTitle'] ?? '').toString().trim(),
-            );
-            final durMatch =
-                RegExp(r'\(\d+h\)\s*$').firstMatch(parentTask.text);
-            final durSuffix =
-                durMatch != null ? ' ${durMatch.group(0)!.trim()}' : '';
-            final withoutDur = durMatch != null
-                ? parentTask.text.substring(0, durMatch.start).trim()
-                : parentTask.text.trim();
-            final dashIdx = withoutDur.indexOf(' — ');
-            final existingGoalPart =
-                dashIdx > 0 ? withoutDur.substring(dashIdx) : '';
-            final cleanNewHead = aiTaskTitle.isNotEmpty
-                ? aiTaskTitle
-                : LayersTextStyleGuide.stripLegacyTemplateTaskSuffix(
-                    dashIdx > 0
-                        ? withoutDur.substring(0, dashIdx).trim()
-                        : withoutDur,
-                  );
-            parentTask.text = '$cleanNewHead$existingGoalPart$durSuffix';
-            appliedAny = true;
-          }
-          final taskNum = tIdx + 1;
-          final rawSubs = rawTask['subSteps'];
-          if (rawSubs is! List || rawSubs.isEmpty) continue;
-
-          final orderedSubs =
-              WorkbenchReleaseMixin.enforceIntraTaskEditorBeforeScriptOrder(
-            rawSubs,
-          );
-          final newChildren = <Subtask>[];
-          for (int sIdx = 0; sIdx < orderedSubs.length; sIdx++) {
-            final item = orderedSubs[sIdx];
-            final rawTitle =
-                (item['title'] ?? item['shortTitle'])?.toString().trim() ?? '';
-            final strippedTitle = rawTitle
-                .replaceFirst(_stepHeaderPrefixRegex, '')
-                .trim();
-            final title = strippedTitle.isNotEmpty
-                ? 'STEP $taskNum.${sIdx + 1} · $strippedTitle'
-                : '';
-            final path = item['stepPath']?.toString().trim() ?? '';
-            final instr = (item['instruction'] ?? item['doInstruction'])
-                    ?.toString()
-                    .trim() ??
-                '';
-            final area1 = item['area1Hierarchy']?.toString().trim() ?? '';
-            final area2 = item['area2Inspector']?.toString().trim() ?? '';
-            var code = (item['codeFormula'] ?? item['codeSnapshot'] ?? '')
-                .toString()
-                .trim();
-            final rawPlacementRows = item['placementRows'];
-            if (code.isEmpty && rawPlacementRows is List && rawPlacementRows.isNotEmpty) {
-              final tbl = <String>[
-                '| Node / Category | Property | Value |',
-                '| --- | --- | --- |',
-              ];
-              for (final row in rawPlacementRows.whereType<Map>()) {
-                final actor = (row['actor'] ?? row['target'] ?? '').toString().trim();
-                final prop = (row['property'] ?? row['key'] ?? '').toString().trim();
-                final val = (row['value'] ?? '').toString().trim();
-                if (actor.isNotEmpty || prop.isNotEmpty || val.isNotEmpty) {
-                  tbl.add('| $actor | $prop | $val |');
-                }
-              }
-              if (tbl.length > 2) code = tbl.join('\n');
-            }
-            if (code.isNotEmpty &&
-                !code.startsWith('|') &&
-                !code.contains('──►')) {
-              final rawLines = code.split('\n');
-              final alreadyHasDiff = rawLines.any(
-                (l) => l.startsWith('+') && !l.startsWith('++'),
-              );
-              if (!alreadyHasDiff) {
-                final diffedLines = <String>[];
-                final hadPriorLines = seenScriptLines.isNotEmpty;
-                for (final l in rawLines) {
-                  final trimmedLine = l.trim();
-                  if (trimmedLine.isEmpty ||
-                      trimmedLine == '{' ||
-                      trimmedLine == '}' ||
-                      trimmedLine == '};' ||
-                      trimmedLine.startsWith('#') ||
-                      trimmedLine.startsWith('//')) {
-                    diffedLines.add(l);
-                    continue;
-                  }
-                  if (hadPriorLines && !seenScriptLines.contains(trimmedLine)) {
-                    diffedLines.add('+ $l');
-                  } else {
-                    diffedLines.add(l);
-                  }
-                  seenScriptLines.add(trimmedLine);
-                }
-                code = diffedLines.join('\n');
-              } else {
-                for (final l in rawLines) {
-                  final clean = l.startsWith('+') ? l.substring(1).trim() : l.trim();
-                  if (clean.isNotEmpty) seenScriptLines.add(clean);
-                }
-              }
-            }
-            final verify = item['verifyResult']?.toString().trim() ?? '';
-            final verifyMode = item['verifyMode']?.toString().trim();
-            final stepRole = item['stepRole']?.toString().trim();
-            if (instr.isEmpty && code.isEmpty) continue;
-            final prevDone = sIdx < parentTask.children.length
-                ? parentTask.children[sIdx].completed
-                : parentTask.completed;
-            final encodedNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
-              instruction: instr,
-              area1Hierarchy: area1,
-              area2Inspector: area2,
-              verifyMode: verifyMode,
-              stepRole: stepRole,
-            );
-            newChildren.add(
-              Subtask(
-                id: '${parentTask.id}_sub_${sIdx + 1}',
-                text: title.isNotEmpty
-                    ? title
-                    : 'STEP $taskNum.${sIdx + 1} · IMPLEMENT STEP ${sIdx + 1}',
-                specNotes: encodedNotes,
-                codeSnippet: code,
-                codeLanguage: path,
-                verification: verify,
-                codeTargetFile: 'custom_snippet',
-                completed: prevDone,
-              ),
-            );
-          }
-          if (newChildren.isNotEmpty) {
-            parentTask.children = newChildren;
-            appliedAny = true;
-          }
-        }
-        return appliedAny;
-      }
-
-      final completedTaskIndices = <int>{};
-      bool mutated = applyParsedTasksList(rawTasks);
-      for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-        final t = cpNode.checklist[tIdx];
-        if (t.children.isNotEmpty &&
-            t.children.every((c) => c.codeTargetFile == 'custom_snippet')) {
-          completedTaskIndices.add(tIdx);
-        }
-      }
-
-      // Pillar 3 Guarantee: If Gemini truncated/omitted any task in `cpNode.checklist`,
-      // synthesize the missing task(s) immediately so generic fallback boilerplate NEVER leaks alongside AI steps!
-      final missingTaskIndices = <int>[
-        for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++)
-          if (!completedTaskIndices.contains(tIdx)) tIdx,
-      ];
-      if (missingTaskIndices.isNotEmpty) {
-        final missingSummaries = [
-          for (final mIdx in missingTaskIndices)
-            'Task ${mIdx + 1} (taskIndex: $mIdx): "${cpNode.checklist[mIdx].text}"',
-        ].join('\n');
-        final followUpPrompt = '''
-You are the Principal Godot 4 Architect ($targetEngineMode) for "$projTitle".
-Complete OMITTED 3-Area Engine How-To steps for Feature "${feat.title}" (Checkpoint "${cpNode.cleanStageTitle}").
-${compactSpecBlock.isNotEmpty ? '$compactSpecBlock\n' : ''}$projectBuildStateContext
-Shared Asset (extend in-place): ${primaryAsset.isNotEmpty ? primaryAsset : engineAssetHint}
-Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
-Active Guards: ${cleanEdgeCases.join(', ')}
-Missing Tasks ONLY (return exact `taskIndex` for each):
-$missingSummaries
-
-Follow `editor_setup` -> `script_logic` -> `wire_and_verify` ordering and `verifyMode: "editor" | "playtest"`.
-In `codeFormula`, emit $codeFormulaModeGuide.
-Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
-        final followUpJson = await GeminiAgentClient.generateJson(
-          prompt: followUpPrompt,
-          apiKey: _apiKey,
-          preferredModel: _conversationModel,
-          thinkingLevel: _thinkingLevel,
-          temperature: 0.25,
-          functionDeclarations: const [commitFeatureHowToStepsTool],
-        );
-        final followUpTasks = followUpJson?['tasks'];
-        if (followUpTasks is List && followUpTasks.isNotEmpty) {
-          final filled = applyParsedTasksList(
-            followUpTasks,
-            allowedIndices: missingTaskIndices.toSet(),
-            fallbackTargetIndices: missingTaskIndices,
-          );
-          if (filled) mutated = true;
-        }
-      }
-
-      final allTasksSynthesized = cpNode.checklist.every(
-        (t) =>
-            t.children.isNotEmpty &&
-            t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
+      final previousSteps = cpNode.flatSteps;
+      final parsedSteps = _buildUnifiedSubtasksFromRawMaps(
+        rawStepMaps,
+        idPrefix: '${cpNode.id}_step',
+        existingSteps: previousSteps,
+        defaultStepPath:
+            primaryAsset.isNotEmpty ? primaryAsset : engineAssetHint,
       );
 
-      if (mutated) {
-        if (allTasksSynthesized) {
-          _failedStepSynthesisFeatureIds.remove(featureId);
-          _aiSynthesizedFeatureSteps.add(synthKey);
-        }
-        TaskHowToBlueprint.clearCache();
-        updateFeatureStates(featureId, states);
-      } else {
+      if (parsedSteps.isEmpty) {
         _failedStepSynthesisFeatureIds.add(featureId);
+        return;
       }
+
+      final finalSteps = cpNode.parameters['manualStepOrder'] == 'true'
+          ? parsedSteps
+          : TaskHowToBlueprint.orderSubtasksByGodotDock(parsedSteps);
+
+      cpNode.checklist = finalSteps;
+      cpNode.parameters.remove('needsAiStepSynthesis');
+
+      if (cpNode.hasAllStepsSynthesized) {
+        _failedStepSynthesisFeatureIds.remove(featureId);
+        _aiSynthesizedFeatureSteps.add(synthKey);
+      }
+      seedCumulativeScriptFromStepsIfMissing(
+        primaryAssetString:
+            primaryAsset.isNotEmpty ? primaryAsset : engineAssetHint,
+        states: states,
+        featureId: featureId,
+        releaseVersion: cpNode.releaseVersion,
+      );
+      TaskHowToBlueprint.clearCache();
+      updateFeatureStates(featureId, states);
     } catch (_) {
       _failedStepSynthesisFeatureIds.add(featureId);
     } finally {
@@ -6201,6 +3553,51 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
             .trim();
     if (doneWhenText.isNotEmpty) {
       sb.writeln('- **Release Done When**: $doneWhenText');
+    }
+
+    final contract = activeGodotContract;
+    final trackedFiles = activeProjectGodotFiles;
+    if (contract.hasAnyEntries || trackedFiles.isNotEmpty) {
+      sb.writeln('\n## 1B. Godot 4 Contract & Cumulative Cloud Scripts');
+      sb.writeln(
+        '- **Godot 4 Strict Idioms**: Always use `@export` (never `export var`), `@onready` (never `onready var`), `move_and_slide()` (zero positional velocity arg), `await` (never `yield`), and Godot 4 callable signal syntax `node.sig.connect(handler)`.',
+      );
+      if (contract.physicsLayers.isNotEmpty) {
+        sb.writeln('\n### Physics Layers (${contract.is3D ? "3D" : "2D"})');
+        sb.writeln('| Layer # | Bitmask Value | Name |');
+        sb.writeln('| :--- | :--- | :--- |');
+        final keys = contract.physicsLayers.keys.toList()..sort();
+        for (final k in keys) {
+          final maskVal = GodotProjectContract.bitmaskForLayerNumbers([k]);
+          sb.writeln('| Layer $k | `$maskVal` | `${contract.physicsLayers[k]}` |');
+        }
+      }
+      if (contract.inputActions.isNotEmpty) {
+        sb.writeln(
+          '\n- **InputMap Actions**: ${contract.inputActions.map((a) => '`$a`').join(', ')}',
+        );
+      }
+      if (contract.autoloads.isNotEmpty) {
+        sb.writeln(
+          '- **Autoload Singletons**: ${contract.autoloads.map((a) => '`${a.name}` (`${a.resPath}`)').join(', ')}',
+        );
+      }
+      if (contract.groups.isNotEmpty) {
+        sb.writeln(
+          '- **Node Groups**: ${contract.groups.map((g) => '`$g`').join(', ')}',
+        );
+      }
+      if (trackedFiles.isNotEmpty) {
+        sb.writeln('\n### Tracked Cumulative Godot Files (`TierType.codeFile`)');
+        for (final vf in trackedFiles) {
+          final lineCount = vf.content.trim().isEmpty
+              ? 0
+              : vf.content.split('\n').length;
+          sb.writeln(
+            '- `${vf.resPath}` (`${vf.releaseVersion}`, $lineCount lines)',
+          );
+        }
+      }
     }
 
     final beats = activeReleaseBeats;
@@ -6321,52 +3718,12 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
             sb.writeln('- **Primary Shared Asset**: `$cpAsset`');
           }
           sb.writeln('- **Playtest Gate**: ${cp.playtestCondition}');
-          for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
-            final task = cp.checklist[tIdx];
-            final bp = TaskHowToBlueprint.resolve(
-              parentTask: task,
-              taskIndex: tIdx,
-              checkpointNode: cp,
-              engineHint: engineHint,
-              phase: _currentPhase,
-            );
-            final doneMark = task.completed ? 'x' : ' ';
-            sb.writeln(
-              '- [$doneMark] **Task ${bp.numLabel}: ${bp.cleanTitle}** (`${bp.whereLocation}`)',
-            );
-            for (final sub in bp.subSteps) {
-              final sMark = sub.subtask.completed ? 'x' : ' ';
-              sb.writeln(
-                '  - [$sMark] **${sub.stepNumberLabel}** — ${sub.instruction}',
-              );
-              if (sub.area1Hierarchy != null &&
-                  sub.area1Hierarchy!.trim().isNotEmpty) {
-                sb.writeln(
-                  '    - **Area 1 (Hierarchy)**: `${sub.area1Hierarchy!.replaceAll('\n', ' / ')}`',
-                );
-              }
-              if (sub.area2Inspector != null &&
-                  sub.area2Inspector!.trim().isNotEmpty) {
-                sb.writeln(
-                  '    - **Area 2 (Inspector)**: `${sub.area2Inspector!.replaceAll('\n', ' | ')}`',
-                );
-              }
-              if (sub.codeFormula.trim().isNotEmpty) {
-                sb.writeln('    ```');
-                for (final line in sub.codeFormula.trim().split('\n')) {
-                  sb.writeln('    $line');
-                }
-                sb.writeln('    ```');
-              }
-              if (sub.verifyResult.trim().isNotEmpty) {
-                final verifyHeading =
-                    sub.isEditorCheck ? 'Check in Editor' : 'Verify';
-                sb.writeln(
-                  '    - *$verifyHeading*: ${sub.verifyResult.trim()}',
-                );
-              }
-            }
-          }
+          final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
+            checkpointNode: cp,
+            engineHint: engineHint,
+            phase: _currentPhase,
+          );
+          _writeUnifiedStepsMarkdown(sb, unifiedSteps);
         }
       }
     }
@@ -6643,52 +4000,53 @@ Call `commit_feature_howto_steps` for the missing taskIndex entries.''';
     }
 
     if (cpNode != null) {
-      sb.writeln('\n## 4. 3-Area Implementation Steps ($effectiveEngineTarget)');
-      for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-        final task = cpNode.checklist[tIdx];
-        final bp = TaskHowToBlueprint.resolve(
-          parentTask: task,
-          taskIndex: tIdx,
-          checkpointNode: cpNode,
-          engineHint: engineHint,
-          phase: _currentPhase,
-        );
-        final doneMark = task.completed ? 'x' : ' ';
-        sb.writeln(
-          '- [$doneMark] **Task ${bp.numLabel}: ${bp.cleanTitle}** (`${bp.whereLocation}`)',
-        );
-        for (final sub in bp.subSteps) {
-          final sMark = sub.subtask.completed ? 'x' : ' ';
-          sb.writeln(
-            '  - [$sMark] **${sub.stepNumberLabel}** — ${sub.instruction}',
-          );
-          if (sub.area1Hierarchy != null &&
-              sub.area1Hierarchy!.trim().isNotEmpty) {
-            sb.writeln(
-              '    - **Area 1 (Hierarchy)**: `${sub.area1Hierarchy!.replaceAll('\n', ' / ')}`',
-            );
-          }
-          if (sub.area2Inspector != null &&
-              sub.area2Inspector!.trim().isNotEmpty) {
-            sb.writeln(
-              '    - **Area 2 (Inspector)**: `${sub.area2Inspector!.replaceAll('\n', ' | ')}`',
-            );
-          }
-          if (sub.codeFormula.trim().isNotEmpty) {
-            sb.writeln('    ```');
-            for (final line in sub.codeFormula.trim().split('\n')) {
-              sb.writeln('    $line');
-            }
-            sb.writeln('    ```');
-          }
-          if (sub.verifyResult.trim().isNotEmpty) {
-            sb.writeln('    - *Verify*: ${sub.verifyResult.trim()}');
-          }
-        }
-      }
+      sb.writeln('\n## 4. Godot Dock Build Queue ($effectiveEngineTarget)');
+      final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
+        checkpointNode: cpNode,
+        engineHint: engineHint,
+        phase: _currentPhase,
+      );
+      _writeUnifiedStepsMarkdown(sb, unifiedSteps);
     }
 
     return sb.toString();
+  }
+
+  void _writeUnifiedStepsMarkdown(
+    StringBuffer sb,
+    List<TaskHowToSubStep> unifiedSteps,
+  ) {
+    for (final sub in unifiedSteps) {
+      final sMark = sub.subtask.completed ? 'x' : ' ';
+      final dockTag = sub.resolvedDockStage.badge;
+      sb.writeln(
+        '- [$sMark] **${sub.stepNumberLabel} [$dockTag] — ${sub.shortTitle}** (${sub.instruction})',
+      );
+      if (sub.area1Hierarchy != null &&
+          sub.area1Hierarchy!.trim().isNotEmpty) {
+        sb.writeln(
+          '  - **Node Hierarchy (`.tscn`)**: `${sub.area1Hierarchy!.replaceAll('\n', ' / ')}`',
+        );
+      }
+      if (sub.area2Inspector != null &&
+          sub.area2Inspector!.trim().isNotEmpty) {
+        sb.writeln(
+          '  - **Inspector / Layer**: `${sub.area2Inspector!.replaceAll('\n', ' | ')}`',
+        );
+      }
+      if (sub.codeFormula.trim().isNotEmpty) {
+        sb.writeln('  ```');
+        for (final line in sub.codeFormula.trim().split('\n')) {
+          sb.writeln('  $line');
+        }
+        sb.writeln('  ```');
+      }
+      if (sub.verifyResult.trim().isNotEmpty) {
+        final verifyHeading =
+            sub.isEditorCheck ? 'Check in Editor' : 'Verify';
+        sb.writeln('  - *$verifyHeading*: ${sub.verifyResult.trim()}');
+      }
+    }
   }
 
   /// Two-Way Godot Sync: Parses a developer's pasted GDScript (`.gd`) or GDExtension C++ snippet
@@ -6973,13 +4331,8 @@ Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.'''
           ? (states.where((s) => s.releaseVersion == activeVer).lastOrNull ??
               states.last)
           : null;
-      final alreadySynthesized = activeCp != null &&
-          activeCp.checklist.isNotEmpty &&
-          activeCp.checklist.every(
-            (t) =>
-                t.children.isNotEmpty &&
-                t.children.every((c) => c.codeTargetFile == 'custom_snippet'),
-          );
+      final alreadySynthesized =
+          activeCp != null && activeCp.hasAllStepsSynthesized;
       if (!alreadySynthesized) {
         synthesizeFeatureHowToStepsWithAi(featureId);
       }
@@ -7534,1191 +4887,4 @@ Call `commit_code_to_spec_sync` with the extracted tuning updates and guards.'''
     await openGateAndRecordRetro(newRelId);
   }
 
-  // ===========================================================================
-  // AGENTIC FEATURE INBOX (`📥 Inbox` — Capture -> Triage WHEN/WHERE/HOW -> Route)
-  // ===========================================================================
-
-  /// All Feature Inbox items persisted on the active project (`feature_inbox_json`).
-  /// Memoized by `(projectDoc.id, raw.hashCode)` to avoid repeated `jsonDecode` calls during UI rebuilds.
-  List<FeatureInboxItem> get featureInboxItems {
-    final proj = activeProject;
-    if (proj == null) return const [];
-    final raw = proj.sections['feature_inbox_json'];
-    if (raw == null || raw.trim().isEmpty) {
-      _cachedInboxProjectId = proj.id;
-      _cachedInboxRawHash = 0;
-      _cachedInboxItems = const [];
-      return const [];
-    }
-    final rawHash = raw.hashCode;
-    if (_cachedInboxProjectId == proj.id && _cachedInboxRawHash == rawHash) {
-      return _cachedInboxItems;
-    }
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return const [];
-      final parsed = List<FeatureInboxItem>.unmodifiable(
-        decoded
-            .whereType<Map>()
-            .map((m) => FeatureInboxItem.fromJson(Map<String, dynamic>.from(m))),
-      );
-      _cachedInboxProjectId = proj.id;
-      _cachedInboxRawHash = rawHash;
-      _cachedInboxItems = parsed;
-      return parsed;
-    } catch (_) {
-      return const [];
-    }
-  }
-
-  /// Newly captured Inbox items awaiting user confirmation (`triagePending`).
-  List<FeatureInboxItem> get pendingFeatureInboxItems => featureInboxItems
-      .where((i) => i.status == FeatureInboxStatus.triagePending)
-      .toList();
-
-  /// Inbox items confirmed and scheduled for a future `ProductionPhase` (`scheduledForFuture`).
-  List<FeatureInboxItem> get scheduledFeatureInboxItems => featureInboxItems
-      .where((i) => i.status == FeatureInboxStatus.scheduledForFuture)
-      .toList();
-
-  /// Total active Inbox badge count (`Needs Triage` + `Scheduled for Future Releases`).
-  int get activeFeatureInboxCount => featureInboxItems
-      .where((i) => i.status != FeatureInboxStatus.implemented)
-      .length;
-
-  /// Returns any scheduled future Inbox upgrades linked to [featureId].
-  List<FeatureInboxItem> scheduledInboxUpgradesForFeature(String featureId) {
-    final scheduled = scheduledFeatureInboxItems;
-    if (scheduled.isEmpty) return const [];
-    final featDoc = documents[featureId];
-    final normTitle = featDoc?.title.toLowerCase().trim() ?? '';
-    return scheduled.where((item) {
-      if (item.targetFeatureId == featureId) return true;
-      if (normTitle.isNotEmpty &&
-          item.targetFeatureTitle != null &&
-          item.targetFeatureTitle!.toLowerCase().trim() == normTitle) {
-        return true;
-      }
-      return false;
-    }).toList();
-  }
-
-  void _saveFeatureInboxItems(List<FeatureInboxItem> items) {
-    final proj = activeProject;
-    if (proj == null) return;
-    final encoded = jsonEncode(items.map((i) => i.toJson()).toList());
-    proj.sections['feature_inbox_json'] = encoded;
-    _cachedInboxProjectId = proj.id;
-    _cachedInboxRawHash = encoded.hashCode;
-    _cachedInboxItems = List<FeatureInboxItem>.unmodifiable(items);
-    _persistDocument(proj);
-    notifyListeners();
-  }
-
-  static final RegExp _inboxStripPrefixRegex = RegExp(
-    r'^(?:i\s+want\s+to\s+add|i\s+d\s+like\s+to\s+add|add\s+a|add\s+an|add|implement|create|build|we\s+need\s+a|we\s+need)\s+',
-    caseSensitive: false,
-  );
-  static final RegExp _inboxClauseSplitRegex = RegExp(
-    r'\b(?:that|which|so\s+that|with|when|where|for)\b',
-    caseSensitive: false,
-  );
-  static final RegExp _inboxTrailingPunctRegex = RegExp(r'[.!?]+$');
-  static final RegExp _inboxWhitespaceRegex = RegExp(r'\s+');
-  static final RegExp _inboxNonAlnumSplitRegex = RegExp(r'[^a-z0-9]+');
-
-  String _cleanShortFeatureTitle(String rawIdea) {
-    var cleaned = rawIdea
-        .trim()
-        .replaceFirst(_inboxStripPrefixRegex, '')
-        .split(_inboxClauseSplitRegex)
-        .first
-        .replaceAll(_inboxTrailingPunctRegex, '')
-        .trim();
-    if (cleaned.isEmpty) cleaned = rawIdea.trim();
-    final words =
-        cleaned.split(_inboxWhitespaceRegex).where((w) => w.isNotEmpty).toList();
-    final capped = words.length > 4 ? words.take(4).join(' ') : words.join(' ');
-    return capped
-        .split(' ')
-        .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
-        .join(' ');
-  }
-
-  FeatureInboxItem _buildDeterministicInboxTriage(
-    String rawIdea, {
-    String? preferredBeatId,
-  }) {
-    final beats = activeReleaseBeats;
-    final activeVer = activeReleaseVersionTag;
-    final engineLabel = _activeEngineLabel;
-    final lowerIdea = rawIdea.toLowerCase();
-    final cleanTitle = _cleanShortFeatureTitle(rawIdea);
-
-    // 1. WHERE: Match against existing Features (for UPGRADE) and Epics
-    TierDocument? matchedBeat = preferredBeatId != null
-        ? beats.where((b) => b.id == preferredBeatId).firstOrNull
-        : null;
-    TierDocument? matchedExistingFeature;
-
-    final ideaTokens = lowerIdea
-        .split(_inboxNonAlnumSplitRegex)
-        .where((w) => w.length >= 3 && !const {'add', 'the', 'and', 'for', 'with', 'into', 'from', 'player', 'game'}.contains(w))
-        .toSet();
-
-    int bestFeatOverlap = 0;
-    for (final b in beats) {
-      for (final f in featuresForBeat(b.id)) {
-        final fTokens = f.title
-            .toLowerCase()
-            .split(_inboxNonAlnumSplitRegex)
-            .where((w) => w.length >= 3)
-            .toSet();
-        final overlap = ideaTokens.intersection(fTokens).length;
-        if (overlap > bestFeatOverlap) {
-          bestFeatOverlap = overlap;
-          matchedExistingFeature = f;
-          matchedBeat ??= b;
-        }
-      }
-    }
-
-    if (matchedBeat == null && beats.isNotEmpty) {
-      int bestBeatScore = -1;
-      for (final b in beats) {
-        final bText = '${b.title} ${b.sections['scope'] ?? ''}'.toLowerCase();
-        int score = 0;
-        for (final tok in ideaTokens) {
-          if (bText.contains(tok)) score += 2;
-        }
-        if ((lowerIdea.contains('move') ||
-                lowerIdea.contains('jump') ||
-                lowerIdea.contains('dash') ||
-                lowerIdea.contains('climb') ||
-                lowerIdea.contains('grapple')) &&
-            (bText.contains('move') || bText.contains('control') || bText.contains('locomotion'))) {
-          score += 3;
-        }
-        if ((lowerIdea.contains('attack') ||
-                lowerIdea.contains('enemy') ||
-                lowerIdea.contains('weapon') ||
-                lowerIdea.contains('combat') ||
-                lowerIdea.contains('damage') ||
-                lowerIdea.contains('parry')) &&
-            (bText.contains('combat') || bText.contains('enemy') || bText.contains('attack') || bText.contains('hazard'))) {
-          score += 3;
-        }
-        if ((lowerIdea.contains('loot') ||
-                lowerIdea.contains('shop') ||
-                lowerIdea.contains('score') ||
-                lowerIdea.contains('wave') ||
-                lowerIdea.contains('upgrade') ||
-                lowerIdea.contains('reward')) &&
-            (bText.contains('reward') || bText.contains('loop') || bText.contains('progress') || bText.contains('reset'))) {
-          score += 3;
-        }
-        if (score > bestBeatScore) {
-          bestBeatScore = score;
-          matchedBeat = b;
-        }
-      }
-      matchedBeat ??= beats.first;
-    }
-
-    final targetBeatId = matchedBeat?.id ?? 'beat_1';
-    final targetBeatTitle = matchedBeat?.title ?? 'Core Gameplay';
-    final integrationMode = matchedExistingFeature != null
-        ? InboxIntegrationMode.upgradeExistingFeature
-        : InboxIntegrationMode.newFeatureInEpic;
-
-    final placementReasoning = matchedExistingFeature != null
-        ? 'Extends existing feature "${matchedExistingFeature.title}" in "$targetBeatTitle" with a version-stamped Delta Checkpoint (Single Source of Truth).'
-        : 'Fits inside Core Loop Epic "$targetBeatTitle" as a dedicated playable mechanic.';
-
-    // 2. WHEN: Evaluate Release Timing Mode & Target Future Phase
-    InboxReleaseTimingMode timingMode = InboxReleaseTimingMode.now;
-    ProductionPhase targetFuturePhase = inferNextProgressivePhase();
-    String timingReasoning =
-        'Directly supports $activeVer (${_currentPhase.label}) core gameplay verification; recommended to build in the active release.';
-
-    final isPostLaunchCandidate = lowerIdea.contains('leaderboard') ||
-        lowerIdea.contains('daily challenge') ||
-        lowerIdea.contains('dlc') ||
-        lowerIdea.contains('season') ||
-        lowerIdea.contains('endless mode') ||
-        lowerIdea.contains('new game+') ||
-        lowerIdea.contains('telemetry');
-    final isFullProdCandidate = lowerIdea.contains('achievement') ||
-        lowerIdea.contains('steam') ||
-        lowerIdea.contains('localization') ||
-        lowerIdea.contains('accessibility') ||
-        lowerIdea.contains('colorblind') ||
-        lowerIdea.contains('save file') ||
-        lowerIdea.contains('cloud save') ||
-        lowerIdea.contains('multi-biome') ||
-        lowerIdea.contains('campaign');
-    final isVerticalSliceCandidate = lowerIdea.contains('boss') ||
-        lowerIdea.contains('cutscene') ||
-        lowerIdea.contains('shader') ||
-        lowerIdea.contains('vfx') ||
-        lowerIdea.contains('screen shake') ||
-        lowerIdea.contains('audio mix') ||
-        lowerIdea.contains('voiceover');
-    final isSplitCandidate = _currentPhase == ProductionPhase.prototype &&
-        (lowerIdea.contains('skill tree') ||
-            lowerIdea.contains('shop') ||
-            lowerIdea.contains('inventory') ||
-            lowerIdea.contains('perk') ||
-            lowerIdea.contains('crafting') ||
-            lowerIdea.contains('progression') ||
-            lowerIdea.contains('loadout'));
-
-    if (isPostLaunchCandidate &&
-        _currentPhase.index < ProductionPhase.postLaunch.index) {
-      timingMode = InboxReleaseTimingMode.futureRelease;
-      targetFuturePhase = ProductionPhase.postLaunch;
-      timingReasoning =
-          'Live-ops/endgame system belongs in 05 · Post-Launch & Live Ops so $activeVer (${_currentPhase.shortName}) stays focused on core loop completion.';
-    } else if (isFullProdCandidate &&
-        _currentPhase.index < ProductionPhase.fullProduction.index) {
-      timingMode = InboxReleaseTimingMode.futureRelease;
-      targetFuturePhase = ProductionPhase.fullProduction;
-      timingReasoning =
-          'Content scaling / platform readiness feature belongs in 04 · Full Production (v1.0) after the Vertical Slice quality bar is locked.';
-    } else if (isVerticalSliceCandidate &&
-        _currentPhase.index < ProductionPhase.verticalSlice.index) {
-      timingMode = InboxReleaseTimingMode.futureRelease;
-      targetFuturePhase = ProductionPhase.verticalSlice;
-      timingReasoning =
-          'High-polish presentation/encounter feature belongs in 03 · Vertical Slice once the 02 · MVP loop is playable end-to-end.';
-    } else if (isSplitCandidate) {
-      timingMode = InboxReleaseTimingMode.splitNowAndFuture;
-      targetFuturePhase = ProductionPhase.mvp;
-      timingReasoning =
-          'Progressive Split: Build a lean 1-stat greybox pickup/modifier in $activeVer (01 · Prototype) now to prove feel, and schedule the full UI/persistence layer for 02 · MVP.';
-    }
-
-    // 3. HOW: Concrete Engine & Checkpoint Architecture
-    final immediateTitle = timingMode == InboxReleaseTimingMode.splitNowAndFuture
-        ? '$cleanTitle Core Modifier'
-        : cleanTitle;
-    final futureTitle = timingMode == InboxReleaseTimingMode.splitNowAndFuture
-        ? '$cleanTitle Progression & UI'
-        : '$cleanTitle (${targetFuturePhase.shortName})';
-
-    return FeatureInboxItem(
-      id: 'inbox_${DateTime.now().microsecondsSinceEpoch}',
-      rawIdea: rawIdea.trim(),
-      status: FeatureInboxStatus.triagePending,
-      releaseTimingMode: timingMode,
-      targetFuturePhase: targetFuturePhase,
-      releaseTimingReasoning: timingReasoning,
-      integrationMode: integrationMode,
-      targetBeatId: targetBeatId,
-      targetBeatTitle: targetBeatTitle,
-      targetFeatureId: matchedExistingFeature?.id,
-      targetFeatureTitle: matchedExistingFeature?.title,
-      placementReasoning: placementReasoning,
-      featureTitle: cleanTitle,
-      goal: 'Build and verify $cleanTitle inside $targetBeatTitle.',
-      inScope: [
-        '$immediateTitle runtime trigger & state handler',
-        'Immediate on-screen visual/audio feedback cue',
-      ],
-      doneWhen:
-          'Trigger $cleanTitle in the playtest arena -> responds cleanly on screen without state lockups.',
-      architectureHowSummary: [
-        'Engine ($engineLabel): Attach $cleanTitle component/node to the $targetBeatTitle actor hierarchy.',
-        'Signal & State: Wire input/overlap event to trigger $cleanTitle and emit HUD/feedback update.',
-        'Guard: Enforce cooldown and state-lock checks before activating $cleanTitle.',
-      ],
-      checkpointTitle: immediateTitle,
-      playtestGate:
-          'Trigger $immediateTitle in playtest -> observable state change and feedback occur cleanly',
-      tasks: [
-        'Actor & Component Setup for $immediateTitle (2h)',
-        'Core Trigger & State Logic for $immediateTitle (1h)',
-        'Visual Feedback & Cooldown Guard for $immediateTitle (1h)',
-      ],
-      tuningParams: const [
-        'activationWindowSec: 0.25 s',
-        'effectMultiplier: 1.25 x',
-      ],
-      edgeCases: [
-        '[STATE GUARD] Block duplicate $cleanTitle activation while active or on cooldown',
-      ],
-      futureCheckpointTitle: futureTitle,
-      futureGoal:
-          'Expand $cleanTitle with ${targetFuturePhase.shortName} progression, UI feedback, and persistence.',
-      futurePlaytestGate:
-          'Complete $futureTitle flow in playtest -> state persists and updates cleanly across runs',
-      futureTasks: [
-        'Data Resource & State Persistence for $futureTitle (2h)',
-        'UI / Presentation Hookup for $futureTitle (1h)',
-        'Edge-Case & Regression Guard for $futureTitle (1h)',
-      ],
-      futureTuningParams: const [
-        'tierScalingFactor: 1.5 x',
-        'maxStackCount: 3',
-      ],
-      futureEdgeCases: [
-        '[STATE GUARD] Clamp $cleanTitle progression state within valid tier bounds',
-      ],
-    );
-  }
-
-  /// Captures a user's feature idea into the Agentic Feature Inbox (`📥 Inbox`),
-  /// immediately computing a deterministic `WHEN` · `WHERE` · `HOW` triage and refining it via Gemini AI.
-  Future<FeatureInboxItem?> submitFeatureIdeaToInbox(
-    String rawIdea, {
-    String? preferredBeatId,
-  }) async {
-    final trimmed = rawIdea.trim();
-    if (trimmed.isEmpty) return null;
-
-    final item = _buildDeterministicInboxTriage(
-      trimmed,
-      preferredBeatId: preferredBeatId,
-    );
-    final currentItems = List<FeatureInboxItem>.from(featureInboxItems);
-    currentItems.insert(0, item);
-    _saveFeatureInboxItems(currentItems);
-
-    if (GeminiAgentClient.hasKey(_apiKey) ||
-        GeminiAgentClient.testMockResponder != null) {
-      await _refineFeatureInboxItemWithAi(item.id);
-    }
-    return featureInboxItems
-        .where((i) => i.id == item.id)
-        .firstOrNull ??
-        item;
-  }
-
-  Future<void> _refineFeatureInboxItemWithAi(String inboxItemId) async {
-    final items = List<FeatureInboxItem>.from(featureInboxItems);
-    final idx = items.indexWhere((i) => i.id == inboxItemId);
-    if (idx < 0) return;
-    final item = items[idx];
-
-    final proj = activeProject;
-    final beats = activeReleaseBeats;
-    final activeVer = activeReleaseVersionTag;
-    final engineLabel = _activeEngineLabel;
-
-    final beatCatalogLines = <String>[];
-    for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-      final b = beats[bIdx];
-      final feats = featuresForBeat(b.id);
-      final featSummary = feats.isEmpty
-          ? '(no features yet)'
-          : feats.map((f) {
-              final asset = (f.sections['primary_asset'] ?? '').trim();
-              final assetSuffix =
-                  asset.isNotEmpty ? ' [shared asset: $asset]' : '';
-              return '${f.id}:"${f.title}"$assetSuffix';
-            }).join(', ');
-      beatCatalogLines.add(
-        '- Epic E${(bIdx + 1).toString().padLeft(2, '0')} [id="${b.id}"]: "${b.title}" -> Features: [$featSummary]',
-      );
-    }
-
-    final compactSpecBlock = _buildCompactWorkbenchSpecContext(
-      includeExclusions: true,
-    );
-
-    final prompt = '''
-You are the Principal Game Producer & Lead Systems Architect ($engineLabel) for "${proj?.title ?? 'Game Project'}".
-Triage this developer feature request captured in the Feature Inbox across 3 dimensions:
-1. WHEN (Release Timing): Does it belong in the CURRENT release ($activeVer · ${_currentPhase.label}), should it be SPLIT (lean 4h core slice in $activeVer now + deeper upgrade scheduled for a future ProductionPhase), or should it be SCHEDULED entirely for a future ProductionPhase (mvp, verticalSlice, fullProduction, postLaunch)?
-2. WHERE (Single Live Tree Placement): Which existing Epic (or new Epic) owns it, and should it be a standalone NEW feature ("newFeatureInEpic") or an UPGRADE checkpoint on an existing Feature ("upgradeExistingFeature")?
-3. HOW (Implementation Architecture): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Engine Architecture bullets ($engineLabel matching the project's 2D/3D spec), Playtest Gate, Foundation-First Build Tasks (stage_1_scene_or_data_foundation -> stage_2_mechanic_logic -> stage_3_state_and_playtest_verify), Tuning Params, and [STATE GUARD] rules.
-
-Developer Request: "${item.rawIdea}"
-Active Release: $activeVer (${_currentPhase.label})
-$compactSpecBlock
-Existing Epics & Live Features:
-${beatCatalogLines.join('\n')}
-
-${GeminiAgentClient.compactStyleRules}
-- If `releaseTimingMode` is `"now"`, omit `"targetFuturePhase"`, `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, `"futureTasks"`, `"futureTuningParams"`, and `"futureEdgeCases"`.
-
-Invoke `commit_inbox_feature_triage` with the structured triage recommendation.''';
-
-    final json = await GeminiAgentClient.generateJson(
-      prompt: prompt,
-      apiKey: _apiKey,
-      preferredModel: _conversationModel,
-      thinkingLevel: _thinkingLevel,
-      temperature: 0.25,
-      functionDeclarations: const [commitInboxFeatureTriageTool],
-    );
-    if (json == null) return;
-
-    final latestItems = List<FeatureInboxItem>.from(featureInboxItems);
-    final latestIdx = latestItems.indexWhere((i) => i.id == inboxItemId);
-    if (latestIdx < 0) return;
-    final target = latestItems[latestIdx];
-
-    final aiTiming = json['releaseTimingMode']?.toString().trim();
-    if (aiTiming != null) {
-      for (final m in InboxReleaseTimingMode.values) {
-        if (m.name == aiTiming) {
-          target.releaseTimingMode = m;
-          break;
-        }
-      }
-    }
-    final aiPhase = json['targetFuturePhase']?.toString().trim();
-    if (aiPhase != null) {
-      for (final p in ProductionPhase.values) {
-        if (p.name == aiPhase) {
-          target.targetFuturePhase = p;
-          break;
-        }
-      }
-    }
-    final aiTimingReason = json['releaseTimingReasoning']?.toString().trim() ?? '';
-    if (aiTimingReason.isNotEmpty) {
-      target.releaseTimingReasoning = aiTimingReason;
-    }
-
-    final aiIntMode = json['integrationMode']?.toString().trim();
-    if (aiIntMode != null) {
-      for (final m in InboxIntegrationMode.values) {
-        if (m.name == aiIntMode) {
-          target.integrationMode = m;
-          break;
-        }
-      }
-    }
-    final aiBeatId = json['targetBeatId']?.toString().trim() ?? '';
-    if (aiBeatId.isNotEmpty && documents[aiBeatId]?.tier == TierType.epic) {
-      target.targetBeatId = aiBeatId;
-      target.targetBeatTitle = documents[aiBeatId]!.title;
-    }
-    final aiFeatId = json['targetFeatureId']?.toString().trim() ?? '';
-    if (aiFeatId.isNotEmpty && documents[aiFeatId]?.tier == TierType.feature) {
-      target.targetFeatureId = aiFeatId;
-      target.targetFeatureTitle = documents[aiFeatId]!.title;
-    }
-    final aiNewEpic = json['newEpicTitle']?.toString().trim() ?? '';
-    if (aiNewEpic.isNotEmpty) {
-      target.newEpicTitle = aiNewEpic;
-    }
-    final aiPlaceReason = json['placementReasoning']?.toString().trim() ?? '';
-    if (aiPlaceReason.isNotEmpty) {
-      target.placementReasoning = aiPlaceReason;
-    }
-    final aiTitle = json['featureTitle']?.toString().trim() ?? '';
-    if (aiTitle.isNotEmpty) target.featureTitle = aiTitle;
-    final aiGoal = json['goal']?.toString().trim() ?? '';
-    if (aiGoal.isNotEmpty) target.goal = aiGoal;
-    final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
-    if (aiDoneWhen.isNotEmpty) target.doneWhen = aiDoneWhen;
-    final aiPrimaryAsset =
-        json['primarySharedScriptOrScene']?.toString().trim() ?? '';
-    if (aiPrimaryAsset.isNotEmpty) {
-      target.primarySharedScriptOrScene = aiPrimaryAsset;
-    }
-    final aiCpTitle = json['checkpointTitle']?.toString().trim() ?? '';
-    if (aiCpTitle.isNotEmpty) target.checkpointTitle = aiCpTitle;
-    final aiGate = json['playtestGate']?.toString().trim() ?? '';
-    if (aiGate.isNotEmpty) target.playtestGate = aiGate;
-
-    List<String> readStrList(dynamic raw) {
-      if (raw is! List) return const [];
-      return raw
-          .map((e) => e?.toString().trim() ?? '')
-          .where((s) => s.isNotEmpty)
-          .toList();
-    }
-
-    final aiInScope = readStrList(json['inScope']);
-    if (aiInScope.isNotEmpty) target.inScope = aiInScope;
-    final aiHow = readStrList(json['architectureHowSummary']);
-    if (aiHow.isNotEmpty) target.architectureHowSummary = aiHow;
-    final aiTasks = ReleasePlannerAgent.extractCheckpointTasksFromMap(json);
-    if (aiTasks.isNotEmpty) {
-      target.tasks = ReleasePlannerAgent.normalizeFoundationFirstTasks(
-        aiTasks,
-        featureTitle: target.featureTitle,
-        beatTitle: target.targetBeatTitle,
-      );
-    }
-    final aiTuning = readStrList(json['tuningParams']);
-    if (aiTuning.isNotEmpty) target.tuningParams = aiTuning;
-    final aiGuards = readStrList(json['edgeCases']);
-    if (aiGuards.isNotEmpty) target.edgeCases = aiGuards;
-
-    final aiFutCp = json['futureCheckpointTitle']?.toString().trim() ?? '';
-    if (aiFutCp.isNotEmpty) target.futureCheckpointTitle = aiFutCp;
-    final aiFutGoal = json['futureGoal']?.toString().trim() ?? '';
-    if (aiFutGoal.isNotEmpty) target.futureGoal = aiFutGoal;
-    final aiFutGate = json['futurePlaytestGate']?.toString().trim() ?? '';
-    if (aiFutGate.isNotEmpty) target.futurePlaytestGate = aiFutGate;
-    final aiFutTasks = ReleasePlannerAgent.extractCheckpointTasksFromMap({
-      'tasks': json['futureTasks'],
-    });
-    if (aiFutTasks.isNotEmpty) {
-      target.futureTasks = ReleasePlannerAgent.normalizeFoundationFirstTasks(
-        aiFutTasks,
-        featureTitle: target.futureCheckpointTitle.isNotEmpty
-            ? target.futureCheckpointTitle
-            : target.featureTitle,
-        beatTitle: target.targetBeatTitle,
-      );
-    }
-    final aiFutTuning = readStrList(json['futureTuningParams']);
-    if (aiFutTuning.isNotEmpty) target.futureTuningParams = aiFutTuning;
-    final aiFutGuards = readStrList(json['futureEdgeCases']);
-    if (aiFutGuards.isNotEmpty) target.futureEdgeCases = aiFutGuards;
-
-    _saveFeatureInboxItems(latestItems);
-  }
-
-  /// Updates the user's `WHEN` / `WHERE` overrides on a `FeatureInboxItem`.
-  void updateFeatureInboxItemTriage(
-    String inboxItemId, {
-    InboxReleaseTimingMode? timingMode,
-    ProductionPhase? targetFuturePhase,
-    InboxIntegrationMode? integrationMode,
-    String? targetBeatId,
-    String? targetFeatureId,
-  }) {
-    final items = List<FeatureInboxItem>.from(featureInboxItems);
-    final idx = items.indexWhere((i) => i.id == inboxItemId);
-    if (idx < 0) return;
-    final item = items[idx];
-    if (timingMode != null) item.releaseTimingMode = timingMode;
-    if (targetFuturePhase != null) item.targetFuturePhase = targetFuturePhase;
-    if (integrationMode != null) item.integrationMode = integrationMode;
-    if (targetBeatId != null && documents[targetBeatId]?.tier == TierType.epic) {
-      item.targetBeatId = targetBeatId;
-      item.targetBeatTitle = documents[targetBeatId]!.title;
-    }
-    if (targetFeatureId != null &&
-        documents[targetFeatureId]?.tier == TierType.feature) {
-      item.targetFeatureId = targetFeatureId;
-      item.targetFeatureTitle = documents[targetFeatureId]!.title;
-    } else if (item.integrationMode ==
-        InboxIntegrationMode.upgradeExistingFeature) {
-      final beatFeats = featuresForBeat(item.targetBeatId);
-      final candidateFeats = beatFeats.isNotEmpty
-          ? beatFeats
-          : <TierDocument>[
-              for (final b in activeReleaseBeats) ...featuresForBeat(b.id),
-            ];
-      if (candidateFeats.isNotEmpty &&
-          !candidateFeats.any((f) => f.id == item.targetFeatureId)) {
-        item.targetFeatureId = candidateFeats.first.id;
-        item.targetFeatureTitle = candidateFeats.first.title;
-      }
-    }
-    _saveFeatureInboxItems(items);
-  }
-
-  /// Removes an item from the Feature Inbox (`📥 Inbox`).
-  void removeFeatureInboxItem(String inboxItemId) {
-    final items = List<FeatureInboxItem>.from(featureInboxItems)
-      ..removeWhere((i) => i.id == inboxItemId);
-    _saveFeatureInboxItems(items);
-  }
-
-  /// Executes or schedules a triaged `FeatureInboxItem`:
-  /// - `now` (or `forceBuildNow == true`): Materializes the Feature or Upgrade Checkpoint into the active release and synthesizes its 6-step `Do -> Copy -> Verify` guide.
-  /// - `splitNowAndFuture`: Materializes the lean core slice into the active release right now AND transitions the item to `scheduledForFuture` (linked to the created Feature ID) for `targetFuturePhase`.
-  /// - `futureRelease`: Transitions the item to `scheduledForFuture` for `targetFuturePhase` (`+0h` added to the active release).
-  Future<String?> acceptFeatureInboxTriage(
-    String inboxItemId, {
-    bool forceBuildNow = false,
-  }) async {
-    final items = List<FeatureInboxItem>.from(featureInboxItems);
-    final idx = items.indexWhere((i) => i.id == inboxItemId);
-    if (idx < 0) return null;
-    final item = items[idx];
-
-    final effectiveTiming =
-        forceBuildNow ? InboxReleaseTimingMode.now : item.releaseTimingMode;
-
-    if (effectiveTiming == InboxReleaseTimingMode.futureRelease) {
-      item.status = FeatureInboxStatus.scheduledForFuture;
-      _saveFeatureInboxItems(items);
-      return null;
-    }
-
-    // Materialize the immediate slice (`now` or `splitNowAndFuture`) into the active release
-    final materializedFeatId = _materializeInboxSliceIntoActiveRelease(item);
-    if (materializedFeatId == null) return null;
-
-    if (effectiveTiming == InboxReleaseTimingMode.splitNowAndFuture) {
-      // Transform the Inbox item into the linked Future Upgrade Checkpoint for targetFuturePhase!
-      item.status = FeatureInboxStatus.scheduledForFuture;
-      item.releaseTimingMode = InboxReleaseTimingMode.futureRelease;
-      item.integrationMode = InboxIntegrationMode.upgradeExistingFeature;
-      item.targetFeatureId = materializedFeatId;
-      item.targetFeatureTitle = documents[materializedFeatId]?.title ?? item.featureTitle;
-      if (item.futureCheckpointTitle.trim().isNotEmpty) {
-        item.checkpointTitle = item.futureCheckpointTitle.trim();
-      }
-      if (item.futureGoal.trim().isNotEmpty) {
-        item.goal = item.futureGoal.trim();
-      }
-      if (item.futurePlaytestGate.trim().isNotEmpty) {
-        item.playtestGate = item.futurePlaytestGate.trim();
-        item.doneWhen = item.futurePlaytestGate.trim();
-      }
-      if (item.futureTasks.isNotEmpty) {
-        item.tasks = List<String>.from(item.futureTasks);
-      }
-      if (item.futureTuningParams.isNotEmpty) {
-        item.tuningParams = List<String>.from(item.futureTuningParams);
-      }
-      if (item.futureEdgeCases.isNotEmpty) {
-        item.edgeCases = List<String>.from(item.futureEdgeCases);
-      }
-    } else {
-      item.status = FeatureInboxStatus.implemented;
-    }
-
-    _saveFeatureInboxItems(items);
-    selectFeature(materializedFeatId, triggerAiSynthesis: false);
-    await synthesizeFeatureHowToStepsWithAi(
-      materializedFeatId,
-      forceRefresh: true,
-    );
-    return materializedFeatId;
-  }
-
-  String? _materializeInboxSliceIntoActiveRelease(FeatureInboxItem item) {
-    final activeVer = activeReleaseVersionTag;
-    final relDoc = activeRelease;
-    if (relDoc == null) return null;
-
-    // 1. Resolve or create target Epic (`beatDoc`)
-    TierDocument? beatDoc = documents[item.targetBeatId];
-    if (item.integrationMode == InboxIntegrationMode.newEpicAndFeature ||
-        beatDoc == null ||
-        beatDoc.tier != TierType.epic) {
-      if (item.integrationMode == InboxIntegrationMode.newEpicAndFeature) {
-        final newBeatId =
-            'beat_${relDoc.id}_inbox_${relDoc.childrenIds.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
-        final epicTitle = (item.newEpicTitle != null &&
-                item.newEpicTitle!.trim().isNotEmpty)
-            ? item.newEpicTitle!.trim()
-            : item.featureTitle;
-        beatDoc = TierDocument(
-          id: newBeatId,
-          title: epicTitle,
-          tier: TierType.epic,
-          parentId: relDoc.id,
-          estimatedDuration: '4h',
-          sections: {
-            'scope':
-                'Goal: ${item.goal}\n\nIn Scope:\n• ${item.featureTitle}\n\nDone When: ${item.doneWhen}',
-          },
-        );
-        documents[newBeatId] = beatDoc;
-        relDoc.childrenIds.add(newBeatId);
-        _persistDocument(beatDoc);
-        _persistDocument(relDoc);
-        item.targetBeatId = newBeatId;
-        item.targetBeatTitle = epicTitle;
-        final bp = _releaseBlueprint;
-        if (bp != null &&
-            !bp.beats.any(
-              (b) =>
-                  b.id == newBeatId ||
-                  b.title.toLowerCase().trim() ==
-                      epicTitle.toLowerCase().trim(),
-            )) {
-          bp.beats.add(
-            ProposedBeatBlueprint(
-              id: newBeatId,
-              title: epicTitle,
-              goal: item.goal,
-              doneWhen: item.doneWhen,
-              features: [],
-            ),
-          );
-        }
-      } else {
-        final fallbackBeats = activeReleaseBeats;
-        if (fallbackBeats.isEmpty) return null;
-        beatDoc = fallbackBeats.first;
-      }
-    }
-
-    // 2. If upgrading an existing Feature, append a new version-stamped Delta Checkpoint
-    if (item.integrationMode == InboxIntegrationMode.upgradeExistingFeature &&
-        (item.targetFeatureId == null ||
-            documents[item.targetFeatureId!]?.tier != TierType.feature)) {
-      final beatFeats = featuresForBeat(beatDoc.id);
-      if (beatFeats.isNotEmpty) {
-        item.targetFeatureId = beatFeats.first.id;
-        item.targetFeatureTitle = beatFeats.first.title;
-      }
-    }
-    if (item.integrationMode == InboxIntegrationMode.upgradeExistingFeature &&
-        item.targetFeatureId != null &&
-        documents[item.targetFeatureId!]?.tier == TierType.feature) {
-      final featDoc = documents[item.targetFeatureId!]!;
-      final states = FeatureStateNode.getStatesForDocument(featDoc);
-      final nextCpNum = states.length + 1;
-      final cpTitle = item.checkpointTitle.trim().isNotEmpty
-          ? item.checkpointTitle.trim()
-          : '${item.featureTitle} ($activeVer)';
-      final tasks = item.tasks.isNotEmpty
-          ? item.tasks
-          : <String>[
-              'Component & State Upgrade for $cpTitle (2h)',
-              'Core Logic & Signal Hookup for $cpTitle (1h)',
-              'State & Bounds Guard for $cpTitle (1h)',
-            ];
-      final existingPrimaryAsset =
-          (featDoc.sections['primary_asset'] ?? '').trim();
-      final resolvedPrimaryAsset = existingPrimaryAsset.isNotEmpty
-          ? existingPrimaryAsset
-          : (item.primarySharedScriptOrScene ?? '').trim();
-      if (existingPrimaryAsset.isEmpty && resolvedPrimaryAsset.isNotEmpty) {
-        featDoc.sections['primary_asset'] = resolvedPrimaryAsset;
-      }
-      final newCp = FeatureStateNode(
-        id: '${featDoc.id}_${activeVer}_cp_$nextCpNum',
-        name: 'Checkpoint $nextCpNum: $cpTitle',
-        trigger: 'Playtest: ${item.playtestGate}',
-        order: states.length,
-        checklist: [
-          for (int i = 0; i < tasks.length; i++)
-            Subtask(
-              id: '${featDoc.id}_inbox_${nextCpNum}_t_${i + 1}',
-              text: tasks[i],
-              completed: false,
-            ),
-        ],
-        coveredScope: item.inScope.isNotEmpty ? item.inScope : [cpTitle],
-        tuningParams: item.tuningParams,
-        edgeCases: item.edgeCases,
-        parameters: {
-          'releaseVersion': activeVer,
-          if (resolvedPrimaryAsset.isNotEmpty)
-            'primarySharedScriptOrScene': resolvedPrimaryAsset,
-        },
-      );
-      for (int tIdx = 0; tIdx < newCp.checklist.length; tIdx++) {
-        TaskHowToBlueprint.resolve(
-          parentTask: newCp.checklist[tIdx],
-          taskIndex: tIdx,
-          checkpointNode: newCp,
-          engineHint: _activeEngineHint,
-          phase: _currentPhase,
-        );
-      }
-      states.add(newCp);
-      featDoc.sections['activeReleaseVersion'] = activeVer;
-      if (featDoc.sections['originVersion'] != activeVer) {
-        featDoc.sections['lifecycle'] = FeatureLifecycleStatus.upgrade.name;
-      }
-      updateFeatureStates(featDoc.id, states);
-      _persistDocument(featDoc);
-      final bp = _releaseBlueprint;
-      if (bp != null) {
-        for (final b in bp.beats) {
-          for (final f in b.features) {
-            if (f.id == featDoc.id ||
-                f.title.toLowerCase().trim() ==
-                    featDoc.title.toLowerCase().trim()) {
-              f.lifecycle = FeatureLifecycleStatus.upgrade;
-              f.included = true;
-              f.estimatedHours = 4;
-              f.checkpoints = [
-                ...f.checkpoints,
-                ProposedCheckpointBlueprint(
-                  title: cpTitle,
-                  playtestCriteria: item.playtestGate,
-                  tasks: tasks,
-                  coveredScope:
-                      item.inScope.isNotEmpty ? item.inScope : [cpTitle],
-                  tuningParams: item.tuningParams,
-                  edgeCases: item.edgeCases,
-                  releaseVersion: activeVer,
-                ),
-              ];
-              break;
-            }
-          }
-        }
-        relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
-        _persistDocument(relDoc);
-      }
-      _syncActiveProjectMetadata();
-      return featDoc.id;
-    }
-
-    // 3. Otherwise create a brand-new standalone Feature in `beatDoc`
-    final featId =
-        'feat_${beatDoc.id}_${beatDoc.childrenIds.length + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
-    final cpTitle = item.checkpointTitle.trim().isNotEmpty
-        ? item.checkpointTitle.trim()
-        : item.featureTitle;
-    final tasks = item.tasks.isNotEmpty
-        ? item.tasks
-        : <String>[
-            'Actor & Component Setup for ${item.featureTitle} (2h)',
-            'Core Trigger & State Logic for ${item.featureTitle} (1h)',
-            'Visual Feedback & Cooldown Guard for ${item.featureTitle} (1h)',
-          ];
-    final formattedTuning = item.tuningParams.map((p) => '• $p').join('\n');
-    final formattedGuards = item.edgeCases.map((e) => '• $e').join('\n');
-    final inScopeBullets = (item.inScope.isNotEmpty
-            ? item.inScope
-            : <String>[item.featureTitle])
-        .map((s) => '• $s')
-        .join('\n');
-
-    final inboxPrimaryAsset =
-        (item.primarySharedScriptOrScene ?? '').trim();
-    final featDoc = TierDocument(
-      id: featId,
-      title: item.featureTitle,
-      tier: TierType.feature,
-      parentId: beatDoc.id,
-      estimatedDuration: '4h',
-      sections: {
-        'originVersion': activeVer,
-        'activeReleaseVersion': activeVer,
-        'lifecycle': FeatureLifecycleStatus.newFeature.name,
-        if (inboxPrimaryAsset.isNotEmpty) 'primary_asset': inboxPrimaryAsset,
-        'scope':
-            'Goal: ${item.goal}\n\nIn Scope:\n$inScopeBullets\n\nDone When: ${item.doneWhen}',
-        'variables': formattedTuning,
-        'tuning': formattedTuning,
-        'edge_cases': formattedGuards,
-      },
-    );
-    final cpNode = FeatureStateNode(
-      id: '${featId}_${activeVer}_cp_1',
-      name: 'Checkpoint 1: $cpTitle',
-      trigger: 'Playtest: ${item.playtestGate}',
-      order: 0,
-      checklist: [
-        for (int i = 0; i < tasks.length; i++)
-          Subtask(
-            id: '${featId}_inbox_t_${i + 1}',
-            text: tasks[i],
-            completed: false,
-          ),
-      ],
-      coveredScope: item.inScope.isNotEmpty ? item.inScope : [item.featureTitle],
-      tuningParams: item.tuningParams,
-      edgeCases: item.edgeCases,
-      parameters: {
-        'releaseVersion': activeVer,
-        if (inboxPrimaryAsset.isNotEmpty)
-          'primarySharedScriptOrScene': inboxPrimaryAsset,
-      },
-    );
-    for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-      TaskHowToBlueprint.resolve(
-        parentTask: cpNode.checklist[tIdx],
-        taskIndex: tIdx,
-        checkpointNode: cpNode,
-        engineHint: _activeEngineHint,
-        phase: _currentPhase,
-      );
-    }
-    FeatureStateNode.saveStatesToDocument(featDoc, [cpNode]);
-    documents[featId] = featDoc;
-    beatDoc.childrenIds.add(featId);
-    _persistDocument(featDoc);
-    _persistDocument(beatDoc);
-
-    // Sync `_releaseBlueprint` if present
-    final bp = _releaseBlueprint;
-    if (bp != null) {
-      for (final b in bp.beats) {
-        if (b.id == beatDoc.id ||
-            b.title.toLowerCase().trim() ==
-                beatDoc.title.toLowerCase().trim()) {
-          b.features.add(
-            ProposedFeatureBlueprint(
-              id: featId,
-              title: item.featureTitle,
-              goal: item.goal,
-              doneWhen: item.doneWhen,
-              estimatedHours: 4,
-              included: true,
-              lifecycle: FeatureLifecycleStatus.newFeature,
-              originVersion: activeVer,
-              primarySharedScriptOrScene:
-                  inboxPrimaryAsset.isNotEmpty ? inboxPrimaryAsset : null,
-              inScope:
-                  item.inScope.isNotEmpty ? item.inScope : [item.featureTitle],
-              outOfScope: const [],
-              tuningParams: item.tuningParams,
-              edgeCases: item.edgeCases,
-              checkpoints: [
-                ProposedCheckpointBlueprint(
-                  title: cpTitle,
-                  playtestCriteria: item.playtestGate,
-                  tasks: tasks,
-                  coveredScope: item.inScope.isNotEmpty
-                      ? item.inScope
-                      : [item.featureTitle],
-                  tuningParams: item.tuningParams,
-                  edgeCases: item.edgeCases,
-                  releaseVersion: activeVer,
-                ),
-              ],
-            ),
-          );
-          break;
-        }
-      }
-      relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
-      _persistDocument(relDoc);
-    }
-    _syncActiveProjectMetadata();
-    return featId;
-  }
-
-  /// Pulls a pending or later-phase Inbox item directly into the active Release Blueprint draft
-  /// (e.g. inside the `+ New Release ✦` Co-Pilot) and marks it scheduled for the draft's phase.
-  bool pullInboxItemIntoReleaseDraft(String inboxItemId) {
-    final bp = _releaseBlueprint;
-    if (bp == null) return false;
-    final items = List<FeatureInboxItem>.from(featureInboxItems);
-    final idx = items.indexWhere((i) => i.id == inboxItemId);
-    if (idx == -1) return false;
-    final item = items[idx];
-    item.status = FeatureInboxStatus.scheduledForFuture;
-    item.releaseTimingMode = InboxReleaseTimingMode.futureRelease;
-    item.targetFuturePhase = _currentPhase;
-    _saveFeatureInboxItems(items);
-    _injectDueScheduledInboxItemsIntoBlueprint(bp, _currentPhase);
-    final relDoc = activeRelease;
-    if (relDoc != null) {
-      relDoc.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
-      _persistDocument(relDoc);
-    }
-    _syncActiveProjectMetadata();
-    notifyListeners();
-    return true;
-  }
-
-  /// Automatically injects any `scheduledForFuture` (or pending-for-future-phase) Inbox items
-  /// whose `targetFuturePhase.index <= targetPhase.index` into [bp] when a new release is planned.
-  void _injectDueScheduledInboxItemsIntoBlueprint(
-    ReleaseBlueprint bp,
-    ProductionPhase targetPhase,
-  ) {
-    if (bp.beats.isEmpty) return;
-    final dueItems = featureInboxItems.where((item) {
-      if (item.status == FeatureInboxStatus.implemented) return false;
-      if (item.status == FeatureInboxStatus.scheduledForFuture) {
-        return item.targetFuturePhase.index <= targetPhase.index;
-      }
-      if (item.status == FeatureInboxStatus.triagePending &&
-          item.releaseTimingMode == InboxReleaseTimingMode.futureRelease) {
-        return item.targetFuturePhase.index <= targetPhase.index;
-      }
-      return false;
-    }).toList();
-    if (dueItems.isEmpty) return;
-
-    final verTag = bp.releaseVersionTag;
-    for (final item in dueItems) {
-      final cpTitle = item.futureCheckpointTitle.trim().isNotEmpty
-          ? item.futureCheckpointTitle.trim()
-          : (item.checkpointTitle.trim().isNotEmpty
-              ? item.checkpointTitle.trim()
-              : '${item.featureTitle} ($verTag)');
-      final goalText = item.futureGoal.trim().isNotEmpty
-          ? item.futureGoal.trim()
-          : item.goal;
-      final gateText = item.futurePlaytestGate.trim().isNotEmpty
-          ? item.futurePlaytestGate.trim()
-          : item.playtestGate;
-      final tasks = item.futureTasks.isNotEmpty
-          ? item.futureTasks
-          : (item.tasks.isNotEmpty
-              ? item.tasks
-              : <String>[
-                  'Component & State Setup for $cpTitle (2h)',
-                  'Core Logic & Signal Hookup for $cpTitle (1h)',
-                  'State & Bounds Guard for $cpTitle (1h)',
-                ]);
-
-      ProposedBeatBlueprint targetBeat;
-      if (item.integrationMode == InboxIntegrationMode.newEpicAndFeature) {
-        final newEpicName = (item.newEpicTitle != null &&
-                item.newEpicTitle!.trim().isNotEmpty)
-            ? item.newEpicTitle!.trim()
-            : item.featureTitle;
-        final existingNewBeat = bp.beats
-            .where(
-              (b) =>
-                  b.title.toLowerCase().trim() ==
-                  newEpicName.toLowerCase().trim(),
-            )
-            .firstOrNull;
-        if (existingNewBeat != null) {
-          targetBeat = existingNewBeat;
-        } else {
-          targetBeat = ProposedBeatBlueprint(
-            id: 'beat_${verTag}_inbox_${bp.beats.length + 1}',
-            title: newEpicName,
-            goal: goalText,
-            doneWhen: gateText,
-            features: [],
-          );
-          bp.beats.add(targetBeat);
-        }
-      } else {
-        targetBeat = bp.beats.firstWhere(
-          (b) =>
-              b.id == item.targetBeatId ||
-              b.title.toLowerCase().trim() ==
-                  item.targetBeatTitle.toLowerCase().trim(),
-          orElse: () => bp.beats.first,
-        );
-      }
-
-      // Check if upgrading an existing feature in targetBeat
-      ProposedFeatureBlueprint? existingFeat;
-      if (item.integrationMode == InboxIntegrationMode.upgradeExistingFeature) {
-        for (final b in bp.beats) {
-          for (final f in b.features) {
-            if (f.id == item.targetFeatureId ||
-                (item.targetFeatureTitle != null &&
-                    f.title.toLowerCase().trim() ==
-                        item.targetFeatureTitle!.toLowerCase().trim())) {
-              existingFeat = f;
-              targetBeat = b;
-              break;
-            }
-          }
-          if (existingFeat != null) break;
-        }
-      }
-
-      if (existingFeat != null) {
-        final effectiveTuning = item.futureTuningParams.isNotEmpty
-            ? item.futureTuningParams
-            : item.tuningParams;
-        final effectiveEdges = item.futureEdgeCases.isNotEmpty
-            ? item.futureEdgeCases
-            : item.edgeCases;
-        existingFeat.lifecycle = FeatureLifecycleStatus.upgrade;
-        existingFeat.included = true;
-        existingFeat.estimatedHours = 4;
-        existingFeat.goal = goalText;
-        existingFeat.doneWhen = gateText;
-        if ((existingFeat.primarySharedScriptOrScene ?? '').trim().isEmpty &&
-            (item.primarySharedScriptOrScene ?? '').trim().isNotEmpty) {
-          existingFeat.primarySharedScriptOrScene =
-              item.primarySharedScriptOrScene!.trim();
-        }
-        if (effectiveTuning.isNotEmpty) {
-          existingFeat.tuningParams = List<String>.from(effectiveTuning);
-        }
-        if (effectiveEdges.isNotEmpty) {
-          existingFeat.edgeCases = List<String>.from(effectiveEdges);
-        }
-        existingFeat.checkpoints = [
-          ProposedCheckpointBlueprint(
-            title: cpTitle,
-            playtestCriteria: gateText,
-            tasks: tasks,
-            coveredScope: [cpTitle],
-            tuningParams: effectiveTuning,
-            edgeCases: effectiveEdges,
-            releaseVersion: verTag,
-          ),
-        ];
-      } else {
-        final alreadyAdded = targetBeat.features.any(
-          (f) =>
-              f.title.toLowerCase().trim() ==
-              item.featureTitle.toLowerCase().trim(),
-        );
-        if (!alreadyAdded) {
-          targetBeat.features.add(
-            ProposedFeatureBlueprint(
-              id: 'feat_${verTag}_inbox_${item.id}',
-              title: item.featureTitle,
-              goal: goalText,
-              doneWhen: gateText,
-              estimatedHours: 4,
-              included: true,
-              lifecycle: FeatureLifecycleStatus.newFeature,
-              originVersion: verTag,
-              primarySharedScriptOrScene:
-                  (item.primarySharedScriptOrScene != null &&
-                          item.primarySharedScriptOrScene!.trim().isNotEmpty)
-                      ? item.primarySharedScriptOrScene!.trim()
-                      : null,
-              inScope:
-                  item.inScope.isNotEmpty ? item.inScope : [item.featureTitle],
-              outOfScope: const [],
-              tuningParams: item.futureTuningParams.isNotEmpty
-                  ? item.futureTuningParams
-                  : item.tuningParams,
-              edgeCases: item.futureEdgeCases.isNotEmpty
-                  ? item.futureEdgeCases
-                  : item.edgeCases,
-              checkpoints: [
-                ProposedCheckpointBlueprint(
-                  title: cpTitle,
-                  playtestCriteria: gateText,
-                  tasks: tasks,
-                  coveredScope: item.inScope.isNotEmpty
-                      ? item.inScope
-                      : [item.featureTitle],
-                  tuningParams: item.futureTuningParams.isNotEmpty
-                      ? item.futureTuningParams
-                      : item.tuningParams,
-                  edgeCases: item.futureEdgeCases.isNotEmpty
-                      ? item.futureEdgeCases
-                      : item.edgeCases,
-                  releaseVersion: verTag,
-                ),
-              ],
-            ),
-          );
-        }
-      }
-    }
-  }
-
-  void _markExecutedInboxItemsImplemented(ReleaseBlueprint bp) {
-    final items = List<FeatureInboxItem>.from(featureInboxItems);
-    if (items.isEmpty) return;
-    bool changed = false;
-    final includedFeatIds = <String>{};
-    final includedFeatTitles = <String>{};
-    for (final b in bp.beats) {
-      for (final f in b.includedFeatures) {
-        includedFeatIds.add(f.id);
-        includedFeatTitles.add(f.title.toLowerCase().trim());
-      }
-    }
-    for (final item in items) {
-      if (item.status == FeatureInboxStatus.implemented) continue;
-      final matchesById =
-          includedFeatIds.contains('feat_${bp.releaseVersionTag}_inbox_${item.id}') ||
-              (item.targetFeatureId != null &&
-                  includedFeatIds.contains(item.targetFeatureId!) &&
-                  item.targetFuturePhase.index <= _currentPhase.index);
-      final matchesByTitle =
-          includedFeatTitles.contains(item.featureTitle.toLowerCase().trim()) &&
-              item.targetFuturePhase.index <= _currentPhase.index;
-      if (matchesById || matchesByTitle) {
-        item.status = FeatureInboxStatus.implemented;
-        changed = true;
-      }
-    }
-    if (changed) {
-      _saveFeatureInboxItems(items);
-    }
-  }
 }

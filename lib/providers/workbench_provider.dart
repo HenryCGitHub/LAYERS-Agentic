@@ -9,15 +9,22 @@ import '../constants/text_style_guide.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
+import '../models/godot_project_contract.dart';
+import '../models/godot_virtual_file.dart';
 import '../models/tier_document.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_vault_service.dart';
+import '../services/godot_folder_sync.dart';
 import '../services/local_vault_service.dart';
+import '../utils/godot_gdscript_guard.dart';
 import '../utils/section_text_utils.dart';
 
 part 'workbench_storage_mixin.dart';
 part 'workbench_concept_mixin.dart';
 part 'workbench_release_mixin.dart';
+part 'workbench_progressive_planner_mixin.dart';
+part 'workbench_inbox_mixin.dart';
+part 'workbench_godot_mixin.dart';
 
 /// Top-level stage in the streamlined 2-stage Antigravity workflow.
 enum WorkbenchStage {
@@ -38,7 +45,12 @@ class WorkbenchProvider extends ChangeNotifier {
 
   final AuthService _authService = AuthService();
   final FirestoreVaultService _firestoreService = FirestoreVaultService();
+  final GodotFolderSyncBackend _godotSync;
   final bool enableAutoLoad;
+
+  final Map<String, String> _diskPulledFilesByResPath = {};
+  final Map<String, List<String>> _lastPatchWarningsByResPath = {};
+  final Map<String, List<GdScriptPatchHunk>> _unmatchedHunksByResPath = {};
 
   /// Optional test-only email override so widget tests can verify Admin/Invitee UI deterministically.
   @visibleForTesting
@@ -318,7 +330,10 @@ class WorkbenchProvider extends ChangeNotifier {
   static final RegExp _mvpEpicExactRegex =
       RegExp(r'^mvp\s+epic\s*\d+$', caseSensitive: false);
 
-  WorkbenchProvider({this.enableAutoLoad = false}) {
+  WorkbenchProvider({
+    this.enableAutoLoad = false,
+    GodotFolderSyncBackend? godotSyncBackend,
+  }) : _godotSync = godotSyncBackend ?? godotFolderSync {
     _authService.addListener(_onAuthStateChanged);
     if (enableAutoLoad) {
       GeminiAgentClient.isProxyAuthenticated = () => isSessionApprovedForAi;

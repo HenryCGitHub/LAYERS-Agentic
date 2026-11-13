@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../models/godot_project_contract.dart';
 import '../../models/task_how_to_blueprint.dart';
 
 /// Parsed row from a structured Godot 4 Markdown Inspector / Input Map / Scene Placement pipe table.
@@ -23,9 +24,9 @@ class _GodotInspectorRow {
   final bool isTransformValue;
 }
 
-/// Renders a native Godot 4 `Scene Tree` + categorized `Inspector` panel
-/// with RGB `X`/`Y`/`Z` Vector2/Vector3 axis boxes, Godot boolean toggles,
-/// Input Map rows, and one-click `Copy Vector` / `⧉` pills.
+/// Renders a categorized Godot 4 `Property & Layer Sheet` panel
+/// with RGB `X`/`Y`/`Z` Vector2/Vector3 axis boxes, Physics Layer toggles,
+/// boolean checkboxes, Input Map rows, and one-click `Copy Vector` / `⧉` pills.
 class GodotInspectorPanel extends StatefulWidget {
   const GodotInspectorPanel({
     super.key,
@@ -37,6 +38,8 @@ class GodotInspectorPanel extends StatefulWidget {
     this.isLevelScene = false,
     this.isInputMap = false,
     this.highlightedTokens = const {},
+    this.contract,
+    this.onPropertyChanged,
   });
 
   final List<String> tableLines;
@@ -47,13 +50,118 @@ class GodotInspectorPanel extends StatefulWidget {
   final bool isLevelScene;
   final bool isInputMap;
   final Set<String> highlightedTokens;
+  final GodotProjectContract? contract;
+  final void Function(String propertyKey, String newValue)? onPropertyChanged;
 
   @override
   State<GodotInspectorPanel> createState() => _GodotInspectorPanelState();
 }
 
 class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
-  String? _selectedTarget;
+  String? _activeEditKey;
+  final TextEditingController _inlineEditCtrl = TextEditingController();
+  final FocusNode _inlineFocusNode = FocusNode();
+  VoidCallback? _onActiveBlurCommit;
+  bool _isFinishingInlineEdit = false;
+  final Map<String, String> _localEditedValues = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _inlineFocusNode.addListener(_handleInlineFocusChange);
+    _inlineFocusNode.onKeyEvent = (node, event) {
+      if (event is KeyDownEvent &&
+          event.logicalKey == LogicalKeyboardKey.escape &&
+          _activeEditKey != null) {
+        _cancelInlineEdit();
+        return KeyEventResult.handled;
+      }
+      return KeyEventResult.ignored;
+    };
+  }
+
+  @override
+  void didUpdateWidget(covariant GodotInspectorPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.tableLines != widget.tableLines) {
+      _localEditedValues.clear();
+      _activeEditKey = null;
+      _onActiveBlurCommit = null;
+      _isFinishingInlineEdit = false;
+    }
+  }
+
+  @override
+  void dispose() {
+    _inlineFocusNode.removeListener(_handleInlineFocusChange);
+    _inlineFocusNode.dispose();
+    _inlineEditCtrl.dispose();
+    super.dispose();
+  }
+
+  void _handleInlineFocusChange() {
+    if (!_inlineFocusNode.hasFocus &&
+        _activeEditKey != null &&
+        !_isFinishingInlineEdit &&
+        mounted) {
+      final blurCommit = _onActiveBlurCommit;
+      _onActiveBlurCommit = null;
+      blurCommit?.call();
+    }
+  }
+
+  void _cancelInlineEdit() {
+    _isFinishingInlineEdit = true;
+    _onActiveBlurCommit = null;
+    setState(() {
+      _activeEditKey = null;
+    });
+    _isFinishingInlineEdit = false;
+  }
+
+  String _rowOverrideKey(_GodotInspectorRow row) =>
+      row.target.isNotEmpty ? '${row.target}.${row.propertyName}' : row.propertyName;
+
+  void _startInlineEdit(
+    String editKey,
+    String initialValue, {
+    VoidCallback? onBlurCommit,
+  }) {
+    if (_activeEditKey != null &&
+        _activeEditKey != editKey &&
+        !_isFinishingInlineEdit) {
+      final prevCommit = _onActiveBlurCommit;
+      _onActiveBlurCommit = null;
+      prevCommit?.call();
+    }
+    _isFinishingInlineEdit = false;
+    _onActiveBlurCommit = onBlurCommit;
+    setState(() {
+      _activeEditKey = editKey;
+      _inlineEditCtrl.text = initialValue;
+      _inlineEditCtrl.selection = TextSelection(
+        baseOffset: 0,
+        extentOffset: initialValue.length,
+      );
+    });
+  }
+
+  void _commitPropertyEdit(_GodotInspectorRow row, String nextValue) {
+    _isFinishingInlineEdit = true;
+    _onActiveBlurCommit = null;
+    final trimmed = nextValue.trim();
+    if (trimmed.isEmpty) {
+      setState(() => _activeEditKey = null);
+      _isFinishingInlineEdit = false;
+      return;
+    }
+    setState(() {
+      _localEditedValues[_rowOverrideKey(row)] = trimmed;
+      _activeEditKey = null;
+    });
+    _isFinishingInlineEdit = false;
+    widget.onPropertyChanged?.call(row.propertyName, trimmed);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,10 +174,7 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
         uniqueTargets.add(r.target);
       }
     }
-    final activeTarget = (_selectedTarget != null &&
-            uniqueTargets.contains(_selectedTarget))
-        ? _selectedTarget!
-        : (uniqueTargets.isNotEmpty ? uniqueTargets.first : '');
+    final activeTarget = uniqueTargets.isNotEmpty ? uniqueTargets.first : '';
 
     final categories = <String, List<_GodotInspectorRow>>{};
     for (final row in parsed) {
@@ -97,12 +202,6 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!widget.isInputMap)
-                _buildSceneTreeDock(
-                  targets: uniqueTargets,
-                  activeTarget: activeTarget,
-                  borderCol: borderCol,
-                ),
               _buildInspectorHeader(activeTarget, borderCol),
               for (final entry in categories.entries)
                 _buildCategorySection(
@@ -257,233 +356,6 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
     return _resolveRootLabel();
   }
 
-  Widget _buildSceneTreeDock({
-    required List<String> targets,
-    required String activeTarget,
-    required Color borderCol,
-  }) {
-    final rootLabel = _resolveRootLabel();
-    final headerTitle =
-        widget.isLevelScene ? 'Scene Tree (Level)' : 'Scene Tree';
-    final isCharacter = widget.parentClassLabel
-            .toLowerCase()
-            .contains('characterbody') ||
-        targets.any(
-          (t) =>
-              t.toLowerCase().contains('characterbody') ||
-              t.toLowerCase().contains('camera'),
-        );
-    final bool showRootCollisionShape = !widget.isLevelScene &&
-        isCharacter &&
-        !targets.any((t) => t.toLowerCase().contains('collision'));
-
-    final barBg =
-        widget.isDark ? const Color(0xFF0E141F) : const Color(0xFFE2E8F0);
-    final mutedText =
-        widget.isDark ? const Color(0xFF64748B) : const Color(0xFF475569);
-
-    return Container(
-      decoration: BoxDecoration(
-        color:
-            widget.isDark ? const Color(0xFF0B1018) : const Color(0xFFF1F5F9),
-        border: Border(bottom: BorderSide(color: borderCol)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: barBg,
-              border: Border(bottom: BorderSide(color: borderCol)),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  '▾ $headerTitle',
-                  style: GoogleFonts.inter(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                    color: widget.isDark
-                        ? const Color(0xFFCBD5E1)
-                        : const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (!widget.isLevelScene)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 1.5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF2563EB).withValues(alpha: 0.22),
-                      borderRadius: BorderRadius.circular(3),
-                      border: Border.all(
-                        color: const Color(0xFF3B82F6).withValues(alpha: 0.45),
-                      ),
-                    ),
-                    child: Text(
-                      '+ Add Node',
-                      style: GoogleFonts.inter(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF60A5FA),
-                      ),
-                    ),
-                  ),
-                const Spacer(),
-                Text(
-                  'Node Type',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    color: mutedText,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildTreeRow(
-                  icon: widget.isLevelScene ? '🗺' : '🎬',
-                  label: rootLabel,
-                  typeLabel: widget.parentClassLabel.isNotEmpty
-                      ? widget.parentClassLabel.replaceFirst(
-                          RegExp(r'^Root Node:\s*'),
-                          '',
-                        )
-                      : (widget.isLevelScene ? 'Node3D' : 'Node'),
-                  indentLevel: 0,
-                  isSelected: false,
-                  isAttachedScript: !widget.isLevelScene,
-                  connector: '',
-                ),
-                if (showRootCollisionShape)
-                  _buildTreeRow(
-                    icon: '⬭',
-                    label: 'CollisionShape',
-                    typeLabel: 'CollisionShape',
-                    indentLevel: 1,
-                    isSelected: false,
-                    isAttachedScript: false,
-                    connector: '├─',
-                  ),
-                for (int i = 0; i < targets.length; i++)
-                  _buildTreeRow(
-                    icon: _inferNodeIcon(
-                      targets[i],
-                      isLevel: widget.isLevelScene,
-                    ),
-                    label: targets[i],
-                    typeLabel: _inferNodeType(
-                      targets[i],
-                      isLevel: widget.isLevelScene,
-                    ),
-                    indentLevel: 1,
-                    isSelected: targets[i] == activeTarget,
-                    isAttachedScript: false,
-                    connector: i == targets.length - 1 ? '└─' : '├─',
-                    onTap: () => setState(() => _selectedTarget = targets[i]),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTreeRow({
-    required String icon,
-    required String label,
-    required String typeLabel,
-    required int indentLevel,
-    required bool isSelected,
-    required bool isAttachedScript,
-    required String connector,
-    VoidCallback? onTap,
-  }) {
-    final rowWidget = Container(
-      margin: const EdgeInsets.only(bottom: 1.5),
-      padding: EdgeInsets.fromLTRB(
-        6 + (indentLevel * 14).toDouble(),
-        3.5,
-        8,
-        3.5,
-      ),
-      decoration: BoxDecoration(
-        color: isSelected
-            ? const Color(0xFF1D4ED8).withValues(alpha: 0.28)
-            : Colors.transparent,
-        borderRadius: BorderRadius.circular(4),
-        border: isSelected
-            ? Border.all(
-                color: const Color(0xFF38BDF8).withValues(alpha: 0.45),
-              )
-            : null,
-      ),
-      child: Row(
-        children: [
-          if (connector.isNotEmpty) ...[
-            Text(
-              connector,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 10,
-                color: const Color(0xFF475569),
-              ),
-            ),
-            const SizedBox(width: 4),
-          ],
-          Text(icon, style: const TextStyle(fontSize: 10.5)),
-          const SizedBox(width: 5),
-          Expanded(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: 11,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected
-                    ? const Color(0xFFE0F2FE)
-                    : (widget.isDark
-                        ? const Color(0xFFCBD5E1)
-                        : const Color(0xFF1E293B)),
-              ),
-            ),
-          ),
-          if (isAttachedScript) ...[
-            const SizedBox(width: 4),
-            Text(
-              '📜',
-              style: const TextStyle(fontSize: 10),
-            ),
-          ],
-          const SizedBox(width: 6),
-          Text(
-            typeLabel,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 9.5,
-              color: isSelected
-                  ? const Color(0xFF7DD3FC)
-                  : const Color(0xFF64748B),
-            ),
-          ),
-        ],
-      ),
-    );
-    if (onTap == null) return rowWidget;
-    return InkWell(
-      borderRadius: BorderRadius.circular(4),
-      onTap: onTap,
-      child: rowWidget,
-    );
-  }
-
   Widget _buildInspectorHeader(String activeTarget, Color borderCol) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -496,7 +368,7 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
       child: Row(
         children: [
           Text(
-            widget.isInputMap ? '⌨ INPUT MAP' : '🎛 INSPECTOR',
+            widget.isInputMap ? '⌨ INPUT MAP' : '🎛 PROPERTY & LAYER SHEET',
             style: GoogleFonts.jetBrainsMono(
               fontSize: 10,
               fontWeight: FontWeight.w700,
@@ -659,8 +531,10 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
     _GodotInspectorRow row, {
     required bool isCompactWidth,
   }) {
-    final xyz = _extractXyz(row.value);
-    final xy = xyz == null ? _extractXy(row.value) : null;
+    final effectiveValue = _localEditedValues[_rowOverrideKey(row)] ?? row.value;
+    final canEdit = widget.onPropertyChanged != null;
+    final xyz = _extractXyz(effectiveValue);
+    final xy = xyz == null ? _extractXy(effectiveValue) : null;
     final copyButton = row.isTransformValue
         ? Builder(
             builder: (context) => Tooltip(
@@ -669,10 +543,10 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
                 key: ValueKey('copy_transform_btn_${row.rowIndex}'),
                 borderRadius: BorderRadius.circular(4),
                 onTap: () {
-                  Clipboard.setData(ClipboardData(text: row.value));
+                  Clipboard.setData(ClipboardData(text: effectiveValue));
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text('Copied Transform: ${row.value}'),
+                      content: Text('Copied Transform: $effectiveValue'),
                       duration: const Duration(seconds: 2),
                     ),
                   );
@@ -709,9 +583,39 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
         runSpacing: 5,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _buildAxisBox('X', xyz.$1, const Color(0xFFEF4444)),
-          _buildAxisBox('Y', xyz.$2, const Color(0xFF22C55E)),
-          _buildAxisBox('Z', xyz.$3, const Color(0xFF3B82F6)),
+          _buildAxisBox(
+            row: row,
+            axis: 'X',
+            val: xyz.$1,
+            accentColor: const Color(0xFFEF4444),
+            canEdit: canEdit,
+            onCommitAxis: (next) => _commitPropertyEdit(
+              row,
+              'Vector3($next, ${xyz.$2}, ${xyz.$3})',
+            ),
+          ),
+          _buildAxisBox(
+            row: row,
+            axis: 'Y',
+            val: xyz.$2,
+            accentColor: const Color(0xFF22C55E),
+            canEdit: canEdit,
+            onCommitAxis: (next) => _commitPropertyEdit(
+              row,
+              'Vector3(${xyz.$1}, $next, ${xyz.$3})',
+            ),
+          ),
+          _buildAxisBox(
+            row: row,
+            axis: 'Z',
+            val: xyz.$3,
+            accentColor: const Color(0xFF3B82F6),
+            canEdit: canEdit,
+            onCommitAxis: (next) => _commitPropertyEdit(
+              row,
+              'Vector3(${xyz.$1}, ${xyz.$2}, $next)',
+            ),
+          ),
           if (copyButton != null) copyButton,
         ],
       );
@@ -723,14 +627,106 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
         runSpacing: 5,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          _buildAxisBox('X', xy.$1, const Color(0xFFEF4444)),
-          _buildAxisBox('Y', xy.$2, const Color(0xFF22C55E)),
+          _buildAxisBox(
+            row: row,
+            axis: 'X',
+            val: xy.$1,
+            accentColor: const Color(0xFFEF4444),
+            canEdit: canEdit,
+            onCommitAxis: (next) => _commitPropertyEdit(
+              row,
+              'Vector2($next, ${xy.$2})',
+            ),
+          ),
+          _buildAxisBox(
+            row: row,
+            axis: 'Y',
+            val: xy.$2,
+            accentColor: const Color(0xFF22C55E),
+            canEdit: canEdit,
+            onCommitAxis: (next) => _commitPropertyEdit(
+              row,
+              'Vector2(${xy.$1}, $next)',
+            ),
+          ),
           if (copyButton != null) copyButton,
         ],
       );
     }
 
-    final lowerVal = row.value.toLowerCase().trim();
+    // Physics Layer / Mask bitmask toggles backed by the Project Contract
+    final contract = widget.contract;
+    final lowerProp = row.propertyName.toLowerCase();
+    final isLayerOrMaskProp = lowerProp.contains('collision layer') ||
+        lowerProp.contains('collision mask') ||
+        lowerProp == 'layer' ||
+        lowerProp == 'mask';
+    final parsedMask = int.tryParse(effectiveValue.trim());
+    if (isLayerOrMaskProp &&
+        contract != null &&
+        contract.physicsLayers.isNotEmpty &&
+        parsedMask != null) {
+      final sortedLayers = contract.physicsLayers.keys.toList()..sort();
+      return Wrap(
+        spacing: 5,
+        runSpacing: 5,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final layerNum in sortedLayers)
+            () {
+              final bitActive = (parsedMask & (1 << (layerNum - 1))) != 0;
+              final label = 'L$layerNum:${contract.physicsLayers[layerNum]}';
+              return InkWell(
+                key: ValueKey('inspector_layer_${row.rowIndex}_$layerNum'),
+                borderRadius: BorderRadius.circular(4),
+                onTap: canEdit
+                    ? () {
+                        final nextMask = parsedMask ^ (1 << (layerNum - 1));
+                        _commitPropertyEdit(row, nextMask.toString());
+                      }
+                    : null,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: bitActive
+                        ? const Color(0xFF2563EB).withValues(alpha: 0.28)
+                        : (widget.isDark
+                            ? const Color(0xFF06090F)
+                            : const Color(0xFFF1F5F9)),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(
+                      color: bitActive
+                          ? const Color(0xFF60A5FA)
+                          : (widget.isDark
+                              ? const Color(0xFF1E293B)
+                              : const Color(0xFFCBD5E1)),
+                    ),
+                  ),
+                  child: Text(
+                    label,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: bitActive
+                          ? const Color(0xFF93C5FD)
+                          : const Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+              );
+            }(),
+          Text(
+            '($parsedMask)',
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 10,
+              color: const Color(0xFF64748B),
+            ),
+          ),
+        ],
+      );
+    }
+
+    final lowerVal = effectiveValue.toLowerCase().trim();
     if (lowerVal == 'true' ||
         lowerVal == 'false' ||
         lowerVal == 'checked' ||
@@ -743,41 +739,86 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
           lowerVal == 'checked' ||
           lowerVal == 'on' ||
           lowerVal == 'enabled';
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 15,
-            height: 15,
-            decoration: BoxDecoration(
-              color: isTrue
-                  ? const Color(0xFF2563EB)
-                  : (widget.isDark
-                      ? const Color(0xFF06090F)
-                      : const Color(0xFFE2E8F0)),
-              borderRadius: BorderRadius.circular(3),
-              border: Border.all(
-                color: isTrue
-                    ? const Color(0xFF60A5FA)
-                    : const Color(0xFF334155),
+      final nextVal = (lowerVal == 'on' || lowerVal == 'off')
+          ? (isTrue ? 'Off' : 'On')
+          : (lowerVal == 'enabled' || lowerVal == 'disabled')
+              ? (isTrue ? 'disabled' : 'enabled')
+              : (isTrue ? 'false' : 'true');
+      return InkWell(
+        key: ValueKey('inspector_bool_${row.rowIndex}'),
+        borderRadius: BorderRadius.circular(4),
+        onTap: canEdit ? () => _commitPropertyEdit(row, nextVal) : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 15,
+                height: 15,
+                decoration: BoxDecoration(
+                  color: isTrue
+                      ? const Color(0xFF2563EB)
+                      : (widget.isDark
+                          ? const Color(0xFF06090F)
+                          : const Color(0xFFE2E8F0)),
+                  borderRadius: BorderRadius.circular(3),
+                  border: Border.all(
+                    color: isTrue
+                        ? const Color(0xFF60A5FA)
+                        : const Color(0xFF334155),
+                  ),
+                ),
+                child: isTrue
+                    ? const Icon(Icons.check, size: 11, color: Colors.white)
+                    : null,
               ),
-            ),
-            child: isTrue
-                ? const Icon(Icons.check, size: 11, color: Colors.white)
-                : null,
+              const SizedBox(width: 6),
+              Text(
+                effectiveValue,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: isTrue
+                      ? const Color(0xFF93C5FD)
+                      : const Color(0xFF94A3B8),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          Text(
-            row.value,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: isTrue
-                  ? const Color(0xFF93C5FD)
-                  : const Color(0xFF94A3B8),
+        ),
+      );
+    }
+
+    final scalarEditKey = 'scalar_${row.rowIndex}';
+    if (_activeEditKey == scalarEditKey && canEdit) {
+      return SizedBox(
+        width: 150,
+        child: TextField(
+          key: ValueKey('inspector_scalar_input_${row.rowIndex}'),
+          controller: _inlineEditCtrl,
+          focusNode: _inlineFocusNode,
+          autofocus: true,
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: widget.isDark
+                ? const Color(0xFFE2E8F0)
+                : const Color(0xFF0F172A),
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+            suffixIcon: IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+              icon: const Icon(Icons.check_rounded, size: 14),
+              onPressed: () => _commitPropertyEdit(row, _inlineEditCtrl.text),
             ),
           ),
-        ],
+          onSubmitted: (val) => _commitPropertyEdit(row, val),
+        ),
       );
     }
 
@@ -786,27 +827,50 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
       runSpacing: 5,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-          decoration: BoxDecoration(
-            color: widget.isDark
-                ? const Color(0xFF06090F)
-                : const Color(0xFFFFFFFF),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
+        InkWell(
+          key: ValueKey('inspector_scalar_${row.rowIndex}'),
+          borderRadius: BorderRadius.circular(4),
+          onTap: canEdit
+              ? () => _startInlineEdit(
+                    scalarEditKey,
+                    effectiveValue,
+                    onBlurCommit: () =>
+                        _commitPropertyEdit(row, _inlineEditCtrl.text),
+                  )
+              : null,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+            decoration: BoxDecoration(
               color: widget.isDark
-                  ? const Color(0xFF1E293B)
-                  : const Color(0xFFCBD5E1),
+                  ? const Color(0xFF06090F)
+                  : const Color(0xFFFFFFFF),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: canEdit
+                    ? const Color(0xFF283854)
+                    : (widget.isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFCBD5E1)),
+              ),
             ),
-          ),
-          child: Text(
-            row.value,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: widget.isDark
-                  ? const Color(0xFFE2E8F0)
-                  : const Color(0xFF0F172A),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  effectiveValue,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: widget.isDark
+                        ? const Color(0xFFE2E8F0)
+                        : const Color(0xFF0F172A),
+                  ),
+                ),
+                if (canEdit) ...[
+                  const SizedBox(width: 5),
+                  const Icon(Icons.edit_outlined, size: 10, color: Color(0xFF64748B)),
+                ],
+              ],
             ),
           ),
         ),
@@ -815,52 +879,112 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
     );
   }
 
-  Widget _buildAxisBox(String axis, String val, Color accentColor) {
-    return Container(
-      decoration: BoxDecoration(
-        color:
-            widget.isDark ? const Color(0xFF06090F) : const Color(0xFFFFFFFF),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: widget.isDark
-              ? const Color(0xFF1E293B)
-              : const Color(0xFFCBD5E1),
+  Widget _buildAxisBox({
+    required _GodotInspectorRow row,
+    required String axis,
+    required String val,
+    required Color accentColor,
+    required bool canEdit,
+    required ValueChanged<String> onCommitAxis,
+  }) {
+    final axisEditKey = 'axis_${row.rowIndex}_$axis';
+    final isEditingAxis = _activeEditKey == axisEditKey && canEdit;
+
+    return InkWell(
+      key: ValueKey('inspector_axis_${row.rowIndex}_$axis'),
+      borderRadius: BorderRadius.circular(4),
+      onTap: (canEdit && !isEditingAxis)
+          ? () => _startInlineEdit(
+                axisEditKey,
+                val,
+                onBlurCommit: () {
+                  final next = _inlineEditCtrl.text.trim();
+                  if (next.isEmpty) {
+                    _cancelInlineEdit();
+                  } else {
+                    onCommitAxis(next);
+                  }
+                },
+              )
+          : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: widget.isDark ? const Color(0xFF06090F) : const Color(0xFFFFFFFF),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: isEditingAxis
+                ? accentColor
+                : (widget.isDark
+                    ? const Color(0xFF1E293B)
+                    : const Color(0xFFCBD5E1)),
+          ),
         ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: IntrinsicHeight(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 3, color: accentColor),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    axis,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: accentColor,
+        clipBehavior: Clip.antiAlias,
+        child: IntrinsicHeight(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 3, color: accentColor),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      axis,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: accentColor,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    val,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: widget.isDark
-                          ? const Color(0xFFE2E8F0)
-                          : const Color(0xFF0F172A),
-                    ),
-                  ),
-                ],
+                    const SizedBox(width: 4),
+                    if (isEditingAxis)
+                      SizedBox(
+                        width: 44,
+                        child: TextField(
+                          key: ValueKey('inspector_axis_input_${row.rowIndex}_$axis'),
+                          controller: _inlineEditCtrl,
+                          focusNode: _inlineFocusNode,
+                          autofocus: true,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w600,
+                            color: widget.isDark
+                                ? const Color(0xFFE2E8F0)
+                                : const Color(0xFF0F172A),
+                          ),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(vertical: 2),
+                            border: InputBorder.none,
+                          ),
+                          onSubmitted: (next) {
+                            final trimmed = next.trim();
+                            if (trimmed.isEmpty) {
+                              _cancelInlineEdit();
+                            } else {
+                              onCommitAxis(trimmed);
+                            }
+                          },
+                        ),
+                      )
+                    else
+                      Text(
+                        val,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: widget.isDark
+                              ? const Color(0xFFE2E8F0)
+                              : const Color(0xFF0F172A),
+                        ),
+                      ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -898,49 +1022,5 @@ class _GodotInspectorPanelState extends State<GodotInspectorPanel> {
       return (tuple.group(1)!, tuple.group(2)!);
     }
     return null;
-  }
-
-  String _inferNodeIcon(String target, {required bool isLevel}) {
-    final lower = target.toLowerCase();
-    if (isLevel) {
-      if (lower.contains('spawn') || lower.contains('marker')) return '🚩';
-      if (lower.contains('light')) return '☀';
-      return '🧊';
-    }
-    if (lower.contains('camera')) return '🎥';
-    if (lower.contains('characterbody')) return '🏃';
-    if (lower.contains('mesh') || lower.contains('sprite')) return '🧱';
-    if (lower.contains('collision')) return '⬭';
-    if (lower.contains('timer')) return '⏱';
-    if (lower.contains('area')) return '🎯';
-    if (lower.contains('audio') || lower.contains('sound')) return '🔊';
-    return '🧩';
-  }
-
-  String _inferNodeType(String target, {required bool isLevel}) {
-    final parenMatch = RegExp(r'\(([^)]+)\)\s*$').firstMatch(target);
-    if (parenMatch != null) return parenMatch.group(1)!.trim();
-    final lower = target.toLowerCase();
-    if (isLevel) {
-      if (lower.contains('spawn') || lower.contains('marker')) {
-        return lower.contains('2d') ? 'Marker2D' : 'Marker3D';
-      }
-      if (lower.contains('light')) return 'DirectionalLight3D';
-      return 'StaticBody3D';
-    }
-    if (lower.contains('camera2d')) return 'Camera2D';
-    if (lower.contains('camera')) return 'Camera3D';
-    if (lower.contains('characterbody2d')) return 'CharacterBody2D';
-    if (lower.contains('characterbody')) return 'CharacterBody3D';
-    if (lower.contains('collisionshape2d')) return 'CollisionShape2D';
-    if (lower.contains('collision')) return 'CollisionShape3D';
-    if (lower.contains('timer')) return 'Timer';
-    if (lower.contains('area2d')) return 'Area2D';
-    if (lower.contains('area')) return 'Area3D';
-    if (lower.contains('sprite')) return 'Sprite2D';
-    if (lower.contains('mesh')) return 'MeshInstance3D';
-    if (lower.contains('ray')) return 'RayCast3D';
-    if (lower.contains('audio')) return 'AudioStreamPlayer';
-    return 'Node';
   }
 }

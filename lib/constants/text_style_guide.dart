@@ -16,8 +16,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 - Feature Goals & In-Scope (Changelog +Delta): Direct 5-10 word summary of concrete mechanics/deltas (e.g. "+6-pellet cone spread, +knockback impulse" for upgrades; "Magnetic ore shard spawn on enemy kill" for new features). NEVER start feature goals with "Build a playable..." or "Upgrade <Feature> into/with..." and NEVER copy-paste raw user instructions verbatim.
 - Done When, Playtest Gates & Verify (Causal Trigger -> Result): "[Player Action] -> [Observable Screen Result]" (<= 14 words, e.g. "Press Fire within 4m of target -> 6 pellets fan out + push enemy back 2.5m"). NEVER use FPS/60fps targets.
 - Concept Spec Cells (02 Game Spec & 03 Tech Spec): Strictly 2-4 Title-Case words naming the concrete setup (e.g. "3D First-Person", "WASD + Mouse", "Singleplayer", "Rooftop Garden Hub", "Godot 4 (GDScript)", "PC Desktop"). NEVER write narrative sentences, explanatory preambles ("with...", "featuring..."), or punctuation.
-- Parent Task Group Titles & Goals (tasks[]): tasks[].title = strictly 2-4 Title-Case words naming the specific scene node, UI widget, data resource, or gameplay calculation for that task (e.g. "Shard Physics Hull", "Merchant Trade Panel", "Backpack Weight Counter", "Hitscan Recoil Ray"; NO verbs, NO 3-item lists, NO "(2h)" tags, and NEVER use generic template suffixes like "Body & Collision", "Prop & Collision", "Action & Math", "Cue & Clamp", or "Cue & Boundary Clamp"); tasks[].goal = 1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").
-- Sub-Step Titles & Instructions (Imperative Runbook): subSteps[].title = 3-4 Title-Case "Verb + Object" words (e.g. "Spawn 6 Pellet Raycasts", NO "STEP X.Y" prefix); instruction = 1 imperative sentence (<= 18 words) starting with a command verb + exact node/script and tuning value.''';
+- Unified Step Titles & Instructions (Imperative Runbook, Single Feature Step List): Emit 1 flat Godot-dock-ordered steps[] array (3-7 cohesive steps per checkpoint: editor_setup -> inspector_setup -> script_logic -> wire_and_verify; NO nested T1..T3 parent tasks). steps[].title = 3-4 Title-Case "Verb + Object" words (e.g. "Build Dash Child Nodes", "Spawn 6 Pellet Raycasts", NO "STEP X.Y" prefix); instruction = 1-3 crisp newline-separated command bullets (<= 18 words each) naming the exact node/script and tuning value.''';
 
   // ── Stage 1: Concept Blueprint Schema Descriptions ────────────────────────
 
@@ -454,12 +453,13 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 
   static const List<String> stepPhaseRoleEnum = <String>[
     'editor_setup',
+    'inspector_setup',
     'script_logic',
     'wire_and_verify',
   ];
 
   static const String stepPhaseRoleSchemaDesc =
-      'Intra-task runbook beat: editor_setup (create Scene/Hierarchy nodes, Colliders, Collision Layers, or exported Inspector properties FIRST), script_logic (add/extend functions & math on primarySharedScriptOrScene SECOND), or wire_and_verify (connect signals/events/Inspector refs & verify THIRD).';
+      'Godot workflow dock beat inside a Feature Build Queue: editor_setup (create/attach Scene Tree child nodes in .tscn FIRST), inspector_setup (bind InputMap, Collision Layers, and @export Inspector properties SECOND), script_logic (add/extend functions & math on primarySharedScriptOrScene THIRD), or wire_and_verify (connect Node Signals & verify F6 FOURTH).';
 
   static const List<String> verifyModeEnum = <String>[
     'editor',

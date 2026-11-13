@@ -610,17 +610,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           cp.parameters.removeWhere(
             (k, _) => k.startsWith('synthesized_') || k.endsWith('_steps_json'),
           );
-          for (int tIdx = 0; tIdx < cp.checklist.length; tIdx++) {
-            final task = cp.checklist[tIdx];
-            task.children = [];
-            TaskHowToBlueprint.resolve(
-              parentTask: task,
-              taskIndex: tIdx,
-              checkpointNode: cp,
-              engineHint: newEngineHint,
-              phase: _currentPhase,
-            );
-          }
+          cp.checklist = [];
+          TaskHowToBlueprint.populateDefaultUnifiedSteps(
+            cp,
+            engineHint: newEngineHint,
+            phase: _currentPhase,
+          );
         }
         FeatureStateNode.saveStatesToDocument(featDoc, states);
         _persistDocument(featDoc);
@@ -908,11 +903,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         final newFeatId = 'feat_${newBeatId}_1';
         final playtestGate =
             'Trigger $featTitle in the test scene -> ${sBeat.description} completes cleanly';
-        final starterTasks = <String>[
-          'Create actor/node structure and base properties for $featTitle (2h)',
-          'Implement core state transitions and player input for $featTitle (1h)',
-          'Hook visual/audio feedback cues and state guard for $featTitle (1h)',
-        ];
+        final starterTasks = ReleasePlannerAgent.defaultDockStepTitles(
+          subject: featTitle,
+        );
         final starterGuards = <String>[
           '[STATE GUARD] Block duplicate $featTitle activation while active',
         ];
@@ -921,28 +914,20 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           name: 'Checkpoint 1: $featTitle',
           trigger: 'Playtest: $playtestGate',
           order: 0,
-          checklist: [
-            for (int tIdx = 0; tIdx < starterTasks.length; tIdx++)
-              Subtask(
-                id: '${newFeatId}_t_${tIdx + 1}',
-                text: starterTasks[tIdx],
-                completed: false,
-              ),
-          ],
           coveredScope: [featTitle],
           tuningParams: List<String>.from(_kSyncStarterTuning),
           edgeCases: starterGuards,
-          parameters: {'releaseVersion': activeVer},
+          parameters: {
+            'releaseVersion': activeVer,
+            if (starterTasks.isNotEmpty)
+              'plannedSlices': starterTasks.join(' | '),
+          },
         );
-        for (int tIdx = 0; tIdx < cpNode.checklist.length; tIdx++) {
-          TaskHowToBlueprint.resolve(
-            parentTask: cpNode.checklist[tIdx],
-            taskIndex: tIdx,
-            checkpointNode: cpNode,
-            engineHint: _activeEngineHint,
-            phase: _currentPhase,
-          );
-        }
+        TaskHowToBlueprint.populateDefaultUnifiedSteps(
+          cpNode,
+          engineHint: _activeEngineHint,
+          phase: _currentPhase,
+        );
         final newFeatDoc = TierDocument(
           id: newFeatId,
           title: featTitle,

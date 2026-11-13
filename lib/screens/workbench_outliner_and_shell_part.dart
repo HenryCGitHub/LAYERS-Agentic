@@ -141,23 +141,26 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     TierDocument feat,
     List<FeatureStateNode> states,
     int cpIdx,
-    String rawTitle,
-  ) {
+    String rawTitle, {
+    GodotDockStage dockStage = GodotDockStage.code,
+  }) {
     final trimmed = rawTitle.trim();
     if (trimmed.isEmpty || cpIdx < 0 || cpIdx >= states.length) return;
     final cpNode = states[cpIdx];
-    final newIdx = widget.workbench.addBuildTaskToCheckpointWithAi(
+    final newIdx = widget.workbench.addUnifiedStepToCheckpoint(
       featureId: feat.id,
       states: states,
       checkpointIndex: cpIdx,
-      rawTaskTitle: trimmed,
+      title: trimmed,
+      dockStage: dockStage,
+      tailorWithAi: true,
     );
     if (newIdx < 0) return;
     _rebuild(() {
       _manualCheckpointFocusIndex = cpIdx;
       _manualCheckpointFocusFeatureId = feat.id;
-      _selectedTaskIndexByCheckpoint[cpNode.id] = newIdx;
-      _selectedSubStepIndexByTask['${cpNode.id}_$newIdx'] = 0;
+      _playtestGateActiveCheckpoints.remove(cpNode.id);
+      _selectedFlatStepIndexByCheckpoint[cpNode.id] = newIdx;
     });
   }
 
@@ -203,882 +206,663 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         ..addAll(beats.where((b) => b.id != openBeatId).map((b) => b.id));
     }
 
-    final topHeader = rel == null
-        ? const SizedBox.shrink()
-        : Container(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: borderSubtle),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                  // Left: Release Selector Dropdown Pill ("v0.1 Prototype ▾")
-                  Flexible(
-                    child: PopupMenuButton<String>(
-                      key: const ValueKey('release_selector_dropdown_btn'),
-                      color: bgSurface,
-                      tooltip: 'Switch Release View or Evolve Scope',
-                      onSelected: (value) {
-                        if (value == '__progressive_release__') {
-                          _showProgressiveNextReleaseModal(context);
-                        } else if (value == '__view_release_plan__') {
-                          _showSavedReleasePlanDialog(context, rel);
-                        } else if (value == '__view_fp_blueprint__') {
-                          _showFullProductionBlueprintModal(
-                            context,
-                            readOnly: true,
-                          );
-                        } else if (value.startsWith('rel:')) {
-                          final targetId = value.substring(4);
-                          final targetDoc = widget.workbench.documents[targetId];
-                          if (targetDoc != null &&
-                              targetDoc.childrenIds.isEmpty &&
-                              targetId != rel.id) {
-                            _showProgressiveNextReleaseModal(context);
-                          } else {
-                            _rebuild(() {
-                              _manualCheckpointFocusIndex = null;
-                              _manualCheckpointFocusFeatureId = null;
-                            });
-                            widget.workbench.selectActiveRelease(targetId);
-                          }
-                        } else {
-                          widget.workbench.setReleaseViewFilter(value);
-                        }
-                      },
-                      itemBuilder: (context) {
-                        final builtReleases = releases
-                            .where((r) => r.childrenIds.isNotEmpty)
-                            .toList();
-                        final displayReleases = builtReleases.isNotEmpty
-                            ? builtReleases
-                            : releases;
-                        final isRelComplete =
-                            widget.workbench.isActiveReleaseComplete;
+    final topHeader = _buildOutlinerReleaseHeader(
+      rel,
+      beats: beats,
+      relProgress: relProgress,
+      releases: releases,
+      archivedFeats: archivedFeats,
+      activeVer: activeVer,
+      releaseRemHoursStr: releaseRemHoursStr,
+      isReleaseDone: isReleaseDone,
+      isOverlayDrawer: isOverlayDrawer,
+    );
 
-                        final byPhase = <ProductionPhase, List<TierDocument>>{
-                          for (final p in ProductionPhase.values) p: <TierDocument>[],
-                        };
-                        for (final r in displayReleases) {
-                          final p = widget.workbench.releasePhaseFor(r);
-                          byPhase[p]!.add(r);
-                        }
+    final middleScrollable = _buildOutlinerScrollBody(
+      beats: beats,
+      archivedFeats: archivedFeats,
+      activeVer: activeVer,
+      isConceptActive: isConceptActive,
+      hasBuiltFeatures: hasBuiltFeatures,
+      hasConceptDraft: hasConceptDraft,
+      conceptBadgeText: conceptBadgeText,
+      isOverlayDrawer: isOverlayDrawer,
+    );
 
-                        String phaseGroupHeader(ProductionPhase p) {
-                          switch (p) {
-                            case ProductionPhase.prototype:
-                              return '01 · PROTOTYPE (GREYBOX LOOP)';
-                            case ProductionPhase.mvp:
-                              return '02 · MVP (FUNCTIONAL DEPTH)';
-                            case ProductionPhase.verticalSlice:
-                              return '03 · VERTICAL SLICE (POLISH PASS)';
-                            case ProductionPhase.fullProduction:
-                              return '04 · FULL PRODUCTION (V1.0 CONTENT)';
-                            case ProductionPhase.postLaunch:
-                              return '05 · POST-LAUNCH & LIVE OPS (V1.1+)';
-                          }
-                        }
+    final bottomFooter = _buildOutlinerFooterActions(
+      beats,
+      isOverlayDrawer: isOverlayDrawer,
+    );
 
-                        final menuItems = <PopupMenuEntry<String>>[
-                          PopupMenuItem<String>(
-                            enabled: false,
-                            height: 26,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'RELEASES · BY PHASE',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.9,
-                                    color: textMuted,
-                                  ),
-                                ),
-                                Text(
-                                  '${displayReleases.length} Shipped',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: textSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF080A0F) : bgRecessed,
+        border: Border(
+          right: BorderSide(
+            color: isOverlayDrawer
+                ? borderBright
+                : (isDark ? const Color(0x14FFFFFF) : borderSubtle),
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          topHeader,
+          Expanded(child: middleScrollable),
+          bottomFooter,
+        ],
+      ),
+    );
+  }
+
+  bool _isOutlinerFeatureDone(TierDocument feat) {
+    final progress = widget.workbench.getDocumentProgress(feat.id);
+    final remMins = _computeFeatureRemainingMinutes(feat);
+    return progress >= 100 || remMins <= 0;
+  }
+
+  Widget _buildOutlinerReleaseHeader(
+    TierDocument? rel, {
+    required List<TierDocument> beats,
+    required int relProgress,
+    required List<TierDocument> releases,
+    required List<TierDocument> archivedFeats,
+    required String activeVer,
+    required String releaseRemHoursStr,
+    required bool isReleaseDone,
+    required bool isOverlayDrawer,
+  }) {
+    if (rel == null) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: borderSubtle),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Flexible(
+            child: PopupMenuButton<String>(
+              key: const ValueKey('release_selector_dropdown_btn'),
+              color: bgSurface,
+              tooltip: 'Switch Release View or Evolve Scope',
+              onSelected: (value) {
+                if (value == '__progressive_release__') {
+                  _showProgressiveNextReleaseModal(context);
+                } else if (value == '__view_release_plan__') {
+                  _showSavedReleasePlanDialog(context, rel);
+                } else if (value == '__view_fp_blueprint__') {
+                  _showFullProductionBlueprintModal(
+                    context,
+                    readOnly: true,
+                  );
+                } else if (value.startsWith('rel:')) {
+                  final targetId = value.substring(4);
+                  final targetDoc = widget.workbench.documents[targetId];
+                  if (targetDoc != null &&
+                      targetDoc.childrenIds.isEmpty &&
+                      targetId != rel.id) {
+                    _showProgressiveNextReleaseModal(context);
+                  } else {
+                    _rebuild(() {
+                      _manualCheckpointFocusIndex = null;
+                      _manualCheckpointFocusFeatureId = null;
+                    });
+                    widget.workbench.selectActiveRelease(targetId);
+                  }
+                } else {
+                  widget.workbench.setReleaseViewFilter(value);
+                }
+              },
+              itemBuilder: (context) {
+                final builtReleases =
+                    releases.where((r) => r.childrenIds.isNotEmpty).toList();
+                final displayReleases =
+                    builtReleases.isNotEmpty ? builtReleases : releases;
+                final isRelComplete = widget.workbench.isActiveReleaseComplete;
+
+                final byPhase = <ProductionPhase, List<TierDocument>>{
+                  for (final p in ProductionPhase.values) p: <TierDocument>[],
+                };
+                for (final r in displayReleases) {
+                  final p = widget.workbench.releasePhaseFor(r);
+                  byPhase[p]!.add(r);
+                }
+
+                String phaseGroupHeader(ProductionPhase p) {
+                  switch (p) {
+                    case ProductionPhase.prototype:
+                      return '01 · PROTOTYPE (GREYBOX LOOP)';
+                    case ProductionPhase.mvp:
+                      return '02 · MVP (FUNCTIONAL DEPTH)';
+                    case ProductionPhase.verticalSlice:
+                      return '03 · VERTICAL SLICE (POLISH PASS)';
+                    case ProductionPhase.fullProduction:
+                      return '04 · FULL PRODUCTION (V1.0 CONTENT)';
+                    case ProductionPhase.postLaunch:
+                      return '05 · POST-LAUNCH & LIVE OPS (V1.1+)';
+                  }
+                }
+
+                final menuItems = <PopupMenuEntry<String>>[
+                  PopupMenuItem<String>(
+                    enabled: false,
+                    height: 26,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'RELEASES · BY PHASE',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.9,
+                            color: textMuted,
                           ),
-                        ];
-
-                        for (final phase in ProductionPhase.values) {
-                          final groupRels = byPhase[phase]!;
-                          final hasActiveInGroup =
-                              groupRels.any((r) => r.id == rel.id);
-                          if (groupRels.isEmpty) {
-                            menuItems.add(
-                              PopupMenuItem<String>(
-                                enabled: false,
-                                height: 22,
-                                child: Text(
-                                  '${phaseGroupHeader(phase)} — UPCOMING',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: textMuted.withValues(alpha: 0.55),
-                                  ),
-                                ),
-                              ),
-                            );
-                            continue;
-                          }
-
-                          final doneInGroup = groupRels
-                              .where(
-                                (r) =>
-                                    widget.workbench.getDocumentProgress(r.id) >=
-                                    100,
-                              )
-                              .length;
-                          menuItems.add(
-                            PopupMenuItem<String>(
-                              enabled: false,
-                              height: 24,
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      phaseGroupHeader(phase),
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 9.5,
-                                        fontWeight: hasActiveInGroup
-                                            ? FontWeight.w800
-                                            : FontWeight.w700,
-                                        color: hasActiveInGroup
-                                            ? textPrimary
-                                            : textMuted,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    hasActiveInGroup
-                                        ? 'ACTIVE'
-                                        : '$doneInGroup / ${groupRels.length}',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: hasActiveInGroup
-                                          ? textPrimary
-                                          : textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-
-                          for (final r in groupRels) {
-                            final isCurrent = r.id == rel.id;
-                            final rVer =
-                                widget.workbench.releaseVersionTagFor(r);
-                            final rDisplayName =
-                                widget.workbench.releaseDisplayName(r);
-                            final rProg =
-                                widget.workbench.getDocumentProgress(r.id);
-                            menuItems.add(
-                              PopupMenuItem<String>(
-                                value: 'rel:${r.id}',
-                                height: 36,
-                                child: Container(
-                                  margin: const EdgeInsets.only(left: 6),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 5,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isCurrent
-                                        ? bgRecessed
-                                        : Colors.transparent,
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: isCurrent
-                                        ? Border.all(
-                                            color: borderBright,
-                                          )
-                                        : Border(
-                                            left: BorderSide(
-                                              color: hasActiveInGroup
-                                                  ? borderBright
-                                                  : borderSubtle,
-                                              width: 2,
-                                            ),
-                                          ),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Flexible(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Text(
-                                              isCurrent ? '● ' : '✓ ',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: isCurrent
-                                                    ? textPrimary
-                                                    : textMuted,
-                                              ),
-                                            ),
-                                            Text(
-                                              '$rVer ',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 11,
-                                                fontWeight: isCurrent
-                                                    ? FontWeight.w700
-                                                    : FontWeight.w600,
-                                                color: isCurrent
-                                                    ? textPrimary
-                                                    : textSecondary,
-                                              ),
-                                            ),
-                                            Flexible(
-                                              child: Text(
-                                                rDisplayName,
-                                                style: GoogleFonts.inter(
-                                                  fontSize: 11.5,
-                                                  fontWeight: isCurrent
-                                                      ? FontWeight.w700
-                                                      : FontWeight.w500,
-                                                  color: isCurrent
-                                                      ? textPrimary
-                                                      : textMuted,
-                                                ),
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      if (isCurrent)
-                                        Text(
-                                          '$relProgress% · $releaseRemHoursStr left',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: textSecondary,
-                                          ),
-                                        )
-                                      else
-                                        Text(
-                                          '$rProg%',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: textMuted,
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
-                        }
-
-                        if (builtReleases.length > 1 ||
-                            widget.workbench.releaseViewFilter != 'active') {
-                          final currentFilter =
-                              widget.workbench.releaseViewFilter;
-                          menuItems.add(const PopupMenuDivider());
-                          menuItems.add(
-                            PopupMenuItem<String>(
-                              value: 'active',
-                              height: 32,
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      '🎯 Active Milestone Only ($activeVer)',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11.5,
-                                        fontWeight: currentFilter == 'active'
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        color: currentFilter == 'active'
-                                            ? textPrimary
-                                            : textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                  if (currentFilter == 'active')
-                                    Text(
-                                      '✓',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: textPrimary,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                          menuItems.add(
-                            PopupMenuItem<String>(
-                              value: 'all',
-                              height: 32,
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      '🌐 All Live Game Features (Include STABLE ✓)',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 11.5,
-                                        fontWeight: currentFilter == 'all'
-                                            ? FontWeight.w700
-                                            : FontWeight.w500,
-                                        color: currentFilter == 'all'
-                                            ? textPrimary
-                                            : textSecondary,
-                                      ),
-                                    ),
-                                  ),
-                                  if (currentFilter == 'all')
-                                    Text(
-                                      '✓',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: textPrimary,
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        if (archivedFeats.isNotEmpty) {
-                          menuItems.add(const PopupMenuDivider());
-                          menuItems.add(
-                            PopupMenuItem<String>(
-                              value: 'archived',
-                              child: Text(
-                                '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
-                                style: GoogleFonts.inter(
-                                  fontSize: 11.5,
-                                  color: textSecondary,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-
-                        menuItems.add(const PopupMenuDivider());
-                        menuItems.add(
-                          PopupMenuItem<String>(
-                            value: '__view_release_plan__',
-                            height: 36,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    '📋 View $activeVer Release Plan',
-                                    overflow: TextOverflow.ellipsis,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Saved Ledger',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                        if (widget.workbench.fullProductionBlueprint != null &&
-                            widget.workbench.fullProductionCoverage()
-                                .skeletonBuilt) {
-                          menuItems.add(
-                            PopupMenuItem<String>(
-                              value: '__view_fp_blueprint__',
-                              height: 34,
-                              child: Text(
-                                '📋 View Full Production Blueprint',
-                                overflow: TextOverflow.ellipsis,
-                                style: GoogleFonts.inter(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: textPrimary,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-                        menuItems.add(
-                          PopupMenuItem<String>(
-                            value: '__progressive_release__',
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 7,
-                              ),
-                              decoration: BoxDecoration(
-                                color: bgRecessed,
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: borderSubtle),
-                              ),
-                              child: Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      isRelComplete
-                                          ? '+ Plan Next Release (${widget.workbench.nextProgressiveVersionLabel})'
-                                          : '🔒 Complete $activeVer ($relProgress%) to unlock ${widget.workbench.nextProgressiveVersionLabel}',
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.inter(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: isRelComplete
-                                            ? const Color(0xFF10B981)
-                                            : textMuted,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    isRelComplete ? 'AI Co-Pilot ✦' : 'LOCKED',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: isRelComplete
-                                          ? const Color(0xFF10B981)
-                                          : textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        );
-
-                        return menuItems;
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 2,
-                          vertical: 3,
                         ),
-                        child: RichText(
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          text: TextSpan(
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: textPrimary,
+                        Text(
+                          '${displayReleases.length} Shipped',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ];
+
+                for (final phase in ProductionPhase.values) {
+                  final groupRels = byPhase[phase]!;
+                  final hasActiveInGroup = groupRels.any((r) => r.id == rel.id);
+                  if (groupRels.isEmpty) {
+                    menuItems.add(
+                      PopupMenuItem<String>(
+                        enabled: false,
+                        height: 22,
+                        child: Text(
+                          '${phaseGroupHeader(phase)} — UPCOMING',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: textMuted.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ),
+                    );
+                    continue;
+                  }
+
+                  final doneInGroup = groupRels
+                      .where((r) => widget.workbench.getDocumentProgress(r.id) >= 100)
+                      .length;
+                  menuItems.add(
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      height: 24,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              phaseGroupHeader(phase),
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 9.5,
+                                fontWeight: hasActiveInGroup
+                                    ? FontWeight.w800
+                                    : FontWeight.w700,
+                                color: hasActiveInGroup ? textPrimary : textMuted,
+                              ),
                             ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            hasActiveInGroup
+                                ? 'ACTIVE'
+                                : '$doneInGroup / ${groupRels.length}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: hasActiveInGroup ? textPrimary : textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+
+                  for (final r in groupRels) {
+                    final isCurrent = r.id == rel.id;
+                    final rVer = widget.workbench.releaseVersionTagFor(r);
+                    final rDisplayName =
+                        widget.workbench.releaseDisplayName(r);
+                    final rProg = widget.workbench.getDocumentProgress(r.id);
+                    menuItems.add(
+                      PopupMenuItem<String>(
+                        value: 'rel:${r.id}',
+                        height: 36,
+                        child: Container(
+                          margin: const EdgeInsets.only(left: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isCurrent ? bgRecessed : Colors.transparent,
+                            borderRadius: BorderRadius.circular(5),
+                            border: isCurrent
+                                ? Border.all(color: borderBright)
+                                : Border(
+                                    left: BorderSide(
+                                      color: hasActiveInGroup
+                                          ? borderBright
+                                          : borderSubtle,
+                                      width: 2,
+                                    ),
+                                  ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              TextSpan(
-                                text: '$activeVer · ',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: textPrimary,
+                              Flexible(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      isCurrent ? '● ' : '✓ ',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: isCurrent ? textPrimary : textMuted,
+                                      ),
+                                    ),
+                                    Text(
+                                      '$rVer ',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11,
+                                        fontWeight: isCurrent
+                                            ? FontWeight.w700
+                                            : FontWeight.w600,
+                                        color: isCurrent
+                                            ? textPrimary
+                                            : textSecondary,
+                                      ),
+                                    ),
+                                    Flexible(
+                                      child: Text(
+                                        rDisplayName,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 11.5,
+                                          fontWeight: isCurrent
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                          color: isCurrent ? textPrimary : textMuted,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-                              TextSpan(
-                                text:
-                                    '${widget.workbench.releaseDisplayName(rel)} ▾',
-                                style: GoogleFonts.inter(
-                                  fontSize: 13,
+                              const SizedBox(width: 10),
+                              Text(
+                                isCurrent
+                                    ? '$relProgress% · $releaseRemHoursStr left'
+                                    : '$rProg%',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10,
                                   fontWeight: FontWeight.w600,
-                                  color: textSecondary,
+                                  color: isCurrent ? textSecondary : textMuted,
                                 ),
                               ),
                             ],
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Right: Clean single percentage ("0%" / "25%" / "100%"), plus Close button in Half-Screen Slide-Over mode
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '$relProgress%',
-                        key: const ValueKey('outline_release_eta_summary'),
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
-                          color: isReleaseDone ? textPrimary : textMuted,
-                        ),
-                      ),
-                      if (isOverlayDrawer) ...[
-                        const SizedBox(width: 8),
-                        InkWell(
-                          key: const ValueKey(
-                            'close_halfscreen_outliner_btn',
-                          ),
-                          onTap: () {
-                            _rebuild(() {
-                              _isHalfScreenOutlinerOpen = false;
-                            });
-                          },
-                          borderRadius: BorderRadius.circular(4),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 5,
-                              vertical: 3,
-                            ),
-                            child: Text(
-                              '✕',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ],
-              ),
-            );
+                    );
+                  }
+                }
 
-    final middleScrollable = SingleChildScrollView(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: borderSubtle),
-              ),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
-                  child: Text(
-                    'Project',
-                    style: GoogleFonts.inter(
-                      fontSize: fontMicro,
-                      fontWeight: weightSemi,
-                      color: textMuted,
-                    ),
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    color: isConceptActive ? bgSurface : Colors.transparent,
-                    borderRadius: BorderRadius.circular(6),
-                    border: isConceptActive
-                        ? Border.all(color: borderSubtle)
-                        : null,
-                  ),
-                  child: InkWell(
-                    key: const ValueKey('rail_concept_blueprint_btn'),
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: () {
-                      if (_isProgressiveModalOpen) {
-                        _closeProgressiveReleasePlanner(confirmed: false);
-                      }
-                      if (isOverlayDrawer) {
-                        _rebuild(() {
-                          _isHalfScreenOutlinerOpen = false;
-                        });
-                      }
-                      widget.workbench.setStage(WorkbenchStage.projectPitch);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
+                if (builtReleases.length > 1 ||
+                    widget.workbench.releaseViewFilter != 'active') {
+                  final currentFilter = widget.workbench.releaseViewFilter;
+                  menuItems.add(const PopupMenuDivider());
+                  menuItems.add(
+                    PopupMenuItem<String>(
+                      value: 'active',
+                      height: 32,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Flexible(
                             child: Text(
-                              'Concept Blueprint',
-                              maxLines: 1,
+                              '🎯 Active Milestone Only ($activeVer)',
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
-                                fontSize: fontMicro,
-                                fontWeight: isConceptActive
-                                    ? weightSemi
-                                    : weightRegular,
-                                color: isConceptActive
+                                fontSize: 11.5,
+                                fontWeight: currentFilter == 'active'
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: currentFilter == 'active'
                                     ? textPrimary
                                     : textSecondary,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            conceptBadgeText,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: fontMicro,
-                              fontWeight: weightSemi,
-                              color: hasBuiltFeatures
-                                  ? accentEmerald
-                                  : (hasConceptDraft
-                                      ? textSecondary
-                                      : textMuted),
+                          if (currentFilter == 'active')
+                            Text(
+                              '✓',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: textPrimary,
+                              ),
                             ),
-                          ),
                         ],
                       ),
                     ),
-                  ),
-                ),
-                if (widget.workbench.fullProductionBlueprint != null &&
-                    widget.workbench.fullProductionCoverage().skeletonBuilt) ...[
-                  const SizedBox(height: 2),
-                  InkWell(
-                    key: const ValueKey('rail_fp_blueprint_btn'),
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: () => _showFullProductionBlueprintModal(
-                      context,
-                      readOnly: true,
+                  );
+                  menuItems.add(
+                    PopupMenuItem<String>(
+                      value: 'all',
+                      height: 32,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              '🌐 All Live Game Features (Include STABLE ✓)',
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight: currentFilter == 'all'
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: currentFilter == 'all'
+                                    ? textPrimary
+                                    : textSecondary,
+                              ),
+                            ),
+                          ),
+                          if (currentFilter == 'all')
+                            Text(
+                              '✓',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: textPrimary,
+                              ),
+                            ),
+                        ],
+                      ),
                     ),
-                    child: Padding(
+                  );
+                }
+
+                if (archivedFeats.isNotEmpty) {
+                  menuItems.add(const PopupMenuDivider());
+                  menuItems.add(
+                    PopupMenuItem<String>(
+                      value: 'archived',
+                      child: Text(
+                        '🗄 Superseded Testbeds Archive (${archivedFeats.length})',
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+
+                menuItems.add(const PopupMenuDivider());
+                menuItems.add(
+                  PopupMenuItem<String>(
+                    value: '__view_release_plan__',
+                    height: 36,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            '📋 View $activeVer Release Plan',
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Saved Ledger',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+                if (widget.workbench.fullProductionBlueprint != null &&
+                    widget.workbench.fullProductionCoverage().skeletonBuilt) {
+                  menuItems.add(
+                    PopupMenuItem<String>(
+                      value: '__view_fp_blueprint__',
+                      height: 34,
+                      child: Text(
+                        '📋 View Full Production Blueprint',
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                menuItems.add(
+                  PopupMenuItem<String>(
+                    value: '__progressive_release__',
+                    child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 10,
                         vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: bgRecessed,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: borderSubtle),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Flexible(
                             child: Text(
-                              'v1.0 Blueprint',
-                              maxLines: 1,
+                              isRelComplete
+                                  ? '+ Plan Next Release (${widget.workbench.nextProgressiveVersionLabel})'
+                                  : '🔒 Complete $activeVer ($relProgress%) to unlock ${widget.workbench.nextProgressiveVersionLabel}',
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
-                                fontSize: fontMicro,
-                                fontWeight: weightRegular,
-                                color: textSecondary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: isRelComplete
+                                    ? const Color(0xFF10B981)
+                                    : textMuted,
                               ),
                             ),
                           ),
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 8),
                           Text(
-                            '06/06 ✓',
+                            isRelComplete ? 'AI Co-Pilot ✦' : 'LOCKED',
                             style: GoogleFonts.jetBrainsMono(
-                              fontSize: fontMicro,
-                              fontWeight: weightSemi,
-                              color: accentEmerald,
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: isRelComplete
+                                  ? const Color(0xFF10B981)
+                                  : textMuted,
                             ),
                           ),
                         ],
                       ),
                     ),
                   ),
-                ],
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-            decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Color(0x14FFFFFF)),
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '01 · RELEASE MAP',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: fontMicro,
-                    fontWeight: weightBold,
-                    letterSpacing: 0.7,
-                    color: const Color(0xFF64748B),
-                  ),
-                ),
-                if (beats.isNotEmpty || archivedFeats.isNotEmpty)
-                  InkWell(
-                    key: const ValueKey('toggle_outliner_search_btn'),
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: () {
-                      _rebuild(() {
-                        _isOutlinerSearchOpen = !_isOutlinerSearchOpen;
-                        if (!_isOutlinerSearchOpen &&
-                            _outlinerSearchQuery.isNotEmpty) {
-                          _outlinerSearchController.clear();
-                          _outlinerSearchQuery = '';
-                        }
-                      });
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
-                      ),
-                      child: Text(
-                        '⌕',
-                        style: GoogleFonts.inter(
-                          fontSize: 12.5,
-                          color: (_isOutlinerSearchOpen ||
-                                  _outlinerSearchQuery.isNotEmpty)
-                              ? textPrimary
-                              : textMuted,
-                        ),
-                      ),
+                );
+
+                return menuItems;
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                child: RichText(
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  text: TextSpan(
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: textPrimary,
                     ),
-                  ),
-              ],
-            ),
-          ),
-          if (beats.isNotEmpty || archivedFeats.isNotEmpty) ...[
-            if (_isOutlinerSearchOpen || _outlinerSearchQuery.trim().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
-                child: Container(
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: bgSurface,
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(
-                      color: _outlinerSearchQuery.trim().isNotEmpty
-                          ? borderBright
-                          : borderSubtle,
-                    ),
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
                     children: [
-                      Expanded(
-                        child: TextField(
-                          key: const ValueKey('outliner_feature_search_input'),
-                          controller: _outlinerSearchController,
-                          onChanged: (val) {
-                            _rebuild(() {
-                              _outlinerSearchQuery = val;
-                            });
-                          },
-                          style: GoogleFonts.inter(
-                            fontSize: 11.5,
-                            color: textPrimary,
-                          ),
-                          decoration: InputDecoration(
-                            hintText: 'Filter features...',
-                            hintStyle: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              color: textMuted,
-                            ),
-                            border: InputBorder.none,
-                            isDense: true,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 5),
-                          ),
+                      TextSpan(
+                        text: '$activeVer · ',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
                         ),
                       ),
-                      if (_outlinerSearchQuery.isNotEmpty)
-                        InkWell(
-                          key: const ValueKey('clear_outliner_search_btn'),
-                          onTap: () {
-                            _outlinerSearchController.clear();
-                            _rebuild(() {
-                              _outlinerSearchQuery = '';
-                            });
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(2),
-                            child: Text(
-                              '✕',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: textMuted,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-          ],
-          if (widget.workbench.releaseViewFilter == 'archived' &&
-              archivedFeats.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'ARCHIVED TESTBEDS (${archivedFeats.length})',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: textMuted,
-                      ),
-                    ),
-                  ),
-                  InkWell(
-                    key: const ValueKey('return_from_archive_btn'),
-                    borderRadius: BorderRadius.circular(4),
-                    onTap: () =>
-                        widget.workbench.setReleaseViewFilter('active'),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
-                      ),
-                      child: Text(
-                        '← Active',
+                      TextSpan(
+                        text: '${widget.workbench.releaseDisplayName(rel)} ▾',
                         style: GoogleFonts.inter(
-                          fontSize: 11.5,
+                          fontSize: 13,
                           fontWeight: FontWeight.w600,
                           color: textSecondary,
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-            for (final arch in archivedFeats)
-              _buildFeatureRailItem(
-                arch,
-                activeVer: activeVer,
-                isOverlayDrawer: isOverlayDrawer,
+          ),
+          const SizedBox(width: 8),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$relProgress%',
+                key: const ValueKey('outline_release_eta_summary'),
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: isReleaseDone ? textPrimary : textMuted,
+                ),
               ),
+              if (isOverlayDrawer) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  key: const ValueKey('close_halfscreen_outliner_btn'),
+                  onTap: () {
+                    _rebuild(() {
+                      _isHalfScreenOutlinerOpen = false;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 3,
+                    ),
+                    child: Text(
+                      '✕',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutlinerScrollBody({
+    required List<TierDocument> beats,
+    required List<TierDocument> archivedFeats,
+    required String activeVer,
+    required bool isConceptActive,
+    required bool hasBuiltFeatures,
+    required bool hasConceptDraft,
+    required String conceptBadgeText,
+    required bool isOverlayDrawer,
+  }) {
+    final releaseHasActiveFeats = beats.any(
+      (b) => widget.workbench.featuresForBeat(b.id).any(
+            (f) => widget.workbench.isFeatureActiveInRelease(f),
+          ),
+    );
+    final showAllLiveFeatures = widget.workbench.releaseViewFilter == 'all';
+    final hasActiveFilter =
+        _filterOutlinerTodoOnly || _outlinerSearchQuery.trim().isNotEmpty;
+
+    int visibleFeatureCount = 0;
+    if (widget.workbench.releaseViewFilter != 'archived') {
+      for (final beat in beats) {
+        final allBeatFeats = widget.workbench.featuresForBeat(beat.id);
+        final baseBeatFeats = (!showAllLiveFeatures && releaseHasActiveFeats)
+            ? allBeatFeats
+                .where((f) => widget.workbench.isFeatureActiveInRelease(f))
+                .toList()
+            : allBeatFeats;
+        for (final feat in baseBeatFeats) {
+          if (_outlinerSearchQuery.trim().isNotEmpty &&
+              !_featureMatchesOutlinerSearch(feat, _outlinerSearchQuery)) {
+            continue;
+          }
+          if (_filterOutlinerTodoOnly && _isOutlinerFeatureDone(feat)) {
+            continue;
+          }
+          visibleFeatureCount++;
+        }
+      }
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildOutlinerProjectSection(
+            isConceptActive: isConceptActive,
+            hasBuiltFeatures: hasBuiltFeatures,
+            hasConceptDraft: hasConceptDraft,
+            conceptBadgeText: conceptBadgeText,
+            isOverlayDrawer: isOverlayDrawer,
+          ),
+          _buildOutlinerSearchAndFilterBar(
+            beats: beats,
+            archivedFeats: archivedFeats,
+          ),
+          if (widget.workbench.releaseViewFilter == 'archived' &&
+              archivedFeats.isNotEmpty) ...[
+            _buildOutlinerArchivedList(
+              archivedFeats: archivedFeats,
+              activeVer: activeVer,
+              isOverlayDrawer: isOverlayDrawer,
+            ),
           ] else ...[
             if (beats.isEmpty && widget.workbench.isAgentBusy)
               Padding(
@@ -1111,516 +895,907 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   ],
                 ),
               ),
-            Builder(
-              builder: (context) {
-                final releaseHasActiveFeats = beats.any(
-                  (b) => widget.workbench.featuresForBeat(b.id).any(
-                        (f) => widget.workbench.isFeatureActiveInRelease(f),
-                      ),
-                );
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+            for (int bIdx = 0; bIdx < beats.length; bIdx++)
+              _buildOutlinerEpicSection(
+                beats: beats,
+                beatIndex: bIdx,
+                activeVer: activeVer,
+                releaseHasActiveFeats: releaseHasActiveFeats,
+                showAllLiveFeatures: showAllLiveFeatures,
+                isOverlayDrawer: isOverlayDrawer,
+              ),
+            if (beats.isNotEmpty &&
+                hasActiveFilter &&
+                visibleFeatureCount == 0 &&
+                !widget.workbench.isAgentBusy)
+              Container(
+                key: const ValueKey('outliner_empty_filter_state'),
+                margin: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D121D),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: borderSubtle),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (int bIdx = 0; bIdx < beats.length; bIdx++)
-                      Builder(
-                        builder: (context) {
-                          final beat = beats[bIdx];
-                          final allBeatFeats =
-                              widget.workbench.featuresForBeat(beat.id);
-                          final showAllLiveFeatures =
-                              widget.workbench.releaseViewFilter == 'all';
-                          final baseBeatFeats = (!showAllLiveFeatures &&
-                                  releaseHasActiveFeats)
-                              ? allBeatFeats
-                                  .where(
-                                    (f) => widget.workbench
-                                        .isFeatureActiveInRelease(f),
-                                  )
-                                  .toList()
-                              : allBeatFeats;
-                          final beatFeats = _outlinerSearchQuery.trim().isEmpty
-                              ? baseBeatFeats
-                              : baseBeatFeats
-                                  .where(
-                                    (f) => _featureMatchesOutlinerSearch(
-                                      f,
-                                      _outlinerSearchQuery,
-                                    ),
-                                  )
-                                  .toList();
-                          final isSynthesizingBeat = widget.workbench
-                              .isSynthesizingBeatFeatures(beat.id);
-                          if (beatFeats.isEmpty &&
-                              allBeatFeats.isNotEmpty &&
-                              !isSynthesizingBeat &&
-                              _activeStage2InlineEditKey !=
-                                  'add_feat_${beat.id}') {
-                            return const SizedBox.shrink();
-                          }
-                          final doneBeatCount = beatFeats
-                              .where(
-                                (f) =>
-                                    widget.workbench
-                                        .getDocumentProgress(f.id) >=
-                                    100,
-                              )
-                              .length;
-                          final allBeatDone = beatFeats.isNotEmpty &&
-                              doneBeatCount == beatFeats.length;
-                          final isBeatActive = beatFeats.any(
-                            (f) => f.id == widget.workbench.selectedFeatureId,
-                          );
-                          final isExpanded =
-                              !_collapsedBeatIds.contains(beat.id) ||
-                              _outlinerSearchQuery.trim().isNotEmpty ||
-                              _activeStage2InlineEditKey ==
-                                  'add_feat_${beat.id}';
-
-                          final rawBeatGoal = (beat.sections['goal'] ??
-                                  beat.sections['summary'] ??
-                                  beat.sections['description'] ??
-                                  '')
-                              .trim();
-                          final beatDisplayTitle =
-                              _formatOutlineBeatDisplayTitle(beat.title);
-
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Container(
-                                padding:
-                                    const EdgeInsets.fromLTRB(10, 8, 10, 4),
-                                child: InkWell(
-                                  key: ValueKey('rail_beat_${beat.id}'),
-                                  borderRadius: BorderRadius.circular(6),
-                                  onTap: () {
-                                    final wasCollapsed =
-                                        _collapsedBeatIds.contains(beat.id);
-                                    _rebuild(() {
-                                      if (wasCollapsed) {
-                                        // Single-accordion: collapse all other Epics and open only this Epic
-                                        _collapsedBeatIds
-                                          ..clear()
-                                          ..addAll(
-                                            beats
-                                                .where((b) => b.id != beat.id)
-                                                .map((b) => b.id),
-                                          );
-                                      } else {
-                                        _collapsedBeatIds.add(beat.id);
-                                      }
-                                    });
-                                    if (beatFeats.isNotEmpty &&
-                                        !_collapsedBeatIds.contains(beat.id) &&
-                                        !isBeatActive) {
-                                      if (_isProgressiveModalOpen) {
-                                        _closeProgressiveReleasePlanner(
-                                          confirmed: false,
-                                        );
-                                      }
-                                      final targetFeat = beatFeats.firstWhere(
-                                        (f) =>
-                                            widget.workbench
-                                                .getDocumentProgress(f.id) <
-                                            100,
-                                        orElse: () => beatFeats.first,
-                                      );
-                                      _rebuild(() {
-                                        _manualCheckpointFocusIndex = null;
-                                        _lastSyncedAccordionFeatureId =
-                                            targetFeat.id;
-                                      });
-                                      widget.workbench
-                                          .selectFeature(targetFeat.id);
-                                    }
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,
-                                      vertical: 3,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.center,
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        // Unnumbered [E] micro-square tier badge (18x18px, 4px radius)
-                                        Container(
-                                          width: 18,
-                                          height: 18,
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            color: allBeatDone
-                                                ? const Color(0xFF10B981)
-                                                    .withValues(alpha: 0.14)
-                                                : (isExpanded || isBeatActive)
-                                                    ? const Color(0xFF38BDF8)
-                                                        .withValues(alpha: 0.14)
-                                                    : const Color(0x0EFFFFFF),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                            border: Border.all(
-                                              color: allBeatDone
-                                                  ? const Color(0xFF10B981)
-                                                      .withValues(alpha: 0.36)
-                                                  : (isExpanded || isBeatActive)
-                                                      ? const Color(0xFF38BDF8)
-                                                          .withValues(
-                                                            alpha: 0.34,
-                                                          )
-                                                      : const Color(0x1CFFFFFF),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            'E',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: fontMicro,
-                                              fontWeight: weightBold,
-                                              height: 1.0,
-                                              color: allBeatDone
-                                                  ? const Color(0xFF6EE7B7)
-                                                  : (isExpanded || isBeatActive)
-                                                      ? const Color(0xFF7DD3FC)
-                                                      : const Color(0xFF64748B),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 7),
-                                        Expanded(
-                                          child: Text(
-                                            beatDisplayTitle,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                            style: GoogleFonts.inter(
-                                              fontSize: fontMicro,
-                                              fontWeight: weightSemi,
-                                              color: allBeatDone
-                                                  ? textMuted
-                                                  : (isBeatActive || isExpanded
-                                                      ? const Color(0xFFF8FAFC)
-                                                      : const Color(
-                                                          0xFFCBD5E1,
-                                                        )),
-                                            ),
-                                          ),
-                                        ),
-                                        if (isSynthesizingBeat) ...[
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            'Building…',
-                                            key: ValueKey(
-                                              'rail_beat_synthesizing_${beat.id}',
-                                            ),
-                                            style: GoogleFonts.inter(
-                                              fontSize: fontMicro,
-                                              fontWeight: weightSemi,
-                                              color: const Color(0xFFFBBF24),
-                                            ),
-                                          ),
-                                        ] else if (beatFeats.isEmpty) ...[
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            'Waiting',
-                                            style: GoogleFonts.inter(
-                                              fontSize: fontMicro,
-                                              fontWeight: weightSemi,
-                                              color: textMuted,
-                                            ),
-                                          ),
-                                        ] else ...[
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 2,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: allBeatDone
-                                                  ? const Color(0xFF10B981)
-                                                      .withValues(alpha: 0.12)
-                                                  : const Color(0x0FFFFFFF),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              border: Border.all(
-                                                color: allBeatDone
-                                                    ? const Color(0xFF10B981)
-                                                        .withValues(alpha: 0.36)
-                                                    : const Color(0x16FFFFFF),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              allBeatDone
-                                                  ? 'DONE'
-                                                  : '$doneBeatCount/${beatFeats.length}',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: fontMicro,
-                                                fontWeight: weightBold,
-                                                color: allBeatDone
-                                                    ? const Color(0xFF6EE7B7)
-                                                    : const Color(0xFF94A3B8),
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              if (isExpanded && rawBeatGoal.isNotEmpty)
-                                Container(
-                                  margin:
-                                      const EdgeInsets.fromLTRB(16, 0, 12, 5),
-                                  padding:
-                                      const EdgeInsets.fromLTRB(9, 6, 9, 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF0B0E15),
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(
-                                      color: const Color(0xFF38BDF8)
-                                          .withValues(alpha: 0.28),
-                                    ),
-                                  ),
-                                  child: RichText(
-                                    text: TextSpan(
-                                      style: GoogleFonts.inter(
-                                        fontSize: fontMicro,
-                                        fontWeight: weightRegular,
-                                        height: 1.38,
-                                        color: const Color(0xFF94A3B8),
-                                      ),
-                                      children: [
-                                        TextSpan(
-                                          text: 'WHY: ',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: fontMicro,
-                                            fontWeight: weightBold,
-                                            letterSpacing: 0.4,
-                                            color: const Color(0xFF7DD3FC),
-                                          ),
-                                        ),
-                                        TextSpan(text: rawBeatGoal),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              if (_activeStage2InlineEditKey ==
-                                  'add_feat_${beat.id}')
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(14, 2, 14, 6),
-                                  child: _buildStage2InlineEditor(
-                                    editKey: 'add_feat_${beat.id}',
-                                    inputKey: const ValueKey(
-                                      'workbench_add_live_feature_input',
-                                    ),
-                                    saveBtnKey: const ValueKey(
-                                      'confirm_workbench_add_live_feature_btn',
-                                    ),
-                                    hintText:
-                                        'New feature (e.g. Shield Parry)...',
-                                    onSave: (val) {
-                                      _rebuild(() {
-                                        _manualCheckpointFocusIndex = null;
-                                        _manualCheckpointFocusFeatureId = null;
-                                      });
-                                      widget.workbench.addLiveFeatureToBeat(
-                                        beat.id,
-                                        val,
-                                      );
-                                    },
-                                  ),
-                                ),
-                              if (isExpanded) ...[
-                                for (int fIdx = 0;
-                                    fIdx < beatFeats.length;
-                                    fIdx++)
-                                  _buildFeatureRailItem(
-                                    beatFeats[fIdx],
-                                    activeVer: activeVer,
-                                    beatTitle: beat.title,
-                                    beatIndex: bIdx,
-                                    isOverlayDrawer: isOverlayDrawer,
-                                  ),
-                                Padding(
-                                  padding:
-                                      const EdgeInsets.fromLTRB(8, 1, 8, 2),
-                                  child: InkWell(
-                                    key: ValueKey(
-                                      'rail_add_feat_to_beat_${beat.id}',
-                                    ),
-                                    borderRadius: BorderRadius.circular(5),
-                                    onTap: () {
-                                      _collapsedBeatIds
-                                        ..clear()
-                                        ..addAll(
-                                          beats
-                                              .where((b) => b.id != beat.id)
-                                              .map((b) => b.id),
-                                        );
-                                      _startStage2InlineEdit(
-                                        'add_feat_${beat.id}',
-                                        '',
-                                      );
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.fromLTRB(
-                                        18,
-                                        4,
-                                        8,
-                                        4,
-                                      ),
-                                      child: Text(
-                                        '+ Add feature',
-                                        style: GoogleFonts.inter(
-                                          fontSize: fontMicro,
-                                          fontWeight: weightRegular,
-                                          color: textMuted,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          );
-                        },
+                    Text(
+                      _filterOutlinerTodoOnly &&
+                              _outlinerSearchQuery.trim().isEmpty
+                          ? 'All features in this release are done ✓'
+                          : 'No features match current filter',
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: textSecondary,
                       ),
-                    if (_activeStage2InlineEditKey == 'add_epic')
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
-                        child: _buildStage2InlineEditor(
-                          editKey: 'add_epic',
-                          inputKey: const ValueKey(
-                            'workbench_add_live_epic_input',
-                          ),
-                          saveBtnKey: const ValueKey(
-                            'confirm_workbench_add_live_epic_btn',
-                          ),
-                          hintText:
-                              'New Epic (e.g. Save & Meta-Progression)...',
-                          onSave: (val) {
-                            _rebuild(() {
-                              _manualCheckpointFocusIndex = null;
-                              _manualCheckpointFocusFeatureId = null;
-                            });
-                            widget.workbench.addLiveEpicToActiveRelease(val);
-                          },
-                        ),
-                      )
-                    else if (beats.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: InkWell(
-                            key: const ValueKey('rail_add_epic_btn'),
-                            borderRadius: BorderRadius.circular(5),
-                            onTap: () => _startStage2InlineEdit('add_epic', ''),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 4,
-                              ),
-                              child: Text(
-                                '+ Add Epic',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: fontMicro,
-                                  fontWeight: weightSemi,
-                                  color: textMuted,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-                    else if (!widget.workbench.isAgentBusy)
-                      Padding(
-                        key: const ValueKey('rail_pre_release_empty_state'),
-                        padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: borderSubtle),
-                          ),
-                          child: Text(
-                            'No release built yet — approve Concept Blueprint to generate v0.1.',
-                            style: GoogleFonts.inter(
-                              fontSize: 11.5,
-                              height: 1.45,
-                              color: textMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                    Builder(
-                      builder: (context) {
-                        final showAllLiveFeatures =
-                            widget.workbench.releaseViewFilter == 'all';
-                        int stableCount = 0;
-                        if (releaseHasActiveFeats) {
-                          for (final b in beats) {
-                            for (final f
-                                in widget.workbench.featuresForBeat(b.id)) {
-                              if (!widget.workbench
-                                      .isFeatureActiveInRelease(f) &&
-                                  f.sections['lifecycle'] !=
-                                      FeatureLifecycleStatus.superseded.name) {
-                                stableCount++;
-                              }
-                            }
-                          }
-                        }
-                        if (stableCount <= 0) return const SizedBox.shrink();
-                        return Padding(
-                          padding: const EdgeInsets.fromLTRB(14, 2, 14, 4),
-                          child: Align(
-                            alignment: Alignment.centerLeft,
-                            child: InkWell(
-                              key: const ValueKey(
-                                'rail_toggle_stable_features_btn',
-                              ),
-                              borderRadius: BorderRadius.circular(5),
-                              onTap: () =>
-                                  widget.workbench.setReleaseViewFilter(
-                                showAllLiveFeatures ? 'active' : 'all',
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 4,
-                                ),
-                                child: Text(
-                                  showAllLiveFeatures
-                                      ? 'Hide STABLE ✓ ($stableCount)'
-                                      : 'Show STABLE ✓ ($stableCount)',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: showAllLiveFeatures
-                                        ? accentEmerald
-                                        : textMuted,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
+                    ),
+                    const SizedBox(height: 6),
+                    InkWell(
+                      key: const ValueKey('outliner_empty_reset_filter_btn'),
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: () {
+                        _outlinerSearchController.clear();
+                        _rebuild(() {
+                          _outlinerSearchQuery = '';
+                          _filterOutlinerTodoOnly = false;
+                        });
                       },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 2,
+                          vertical: 2,
+                        ),
+                        child: Text(
+                          'Reset Filter',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF7DD3FC),
+                          ),
+                        ),
+                      ),
                     ),
                   ],
-                );
-              },
+                ),
+              ),
+            if (_activeStage2InlineEditKey == 'add_epic')
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
+                child: _buildStage2InlineEditor(
+                  editKey: 'add_epic',
+                  inputKey: const ValueKey('workbench_add_live_epic_input'),
+                  saveBtnKey: const ValueKey(
+                    'confirm_workbench_add_live_epic_btn',
+                  ),
+                  hintText: 'New Epic (e.g. Save & Meta-Progression)...',
+                  onSave: (val) {
+                    _rebuild(() {
+                      _manualCheckpointFocusIndex = null;
+                      _manualCheckpointFocusFeatureId = null;
+                    });
+                    widget.workbench.addLiveEpicToActiveRelease(val);
+                  },
+                ),
+              )
+            else if (beats.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: InkWell(
+                    key: const ValueKey('rail_add_epic_btn'),
+                    borderRadius: BorderRadius.circular(5),
+                    onTap: () => _startStage2InlineEdit('add_epic', ''),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 4,
+                      ),
+                      child: Text(
+                        '+ Add Epic',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: fontMicro,
+                          fontWeight: weightSemi,
+                          color: textMuted,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else if (!widget.workbench.isAgentBusy)
+              Padding(
+                key: const ValueKey('rail_pre_release_empty_state'),
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: borderSubtle),
+                  ),
+                  child: Text(
+                    'No release built yet — approve Concept Blueprint to generate v0.1.',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      height: 1.45,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
+              ),
+            _buildOutlinerStableToggle(
+              beats: beats,
+              releaseHasActiveFeats: releaseHasActiveFeats,
+              showAllLiveFeatures: showAllLiveFeatures,
             ),
           ],
           const SizedBox(height: 8),
         ],
       ),
     );
+  }
 
-    final bottomFooter = Container(
+  Widget _buildOutlinerProjectSection({
+    required bool isConceptActive,
+    required bool hasBuiltFeatures,
+    required bool hasConceptDraft,
+    required String conceptBadgeText,
+    required bool isOverlayDrawer,
+  }) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: borderSubtle),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(6, 2, 6, 4),
+            child: Text(
+              'Project',
+              style: GoogleFonts.inter(
+                fontSize: fontMicro,
+                fontWeight: weightSemi,
+                color: textMuted,
+              ),
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              color: isConceptActive ? bgSurface : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+              border: isConceptActive ? Border.all(color: borderSubtle) : null,
+            ),
+            child: InkWell(
+              key: const ValueKey('rail_concept_blueprint_btn'),
+              borderRadius: BorderRadius.circular(6),
+              onTap: () {
+                if (_isProgressiveModalOpen) {
+                  _closeProgressiveReleasePlanner(confirmed: false);
+                }
+                if (isOverlayDrawer) {
+                  _rebuild(() {
+                    _isHalfScreenOutlinerOpen = false;
+                  });
+                }
+                widget.workbench.setStage(WorkbenchStage.projectPitch);
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'Concept Blueprint',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: fontMicro,
+                          fontWeight:
+                              isConceptActive ? weightSemi : weightRegular,
+                          color: isConceptActive ? textPrimary : textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      conceptBadgeText,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: fontMicro,
+                        fontWeight: weightSemi,
+                        color: hasBuiltFeatures
+                            ? accentEmerald
+                            : (hasConceptDraft ? textSecondary : textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (widget.workbench.fullProductionBlueprint != null &&
+              widget.workbench.fullProductionCoverage().skeletonBuilt) ...[
+            const SizedBox(height: 2),
+            InkWell(
+              key: const ValueKey('rail_fp_blueprint_btn'),
+              borderRadius: BorderRadius.circular(6),
+              onTap: () => _showFullProductionBlueprintModal(
+                context,
+                readOnly: true,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        'v1.0 Blueprint',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: fontMicro,
+                          fontWeight: weightRegular,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '06/06 ✓',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: fontMicro,
+                        fontWeight: weightSemi,
+                        color: accentEmerald,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOutlinerSearchAndFilterBar({
+    required List<TierDocument> beats,
+    required List<TierDocument> archivedFeats,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+          decoration: const BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: Color(0x14FFFFFF)),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '01 · RELEASE MAP',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: fontMicro,
+                  fontWeight: weightBold,
+                  letterSpacing: 0.7,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
+              if (beats.isNotEmpty || archivedFeats.isNotEmpty)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (beats.isNotEmpty)
+                      InkWell(
+                        key: const ValueKey('toggle_outliner_todo_filter_btn'),
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: () {
+                          _rebuild(() {
+                            _filterOutlinerTodoOnly =
+                                !_filterOutlinerTodoOnly;
+                          });
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          margin: const EdgeInsets.only(right: 4),
+                          decoration: BoxDecoration(
+                            color: _filterOutlinerTodoOnly
+                                ? const Color(0xFF0E293D)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: _filterOutlinerTodoOnly
+                                  ? const Color(0xFF38BDF8)
+                                      .withValues(alpha: 0.55)
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Text(
+                            'Todo',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: _filterOutlinerTodoOnly
+                                  ? weightBold
+                                  : weightSemi,
+                              color: _filterOutlinerTodoOnly
+                                  ? const Color(0xFF7DD3FC)
+                                  : textMuted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    InkWell(
+                      key: const ValueKey('toggle_outliner_search_btn'),
+                      borderRadius: BorderRadius.circular(4),
+                      onTap: () {
+                        _rebuild(() {
+                          _isOutlinerSearchOpen = !_isOutlinerSearchOpen;
+                          if (!_isOutlinerSearchOpen &&
+                              _outlinerSearchQuery.isNotEmpty) {
+                            _outlinerSearchController.clear();
+                            _outlinerSearchQuery = '';
+                          }
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 4,
+                          vertical: 2,
+                        ),
+                        child: Text(
+                          '⌕',
+                          style: GoogleFonts.inter(
+                            fontSize: 12.5,
+                            color: (_isOutlinerSearchOpen ||
+                                    _outlinerSearchQuery.isNotEmpty)
+                                ? textPrimary
+                                : textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
+        ),
+        if ((beats.isNotEmpty || archivedFeats.isNotEmpty) &&
+            (_isOutlinerSearchOpen || _outlinerSearchQuery.trim().isNotEmpty))
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+            child: Container(
+              height: 28,
+              decoration: BoxDecoration(
+                color: bgSurface,
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: _outlinerSearchQuery.trim().isNotEmpty
+                      ? borderBright
+                      : borderSubtle,
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('outliner_feature_search_input'),
+                      controller: _outlinerSearchController,
+                      onChanged: (val) {
+                        _rebuild(() {
+                          _outlinerSearchQuery = val;
+                        });
+                      },
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        color: textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Filter features...',
+                        hintStyle: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: textMuted,
+                        ),
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 5),
+                      ),
+                    ),
+                  ),
+                  if (_outlinerSearchQuery.isNotEmpty)
+                    InkWell(
+                      key: const ValueKey('clear_outliner_search_btn'),
+                      onTap: () {
+                        _outlinerSearchController.clear();
+                        _rebuild(() {
+                          _outlinerSearchQuery = '';
+                        });
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(2),
+                        child: Text(
+                          '✕',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildOutlinerArchivedList({
+    required List<TierDocument> archivedFeats,
+    required String activeVer,
+    required bool isOverlayDrawer,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'ARCHIVED TESTBEDS (${archivedFeats.length})',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: textMuted,
+                  ),
+                ),
+              ),
+              InkWell(
+                key: const ValueKey('return_from_archive_btn'),
+                borderRadius: BorderRadius.circular(4),
+                onTap: () => widget.workbench.setReleaseViewFilter('active'),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  child: Text(
+                    '← Active',
+                    style: GoogleFonts.inter(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: textSecondary,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        for (final arch in archivedFeats)
+          _buildFeatureRailItem(
+            arch,
+            activeVer: activeVer,
+            isOverlayDrawer: isOverlayDrawer,
+          ),
+      ],
+    );
+  }
+
+  Widget _buildOutlinerEpicSection({
+    required List<TierDocument> beats,
+    required int beatIndex,
+    required String activeVer,
+    required bool releaseHasActiveFeats,
+    required bool showAllLiveFeatures,
+    required bool isOverlayDrawer,
+  }) {
+    final beat = beats[beatIndex];
+    final allBeatFeats = widget.workbench.featuresForBeat(beat.id);
+    final baseBeatFeats = (!showAllLiveFeatures && releaseHasActiveFeats)
+        ? allBeatFeats
+            .where((f) => widget.workbench.isFeatureActiveInRelease(f))
+            .toList()
+        : allBeatFeats;
+    final filteredSearchFeats = _outlinerSearchQuery.trim().isEmpty
+        ? baseBeatFeats
+        : baseBeatFeats
+            .where(
+              (f) => _featureMatchesOutlinerSearch(f, _outlinerSearchQuery),
+            )
+            .toList();
+    final beatFeats = _filterOutlinerTodoOnly
+        ? filteredSearchFeats.where((f) => !_isOutlinerFeatureDone(f)).toList()
+        : filteredSearchFeats;
+    final isSynthesizingBeat =
+        widget.workbench.isSynthesizingBeatFeatures(beat.id);
+    if (beatFeats.isEmpty &&
+        allBeatFeats.isNotEmpty &&
+        !isSynthesizingBeat &&
+        _activeStage2InlineEditKey != 'add_feat_${beat.id}') {
+      return const SizedBox.shrink();
+    }
+
+    final totalDoneCount =
+        filteredSearchFeats.where(_isOutlinerFeatureDone).length;
+    final doneBeatCount = beatFeats
+        .where((f) => widget.workbench.getDocumentProgress(f.id) >= 100)
+        .length;
+    final allBeatDone =
+        beatFeats.isNotEmpty && doneBeatCount == beatFeats.length;
+    final isBeatActive = beatFeats.any(
+      (f) => f.id == widget.workbench.selectedFeatureId,
+    );
+    final isExpanded = !_collapsedBeatIds.contains(beat.id) ||
+        _outlinerSearchQuery.trim().isNotEmpty ||
+        _filterOutlinerTodoOnly ||
+        _activeStage2InlineEditKey == 'add_feat_${beat.id}';
+
+    final rawBeatGoal = (beat.sections['goal'] ??
+            beat.sections['summary'] ??
+            beat.sections['description'] ??
+            '')
+        .trim();
+    final beatDisplayTitle = _formatOutlineBeatDisplayTitle(beat.title);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(10, 8, 10, 4),
+          child: InkWell(
+            key: ValueKey('rail_beat_${beat.id}'),
+            borderRadius: BorderRadius.circular(6),
+            onTap: () {
+              final wasCollapsed = _collapsedBeatIds.contains(beat.id);
+              _rebuild(() {
+                if (wasCollapsed) {
+                  _collapsedBeatIds
+                    ..clear()
+                    ..addAll(
+                      beats.where((b) => b.id != beat.id).map((b) => b.id),
+                    );
+                } else {
+                  _collapsedBeatIds.add(beat.id);
+                }
+              });
+              if (beatFeats.isNotEmpty &&
+                  !_collapsedBeatIds.contains(beat.id) &&
+                  !isBeatActive) {
+                if (_isProgressiveModalOpen) {
+                  _closeProgressiveReleasePlanner(confirmed: false);
+                }
+                final targetFeat = beatFeats.firstWhere(
+                  (f) => widget.workbench.getDocumentProgress(f.id) < 100,
+                  orElse: () => beatFeats.first,
+                );
+                _rebuild(() {
+                  _manualCheckpointFocusIndex = null;
+                  _lastSyncedAccordionFeatureId = targetFeat.id;
+                });
+                widget.workbench.selectFeature(targetFeat.id);
+              }
+            },
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    width: 18,
+                    height: 18,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: allBeatDone
+                          ? const Color(0xFF10B981).withValues(alpha: 0.14)
+                          : (isExpanded || isBeatActive)
+                              ? const Color(0xFF38BDF8).withValues(alpha: 0.14)
+                              : const Color(0x0EFFFFFF),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: allBeatDone
+                            ? const Color(0xFF10B981).withValues(alpha: 0.36)
+                            : (isExpanded || isBeatActive)
+                                ? const Color(0xFF38BDF8)
+                                    .withValues(alpha: 0.34)
+                                : const Color(0x1CFFFFFF),
+                      ),
+                    ),
+                    child: Text(
+                      'E',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: fontMicro,
+                        fontWeight: weightBold,
+                        height: 1.0,
+                        color: allBeatDone
+                            ? const Color(0xFF6EE7B7)
+                            : (isExpanded || isBeatActive)
+                                ? const Color(0xFF7DD3FC)
+                                : const Color(0xFF64748B),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      beatDisplayTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: fontMicro,
+                        fontWeight: weightSemi,
+                        color: allBeatDone
+                            ? textMuted
+                            : (isBeatActive || isExpanded
+                                ? const Color(0xFFF8FAFC)
+                                : const Color(0xFFCBD5E1)),
+                      ),
+                    ),
+                  ),
+                  if (isSynthesizingBeat) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      'Building…',
+                      key: ValueKey('rail_beat_synthesizing_${beat.id}'),
+                      style: GoogleFonts.inter(
+                        fontSize: fontMicro,
+                        fontWeight: weightSemi,
+                        color: const Color(0xFFFBBF24),
+                      ),
+                    ),
+                  ] else if (beatFeats.isEmpty) ...[
+                    const SizedBox(width: 6),
+                    Text(
+                      'Waiting',
+                      style: GoogleFonts.inter(
+                        fontSize: fontMicro,
+                        fontWeight: weightSemi,
+                        color: textMuted,
+                      ),
+                    ),
+                  ] else ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: allBeatDone
+                            ? const Color(0xFF10B981).withValues(alpha: 0.12)
+                            : const Color(0x0FFFFFFF),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                          color: allBeatDone
+                              ? const Color(0xFF10B981).withValues(alpha: 0.36)
+                              : const Color(0x16FFFFFF),
+                        ),
+                      ),
+                      child: Text(
+                        allBeatDone
+                            ? 'DONE'
+                            : '$doneBeatCount/${beatFeats.length}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: fontMicro,
+                          fontWeight: weightBold,
+                          color: allBeatDone
+                              ? const Color(0xFF6EE7B7)
+                              : const Color(0xFF94A3B8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (isExpanded && filteredSearchFeats.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 12, 4),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(2),
+              child: LinearProgressIndicator(
+                value: totalDoneCount / filteredSearchFeats.length,
+                minHeight: 2,
+                backgroundColor: const Color(0xFF141C2B),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  allBeatDone ? accentEmerald : const Color(0xFF38BDF8),
+                ),
+              ),
+            ),
+          ),
+        if (isExpanded && rawBeatGoal.isNotEmpty)
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 12, 5),
+            padding: const EdgeInsets.fromLTRB(9, 6, 9, 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0B0E15),
+              borderRadius: BorderRadius.circular(5),
+              border: Border.all(
+                color: const Color(0xFF38BDF8).withValues(alpha: 0.28),
+              ),
+            ),
+            child: RichText(
+              text: TextSpan(
+                style: GoogleFonts.inter(
+                  fontSize: fontMicro,
+                  fontWeight: weightRegular,
+                  height: 1.38,
+                  color: const Color(0xFF94A3B8),
+                ),
+                children: [
+                  TextSpan(
+                    text: 'WHY: ',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: fontMicro,
+                      fontWeight: weightBold,
+                      letterSpacing: 0.4,
+                      color: const Color(0xFF7DD3FC),
+                    ),
+                  ),
+                  TextSpan(text: rawBeatGoal),
+                ],
+              ),
+            ),
+          ),
+        if (_activeStage2InlineEditKey == 'add_feat_${beat.id}')
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
+            child: _buildStage2InlineEditor(
+              editKey: 'add_feat_${beat.id}',
+              inputKey: const ValueKey('workbench_add_live_feature_input'),
+              saveBtnKey: const ValueKey(
+                'confirm_workbench_add_live_feature_btn',
+              ),
+              hintText: 'New feature (e.g. Shield Parry)...',
+              onSave: (val) {
+                _rebuild(() {
+                  _manualCheckpointFocusIndex = null;
+                  _manualCheckpointFocusFeatureId = null;
+                });
+                widget.workbench.addLiveFeatureToBeat(beat.id, val);
+              },
+            ),
+          ),
+        if (isExpanded) ...[
+          for (int fIdx = 0; fIdx < beatFeats.length; fIdx++)
+            _buildFeatureRailItem(
+              beatFeats[fIdx],
+              activeVer: activeVer,
+              beatTitle: beat.title,
+              beatIndex: beatIndex,
+              isOverlayDrawer: isOverlayDrawer,
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(8, 1, 8, 2),
+            child: InkWell(
+              key: ValueKey('rail_add_feat_to_beat_${beat.id}'),
+              borderRadius: BorderRadius.circular(5),
+              onTap: () {
+                _collapsedBeatIds
+                  ..clear()
+                  ..addAll(beats.where((b) => b.id != beat.id).map((b) => b.id));
+                _startStage2InlineEdit('add_feat_${beat.id}', '');
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 4, 8, 4),
+                child: Text(
+                  '+ Add feature',
+                  style: GoogleFonts.inter(
+                    fontSize: fontMicro,
+                    fontWeight: weightRegular,
+                    color: textMuted,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildOutlinerStableToggle({
+    required List<TierDocument> beats,
+    required bool releaseHasActiveFeats,
+    required bool showAllLiveFeatures,
+  }) {
+    int stableCount = 0;
+    if (releaseHasActiveFeats) {
+      for (final b in beats) {
+        for (final f in widget.workbench.featuresForBeat(b.id)) {
+          if (!widget.workbench.isFeatureActiveInRelease(f) &&
+              f.sections['lifecycle'] != FeatureLifecycleStatus.superseded.name) {
+            stableCount++;
+          }
+        }
+      }
+    }
+    if (stableCount <= 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 2, 14, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: InkWell(
+          key: const ValueKey('rail_toggle_stable_features_btn'),
+          borderRadius: BorderRadius.circular(5),
+          onTap: () => widget.workbench.setReleaseViewFilter(
+            showAllLiveFeatures ? 'active' : 'all',
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Text(
+              showAllLiveFeatures
+                  ? 'Hide STABLE ✓ ($stableCount)'
+                  : 'Show STABLE ✓ ($stableCount)',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: showAllLiveFeatures ? accentEmerald : textMuted,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOutlinerFooterActions(
+    List<TierDocument> beats, {
+    required bool isOverlayDrawer,
+  }) {
+    final pendingCount = widget.workbench.pendingFeatureInboxItems.length;
+    final scheduledCount = widget.workbench.scheduledFeatureInboxItems.length;
+    final totalInbox = pendingCount + scheduledCount;
+    final releaseHasActiveFeats = beats.any(
+      (b) => widget.workbench.featuresForBeat(b.id).any(
+            (f) => widget.workbench.isFeatureActiveInRelease(f),
+          ),
+    );
+    int totalActiveFeats = 0;
+    int verifiedFeats = 0;
+    for (final b in beats) {
+      for (final f in widget.workbench.featuresForBeat(b.id)) {
+        if (releaseHasActiveFeats &&
+            !widget.workbench.isFeatureActiveInRelease(f)) {
+          continue;
+        }
+        totalActiveFeats++;
+        if (widget.workbench.getDocumentProgress(f.id) >= 100) {
+          verifiedFeats++;
+        }
+      }
+    }
+    final isRelComplete = widget.workbench.isActiveReleaseComplete;
+    final nextVerLabel = widget.workbench.nextProgressiveVersionLabel;
+    final nextReleaseRightLabel = isRelComplete
+        ? 'ready →'
+        : (totalActiveFeats > 0 ? '$verifiedFeats/$totalActiveFeats done' : 'locked');
+
+    return Container(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
       decoration: BoxDecoration(
         color: bgRecessed,
@@ -1632,193 +1807,115 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Builder(
-            builder: (context) {
-              final pendingCount =
-                  widget.workbench.pendingFeatureInboxItems.length;
-              final scheduledCount =
-                  widget.workbench.scheduledFeatureInboxItems.length;
-              final totalInbox = pendingCount + scheduledCount;
-              return InkWell(
-                key: const ValueKey('open_feature_inbox_btn'),
-                onTap: () => _showFeatureInboxModal(context),
-                borderRadius: BorderRadius.circular(5),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 5,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          'Inbox',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            fontSize: fontMicro,
-                            fontWeight: weightSemi,
-                            color: textSecondary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$totalInbox',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: fontMicro,
-                          fontWeight: weightSemi,
-                          color: pendingCount > 0 ? accentEmerald : textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
-          Builder(
-            builder: (context) {
-              final releaseHasActiveFeats = beats.any(
-                (b) => widget.workbench.featuresForBeat(b.id).any(
-                      (f) => widget.workbench.isFeatureActiveInRelease(f),
-                    ),
-              );
-              int totalActiveFeats = 0;
-              int verifiedFeats = 0;
-              for (final b in beats) {
-                for (final f in widget.workbench.featuresForBeat(b.id)) {
-                  if (releaseHasActiveFeats &&
-                      !widget.workbench.isFeatureActiveInRelease(f)) {
-                    continue;
-                  }
-                  totalActiveFeats++;
-                  if (widget.workbench.getDocumentProgress(f.id) >= 100) {
-                    verifiedFeats++;
-                  }
-                }
-              }
-              final isRelComplete = widget.workbench.isActiveReleaseComplete;
-              final nextVerLabel =
-                  widget.workbench.nextProgressiveVersionLabel;
-              final nextReleaseRightLabel = isRelComplete
-                  ? 'ready →'
-                  : (totalActiveFeats > 0
-                      ? '$verifiedFeats/$totalActiveFeats done'
-                      : 'locked');
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
+          InkWell(
+            key: const ValueKey('open_feature_inbox_btn'),
+            onTap: () => _showFeatureInboxModal(context),
+            borderRadius: BorderRadius.circular(5),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  InkWell(
-                    key: const ValueKey('open_playtest_run_sheet_btn'),
-                    onTap: () => _showPlaytestRunSheetModal(context),
-                    borderRadius: BorderRadius.circular(5),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              'Playtest',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: fontMicro,
-                                fontWeight: weightSemi,
-                                color: textSecondary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '$verifiedFeats/$totalActiveFeats',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: fontMicro,
-                              fontWeight: weightSemi,
-                              color: isRelComplete ? accentEmerald : textMuted,
-                            ),
-                          ),
-                        ],
+                  Flexible(
+                    child: Text(
+                      'Inbox',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: fontMicro,
+                        fontWeight: weightSemi,
+                        color: textSecondary,
                       ),
                     ),
                   ),
-                  InkWell(
-                    key: const ValueKey('outliner_new_progressive_release_btn'),
-                    onTap: () {
-                      if (isOverlayDrawer) {
-                        _rebuild(() {
-                          _isHalfScreenOutlinerOpen = false;
-                        });
-                      }
-                      _showProgressiveNextReleaseModal(context);
-                    },
-                    borderRadius: BorderRadius.circular(5),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              'Next release · $nextVerLabel',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.inter(
-                                fontSize: fontMicro,
-                                fontWeight: weightSemi,
-                                color: isRelComplete
-                                    ? accentEmerald
-                                    : textSecondary,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            nextReleaseRightLabel,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: fontMicro,
-                              fontWeight: weightSemi,
-                              color: isRelComplete ? accentEmerald : textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$totalInbox',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: fontMicro,
+                      fontWeight: weightSemi,
+                      color: pendingCount > 0 ? accentEmerald : textMuted,
                     ),
                   ),
                 ],
-              );
+              ),
+            ),
+          ),
+          InkWell(
+            key: const ValueKey('open_playtest_run_sheet_btn'),
+            onTap: () => _showPlaytestRunSheetModal(context),
+            borderRadius: BorderRadius.circular(5),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Playtest',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: fontMicro,
+                        fontWeight: weightSemi,
+                        color: textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '$verifiedFeats/$totalActiveFeats',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: fontMicro,
+                      fontWeight: weightSemi,
+                      color: isRelComplete ? accentEmerald : textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          InkWell(
+            key: const ValueKey('outliner_new_progressive_release_btn'),
+            onTap: () {
+              if (isOverlayDrawer) {
+                _rebuild(() {
+                  _isHalfScreenOutlinerOpen = false;
+                });
+              }
+              _showProgressiveNextReleaseModal(context);
             },
+            borderRadius: BorderRadius.circular(5),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Flexible(
+                    child: Text(
+                      'Next release · $nextVerLabel',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.inter(
+                        fontSize: fontMicro,
+                        fontWeight: weightSemi,
+                        color: isRelComplete ? accentEmerald : textSecondary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    nextReleaseRightLabel,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: fontMicro,
+                      fontWeight: weightSemi,
+                      color: isRelComplete ? accentEmerald : textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ],
-      ),
-    );
-
-    return Container(
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF080A0F) : bgRecessed,
-        border: Border(
-          right: BorderSide(
-            color: isOverlayDrawer
-                ? borderBright
-                : (isDark ? const Color(0x14FFFFFF) : borderSubtle),
-          ),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          topHeader,
-          Expanded(child: middleScrollable),
-          bottomFooter,
         ],
       ),
     );
@@ -1851,79 +1948,26 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         widget.workbench.isSynthesizingFeatureSteps(feat.id);
     final isWaitingForStepsInLiveMode =
         widget.workbench.isFeatureWaitingForStepsInLiveMode(feat.id);
-    final isFeatureBeingBuiltInLiveMode =
-        widget.workbench.isFeatureBeingBuiltInLiveMode(feat.id);
 
     int doneStepCount = 0;
     int totalStepCount = 0;
     int activeFocusIndex = 0;
     FeatureStateNode? activeCp;
-    final howToBlueprints = <TaskHowToBlueprint>[];
     final states = FeatureStateNode.getStatesForDocument(feat);
     if (states.isNotEmpty) {
-      int resolvedIdx = -1;
-      for (int i = 0; i < states.length; i++) {
-        final s = states[i];
-        if (s.releaseVersion != activeVer) continue;
-        final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
-        if (!s.isCompleted || awaitingPlaytest) {
-          resolvedIdx = i;
-          break;
-        }
-      }
-      if (resolvedIdx == -1) {
-        resolvedIdx =
-            states.lastIndexWhere((s) => s.releaseVersion == activeVer);
-      }
-      if (resolvedIdx == -1) {
-        for (int i = 0; i < states.length; i++) {
-          final s = states[i];
-          final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
-          if (!s.isCompleted || awaitingPlaytest) {
-            resolvedIdx = i;
-            break;
-          }
-        }
-      }
-      if (resolvedIdx == -1) {
-        resolvedIdx = states.length - 1;
-      }
-      activeFocusIndex = (_manualCheckpointFocusFeatureId == feat.id &&
-              _manualCheckpointFocusIndex != null &&
-              _manualCheckpointFocusIndex! >= 0 &&
-              _manualCheckpointFocusIndex! < states.length)
-          ? _manualCheckpointFocusIndex!
-          : resolvedIdx;
+      activeFocusIndex = _resolveActiveCheckpointIndex(feat, states);
       activeCp = states[activeFocusIndex];
       final hint = _engineHint;
       final phase = widget.workbench.currentPhase;
-      for (int tIdx = 0; tIdx < activeCp.checklist.length; tIdx++) {
-        final bp = TaskHowToBlueprint.resolve(
-          parentTask: activeCp.checklist[tIdx],
-          taskIndex: tIdx,
-          checkpointNode: activeCp,
-          engineHint: hint,
-          phase: phase,
-        );
-        howToBlueprints.add(bp);
-        totalStepCount += bp.subSteps.length;
-        doneStepCount +=
-            bp.subSteps.where((s) => s.subtask.completed).length;
-      }
+      final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
+        checkpointNode: activeCp,
+        engineHint: hint,
+        phase: phase,
+      );
+      totalStepCount = unifiedSteps.length;
+      doneStepCount =
+          unifiedSteps.where((s) => s.subtask.completed).length;
     }
-
-    int selectedTaskIdx = 0;
-    if (activeCp != null && activeCp.checklist.isNotEmpty) {
-      selectedTaskIdx = _selectedTaskIndexByCheckpoint[activeCp.id] ??
-          activeCp.checklist.indexWhere((t) => !t.completed);
-      if (selectedTaskIdx < 0 || selectedTaskIdx >= activeCp.checklist.length) {
-        selectedTaskIdx = 0;
-      }
-    }
-    final bool attachLiveTaskKeys = !isOverlayDrawer || _isHalfScreenOutlinerOpen;
-    final String featureGoalText = TaskHowToBlueprint.formatConciseFeatureGoal(
-      SectionTextUtils.resolveGoal(feat.sections),
-    );
 
     return Opacity(
       opacity: shouldDim ? 0.78 : 1.0,
@@ -1958,6 +2002,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   _manualCheckpointFocusIndex = null;
                   _inlineBugDrawerNodeId = null;
                   _isHalfScreenOutlinerOpen = false;
+                  _editingCodeFileResPath = null;
                 });
                 widget.workbench.selectFeature(feat.id);
               },
@@ -2147,382 +2192,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               ),
             ),
 
-            // ── Expanded Active Feature: WHAT Brief + Nested Tasks (T1, T2, T3) inside Far-Left Outliner Rail ──
-            if (isSelected &&
-                activeCp != null &&
-                !isFeatureBeingBuiltInLiveMode &&
-                howToBlueprints.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (featureGoalText.isNotEmpty)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 7),
-                        padding: const EdgeInsets.fromLTRB(8, 5, 8, 5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0B0E15),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(color: const Color(0x14FFFFFF)),
-                        ),
-                        child: RichText(
-                          text: TextSpan(
-                            style: GoogleFonts.inter(
-                              fontSize: fontMicro,
-                              fontWeight: weightRegular,
-                              height: 1.35,
-                              color: const Color(0xFFCBD5E1),
-                            ),
-                            children: [
-                              TextSpan(
-                                text: 'WHAT: ',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: fontMicro,
-                                  fontWeight: weightBold,
-                                  letterSpacing: 0.4,
-                                  color: const Color(0xFFA5B4FC),
-                                ),
-                              ),
-                              TextSpan(text: featureGoalText),
-                            ],
-                          ),
-                        ),
-                      ),
-                    Container(
-                      padding: const EdgeInsets.only(left: 7),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          left: BorderSide(
-                            color:
-                                const Color(0xFF6875F5).withValues(alpha: 0.32),
-                          ),
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          for (int tIdx = 0;
-                              tIdx < howToBlueprints.length;
-                              tIdx++)
-                            Builder(
-                              builder: (context) {
-                                final cpNode = activeCp!;
-                                final bp = howToBlueprints[tIdx];
-                                final task = cpNode.checklist[tIdx];
-                                final isFixTask =
-                                    task.text.trim().startsWith('[FIX]');
-                                final isTaskActive = tIdx == selectedTaskIdx;
-                                final doneSubCount = bp.subSteps
-                                    .where((s) => s.subtask.completed)
-                                    .length;
-                                final taskSubCount = bp.subSteps.length;
-                                final isTaskDone = task.completed ||
-                                    (taskSubCount > 0 &&
-                                        doneSubCount >= taskSubCount);
-                                final groupTitle = bp.shortTaskTitle;
-
-                                if (attachLiveTaskKeys &&
-                                    _activeStage2InlineEditKey ==
-                                        'edit_task_${cpNode.id}_$tIdx') {
-                                  return Padding(
-                                    padding: const EdgeInsets.only(bottom: 4),
-                                    child: _buildStage2InlineEditor(
-                                      editKey: 'edit_task_${cpNode.id}_$tIdx',
-                                      inputKey: const ValueKey(
-                                        'edit_stage3_task_title_input',
-                                      ),
-                                      saveBtnKey: const ValueKey(
-                                        'save_stage3_task_title_btn',
-                                      ),
-                                      deleteBtnKey: const ValueKey(
-                                        'delete_stage3_task_btn',
-                                      ),
-                                      hintText: 'Edit task title...',
-                                      onSave: (val) {
-                                        task.text = val;
-                                        TaskHowToBlueprint.clearCache();
-                                        widget.workbench.updateFeatureStates(
-                                          feat.id,
-                                          states,
-                                        );
-                                      },
-                                      onDelete: cpNode.checklist.length > 1
-                                          ? () {
-                                              cpNode.checklist.removeAt(tIdx);
-                                              TaskHowToBlueprint.clearCache();
-                                              widget.workbench
-                                                  .updateFeatureStates(
-                                                feat.id,
-                                                states,
-                                              );
-                                              _rebuild(() {
-                                                final nextIdx =
-                                                    cpNode.checklist.isEmpty
-                                                        ? 0
-                                                        : tIdx.clamp(
-                                                            0,
-                                                            cpNode.checklist
-                                                                    .length -
-                                                                1,
-                                                          );
-                                                _selectedTaskIndexByCheckpoint[
-                                                    cpNode.id] = nextIdx;
-                                                _selectedSubStepIndexByTask[
-                                                        '${cpNode.id}_$nextIdx'] =
-                                                    0;
-                                              });
-                                            }
-                                          : null,
-                                    ),
-                                  );
-                                }
-
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 4),
-                                  decoration: BoxDecoration(
-                                    color: isTaskActive
-                                        ? const Color(0xFF1F2738)
-                                        : const Color(0xFF0D1119),
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(
-                                      color: isTaskActive
-                                          ? const Color(0xFF38BDF8)
-                                              .withValues(alpha: 0.55)
-                                          : const Color(0x14FFFFFF),
-                                    ),
-                                  ),
-                                  child: InkWell(
-                                    key: attachLiveTaskKeys
-                                        ? ValueKey(
-                                            'outline_task_${cpNode.id}_$tIdx',
-                                          )
-                                        : null,
-                                    borderRadius: BorderRadius.circular(5),
-                                    onTap: () {
-                                      _rebuild(() {
-                                        _manualCheckpointFocusIndex =
-                                            activeFocusIndex;
-                                        _manualCheckpointFocusFeatureId =
-                                            feat.id;
-                                        _selectedTaskIndexByCheckpoint[
-                                            cpNode.id] = tIdx;
-                                        final firstIncomplete = task.children
-                                            .indexWhere((c) => !c.completed);
-                                        _selectedSubStepIndexByTask[
-                                                '${cpNode.id}_$tIdx'] =
-                                            firstIncomplete != -1
-                                                ? firstIncomplete
-                                                : 0;
-                                        if (isOverlayDrawer) {
-                                          _isHalfScreenOutlinerOpen = false;
-                                        }
-                                      });
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 6,
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          InkWell(
-                                            key: attachLiveTaskKeys
-                                                ? ValueKey(
-                                                    'complete_task_group_${cpNode.id}_$tIdx',
-                                                  )
-                                                : null,
-                                            onTap: () =>
-                                                _toggleTaskGroupCompletion(
-                                              feat,
-                                              states,
-                                              cpNode,
-                                              tIdx,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
-                                            child: Container(
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                horizontal: 5,
-                                                vertical: 2,
-                                              ),
-                                              alignment: Alignment.center,
-                                              decoration: BoxDecoration(
-                                                color: isTaskDone
-                                                    ? const Color(0xFF10B981)
-                                                        .withValues(alpha: 0.16)
-                                                    : (isFixTask
-                                                        ? accentCrimson
-                                                            .withValues(
-                                                                alpha: 0.14)
-                                                        : const Color(
-                                                                0xFFF59E0B)
-                                                            .withValues(
-                                                                alpha: 0.14)),
-                                                borderRadius:
-                                                    BorderRadius.circular(4),
-                                                border: Border.all(
-                                                  color: isTaskDone
-                                                      ? const Color(0xFF10B981)
-                                                          .withValues(
-                                                              alpha: 0.42)
-                                                      : (isFixTask
-                                                          ? accentCrimson
-                                                              .withValues(
-                                                                  alpha: 0.38)
-                                                          : const Color(
-                                                                  0xFFF59E0B)
-                                                              .withValues(
-                                                                  alpha: 0.38)),
-                                                ),
-                                              ),
-                                              child: Text(
-                                                isTaskDone
-                                                    ? '✓'
-                                                    : (isFixTask
-                                                        ? '!'
-                                                        : 'T${tIdx + 1}'),
-                                                style:
-                                                    GoogleFonts.jetBrainsMono(
-                                                  fontSize: fontMicro,
-                                                  fontWeight: weightBold,
-                                                  height: 1.0,
-                                                  color: isTaskDone
-                                                      ? const Color(0xFF6EE7B7)
-                                                      : (isFixTask
-                                                          ? accentCrimson
-                                                          : const Color(
-                                                              0xFFFCD34D)),
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 7),
-                                          Expanded(
-                                            child: Text(
-                                              groupTitle,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.inter(
-                                                fontSize: fontMicro,
-                                                fontWeight: isTaskActive
-                                                    ? weightBold
-                                                    : weightSemi,
-                                                color: isFixTask
-                                                    ? accentCrimson
-                                                    : (isTaskDone
-                                                        ? const Color(
-                                                            0xFF94A3B8)
-                                                        : (isTaskActive
-                                                            ? const Color(
-                                                                0xFFF8FAFC)
-                                                            : const Color(
-                                                                0xFFCBD5E1))),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          InkWell(
-                                            key: attachLiveTaskKeys
-                                                ? ValueKey(
-                                                    'edit_active_task_title_btn_${cpNode.id}_$tIdx',
-                                                  )
-                                                : null,
-                                            onTap: () => _startStage2InlineEdit(
-                                              'edit_task_${cpNode.id}_$tIdx',
-                                              task.text,
-                                            ),
-                                            borderRadius:
-                                                BorderRadius.circular(3),
-                                            child: const Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                horizontal: 2,
-                                                vertical: 1,
-                                              ),
-                                              child: Icon(
-                                                Icons.edit_outlined,
-                                                size: 12,
-                                                color: Color(0xFF64748B),
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            isTaskDone
-                                                ? 'DONE'
-                                                : '$doneSubCount/$taskSubCount',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: fontMicro,
-                                              fontWeight: weightSemi,
-                                              color: isTaskDone
-                                                  ? const Color(0xFF6EE7B7)
-                                                  : (isTaskActive
-                                                      ? const Color(0xFF38BDF8)
-                                                      : const Color(
-                                                          0xFF64748B)),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          if (attachLiveTaskKeys &&
-                              _activeStage2InlineEditKey ==
-                                  'add_task_${activeCp.id}')
-                            Padding(
-                              padding: const EdgeInsets.only(top: 2),
-                              child: _buildStage2InlineEditor(
-                                editKey: 'add_task_${activeCp.id}',
-                                inputKey: const ValueKey(
-                                  'add_stage3_task_title_input',
-                                ),
-                                saveBtnKey: const ValueKey(
-                                  'confirm_add_stage3_task_btn',
-                                ),
-                                hintText:
-                                    'Add build task (e.g. Wall-jump impulse)...',
-                                onSave: (val) => _commitInlineAddBuildTask(
-                                  feat,
-                                  states,
-                                  activeFocusIndex,
-                                  val,
-                                ),
-                              ),
-                            )
-                          else
-                            InkWell(
-                              key: attachLiveTaskKeys
-                                  ? ValueKey(
-                                      'outline_add_task_btn_${activeCp.id}',
-                                    )
-                                  : null,
-                              borderRadius: BorderRadius.circular(4),
-                              onTap: () => _startStage2InlineEdit(
-                                'add_task_${activeCp!.id}',
-                                '',
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.fromLTRB(4, 3, 4, 2),
-                                child: Text(
-                                  '+ Add Build Task...',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: fontMicro,
-                                    fontWeight: weightSemi,
-                                    color: const Color(0xFF64748B),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
           ],
         ),
       ),
@@ -2555,43 +2224,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     final isDone = progress >= 100;
     final nextFeat = widget.workbench.nextIncompleteFeature;
 
-    final activeVer = widget.workbench.activeReleaseVersionTag;
-    int activeFocusIndex = -1;
-    // 1. Prioritize incomplete (or awaiting playtest) checkpoints belonging to the active release
-    for (int i = 0; i < states.length; i++) {
-      final s = states[i];
-      if (s.releaseVersion != activeVer) continue;
-      final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
-      if (!s.isCompleted || awaitingPlaytest) {
-        activeFocusIndex = i;
-        break;
-      }
-    }
-    // 2. Otherwise prefer the last checkpoint belonging to the active release
-    if (activeFocusIndex == -1) {
-      activeFocusIndex =
-          states.lastIndexWhere((s) => s.releaseVersion == activeVer);
-    }
-    // 3. Fall back to any incomplete checkpoint or the last checkpoint
-    if (activeFocusIndex == -1) {
-      for (int i = 0; i < states.length; i++) {
-        final s = states[i];
-        final awaitingPlaytest = _awaitingPlaytestVerification.contains(s.id);
-        if (!s.isCompleted || awaitingPlaytest) {
-          activeFocusIndex = i;
-          break;
-        }
-      }
-    }
-    if (activeFocusIndex == -1 && states.isNotEmpty) {
-      activeFocusIndex = states.length - 1;
-    }
-    final effectiveFocusIndex = (_manualCheckpointFocusFeatureId == feat.id &&
-            _manualCheckpointFocusIndex != null &&
-            _manualCheckpointFocusIndex! >= 0 &&
-            _manualCheckpointFocusIndex! < states.length)
-        ? _manualCheckpointFocusIndex!
-        : activeFocusIndex;
+    final effectiveFocusIndex = _resolveActiveCheckpointIndex(feat, states);
 
     Widget buildBody() {
       final activeFeatureContent = Column(
@@ -2645,6 +2278,50 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           Expanded(
             child: LayoutBuilder(
               builder: (context, viewportConstraints) {
+                final useIndependentPaneScroll =
+                    viewportConstraints.maxHeight.isFinite &&
+                    viewportConstraints.maxHeight >= 460 &&
+                    states.isNotEmpty &&
+                    (widget.workbench.focusMode || states.length <= 1);
+                if (useIndependentPaneScroll) {
+                  return Container(
+                    key: const ValueKey('stage3_active_feature_sheet'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (widget.workbench.isActiveReleaseComplete) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                            child: _buildReleaseShippedBanner(rel),
+                          ),
+                        ] else if (isDone &&
+                            nextFeat != null &&
+                            !states.any(
+                              (s) =>
+                                  _awaitingPlaytestVerification.contains(s.id),
+                            )) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                            child: _buildNextFeatureAdvanceBanner(
+                              feat,
+                              nextFeat,
+                            ),
+                          ),
+                        ],
+                        Expanded(
+                          child: _buildCheckpointCard(
+                            feat,
+                            states,
+                            effectiveFocusIndex,
+                            activeFocusIndex: effectiveFocusIndex,
+                            isHalfScreenOverlayMode: isHalfScreenOverlayMode,
+                            fillViewportHeight: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
                 return SingleChildScrollView(
                   child: ConstrainedBox(
                     constraints: BoxConstraints(

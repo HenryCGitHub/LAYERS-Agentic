@@ -110,6 +110,130 @@ class FeatureStateNode {
   bool get isCompleted =>
       totalChecklistCount > 0 && completedChecklistCount == totalChecklistCount;
 
+  /// Iterates every executable build step in [checklist] uniformly across both
+  /// flat Unified Steps (`entry.children.isEmpty`) and legacy nested subtasks
+  /// (`parentTask.children`).
+  List<({Subtask step, Subtask? legacyParent})> get flatStepEntries {
+    final entries = <({Subtask step, Subtask? legacyParent})>[];
+    for (final item in checklist) {
+      if (item.children.isEmpty) {
+        entries.add((step: item, legacyParent: null));
+      } else {
+        for (final child in item.children) {
+          if (child.children.isEmpty) {
+            entries.add((step: child, legacyParent: item));
+          } else {
+            final nestedLeaves = <Subtask>[];
+            _collectLeafSubtasks(child, nestedLeaves);
+            for (final leaf in nestedLeaves) {
+              entries.add((step: leaf, legacyParent: item));
+            }
+          }
+        }
+      }
+    }
+    return entries;
+  }
+
+  /// Convenience static accessor for uniform iteration of flat and legacy steps.
+  static List<({Subtask step, Subtask? legacyParent})> iterStepEntries(
+    FeatureStateNode cp,
+  ) =>
+      cp.flatStepEntries;
+
+  /// True when every executable step in [checklist] has been synthesized by AI
+  /// (or user-authored as `'custom_snippet'`), across both flat & legacy layouts.
+  bool get hasAllStepsSynthesized {
+    final entries = flatStepEntries;
+    return entries.isNotEmpty &&
+        entries.every((e) => e.step.codeTargetFile == 'custom_snippet');
+  }
+
+  /// Flat ordered list of executable [Subtask] steps for this checkpoint.
+  List<Subtask> get flatSteps =>
+      flatStepEntries.map((entry) => entry.step).toList();
+
+  static void _collectLeafSubtasks(Subtask node, List<Subtask> out) {
+    if (node.children.isEmpty) {
+      out.add(node);
+      return;
+    }
+    for (final child in node.children) {
+      _collectLeafSubtasks(child, out);
+    }
+  }
+
+  /// Promotes legacy nested `parentTask.children` directly onto [checklist] as
+  /// flat Unified Steps while preserving IDs, completion states, notes,
+  /// snippets, target files, and verifications cleanly (`leafCount` invariant).
+  ///
+  /// Returns `true` when at least one nested parent task was flattened.
+  bool flattenLegacyNestedChecklistIfNeeded() {
+    if (!checklist.any((item) => item.children.isNotEmpty)) {
+      return false;
+    }
+    final flattened = <Subtask>[];
+    for (final item in checklist) {
+      if (item.children.isEmpty) {
+        flattened.add(item);
+      } else {
+        _collectLeafSubtasks(item, flattened);
+      }
+    }
+    checklist = flattened;
+    return true;
+  }
+
+  static String _guardStorageKey(int index, String guardText) {
+    final cleaned = guardText.trim();
+    return cleaned.isNotEmpty ? cleaned : '#$index';
+  }
+
+  /// Signed-off `[STATE GUARD]` identifiers stored in `parameters['signedOffGuards']`.
+  Set<String> get signedOffGuards {
+    final raw = parameters['signedOffGuards'];
+    if (raw == null || raw.trim().isEmpty) return <String>{};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded.map((e) => e.toString()).toSet();
+      }
+    } catch (_) {}
+    return <String>{};
+  }
+
+  bool isGuardSignedOff(int index, String guardText) {
+    final set = signedOffGuards;
+    return set.contains(_guardStorageKey(index, guardText)) ||
+        set.contains('#$index');
+  }
+
+  void setGuardSignedOff(int index, String guardText, bool signedOff) {
+    final next = Set<String>.from(signedOffGuards);
+    final key = _guardStorageKey(index, guardText);
+    if (signedOff) {
+      next.add(key);
+    } else {
+      next.remove(key);
+      next.remove('#$index');
+    }
+    if (next.isEmpty) {
+      parameters.remove('signedOffGuards');
+    } else {
+      parameters['signedOffGuards'] = jsonEncode(next.toList());
+    }
+  }
+
+  bool get isPlaytestPassed => parameters['playtestPassed'] == 'true';
+
+  set isPlaytestPassed(bool passed) {
+    if (passed) {
+      parameters['playtestPassed'] = 'true';
+    } else {
+      parameters.remove('playtestPassed');
+    }
+  }
+
   /// Observable in-viewport playtest condition for this stage.
   String get playtestCondition {
     var t = trigger.trim();

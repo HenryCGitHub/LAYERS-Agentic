@@ -461,6 +461,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   /// Switches the active project and restores its Stage 1/2/3 blueprints and selection.
   void switchProject(String projectId) {
     if (!documents.containsKey(projectId)) return;
+    if (projectId != _activeProjectId) {
+      _godotSync.unlink();
+      _diskPulledFilesByResPath.clear();
+      _lastPatchWarningsByResPath.clear();
+      _unmatchedHunksByResPath.clear();
+    }
     _restoreProjectState(projectId);
     _persistSettings();
     notifyListeners();
@@ -471,6 +477,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _stepQueueGeneration++;
     _pendingFeatureStepQueue.clear();
     _synthesizingFeatureIds.clear();
+    _godotSync.unlink();
+    _diskPulledFilesByResPath.clear();
+    _lastPatchWarningsByResPath.clear();
+    _unmatchedHunksByResPath.clear();
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedBeatId = null;
@@ -742,6 +752,26 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     String remapClonedId(String id) =>
         mappedRelIds[id] ?? mappedBeatIds[id] ?? mappedFeatIds[id] ?? id;
 
+    // Clone cumulative Cloud-saved Godot code/resource files (`TierType.codeFile`).
+    final codeFiles = documents.values
+        .where((d) => d.tier == TierType.codeFile && d.parentId == projectId)
+        .toList();
+    for (final oldCodeDoc in codeFiles) {
+      final vf = GodotVirtualFile.fromTierDocument(oldCodeDoc);
+      final newCodeId = GodotVirtualFile.stableDocId(newId, vf.resPath);
+      final remappedFeatures =
+          vf.featureIds.map(remapClonedId).toSet().toList();
+      final clonedCodeDoc = vf
+          .copyWith(
+            id: newCodeId,
+            projectId: newId,
+            featureIds: remappedFeatures,
+          )
+          .toTierDocument();
+      documents[newCodeId] = clonedCodeDoc;
+      _persistDocument(clonedCodeDoc);
+    }
+
     for (final newRelId in newReleaseIds) {
       final relDoc = documents[newRelId];
       if (relDoc == null) continue;
@@ -913,6 +943,18 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           if (rawRelBp != null && rawRelBp.isNotEmpty) {
             newSections['release_blueprint_json'] =
                 _remapSerializedReleaseBlueprintJson(rawRelBp, remapId);
+          }
+        } else if (d.tier == TierType.codeFile) {
+          final rawFeatIds = newSections[GodotVirtualFile.featureIdsKey];
+          if (rawFeatIds != null && rawFeatIds.isNotEmpty) {
+            try {
+              final decoded = jsonDecode(rawFeatIds);
+              if (decoded is List) {
+                newSections[GodotVirtualFile.featureIdsKey] = jsonEncode(
+                  decoded.map((e) => remapId(e.toString())).toSet().toList(),
+                );
+              }
+            } catch (_) {}
           }
         }
 

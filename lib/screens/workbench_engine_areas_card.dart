@@ -1,1805 +1,1485 @@
 part of 'release_workbench_screen.dart';
 
-class _ComponentInspectorVarRow {
-  final String key;
-  final String propertyLabel;
-  final String categoryLabel;
-  final String value;
-  final List<String> usedInSteps;
-  final int firstTaskIdx;
-  final int firstSubStepIdx;
-  final bool isUsedInActiveTask;
-  final bool isUsedInActiveStep;
-  final int? tuningParamIndex;
-
-  const _ComponentInspectorVarRow({
-    required this.key,
-    required this.propertyLabel,
-    required this.categoryLabel,
-    required this.value,
-    required this.usedInSteps,
-    required this.firstTaskIdx,
-    required this.firstSubStepIdx,
-    required this.isUsedInActiveTask,
-    required this.isUsedInActiveStep,
-    this.tuningParamIndex,
-  });
-}
-
 extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
-  /// Builds the node-scoped persistent variable list for `activeTargetComp`.
-  /// - Only collects variables belonging to `activeTargetComp` (tasks targeting this node).
-  /// - Variables belonging to other nodes in `components` are excluded so selecting a different
-  ///   node in the Scene Tree switches the Inspector Dock to that node's own variables.
-  /// - Within the selected node, variables remain in a stable list and focus/dim per step (`1.1`, `1.2`, etc.).
-  List<_ComponentInspectorVarRow> _buildComponentInspectorRows({
-    required FeatureStateNode node,
-    required List<TaskHowToBlueprint> howToBlueprints,
-    required int selectedTaskIdx,
-    required int activeSubStepIdx,
-    required ({
-      String icon,
-      String componentKey,
-      String displayLabel,
-    }) activeTargetComp,
-    required List<({
-      String icon,
-      String componentKey,
-      String displayLabel,
-      List<int> taskIndices,
-    })> components,
-    required List<({String key, String value})> activeStepFallbackRows,
-    required List<String> tuningItems,
-    required String primaryTuningLabel,
-    required bool is2D,
-    required String archetype,
+  /// Synthesizes `.tscn` Scene Tree hierarchy lines for a `SCENE` Unified Step
+  /// (never includes fake IDE Inspector chrome or `+ Add Node` controls).
+  List<String> _synthesizeSceneTreeLines(
+    TaskHowToSubStep subStep, {
+    required ({String icon, String componentKey, String displayLabel})
+        activeTargetComp,
+    required String assetName,
   }) {
-    final activeCompLower = activeTargetComp.componentKey.toLowerCase();
-    final matchedComp = components
-        .where((c) => c.componentKey.toLowerCase() == activeCompLower)
-        .toList();
-    final List<int> compTaskIndices = matchedComp.isNotEmpty &&
-            matchedComp.first.taskIndices.isNotEmpty
-        ? matchedComp.first.taskIndices
-        : <int>[selectedTaskIdx];
-
-    final otherCompKeys = <String>{
-      for (final c in components)
-        if (c.componentKey.toLowerCase() != activeCompLower)
-          c.componentKey.toLowerCase(),
-    };
-
-    final isActiveCapsuleComp = activeCompLower.contains('capsule') ||
-        activeCompLower.contains('collider') ||
-        activeCompLower.contains('collisionshape');
-    final isActiveMovementComp = activeCompLower.contains('movement') ||
-        activeCompLower.contains('rigidbody') ||
-        activeCompLower.contains('characterbody');
-
-    bool belongsToOtherComponent(String rawKey, String rawVal) {
-      final keyLower = rawKey.toLowerCase();
-      final valLower = rawVal.toLowerCase();
-      if (isActiveCapsuleComp &&
-          (keyLower == 'asset name' ||
-              keyLower == 'parent class' ||
-              keyLower.contains('walkspeed') ||
-              keyLower.contains('move_speed') ||
-              keyLower.contains('jump_velocity') ||
-              keyLower.contains('air_control') ||
-              valLower.contains('move_speed') ||
-              valLower.contains('walkspeed'))) {
-        return true;
-      }
-      final inferred = _inferOwningComponentForProperty(
-        rawKey: rawKey,
-        defaultComponentKey: activeTargetComp.componentKey,
-        is2D: is2D,
-      );
-      final inferredCompLower = inferred.componentLabel.toLowerCase();
-      if (inferredCompLower != activeCompLower) {
-        if (otherCompKeys.contains(inferredCompLower) ||
-            (isActiveCapsuleComp &&
-                (inferredCompLower.contains('movement') ||
-                    inferredCompLower.contains('camera') ||
-                    inferredCompLower.contains('controller') ||
-                    inferredCompLower.contains('characterbody'))) ||
-            (isActiveMovementComp &&
-                (inferredCompLower.contains('capsule') ||
-                    inferredCompLower.contains('collider') ||
-                    inferredCompLower.contains('collisionshape')))) {
-          return true;
-        }
-      }
-      return false;
+    final area1 = (subStep.area1Hierarchy ?? '').trim();
+    final rawCode = subStep.codeFormula.trim();
+    final source = area1.isNotEmpty
+        ? area1
+        : (RegExp(r'[└├]─(?!─►)').hasMatch(rawCode) ? rawCode : '');
+    if (source.isNotEmpty) {
+      final parsed = source
+          .split('\n')
+          .map((l) => l.trimRight())
+          .where((l) => l.trim().isNotEmpty && !l.trimLeft().startsWith('//'))
+          .toList();
+      if (parsed.isNotEmpty) return parsed;
     }
-
-    final accumByNormKey = <String, ({
-      String key,
-      String propertyLabel,
-      String categoryLabel,
-      String value,
-      List<String> usedInSteps,
-      int firstTaskIdx,
-      int firstSubStepIdx,
-      int? tuningParamIndex,
-    })>{};
-
-    void recordProperty({
-      required String rawKey,
-      required String rawVal,
-      required int tIdx,
-      required int sIdx,
-      int? explicitTuningIdx,
-    }) {
-      final cleanKey = rawKey.trim();
-      final cleanVal = rawVal.trim();
-      if (cleanKey.isEmpty || cleanVal.isEmpty) return;
-      if (belongsToOtherComponent(cleanKey, cleanVal)) return;
-
-      final resolved = _inferOwningComponentForProperty(
-        rawKey: cleanKey,
-        defaultComponentKey: activeTargetComp.componentKey,
-        is2D: is2D,
-      );
-      final propLabel = resolved.propertyLabel.trim().isNotEmpty
-          ? resolved.propertyLabel.trim()
-          : cleanKey;
-      final normKey = propLabel.toLowerCase();
-      final stepBadge = '${tIdx + 1}.${sIdx + 1}';
-
-      int? matchedTuningIdx = explicitTuningIdx;
-      if (matchedTuningIdx == null) {
-        for (int ti = 0; ti < tuningItems.length; ti++) {
-          final tk = tuningItems[ti]
-              .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
-              .first
-              .trim()
-              .toLowerCase();
-          if (tk.isNotEmpty &&
-              (tk == normKey || tk == cleanKey.toLowerCase())) {
-            matchedTuningIdx = ti;
-            break;
-          }
-        }
-      }
-
-      String effectiveVal = cleanVal;
-      if (matchedTuningIdx != null && matchedTuningIdx < tuningItems.length) {
-        final tp = tuningItems[matchedTuningIdx];
-        final parts =
-            tp.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
-        if (parts.length > 1) {
-          effectiveVal = parts.sublist(1).join(':').trim();
-        }
-      }
-      final customOverride =
-          _customComponentPropertyOverrides['${node.id}::$cleanKey'] ??
-              _customComponentPropertyOverrides['${node.id}::$propLabel'];
-      if (customOverride != null && customOverride.isNotEmpty) {
-        effectiveVal = customOverride;
-      }
-
-      final existing = accumByNormKey[normKey];
-      if (existing == null) {
-        accumByNormKey[normKey] = (
-          key: cleanKey,
-          propertyLabel: propLabel,
-          categoryLabel: resolved.categoryLabel,
-          value: effectiveVal,
-          usedInSteps: <String>[stepBadge],
-          firstTaskIdx: tIdx,
-          firstSubStepIdx: sIdx,
-          tuningParamIndex: matchedTuningIdx,
-        );
-      } else {
-        if (!existing.usedInSteps.contains(stepBadge)) {
-          existing.usedInSteps.add(stepBadge);
-        }
-        if (tIdx == selectedTaskIdx && sIdx == activeSubStepIdx) {
-          accumByNormKey[normKey] = (
-            key: existing.key,
-            propertyLabel: existing.propertyLabel,
-            categoryLabel: existing.categoryLabel,
-            value: effectiveVal,
-            usedInSteps: existing.usedInSteps,
-            firstTaskIdx: existing.firstTaskIdx,
-            firstSubStepIdx: existing.firstSubStepIdx,
-            tuningParamIndex:
-                existing.tuningParamIndex ?? matchedTuningIdx,
-          );
-        }
-      }
-    }
-
-    // 1. Collect properties across all sub-steps of tasks targeting `activeTargetComp`
-    for (final tIdx in compTaskIndices) {
-      if (tIdx < 0 || tIdx >= howToBlueprints.length) continue;
-      final bp = howToBlueprints[tIdx];
-
-      for (int sIdx = 0; sIdx < bp.subSteps.length; sIdx++) {
-        final sub = bp.subSteps[sIdx];
-        final aiArea2 = sub.area2Inspector?.trim() ?? '';
-        bool addedAnyForSubStep = false;
-
-        if (aiArea2.isNotEmpty) {
-          final rawEntries = aiArea2.contains('\n')
-              ? aiArea2.split('\n')
-              : aiArea2.split('|');
-          for (final rawEntry in rawEntries) {
-            final cleanEntry = rawEntry.trim();
-            if (cleanEntry.isEmpty) continue;
-            final colonIdx = cleanEntry.indexOf(':');
-            final eqIdx = cleanEntry.indexOf('=');
-            final delimIdx = colonIdx != -1 ? colonIdx : eqIdx;
-            if (delimIdx > 0 && delimIdx < cleanEntry.length - 1) {
-              recordProperty(
-                rawKey: cleanEntry.substring(0, delimIdx).trim(),
-                rawVal: cleanEntry.substring(delimIdx + 1).trim(),
-                tIdx: tIdx,
-                sIdx: sIdx,
-              );
-              addedAnyForSubStep = true;
-            }
-          }
-        }
-
-        // Also check tuning parameters referenced in this sub-step's code or instruction
-        final subCorpus =
-            '${sub.shortTitle} ${sub.instruction} ${sub.codeFormula} $aiArea2'
-                .toLowerCase();
-        for (int ti = 0; ti < tuningItems.length; ti++) {
-          final tp = tuningItems[ti].trim();
-          if (tp.isEmpty) continue;
-          final parts =
-              tp.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
-          final k = parts.first.trim();
-          final v =
-              parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
-          if (k.isNotEmpty && subCorpus.contains(k.toLowerCase())) {
-            recordProperty(
-              rawKey: k,
-              rawVal: v,
-              tIdx: tIdx,
-              sIdx: sIdx,
-              explicitTuningIdx: ti,
-            );
-            addedAnyForSubStep = true;
-          }
-        }
-
-        if (!addedAnyForSubStep && sIdx == 0 && isActiveCapsuleComp) {
-          recordProperty(
-            rawKey: 'Height',
-            rawVal: is2D ? '70.0 px' : '1.76 m',
-            tIdx: tIdx,
-            sIdx: sIdx,
-          );
-          recordProperty(
-            rawKey: 'Radius',
-            rawVal: is2D ? '16.0 px' : '0.35 m',
-            tIdx: tIdx,
-            sIdx: sIdx,
-          );
-        }
-      }
-    }
-
-    // 2. Ensure all active-step fallback rows (for the selected component) are included
-    for (final row in activeStepFallbackRows) {
-      recordProperty(
-        rawKey: row.key,
-        rawVal: row.value,
-        tIdx: selectedTaskIdx,
-        sIdx: activeSubStepIdx,
-      );
-    }
-
-    // 3. If a tuning item belongs to this component (or is the task's primary tuning slot) and isn't in the map yet, add it
-    if (!isActiveCapsuleComp && tuningItems.isNotEmpty) {
-      final slotIdx = selectedTaskIdx % tuningItems.length;
-      final slotTp = tuningItems[slotIdx].trim();
-      if (slotTp.isNotEmpty) {
-        final parts =
-            slotTp.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
-        final k = parts.first.trim();
-        final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
-        if (k.isNotEmpty && !belongsToOtherComponent(k, v)) {
-          recordProperty(
-            rawKey: k,
-            rawVal: v,
-            tIdx: selectedTaskIdx,
-            sIdx: 0,
-            explicitTuningIdx: slotIdx,
-          );
-        }
-      }
-    }
-
-    final activeStepBadge = '${selectedTaskIdx + 1}.${activeSubStepIdx + 1}';
-    final activeTaskPrefix = '${selectedTaskIdx + 1}.';
-    final rawEntries = accumByNormKey.values.toList();
-
-    bool anyMatchesActiveStep = rawEntries
-        .any((e) => e.usedInSteps.contains(activeStepBadge));
-
-    final result = <_ComponentInspectorVarRow>[];
-    for (int i = 0; i < rawEntries.length; i++) {
-      final e = rawEntries[i];
-      final usedInTask =
-          e.usedInSteps.any((b) => b.startsWith(activeTaskPrefix));
-      final usedInStep = e.usedInSteps.contains(activeStepBadge) ||
-          (!anyMatchesActiveStep && i == 0);
-      result.add(
-        _ComponentInspectorVarRow(
-          key: e.key,
-          propertyLabel: e.propertyLabel,
-          categoryLabel: e.categoryLabel,
-          value: e.value,
-          usedInSteps: e.usedInSteps,
-          firstTaskIdx: e.firstTaskIdx,
-          firstSubStepIdx: e.firstSubStepIdx,
-          isUsedInActiveTask: usedInTask || usedInStep,
-          isUsedInActiveStep: usedInStep,
-          tuningParamIndex: e.tuningParamIndex,
-        ),
-      );
-    }
-    return result;
+    final rootLabel = assetName.replaceAll(RegExp(r'\.(tscn|gd)$'), '');
+    final pascalRoot = rootLabel
+        .split(RegExp(r'[_\s-]+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1))
+        .join();
+    return [
+      '${pascalRoot.isNotEmpty ? pascalRoot : 'FeatureRoot'} (${activeTargetComp.componentKey})',
+      '└─ CollisionShape2D/3D (Capsule / Shape)',
+    ];
   }
 
-  /// Renders the Godot 4 3-Area Step Card (`SCENE TREE DOCK (.tscn)`, `INSPECTOR DOCK`,
-  /// `NODE SIGNALS`, and `GDSCRIPT`), showing only the sections
-  /// genuinely used by the active step so Inspector setup is never mislabeled as GDScript.
-  Widget _buildEngineStepAreasBox({
-    required TierDocument feat,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
+  /// Extracts child node tuples `(name, type)` for `GodotVirtualFile.buildTscnStarterScaffold`.
+  List<({String name, String type})> _buildSceneTscnChildren(
+    List<String> sceneTreeLines, {
+    required bool is2D,
+  }) {
+    final out = <({String name, String type})>[];
+    for (int i = 1; i < sceneTreeLines.length; i++) {
+      final cleaned = sceneTreeLines[i]
+          .replaceAll(RegExp(r'^[└├│─\s•\-🎯📦⚙️📷🦴🧩📁⚡🗺]+'), '')
+          .replaceAll('[ACTIVE]', '')
+          .replaceAll('← SELECTED', '')
+          .trim();
+      if (cleaned.isEmpty) continue;
+      final m = RegExp(r'^([A-Za-z0-9_]+)(?:\s*\(([^)]+)\))?').firstMatch(cleaned);
+      if (m == null) continue;
+      final name = m.group(1)!.trim();
+      var type = (m.group(2) ?? '').trim();
+      if (type.isEmpty || type.contains('/')) {
+        if (name.toLowerCase().contains('collision')) {
+          type = is2D ? 'CollisionShape2D' : 'CollisionShape3D';
+        } else if (name.toLowerCase().contains('camera')) {
+          type = is2D ? 'Camera2D' : 'Camera3D';
+        } else if (name.toLowerCase().contains('timer')) {
+          type = 'Timer';
+        } else if (name.toLowerCase().contains('area')) {
+          type = is2D ? 'Area2D' : 'Area3D';
+        } else {
+          type = is2D ? 'Node2D' : 'Node3D';
+        }
+      }
+      out.add((name: name, type: type));
+    }
+    return out;
+  }
+
+  /// Builds a shared starter Godot 4 `.tscn` scaffold string from a feature's
+  /// asset spec, Scene Tree lines, and attached script path.
+  String _buildFeatureStarterTscnText({
+    required String assetName,
+    required String parentClassLabel,
+    required bool is2D,
+    required List<String> sceneTreeLines,
+    required String? scriptResPath,
+  }) {
+    final cleanRoot = assetName.replaceAll(RegExp(r'\.(tscn|gd)$'), '');
+    final pascalRoot = cleanRoot
+        .split(RegExp(r'[_\s-]+'))
+        .where((w) => w.isNotEmpty)
+        .map((w) => w[0].toUpperCase() + w.substring(1))
+        .join();
+    final fallbackRootType = is2D ? 'CharacterBody2D' : 'CharacterBody3D';
+    final rootType = GodotVirtualFile.sanitizeGdClassName(
+      parentClassLabel,
+      fallback: fallbackRootType,
+    );
+    final children = _buildSceneTscnChildren(sceneTreeLines, is2D: is2D);
+    return GodotVirtualFile.buildTscnStarterScaffold(
+      rootNodeName: pascalRoot.isNotEmpty ? pascalRoot : 'FeatureRoot',
+      rootNodeType: rootType,
+      scriptResPath: scriptResPath,
+      childNodes: children,
+    );
+  }
+
+  /// Synthesizes Markdown pipe-table rows (`| Node / Category | Property | Value |`)
+  /// for `GodotInspectorPanel` from explicit pipe tables, `area2Inspector` hints,
+  /// matching checkpoint `tuningParams`, and inline edits.
+  List<String> _synthesizeInspectorTableLines({
     required FeatureStateNode node,
-    required List<TaskHowToBlueprint> howToBlueprints,
-    required TaskHowToBlueprint selectedHowTo,
     required TaskHowToSubStep activeSubStep,
-    required int selectedTaskIdx,
-    required int activeSubStepIdx,
-    required String primaryTuningLabel,
-    required String primaryGuardLabel,
+    required ({String icon, String componentKey, String displayLabel})
+        activeTargetComp,
+    required List<String> tuningItems,
+    required bool is2D,
+  }) {
+    final rawCode = activeSubStep.codeFormula.trim();
+    final rawLines = rawCode.isNotEmpty ? rawCode.split('\n') : const <String>[];
+    final pipeLines = rawLines
+        .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
+        .toList();
+    if (pipeLines.length >= 2) {
+      if (activeSubStep.resolvedDockStage != GodotDockStage.inspector ||
+          tuningItems.isEmpty) {
+        return pipeLines;
+      }
+      final existingCorpus = pipeLines.join('\n').toLowerCase();
+      final appendedRows = <String>[];
+      for (final tp in tuningItems) {
+        final parts =
+            tp.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
+        final k = parts.first.trim();
+        final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
+        if (k.isEmpty || v.isEmpty) continue;
+        final inferred = _inferOwningComponentForProperty(
+          rawKey: k,
+          defaultComponentKey: activeTargetComp.componentKey,
+          is2D: is2D,
+        );
+        final propLabel = inferred.propertyLabel.trim().isNotEmpty
+            ? inferred.propertyLabel.trim()
+            : k;
+        if (existingCorpus.contains(k.toLowerCase()) ||
+            existingCorpus.contains(propLabel.toLowerCase())) {
+          continue;
+        }
+        final overrideVal =
+            _customComponentPropertyOverrides['${node.id}::$k'] ??
+                _customComponentPropertyOverrides['${node.id}::$propLabel'];
+        final finalVal =
+            (overrideVal != null && overrideVal.isNotEmpty) ? overrideVal : v;
+        appendedRows.add('| ${inferred.categoryLabel} | $propLabel | $finalVal |');
+      }
+      return appendedRows.isEmpty ? pipeLines : [...pipeLines, ...appendedRows];
+    }
+
+    final convertedGraph = _tryConvertConfigGraphToTableLines(
+      rawCode,
+      stepDo: activeSubStep.instruction.trim(),
+      stepRole: activeSubStep.stepRole ?? '',
+      defaultTarget: activeTargetComp.displayLabel,
+    );
+    if (convertedGraph.length >= 2) return convertedGraph;
+
+    final rows = <({String cat, String prop, String val})>[];
+    final seenProps = <String>{};
+
+    void addProp(String rawKey, String rawVal) {
+      final k = rawKey.trim();
+      final v = rawVal.trim();
+      if (k.isEmpty || v.isEmpty) return;
+      final inferred = _inferOwningComponentForProperty(
+        rawKey: k,
+        defaultComponentKey: activeTargetComp.componentKey,
+        is2D: is2D,
+      );
+      final propLabel = inferred.propertyLabel.trim().isNotEmpty
+          ? inferred.propertyLabel.trim()
+          : k;
+      final norm = propLabel.toLowerCase();
+      if (!seenProps.add(norm)) return;
+      final overrideVal =
+          _customComponentPropertyOverrides['${node.id}::$k'] ??
+              _customComponentPropertyOverrides['${node.id}::$propLabel'];
+      rows.add((
+        cat: inferred.categoryLabel,
+        prop: propLabel,
+        val: (overrideVal != null && overrideVal.isNotEmpty) ? overrideVal : v,
+      ));
+    }
+
+    final aiArea2 = (activeSubStep.area2Inspector ?? '').trim();
+    if (aiArea2.isNotEmpty) {
+      final entries =
+          aiArea2.contains('\n') ? aiArea2.split('\n') : aiArea2.split('|');
+      for (final rawEntry in entries) {
+        final clean = rawEntry.trim();
+        if (clean.isEmpty) continue;
+        final cIdx = clean.indexOf(':');
+        final eIdx = clean.indexOf('=');
+        final dIdx = cIdx != -1 ? cIdx : eIdx;
+        if (dIdx > 0 && dIdx < clean.length - 1) {
+          addProp(clean.substring(0, dIdx), clean.substring(dIdx + 1));
+        }
+      }
+    }
+
+    final dockStage = activeSubStep.resolvedDockStage;
+    final corpus =
+        '${activeSubStep.shortTitle} ${activeSubStep.instruction} $rawCode $aiArea2'
+            .toLowerCase();
+    for (final tp in tuningItems) {
+      final parts =
+          tp.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
+      final k = parts.first.trim();
+      final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
+      if (k.isEmpty) continue;
+      if (dockStage == GodotDockStage.inspector ||
+          corpus.contains(k.toLowerCase())) {
+        addProp(k, v);
+      }
+    }
+
+    if (rows.isEmpty && dockStage == GodotDockStage.inspector) {
+      for (final tp in tuningItems.take(4)) {
+        final parts =
+            tp.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
+        final k = parts.first.trim();
+        final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
+        if (k.isNotEmpty) addProp(k, v);
+      }
+    }
+
+    if (rows.isEmpty) return const [];
+    return [
+      '| Node / Category | Property | Value |',
+      '| --- | --- | --- |',
+      for (final r in rows) '| ${r.cat} | ${r.prop} | ${r.val} |',
+    ];
+  }
+
+  String _resolveEffectiveResPathForStep({
+    required TierDocument feat,
+    required FeatureStateNode node,
+    required TaskHowToSubStep subStep,
+  }) {
+    final fromStep = widget.workbench.extractPrimaryScriptResPath(subStep.stepPath) ??
+        widget.workbench.extractPrimarySceneResPath(subStep.stepPath);
+    if (fromStep != null && fromStep.trim().isNotEmpty) {
+      return GodotVirtualFile.normalizeResPath(fromStep);
+    }
+    final fromPrimary = widget.workbench.extractPrimaryScriptResPath(
+          node.parameters['primarySharedScriptOrScene'] ??
+              feat.sections['primary_asset'],
+        ) ??
+        widget.workbench.extractPrimarySceneResPath(
+          node.parameters['primarySharedScriptOrScene'] ??
+              feat.sections['primary_asset'],
+        );
+    if (fromPrimary != null && fromPrimary.trim().isNotEmpty) {
+      return GodotVirtualFile.normalizeResPath(fromPrimary);
+    }
+    final derived = TaskHowToBlueprint.deriveConcreteAssetName(feat.title);
+    final snake = derived.snakeName.isNotEmpty ? derived.snakeName : 'feature';
+    return 'res://scripts/$snake.gd';
+  }
+
+  Widget _buildInitialSetupCard({
+    required TierDocument feat,
+    required FeatureStateNode node,
+    required ({
+      String archetype,
+      bool is2D,
+      String sec1Title,
+      String sec2Title,
+      String sec3Title,
+      String assetIcon,
+      String assetName,
+      String parentClassLabel,
+      String folderPath,
+      bool isNewAssetOnTask,
+      List<({String label, String detail})> setupSteps,
+      String levelHookupTitle,
+      List<String> levelHookupSteps,
+    }) assetSpec,
     required List<String> tuningItems,
     required List<String> edgeItems,
   }) {
-    final rawCode = activeSubStep.codeFormula.trim();
-    final stepPath = activeSubStep.stepPath.isNotEmpty
-        ? activeSubStep.stepPath
-        : selectedHowTo.whereLocation;
-    final primaryVarName = primaryTuningLabel
-        .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
-        .first
-        .trim();
-
-    // Strip any leading single-line comment when displaying a pure hierarchy/setup block
-    final rawLines = rawCode.split('\n');
-    final cleanSetupLines = <String>[];
-    for (int i = 0; i < rawLines.length; i++) {
-      final line = rawLines[i];
-      if (i == 0 && line.trimLeft().startsWith('//')) continue;
-      cleanSetupLines.add(line);
+    if (!assetSpec.isNewAssetOnTask) {
+      return SizedBox.shrink(key: ValueKey('initial_setup_area_${node.id}'));
     }
-    final cleanSetupText = cleanSetupLines.join('\n').trim().isEmpty
-        ? rawCode
-        : cleanSetupLines.join('\n').trim();
-
-    // Classify the active step based on its actual content & step context
-    final lowerPath = stepPath.toLowerCase();
-    final hasSignalArrows = rawCode.contains('──►') ||
-        rawCode.contains('└──►') ||
-        rawCode.contains('├──►') ||
-        RegExp(r'^\s*\[[^\]]+\]', multiLine: true).hasMatch(rawCode);
-    final hasHierarchyTreeChars =
-        RegExp(r'[└├]─(?!─►)').hasMatch(rawCode) && !hasSignalArrows;
-    final isTreeHierarchyStep = !hasSignalArrows &&
-        (hasHierarchyTreeChars ||
-            lowerPath.contains('scene dock') ||
-            lowerPath.contains('scene tree') ||
-            lowerPath.contains('add child node'));
-    final isLevelPlacementStep = !isTreeHierarchyStep &&
-        (rawCode.contains('Instance:') ||
-            rawCode.contains('Instanced Node:') ||
-            lowerPath.contains('instantiate child scene') ||
-            lowerPath.contains('main scene') ||
-            (selectedTaskIdx == 0 && activeSubStepIdx == 2));
-    final isCodeVariableStep = rawCode.contains('@export var') ||
-        rawCode.contains('@export_range') ||
-        lowerPath.contains('inspector');
-    final isScriptCreationStep = selectedTaskIdx == 0 &&
-        activeSubStepIdx == 0 &&
-        !isTreeHierarchyStep &&
-        !isCodeVariableStep;
-
-    final matchedTunings = tuningItems.where((t) {
-      final key = t
-          .split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex)
-          .first
-          .trim()
-          .toLowerCase();
-      return key.isNotEmpty &&
-          (rawCode.toLowerCase().contains(key) ||
-              activeSubStep.instruction.toLowerCase().contains(key));
-    }).toList();
-    final effectiveTuningLabel = matchedTunings.isNotEmpty
-        ? matchedTunings.join('  ·  ')
-        : primaryTuningLabel;
-
-    String? compWhere;
-    String? compBody;
-    String inspWhere = '';
-    final inspRows = <({String key, String value})>[];
-    String? codeWhere;
-    String? codeBody;
-
-    if (isTreeHierarchyStep) {
-      compWhere = stepPath;
-      compBody = cleanSetupText;
-      inspWhere = 'Inspector Dock (Node Properties)';
-      for (final line in compBody.split('\n')) {
-        final match = _ReleaseWorkbenchScreenState._treeChildRegex.firstMatch(line);
-        if (match != null) {
-          final nodeName = match.group(1)!.trim();
-          final nodeDesc = (match.group(2) ?? '').trim();
-          if (nodeName.isEmpty) continue;
-          if (nodeDesc.isNotEmpty) {
-            final colonIdx = nodeDesc.indexOf(':');
-            if (colonIdx > 0 && colonIdx < nodeDesc.length - 1) {
-              final propType = nodeDesc.substring(0, colonIdx).trim();
-              final propVal = nodeDesc.substring(colonIdx + 1).trim();
-              inspRows.add((
-                key: '$nodeName → $propType',
-                value: propVal,
-              ));
-            } else {
-              inspRows.add((
-                key: '$nodeName → Type / Resource',
-                value: nodeDesc,
-              ));
-            }
-          }
-        }
-      }
-      for (final t in matchedTunings.take(2)) {
-        final parts =
-            t.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
-        final k = parts.first.trim();
-        final v = parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
-        if (k.isNotEmpty) {
-          inspRows.add((key: 'Tuning · $k', value: v));
-        }
-      }
-      if (inspRows.isEmpty) {
-        inspRows.add((key: 'Primary Tuning Binding', value: effectiveTuningLabel));
-      }
-    } else if (isLevelPlacementStep) {
-      compWhere = stepPath;
-      compBody = cleanSetupText;
-      inspWhere = 'Inspector Dock → Node Transform';
-      inspRows.addAll(const [
-        (
-          key: 'Transform → Position',
-          value: 'Vector2(0, 0) / Vector3(0, 0, 0)',
-        ),
-        (
-          key: 'Scene Instance Mode',
-          value: 'Active Level Instance',
-        ),
-      ]);
-    } else if (isCodeVariableStep) {
-      inspWhere = 'Inspector Dock → Script Variables';
-      inspRows.addAll([
-        (
-          key: 'Inspector Specifier',
-          value: '@export var',
-        ),
-        (key: 'Default Tuning Value', value: effectiveTuningLabel),
-      ]);
-      codeWhere = stepPath;
-      codeBody = rawCode;
-    } else if (isScriptCreationStep) {
-      compWhere = 'Scene Dock (Top-Left)';
-      compBody = 'Root Node (Node2D / CharacterBody2D/3D)  [📜 Attached .gd]';
-      inspWhere = 'Script Attach Dialog';
-      inspRows.addAll([
-        const (
-          key: 'Base Class',
-          value: 'Node2D / Node3D',
-        ),
-        (key: 'File Path', value: stepPath),
-      ]);
-      codeWhere = stepPath;
-      codeBody = rawCode;
-    } else {
-      // Runtime GDScript / Node Signals / Guard Step:
-      if (activeSubStepIdx == 0) {
-        inspWhere = activeSubStep.isGuardStep
-            ? 'Guard Condition & Safety Check'
-            : 'Runtime Tuning & Inspector Binding';
-        inspRows.add((key: 'Tuning Parameter', value: effectiveTuningLabel));
-      }
-      codeWhere = stepPath;
-      codeBody = rawCode;
-    }
-
-    final isPureRuntimeCodeStep = !isTreeHierarchyStep &&
-        !isLevelPlacementStep &&
-        !isCodeVariableStep &&
-        !isScriptCreationStep &&
-        activeSubStepIdx > 0;
-
-    // Apply on-demand hierarchy & Inspector overrides when present
-    final aiArea1 = activeSubStep.area1Hierarchy?.trim() ?? '';
-    if (aiArea1.isNotEmpty) {
-      compWhere ??= stepPath;
-      compBody = aiArea1;
-      if (rawCode.isNotEmpty && rawCode != aiArea1) {
-        codeWhere ??= stepPath;
-        codeBody ??= rawCode;
-      }
-    } else if (hasSignalArrows && rawCode.isNotEmpty) {
-      codeWhere ??= stepPath;
-      codeBody ??= rawCode;
-    }
-    final aiArea2 = activeSubStep.area2Inspector?.trim() ?? '';
-    if (aiArea2.isNotEmpty) {
-      if (inspWhere.isEmpty) {
-        inspWhere = 'Inspector Dock';
-      }
-      final parsedAiRows = <({String key, String value})>[];
-      final rawEntries = aiArea2.contains('\n')
-          ? aiArea2.split('\n')
-          : aiArea2.split('|');
-      for (final rawEntry in rawEntries) {
-        final cleanEntry = rawEntry.trim();
-        if (cleanEntry.isEmpty) continue;
-        final colonIdx = cleanEntry.indexOf(':');
-        final eqIdx = cleanEntry.indexOf('=');
-        final delimIdx = colonIdx != -1 ? colonIdx : eqIdx;
-        if (delimIdx > 0 && delimIdx < cleanEntry.length - 1) {
-          parsedAiRows.add((
-            key: cleanEntry.substring(0, delimIdx).trim(),
-            value: cleanEntry.substring(delimIdx + 1).trim(),
-          ));
-        } else {
-          parsedAiRows.add((key: 'Inspector Binding', value: cleanEntry));
-        }
-      }
-      final isSingleDuplicatePrimaryTuning = isPureRuntimeCodeStep &&
-          aiArea1.isEmpty &&
-          parsedAiRows.length == 1 &&
-          parsedAiRows.first.key.toLowerCase() ==
-              primaryVarName.toLowerCase();
-      if (parsedAiRows.isNotEmpty && !isSingleDuplicatePrimaryTuning) {
-        inspRows
-          ..clear()
-          ..addAll(parsedAiRows);
-      }
-    }
-
-    if (compBody != null && compBody.trim().isNotEmpty && inspRows.isEmpty) {
-      if (inspWhere.isEmpty) {
-        inspWhere = compWhere ?? stepPath;
-      }
-      for (final rawLine in compBody.split('\n')) {
-        final cleanLine = rawLine.trim();
-        if (cleanLine.isEmpty) continue;
-        inspRows.add((key: 'Node', value: cleanLine));
-      }
-    }
-
-    final activeTargetComp = _resolveTaskTargetComponent(
-      selectedHowTo,
-    );
-    final assetSpec = _resolveFeatureAssetSpec(
-      feat: feat,
-      checkpointIndex: checkpointIndex,
-      selectedTaskIdx: selectedTaskIdx,
-      selectedHowTo: selectedHowTo,
-      activeSubStep: activeSubStep,
-      activeTargetComp: activeTargetComp,
-    );
-
-    // ── Strict Task-Scoped Variable Filtering (Omit Unused Variables Completely) ──
-    final taskTitleLower = selectedHowTo.shortTaskTitle.toLowerCase();
-    final isTaskGuardRelevant = taskTitleLower.contains('guard') ||
-        taskTitleLower.contains('clamp') ||
-        taskTitleLower.contains('lock') ||
-        taskTitleLower.contains('boundary') ||
-        activeSubStep.stepNumberLabel.toUpperCase().contains('GUARD') ||
-        selectedTaskIdx == howToBlueprints.length - 1 ||
-        howToBlueprints.length == 1;
-
-    final activeCompLower = activeTargetComp.componentKey.toLowerCase();
-    final isActiveCapsuleTask = activeCompLower.contains('capsule') ||
-        activeCompLower.contains('collider') ||
-        activeCompLower.contains('collisionshape') ||
-        taskTitleLower.contains('capsule') ||
-        taskTitleLower.contains('collider');
-    final isActiveMovementTask = activeCompLower.contains('movement') ||
-        activeCompLower.contains('rigidbody') ||
-        activeCompLower.contains('characterbody');
-
-    final otherTaskCompKeys = <String>{
-      for (int tIdx = 0; tIdx < howToBlueprints.length; tIdx++)
-        if (tIdx != selectedTaskIdx)
-          _resolveTaskTargetComponent(
-            howToBlueprints[tIdx],
-          ).componentKey.toLowerCase(),
-    }..remove(activeCompLower);
-
-    final taskExplicitCorpus = [
-      selectedHowTo.shortTaskTitle,
-      selectedHowTo.taskGoalSentence,
-      activeSubStep.shortTitle,
-      activeSubStep.codeFormula,
-    ].join(' ').toLowerCase();
-
-    final unfilteredInspRows = List<({String key, String value})>.from(inspRows);
-    inspRows.removeWhere((row) {
-      final keyLower = row.key.toLowerCase();
-      final valLower = row.value.toLowerCase();
-      if (!isTaskGuardRelevant && keyLower.contains('guard')) {
-        return true;
-      }
-      if (isActiveCapsuleTask &&
-          (keyLower == 'asset name' ||
-              keyLower == 'parent class' ||
-              keyLower.contains('walkspeed') ||
-              keyLower.contains('move_speed') ||
-              keyLower.contains('jump_velocity') ||
-              keyLower.contains('air_control') ||
-              valLower.contains('move_speed') ||
-              valLower.contains('walkspeed'))) {
-        return true;
-      }
-      final inferred = _inferOwningComponentForProperty(
-        rawKey: row.key,
-        defaultComponentKey: activeTargetComp.componentKey,
-        is2D: assetSpec.is2D,
-      );
-      final inferredCompLower = inferred.componentLabel.toLowerCase();
-      final propLower = inferred.propertyLabel.toLowerCase();
-      if (inferredCompLower != activeCompLower) {
-        final belongsToOtherTaskComp =
-            otherTaskCompKeys.contains(inferredCompLower) ||
-                (isActiveCapsuleTask &&
-                    (inferredCompLower.contains('movement') ||
-                        inferredCompLower.contains('camera') ||
-                        inferredCompLower.contains('controller') ||
-                        inferredCompLower.contains('characterbody'))) ||
-                (isActiveMovementTask &&
-                    (inferredCompLower.contains('capsule') ||
-                        inferredCompLower.contains('collider') ||
-                        inferredCompLower.contains('collisionshape')));
-        if (belongsToOtherTaskComp && !taskExplicitCorpus.contains(propLower)) {
-          return true;
-        }
-      }
-      return false;
-    });
-
-    if (inspRows.isEmpty) {
-      if (isActiveCapsuleTask) {
-        inspRows.addAll([
-          (
-            key: 'Height',
-            value: assetSpec.is2D ? '70.0 px' : '1.76 m',
+    final stepSummary = assetSpec.setupSteps
+        .map((s) => s.label.trim())
+        .where((s) => s.isNotEmpty)
+        .join(' · ');
+    return Container(
+      key: ValueKey('initial_setup_area_${node.id}'),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B0E15),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFF1E293B)),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 5,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Wrap(
+            spacing: 7,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                'INITIAL SETUP',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: fontMicro,
+                  fontWeight: weightBold,
+                  letterSpacing: 0.4,
+                  color: const Color(0xFF94A3B8),
+                ),
+              ),
+              Text(
+                '·',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: fontMicro,
+                  fontWeight: weightSemi,
+                  color: const Color(0xFF475569),
+                ),
+              ),
+              InkWell(
+                key: ValueKey('compact_shared_asset_badge_${node.id}'),
+                borderRadius: BorderRadius.circular(4),
+                onTap: () => showGodotFilesAndSyncDialog(
+                  context,
+                  widget.workbench,
+                  initialResPath: widget.workbench
+                          .extractPrimaryScriptResPath(
+                        feat.sections['primary_asset'],
+                      ) ??
+                      widget.workbench.extractPrimarySceneResPath(
+                        feat.sections['primary_asset'],
+                      ),
+                  activeFeature: feat,
+                ),
+                child: Text(
+                  '${assetSpec.assetIcon} ${assetSpec.assetName}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: fontBody,
+                    fontWeight: weightBold,
+                    color: const Color(0xFF38BDF8),
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 1.5,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF131B28),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: const Color(0xFF243046)),
+                ),
+                child: Text(
+                  assetSpec.parentClassLabel,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: fontMicro,
+                    fontWeight: weightSemi,
+                    color: const Color(0xFF94A3B8),
+                  ),
+                ),
+              ),
+              if (stepSummary.isNotEmpty)
+                Text(
+                  stepSummary,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.inter(
+                    fontSize: fontMicro,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+            ],
           ),
-          (
-            key: 'Radius',
-            value: assetSpec.is2D ? '16.0 px' : '0.35 m',
-          ),
-        ]);
-      } else if (matchedTunings.isNotEmpty) {
-        for (final t in matchedTunings.take(2)) {
-          final parts =
-              t.split(_ReleaseWorkbenchScreenState._tuningVarDelimiterRegex);
-          final k = parts.first.trim();
-          final v =
-              parts.length > 1 ? parts.sublist(1).join(':').trim() : '1.0';
-          if (k.isNotEmpty) {
-            inspRows.add((key: k, value: v));
-          }
-        }
-      } else if (unfilteredInspRows.isNotEmpty) {
-        inspRows.add(unfilteredInspRows.first);
-      }
-    }
-
-    final components = _buildPersistentSceneTreeComponents(
-      howToBlueprints,
-    );
-
-    final componentInspectorRows = _buildComponentInspectorRows(
-      node: node,
-      howToBlueprints: howToBlueprints,
-      selectedTaskIdx: selectedTaskIdx,
-      activeSubStepIdx: activeSubStepIdx,
-      activeTargetComp: activeTargetComp,
-      components: components,
-      activeStepFallbackRows: inspRows,
-      tuningItems: tuningItems,
-      primaryTuningLabel: primaryTuningLabel,
-      is2D: assetSpec.is2D,
-      archetype: assetSpec.archetype,
-    );
-
-    final fallbackCodeLines = rawCode.isNotEmpty
-        ? rawCode.split('\n')
-        : <String>[
-            for (final r in inspRows) '${r.key} = ${r.value}',
-          ];
-    final effectiveCodeLines =
-        (codeBody != null && codeBody.trim().isNotEmpty)
-            ? codeBody.split('\n')
-            : fallbackCodeLines;
-    final hasCode = effectiveCodeLines.isNotEmpty;
-    final showCode =
-        hasCode && (_engineAreaFilter == 0 || _engineAreaFilter == 3);
-    final effectiveHeaderPath = (codeWhere != null && codeWhere.trim().isNotEmpty)
-        ? codeWhere.trim()
-        : stepPath;
-
-    // ── INITIAL SETUP WIDGET (Option A: 3-Column Horizontal Strip · Only visible when assetSpec.isNewAssetOnTask == true) ──
-    final Widget initialSetupWidget = assetSpec.isNewAssetOnTask
-        ? Container(
-            key: ValueKey('initial_setup_area_${node.id}'),
-            padding: const EdgeInsets.all(12),
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 7,
+              vertical: 2,
+            ),
             decoration: BoxDecoration(
-              color: const Color(0xFF0B0E15),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFF1E293B),
+              color: const Color(0xFF131B28),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: const Color(0xFF243046)),
+            ),
+            child: Text(
+              '+ Create in ${assetSpec.folderPath}',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: fontMicro,
+                fontWeight: weightSemi,
+                color: const Color(0xFF38BDF8),
               ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSceneStageDockPane({
+    required FeatureStateNode node,
+    required List<String> sceneTreeLines,
+    required String assetName,
+    required String parentClassLabel,
+    required bool is2D,
+    required String? scriptResPath,
+  }) {
+    return Container(
+      key: ValueKey('scene_dock_tree_pane_${node.id}'),
+      decoration: BoxDecoration(
+        color: const Color(0xFF06090F),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF1F2B3E)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+            decoration: const BoxDecoration(
+              color: Color(0xFF0D1422),
+              border: Border(bottom: BorderSide(color: Color(0xFF1F2B3E))),
+            ),
+            child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.only(bottom: 9),
-                  margin: const EdgeInsets.only(bottom: 9),
-                  decoration: const BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(
-                        color: Color(0xFF161F2E),
+                Text(
+                  '🌲 .tscn NODE TREE',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF34D399),
+                  ),
+                ),
+                const Spacer(),
+                InkWell(
+                  key: ValueKey('copy_starter_tscn_btn_${node.id}'),
+                  borderRadius: BorderRadius.circular(5),
+                  onTap: () {
+                    final scaffold = _buildFeatureStarterTscnText(
+                      assetName: assetName,
+                      parentClassLabel: parentClassLabel,
+                      is2D: is2D,
+                      sceneTreeLines: sceneTreeLines,
+                      scriptResPath: scriptResPath,
+                    );
+                    Clipboard.setData(ClipboardData(text: scaffold));
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            'Copied starter $assetName hierarchy to clipboard ✓',
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF13221D),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: const Color(0xFF34D399).withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Text(
+                      '⧉ Copy Starter .tscn',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: const Color(0xFF6EE7B7),
                       ),
                     ),
                   ),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Wrap(
-                        spacing: 7,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (int i = 0; i < sceneTreeLines.length; i++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      bottom: i == sceneTreeLines.length - 1 ? 0 : 4,
+                    ),
+                    child: Text(
+                      sceneTreeLines[i],
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: fontBody,
+                        fontWeight: i == 0 ? weightBold : weightRegular,
+                        color: i == 0
+                            ? const Color(0xFF34D399)
+                            : const Color(0xFFE2E8F0),
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInlineCodeSyncStrip({
+    required TierDocument feat,
+    required FeatureStateNode node,
+    required int stepIdx,
+    required String resPath,
+  }) {
+    final normPath = GodotVirtualFile.normalizeResPath(resPath);
+    final vf = widget.workbench.godotFileForResPath(normPath);
+    final diffLines = vf != null
+        ? widget.workbench.previewDiskDiffForResPath(normPath)
+        : const <GodotDiffLine>[];
+    final addedCount =
+        diffLines.where((l) => l.kind == GodotDiffLineKind.added).length;
+    final hasCloudFile = vf != null && vf.content.trim().isNotEmpty;
+    final statusLabel = !hasCloudFile
+        ? 'Cloud File: $normPath'
+        : (addedCount > 0
+            ? 'Patched in Cloud · $normPath (+$addedCount lines)'
+            : 'In Sync · $normPath');
+
+    return Container(
+      key: ValueKey('inline_code_sync_strip_${node.id}_$stepIdx'),
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0A111D),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(
+          color: (addedCount > 0
+                  ? const Color(0xFF38BDF8)
+                  : const Color(0xFF1F2B3E))
+              .withValues(alpha: addedCount > 0 ? 0.45 : 1.0),
+        ),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        alignment: WrapAlignment.spaceBetween,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: addedCount > 0
+                      ? const Color(0xFF38BDF8)
+                      : (hasCloudFile
+                          ? const Color(0xFF34D399)
+                          : const Color(0xFF64748B)),
+                ),
+              ),
+              const SizedBox(width: 7),
+              Flexible(
+                child: Text(
+                  statusLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: addedCount > 0
+                        ? const Color(0xFF7DD3FC)
+                        : const Color(0xFF94A3B8),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              InkWell(
+                key: ValueKey('inline_open_code_file_btn_${node.id}'),
+                borderRadius: BorderRadius.circular(5),
+                onTap: () {
+                  _rebuild(() {
+                    _isCodeFileWorkspaceMode = true;
+                    _selectedCodeFileResPath = normPath;
+                    _isShowingStarterTscnInCodeMode = false;
+                  });
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF131B2A),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(color: const Color(0xFF26334D)),
+                  ),
+                  child: Text(
+                    'Show Full .gd',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                ),
+              ),
+              InkWell(
+                key: ValueKey('inline_review_diff_btn_${node.id}'),
+                borderRadius: BorderRadius.circular(5),
+                onTap: () => showGodotFilesAndSyncDialog(
+                  context,
+                  widget.workbench,
+                  initialResPath: normPath,
+                  activeFeature: feat,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0E293D),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: const Color(0xFF38BDF8).withValues(alpha: 0.45),
+                    ),
+                  ),
+                  child: Text(
+                    widget.workbench.isGodotFolderLinked
+                        ? 'Review Diff → Write'
+                        : 'Link Folder & Write',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF7DD3FC),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Dedicated `F6 · PLAYTEST SIGN-OFF GATE` pane at the bottom of a Feature's Build Queue.
+  Widget _buildPlaytestGateWorkspacePane({
+    required TierDocument feat,
+    required List<FeatureStateNode> states,
+    required FeatureStateNode node,
+    required List<TaskHowToSubStep> unifiedSteps,
+    required List<String> edgeItems,
+    required List<String> tuningItems,
+  }) {
+    final doneSteps = unifiedSteps.where((s) => s.subtask.completed).length;
+    final totalSteps = unifiedSteps.length;
+    final signedOffGuards = [
+      for (int i = 0; i < edgeItems.length; i++)
+        if (node.isGuardSignedOff(i, edgeItems[i])) i,
+    ].length;
+    final endGoal = node.playtestCondition;
+    final activeVer = widget.workbench.activeReleaseVersionTag;
+    final hasNextCp = states.any(
+      (s) => s.id != node.id && s.releaseVersion == activeVer && !s.isCompleted,
+    );
+
+    return Container(
+      key: ValueKey('playtest_gate_card_${node.id}'),
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D131F),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: node.isPlaytestPassed
+              ? accentEmerald.withValues(alpha: 0.5)
+              : const Color(0xFF34D399).withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF062E24),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(
+                        color: const Color(0xFF34D399).withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Text(
+                      '▶ F6 · PLAYTEST SIGN-OFF GATE',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: weightBold,
+                        color: const Color(0xFF34D399),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '$doneSteps/$totalSteps Build Steps Done',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: fontMicro,
+                      fontWeight: weightSemi,
+                      color: textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+              if (edgeItems.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF1D160B),
+                    borderRadius: BorderRadius.circular(5),
+                    border: Border.all(
+                      color: const Color(0xFFF59E0B).withValues(alpha: 0.38),
+                    ),
+                  ),
+                  child: Text(
+                    '$signedOffGuards/${edgeItems.length} Guards Checked',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: fontMicro,
+                      fontWeight: weightBold,
+                      color: const Color(0xFFFCD34D),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF080D16),
+              borderRadius: BorderRadius.circular(7),
+              border: Border.all(color: const Color(0xFF1B263B)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '✓ PLAYTEST END GOAL (RUN SCENE F6)',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: fontMicro,
+                    fontWeight: weightBold,
+                    letterSpacing: 0.5,
+                    color: const Color(0xFF34D399),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text.rich(
+                  _buildSemanticStepSpan(
+                    text: endGoal,
+                    baseStyle: GoogleFonts.inter(
+                      fontSize: fontItem,
+                      fontWeight: weightSemi,
+                      height: 1.45,
+                      color: textPrimary,
+                    ),
+                    tuningItems: tuningItems,
+                    edgeItems: edgeItems,
+                    isCodeBlock: false,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (edgeItems.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            Text(
+              'STATE & BOUNDARY GUARDS',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: fontMicro,
+                fontWeight: weightBold,
+                letterSpacing: 0.6,
+                color: const Color(0xFFFBBF24),
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (int gIdx = 0; gIdx < edgeItems.length; gIdx++)
+              Builder(
+                builder: (context) {
+                  final rawGuard = edgeItems[gIdx];
+                  final isChecked = node.isGuardSignedOff(gIdx, rawGuard);
+                  final cleanGuard = rawGuard
+                      .replaceFirst(
+                        RegExp(
+                          r'^\[(?:STATE|PLAYTEST)?\s*GUARD\]\s*',
+                          caseSensitive: false,
+                        ),
+                        '',
+                      )
+                      .trim();
+                  return InkWell(
+                    key: ValueKey('playtest_guard_check_${node.id}_$gIdx'),
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () {
+                      node.setGuardSignedOff(gIdx, rawGuard, !isChecked);
+                      widget.workbench.updateFeatureStates(feat.id, states);
+                      _rebuild();
+                    },
+                    child: Container(
+                      margin: EdgeInsets.only(
+                        bottom: gIdx == edgeItems.length - 1 ? 0 : 6,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isChecked
+                            ? const Color(0xFF0A1F18)
+                            : const Color(0xFF0B0E17),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: isChecked
+                              ? const Color(0xFF34D399).withValues(alpha: 0.4)
+                              : const Color(0xFF1F2A3F),
+                        ),
+                      ),
+                      child: Row(
                         children: [
-                          Text(
-                            'INITIAL SETUP',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: fontMicro,
-                              fontWeight: weightBold,
-                              letterSpacing: 0.4,
-                              color: const Color(0xFF94A3B8),
-                            ),
-                          ),
-                          Text(
-                            '·',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: fontMicro,
-                              fontWeight: weightSemi,
-                              color: const Color(0xFF475569),
-                            ),
-                          ),
-                          Text(
-                            '${assetSpec.assetIcon} ${assetSpec.assetName}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: fontBody,
-                              fontWeight: weightBold,
-                              color: const Color(0xFF38BDF8),
-                            ),
-                          ),
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 7,
-                              vertical: 2,
-                            ),
+                            width: 17,
+                            height: 17,
+                            alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: const Color(0xFF131B28),
+                              color: isChecked
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF07090E),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                color: const Color(0xFF243046),
+                                color: isChecked
+                                    ? const Color(0xFF10B981)
+                                    : const Color(0xFFF59E0B)
+                                        .withValues(alpha: 0.6),
                               ),
                             ),
                             child: Text(
-                              assetSpec.parentClassLabel,
+                              isChecked ? '✓' : '',
                               style: GoogleFonts.jetBrainsMono(
-                                fontSize: fontMicro,
-                                fontWeight: weightSemi,
-                                color: const Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF131B28),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: const Color(0xFF243046),
-                          ),
-                        ),
-                        child: Text(
-                          '+ Create in ${assetSpec.folderPath}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: fontMicro,
-                            fontWeight: weightSemi,
-                            color: const Color(0xFF38BDF8),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                LayoutBuilder(
-                  builder: (context, setupCons) {
-                    final useHorizontalGrid =
-                        setupCons.maxWidth >= 560 &&
-                        assetSpec.setupSteps.length > 1;
-                    Widget buildSetupStepCard(int stIdx) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0E1420),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: const Color(0xFF182234),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${stIdx + 1}. ${assetSpec.setupSteps[stIdx].label}:',
-                              style: GoogleFonts.inter(
-                                fontSize: fontBody,
+                                fontSize: 10,
                                 fontWeight: weightBold,
-                                height: 1.4,
-                                color: const Color(0xFFF8FAFC),
+                                color: const Color(0xFF05101A),
                               ),
                             ),
-                            const SizedBox(height: 3),
-                            Text.rich(
+                          ),
+                          const SizedBox(width: 9),
+                          Expanded(
+                            child: Text.rich(
                               _buildSemanticStepSpan(
-                                text: assetSpec.setupSteps[stIdx].detail,
+                                text: cleanGuard,
                                 baseStyle: GoogleFonts.inter(
                                   fontSize: fontBody,
                                   fontWeight: weightRegular,
-                                  height: 1.4,
-                                  color: const Color(0xFF94A3B8),
+                                  color: isChecked
+                                      ? textSecondary
+                                      : const Color(0xFFFDE68A),
                                 ),
                                 tuningItems: tuningItems,
                                 edgeItems: edgeItems,
                                 isCodeBlock: false,
                               ),
                             ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    if (useHorizontalGrid) {
-                      return IntrinsicHeight(
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            for (int stIdx = 0;
-                                stIdx < assetSpec.setupSteps.length;
-                                stIdx++) ...[
-                              if (stIdx > 0) const SizedBox(width: 8),
-                              Expanded(child: buildSetupStepCard(stIdx)),
-                            ],
-                          ],
-                        ),
-                      );
-                    }
-
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (int stIdx = 0;
-                            stIdx < assetSpec.setupSteps.length;
-                            stIdx++)
-                          Padding(
-                            padding: EdgeInsets.only(
-                              bottom: stIdx == assetSpec.setupSteps.length - 1
-                                  ? 0
-                                  : 6,
-                            ),
-                            child: buildSetupStepCard(stIdx),
                           ),
-                      ],
-                    );
-                  },
-                ),
-              ],
-            ),
-          )
-        : SizedBox.shrink(
-            key: ValueKey('initial_setup_area_${node.id}'),
-          );
-
-    // Count completed sub-steps for the active task
-    final int activeTaskDoneSteps = selectedHowTo.subSteps
-        .where((s) => s.subtask.completed)
-        .length;
-
-    bool isSubStepExpanded(int stepIdx) {
-      final stepKey = '${node.id}_${selectedTaskIdx}_$stepIdx';
-      if (_collapsedSubStepKeys.contains(stepKey)) return false;
-      if (_expandedSubStepKeys.contains(stepKey)) return true;
-      if (widget.workbench.focusMode && selectedHowTo.subSteps.length > 1) {
-        return stepIdx == activeSubStepIdx;
-      }
-      return true;
-    }
-
-    final compactHierarchySummary = components.isNotEmpty
-        ? components
-            .take(3)
-            .map((c) => c.displayLabel)
-            .join(' › ')
-        : '';
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // ══════════════════════════════════════════════════════════════════════
-        // 100% FULL-WIDTH RUNBOOK SHEET:
-        //   1. INITIAL SETUP (only when assetSpec.isNewAssetOnTask == true)
-        //   2. STEPS (X/Y) + TARGET + Hierarchy Summary + Focus/Expand All
-        //   3. Focus-Mode Step → Code Accordion (1.1, 1.2, 1.3)
-        // ══════════════════════════════════════════════════════════════════════
-        Padding(
-          key: ValueKey('area3_script_setup_panel_${node.id}'),
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // ── 1. INITIAL SETUP (Only shown when assetSpec.isNewAssetOnTask == true) ──
-              initialSetupWidget,
-              if (assetSpec.isNewAssetOnTask) const SizedBox(height: 14),
-
-              // ── 2. STEPS (X/Y) + TARGET + COMPACT HIERARCHY HEADER BAR ──
-              Wrap(
-                spacing: 8,
-                runSpacing: 6,
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 2.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF181E2C),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: const Color(0xFF262E40),
-                          ),
-                        ),
-                        child: Text(
-                          'STEPS ($activeTaskDoneSteps/${selectedHowTo.subSteps.length})',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: fontMicro,
-                            fontWeight: weightBold,
-                            letterSpacing: 0.4,
-                            color: const Color(0xFF94A3B8),
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0B0E15),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: const Color(0xFF262E40),
-                          ),
-                        ),
-                        child: Text.rich(
-                          TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'TARGET: ',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: fontMicro,
-                                  fontWeight: weightBold,
-                                  color: const Color(0xFF64748B),
-                                ),
-                              ),
-                              TextSpan(
-                                text:
-                                    '${assetSpec.assetIcon} ${assetSpec.assetName}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: fontMicro,
-                                  fontWeight: weightSemi,
-                                  color: const Color(0xFFE2E8F0),
-                                ),
-                              ),
-                              TextSpan(
-                                text: ' › ',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: fontMicro,
-                                  fontWeight: weightSemi,
-                                  color: const Color(0xFF64748B),
-                                ),
-                              ),
-                              TextSpan(
-                                text:
-                                    '${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: fontMicro,
-                                  fontWeight: weightSemi,
-                                  color: const Color(0xFF38BDF8),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      if (compactHierarchySummary.isNotEmpty)
-                        Container(
-                          key: ValueKey(
-                            'steps_hierarchy_summary_${node.id}_$selectedTaskIdx',
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 2.5,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF090D15),
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                              color: const Color(0xFF1E293B),
-                            ),
-                          ),
-                          child: Text(
-                            'Hierarchy: $compactHierarchySummary',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9.5,
-                              fontWeight: weightRegular,
-                              color: const Color(0xFF64748B),
-                            ),
-                          ),
-                        ),
-                      if (selectedHowTo.subSteps.length > 1)
-                        Builder(
-                          builder: (context) {
-                            final allExpanded = List<int>.generate(
-                              selectedHowTo.subSteps.length,
-                              (i) => i,
-                            ).every(isSubStepExpanded);
-                            return InkWell(
-                              key: ValueKey(
-                                'toggle_all_substeps_btn_${node.id}_$selectedTaskIdx',
-                              ),
-                              borderRadius: BorderRadius.circular(5),
-                              onTap: () {
-                                _rebuild(() {
-                                  for (int i = 0;
-                                      i < selectedHowTo.subSteps.length;
-                                      i++) {
-                                    final k =
-                                        '${node.id}_${selectedTaskIdx}_$i';
-                                    if (allExpanded) {
-                                      if (widget.workbench.focusMode &&
-                                          i == activeSubStepIdx) {
-                                        _collapsedSubStepKeys.remove(k);
-                                        _expandedSubStepKeys.add(k);
-                                      } else {
-                                        _expandedSubStepKeys.remove(k);
-                                        _collapsedSubStepKeys.add(k);
-                                      }
-                                    } else {
-                                      _collapsedSubStepKeys.remove(k);
-                                      _expandedSubStepKeys.add(k);
-                                    }
-                                  }
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 7,
-                                  vertical: 2.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF131926),
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: const Color(0xFF262E40),
-                                  ),
-                                ),
-                                child: Text(
-                                  allExpanded
-                                      ? (widget.workbench.focusMode
-                                          ? '▴ Focus Active'
-                                          : 'Collapse all')
-                                      : '▾ Expand All',
-                                  style: GoogleFonts.inter(
-                                    fontSize: fontMicro,
-                                    fontWeight: weightSemi,
-                                    color: const Color(0xFF94A3B8),
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                  InkWell(
-                    key: ValueKey(
-                      'copy_task_ai_prompt_btn_${node.id}_$selectedTaskIdx',
-                    ),
-                    onTap: () {
-                      final inspSummary = componentInspectorRows
-                          .map((r) => '- ${r.propertyLabel}: ${r.value}')
-                          .join('\n');
-                      final setupSummary = [
-                        for (int i = 0; i < assetSpec.setupSteps.length; i++)
-                          '${i + 1}. ${assetSpec.setupSteps[i].label}: ${assetSpec.setupSteps[i].detail}',
-                      ].join('\n');
-                      final levelSummary = [
-                        for (int i = 0;
-                            i < assetSpec.levelHookupSteps.length;
-                            i++)
-                          '${i + 1}. ${assetSpec.levelHookupSteps[i]}',
-                      ].join('\n');
-                      final allSubStepsPrompt = [
-                        for (int i = 0;
-                            i < selectedHowTo.subSteps.length;
-                            i++) ...[
-                          () {
-                            final st = selectedHowTo.subSteps[i];
-                            final stPath = st.stepPath.trim().isNotEmpty
-                                ? st.stepPath.trim()
-                                : effectiveHeaderPath;
-                            final stHier = (st.area1Hierarchy ?? '').trim();
-                            final stInsp = (st.area2Inspector ?? '').trim();
-                            final stCode = st.codeFormula.trim();
-                            final stCheck = st.verifyResult.trim();
-                            return [
-                              '### Step ${selectedTaskIdx + 1}.${i + 1} · ${st.shortTitle} ($stPath)',
-                              if (st.instruction.trim().isNotEmpty)
-                                'DO: ${st.instruction.trim()}',
-                              if (stHier.isNotEmpty) 'Hierarchy:\n$stHier',
-                              if (stInsp.isNotEmpty) 'Inspector: $stInsp',
-                              if (stCode.isNotEmpty) 'Script:\n$stCode',
-                              if (stCheck.isNotEmpty)
-                                '${st.isEditorCheck ? 'Check in Editor' : 'Verify in Engine'}: $stCheck',
-                            ].join('\n');
-                          }(),
                         ],
-                      ].join('\n\n');
-                      final tuningSummary = tuningItems.isNotEmpty
-                          ? tuningItems.map((t) => '- $t').join('\n')
-                          : '';
-                      final guardsSummary = edgeItems.isNotEmpty
-                          ? edgeItems.map((g) => '- $g').join('\n')
-                          : (primaryGuardLabel.isNotEmpty
-                              ? '- $primaryGuardLabel'
-                              : '');
-                      final promptText = [
-                        'Task T${selectedTaskIdx + 1}: ${selectedHowTo.shortTaskTitle} (${feat.title})',
-                        'Asset: ${assetSpec.assetName} (${assetSpec.parentClassLabel}) in ${assetSpec.folderPath}',
-                        if (setupSummary.isNotEmpty)
-                          'Setup Steps:\n$setupSummary',
-                        'Target Component: ${activeTargetComp.displayLabel}',
-                        if (tuningSummary.isNotEmpty)
-                          'Tuning Parameters:\n$tuningSummary',
-                        if (inspSummary.isNotEmpty)
-                          'Inspector Properties:\n$inspSummary',
-                        if (guardsSummary.isNotEmpty)
-                          'Guardrails:\n$guardsSummary',
-                        if (allSubStepsPrompt.isNotEmpty)
-                          'Implementation Steps (${selectedHowTo.subSteps.length}):\n$allSubStepsPrompt',
-                        if (levelSummary.isNotEmpty)
-                          '${assetSpec.levelHookupTitle}:\n$levelSummary',
-                        'Task Verify Goal: ${selectedHowTo.taskDoneCheck}',
-                      ].join('\n\n');
-                      Clipboard.setData(
-                        ClipboardData(text: promptText),
-                      );
-                      if (mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Copied Task T${selectedTaskIdx + 1} AI Prompt (${selectedHowTo.subSteps.length} steps)',
-                            ),
-                            duration: const Duration(seconds: 2),
-                          ),
-                        );
-                      }
-                    },
-                    borderRadius: BorderRadius.circular(6),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4.5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF181E2C),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: const Color(0xFF262E40),
-                        ),
-                      ),
-                      child: Text(
-                        '✦ Copy Task Prompt',
-                        style: GoogleFonts.inter(
-                          fontSize: fontMicro,
-                          fontWeight: weightSemi,
-                          color: const Color(0xFFCBD5E1),
-                        ),
                       ),
                     ),
-                  ),
-                ],
+                  );
+                },
               ),
-              const SizedBox(height: 8),
-
-              // ── 3. OPTION A: ALL-STEPS-OPEN STEP → CODE STACK (`1.1`, `1.2`, `1.3`) ──
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int sIdx = 0;
-                      sIdx < selectedHowTo.subSteps.length;
-                      sIdx++)
-                    Builder(
-                      builder: (context) {
-                        final subStep = selectedHowTo.subSteps[sIdx];
-                        final bool isSubActive = sIdx == activeSubStepIdx;
-                        final bool isSubDone = subStep.subtask.completed;
-                        final String stepCollapseKey =
-                            '${node.id}_${selectedTaskIdx}_$sIdx';
-                        final bool isStepExpanded = isSubStepExpanded(sIdx);
-                        final String stepRawCode = subStep.codeFormula.trim();
-                        final List<String> stepCodeLines =
-                            stepRawCode.isNotEmpty
-                                ? stepRawCode.split('\n')
-                                : const <String>[];
-                        final List<String> rawPipeTableLines = stepCodeLines
-                            .where(
-                              (l) =>
-                                  l.trim().startsWith('|') &&
-                                  l.trim().endsWith('|'),
-                            )
-                            .toList();
-                        final String stepDoInstruction =
-                            subStep.instruction.trim();
-                        final String stepPathBadgeText =
-                            subStep.stepPath.trim();
-                        final String stepVerifyText =
-                            subStep.verifyResult.trim();
-                        final List<String> effectiveTableLines =
-                            rawPipeTableLines.length >= 2
-                                ? rawPipeTableLines
-                                : _tryConvertConfigGraphToTableLines(
-                                    stepRawCode,
-                                    stepDo: stepDoInstruction,
-                                    stepRole: subStep.stepRole ?? '',
-                                    defaultTarget: activeTargetComp.displayLabel,
-                                  );
-                        final windowCtx = _resolveWindowContextForSubStep(
-                          subStep,
-                          activeTargetLabel: activeTargetComp.displayLabel,
-                        );
-                        final prevWindowCtx = sIdx > 0
-                            ? _resolveWindowContextForSubStep(
-                                selectedHowTo.subSteps[sIdx - 1],
-                                activeTargetLabel:
-                                    activeTargetComp.displayLabel,
-                              )
-                            : null;
-                        final bool isWindowContextSwitch =
-                            prevWindowCtx != null &&
-                                prevWindowCtx.label != windowCtx.label;
-
-                        // Resolve conditional Guard chip only when directly relevant to this step
-                        String stepGuardChipText = '';
-                        if (edgeItems.isNotEmpty) {
-                          final bool mentionsGuardConcept =
-                              subStep.isGuardStep ||
-                                  RegExp(
-                                    r'\b(?:guard|clamp|cooldown|null|is_valid|invalid|limit|prevent|cap)\b',
-                                    caseSensitive: false,
-                                  ).hasMatch(
-                                    '${subStep.shortTitle} $stepDoInstruction $stepRawCode',
-                                  );
-                          if (mentionsGuardConcept) {
-                            stepGuardChipText = edgeItems.first
-                                .replaceFirst(
-                                  RegExp(
-                                    r'^\[(?:STATE|PLAYTEST)?\s*GUARD\]\s*',
-                                    caseSensitive: false,
-                                  ),
-                                  '',
-                                )
-                                .trim();
-                          }
-                        }
-                        final bool hasStepEditorContext =
-                            stepGuardChipText.isNotEmpty;
-                        final bool hasExpandableDrawerContent =
-                            stepDoInstruction.isNotEmpty ||
-                                hasStepEditorContext ||
-                                (showCode &&
-                                    (stepCodeLines.isNotEmpty ||
-                                        effectiveTableLines.isNotEmpty)) ||
-                                stepVerifyText.isNotEmpty;
-
-                        return Padding(
-                          padding: EdgeInsets.only(
-                            bottom: sIdx == selectedHowTo.subSteps.length - 1
-                                ? 0
-                                : 10,
-                          ),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: isSubActive
-                                  ? const Color(0xFF141B29)
-                                  : const Color(0xFF0D131F),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isSubActive
-                                    ? const Color(0xFF38BDF8)
-                                        .withValues(alpha: 0.48)
-                                    : const Color(0xFF24324B),
-                              ),
-                            ),
-                            clipBehavior: Clip.antiAlias,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                // Step Header Row (Checkbox + 1.X + Short Title + Step Path + [✎] + [Copy code] + Fold Chevron)
-                                InkWell(
-                                  key: ValueKey(
-                                    'task_sheet_step_row_${node.id}_${selectedTaskIdx}_$sIdx',
-                                  ),
-                                  onTap: () {
-                                    _rebuild(() {
-                                      _selectedSubStepIndexByTask[
-                                          '${node.id}_$selectedTaskIdx'] = sIdx;
-                                      _collapsedSubStepKeys
-                                          .remove(stepCollapseKey);
-                                      _expandedSubStepKeys.add(stepCollapseKey);
-                                    });
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 9,
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        // Step Completion Checkbox
-                                        InkWell(
-                                          key: ValueKey(
-                                            'toggle_step_mark_${node.id}_${selectedTaskIdx}_$sIdx',
-                                          ),
-                                          onTap: () =>
-                                              _toggleHowToSubStepCompletion(
-                                            feat,
-                                            states,
-                                            node,
-                                            selectedTaskIdx,
-                                            sIdx,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(4),
-                                          child: Container(
-                                            width: 18,
-                                            height: 18,
-                                            alignment: Alignment.center,
-                                            decoration: BoxDecoration(
-                                              color: isSubDone
-                                                  ? const Color(0xFF10B981)
-                                                  : const Color(0xFF07090E),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                              border: Border.all(
-                                                color: isSubDone
-                                                    ? const Color(0xFF10B981)
-                                                    : (isSubActive
-                                                        ? const Color(
-                                                            0xFF38BDF8)
-                                                        : const Color(
-                                                            0xFF334155)),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              isSubDone ? '✓' : '',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: fontMicro,
-                                                fontWeight: weightBold,
-                                                height: 1.0,
-                                                color: const Color(0xFF05101A),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 9),
-                                        SizedBox(
-                                          width: 32,
-                                          child: Text(
-                                            '${selectedTaskIdx + 1}.${sIdx + 1}',
-                                            style: GoogleFonts.jetBrainsMono(
-                                              fontSize: fontBody,
-                                              fontWeight: weightBold,
-                                              color: const Color(0xFF38BDF8),
-                                            ),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          child: Row(
-                                            children: [
-                                              Flexible(
-                                                child: Text(
-                                                  subStep.shortTitle,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                  style: GoogleFonts.inter(
-                                                    fontSize: fontItem,
-                                                    fontWeight: weightBold,
-                                                    color: isSubActive
-                                                        ? const Color(
-                                                            0xFFF8FAFC)
-                                                        : const Color(
-                                                            0xFFE2E8F0),
-                                                  ),
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Container(
-                                                key: ValueKey(
-                                                  'window_context_badge_${node.id}_${selectedTaskIdx}_$sIdx',
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 1.5,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: windowCtx.accent
-                                                      .withValues(alpha: 0.12),
-                                                  borderRadius:
-                                                      BorderRadius.circular(4),
-                                                  border: Border.all(
-                                                    color: windowCtx.accent
-                                                        .withValues(
-                                                      alpha: 0.36,
-                                                    ),
-                                                  ),
-                                                ),
-                                                child: Text(
-                                                  '${windowCtx.icon} ${windowCtx.label}',
-                                                  style: GoogleFonts
-                                                      .jetBrainsMono(
-                                                    fontSize: 9,
-                                                    fontWeight: FontWeight.w700,
-                                                    color: windowCtx.accent,
-                                                  ),
-                                                ),
-                                              ),
-                                              if (!isStepExpanded) ...[
-                                                const SizedBox(width: 8),
-                                                Expanded(
-                                                  child: Text(
-                                                    '${_summarizeSubStepForCollapsedRow(subStep, rawTableLines: rawPipeTableLines)} · ▾ Re-open',
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: GoogleFonts
-                                                        .jetBrainsMono(
-                                                      fontSize: 9.5,
-                                                      fontWeight:
-                                                          FontWeight.w500,
-                                                      color: const Color(
-                                                        0xFF64748B,
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ] else if (stepPathBadgeText
-                                                  .isNotEmpty) ...[
-                                                const SizedBox(width: 8),
-                                                Flexible(
-                                                  child: Container(
-                                                    padding: const EdgeInsets
-                                                        .symmetric(
-                                                      horizontal: 6,
-                                                      vertical: 1.5,
-                                                    ),
-                                                    decoration: BoxDecoration(
-                                                      color: const Color(
-                                                        0xFF090D16,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        4,
-                                                      ),
-                                                      border: Border.all(
-                                                        color: const Color(
-                                                          0xFF1E293B,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    child: Text(
-                                                      stepPathBadgeText,
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 9.5,
-                                                        fontWeight:
-                                                            FontWeight.w500,
-                                                        color: const Color(
-                                                          0xFF64748B,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        InkWell(
-                                          key: ValueKey(
-                                            'edit_howto_substep_${node.id}_${selectedTaskIdx}_$sIdx',
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(5),
-                                          onTap: () =>
-                                              _promptEditHowToSubStepDialog(
-                                            feat,
-                                            states,
-                                            node,
-                                            selectedTaskIdx,
-                                            sIdx,
-                                          ),
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 6,
-                                              vertical: 3.5,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF131B2A),
-                                              borderRadius:
-                                                  BorderRadius.circular(5),
-                                              border: Border.all(
-                                                color: const Color(0xFF24324B),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              '✎',
-                                              style: GoogleFonts.inter(
-                                                fontSize: fontMicro,
-                                                color: const Color(0xFF94A3B8),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        InkWell(
-                                          key: ValueKey(
-                                            'copy_howto_code_${node.id}_${selectedTaskIdx}_$sIdx',
-                                          ),
-                                          onTap: () =>
-                                              _copySubStepCodeFormula(
-                                            selectedTaskIdx,
-                                            sIdx,
-                                            subStep.codeFormula,
-                                          ),
-                                          borderRadius:
-                                              BorderRadius.circular(5),
-                                          child: Container(
-                                            padding:
-                                                const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 3.5,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF162032),
-                                              borderRadius:
-                                                  BorderRadius.circular(5),
-                                              border: Border.all(
-                                                color:
-                                                    const Color(0xFF283854),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              assetSpec.archetype == 'level'
-                                                  ? '⧉ Copy steps'
-                                                  : '⧉ Copy code',
-                                              style: GoogleFonts.inter(
-                                                fontSize: fontMicro,
-                                                fontWeight: weightSemi,
-                                                color:
-                                                    const Color(0xFFCBD5E1),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        InkWell(
-                                          borderRadius:
-                                              BorderRadius.circular(5),
-                                          onTap: () {
-                                            _rebuild(() {
-                                              if (isStepExpanded) {
-                                                _expandedSubStepKeys
-                                                    .remove(stepCollapseKey);
-                                                _collapsedSubStepKeys
-                                                    .add(stepCollapseKey);
-                                              } else {
-                                                _collapsedSubStepKeys
-                                                    .remove(stepCollapseKey);
-                                                _expandedSubStepKeys
-                                                    .add(stepCollapseKey);
-                                              }
-                                            });
-                                          },
-                                          child: Container(
-                                            width: 24,
-                                            height: 24,
-                                            alignment: Alignment.center,
-                                            child: Icon(
-                                              isStepExpanded
-                                                  ? Icons
-                                                      .keyboard_arrow_up_rounded
-                                                  : Icons
-                                                      .keyboard_arrow_down_rounded,
-                                              size: 18,
-                                              color: isSubActive
-                                                  ? const Color(0xFF38BDF8)
-                                                  : const Color(0xFF94A3B8),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-
-                                // Expanded 3-Area Implementation Drawer (DO + Conditional Editor Context + Code + Per-Step Check)
-                                if (isStepExpanded &&
-                                    hasExpandableDrawerContent)
-                                  Container(
-                                    padding: const EdgeInsets.fromLTRB(
-                                      14,
-                                      10,
-                                      14,
-                                      10,
-                                    ),
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF07090E),
-                                      border: Border(
-                                        top: BorderSide(
-                                          color: Color(0xFF182234),
-                                        ),
-                                      ),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        // 0. Context-Switch Callout (only when moving to a different Godot Dock)
-                                        if (isWindowContextSwitch)
-                                          Container(
-                                            key: ValueKey(
-                                              'window_context_switch_${node.id}_${selectedTaskIdx}_$sIdx',
-                                            ),
-                                            margin: const EdgeInsets.only(
-                                              bottom: 8,
-                                            ),
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: windowCtx.accent
-                                                  .withValues(alpha: 0.08),
-                                              borderRadius:
-                                                  BorderRadius.circular(5),
-                                              border: Border.all(
-                                                color: windowCtx.accent
-                                                    .withValues(alpha: 0.25),
-                                              ),
-                                            ),
-                                            child: Text(
-                                              '↳ Switch from ${prevWindowCtx.icon} ${prevWindowCtx.label} to ${windowCtx.icon} ${windowCtx.label}',
-                                              style: GoogleFonts.jetBrainsMono(
-                                                fontSize: 10,
-                                                fontWeight: FontWeight.w600,
-                                                color: windowCtx.accent,
-                                              ),
-                                            ),
-                                          ),
-                                        // 1-4. Responsive 2-Column Workbook Spread (Left: DO + Guard + Check | Right: Godot Panel)
-                                        _buildStepDrawerBody(
-                                          nodeId: node.id,
-                                          selectedTaskIdx: selectedTaskIdx,
-                                          sIdx: sIdx,
-                                          subStep: subStep,
-                                          windowCtx: windowCtx,
-                                          showCode: showCode,
-                                          isDark: isDark,
-                                          stepDoInstruction: stepDoInstruction,
-                                          stepGuardChipText: stepGuardChipText,
-                                          effectiveTableLines:
-                                              effectiveTableLines,
-                                          stepRawCode: stepRawCode,
-                                          stepCodeLines: stepCodeLines,
-                                          stepPathBadgeText: stepPathBadgeText,
-                                          stepVerifyText: stepVerifyText,
-                                          assetName: assetSpec.assetName,
-                                          parentClassLabel:
-                                              assetSpec.parentClassLabel,
-                                          tuningItems: tuningItems,
-                                          edgeItems: edgeItems,
-                                          fontMicro: fontMicro,
-                                          fontBody: fontBody,
-                                          weightRegular: weightRegular,
-                                          weightSemi: weightSemi,
-                                          weightBold: weightBold,
-                                          textPrimary: textPrimary,
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
-                ],
+          ],
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 10,
+            runSpacing: 8,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              OutlinedButton.icon(
+                key: ValueKey('playtest_gate_add_fix_btn_${node.id}'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFFFBBF24),
+                  side: BorderSide(
+                    color: const Color(0xFFF59E0B).withValues(alpha: 0.45),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                ),
+                onPressed: () {
+                  _rebuild(() {
+                    _inlineBugDrawerNodeId = _inlineBugDrawerNodeId == node.id
+                        ? null
+                        : node.id;
+                  });
+                },
+                icon: const Icon(Icons.bug_report_outlined, size: 15),
+                label: Text(
+                  '+ Add [FIX] Step / Paste Debugger Trace',
+                  style: GoogleFonts.inter(
+                    fontSize: fontBody,
+                    fontWeight: weightSemi,
+                  ),
+                ),
+              ),
+              ElevatedButton.icon(
+                key: ValueKey('playtest_gate_pass_btn_${node.id}'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: accentEmerald,
+                  foregroundColor: const Color(0xFF042117),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                ),
+                onPressed: () =>
+                    _passCheckpointPlaytestAndAdvance(feat, states, node),
+                icon: const Icon(Icons.verified_rounded, size: 16),
+                label: Text(
+                  hasNextCp
+                      ? '✓ Pass Playtest & Next Checkpoint'
+                      : '✓ Pass Playtest & Complete Feature',
+                  style: GoogleFonts.inter(
+                    fontSize: fontBody,
+                    fontWeight: weightBold,
+                  ),
+                ),
               ),
             ],
           ),
-        ),
-      ],
+        ],
+      ),
+    );
+  }
+
+  /// Renders the focused Active Unified Step Card (DO -> Copy -> Verify) matching
+  /// the step's Godot dock stage (`SCENE`, `INSP`, `CODE`, `WIRE`, `FIX`).
+  Widget _buildEngineStepAreasBox({
+    required TierDocument feat,
+    required List<FeatureStateNode> states,
+    required int checkpointIndex,
+    required FeatureStateNode node,
+    required List<TaskHowToSubStep> unifiedSteps,
+    required int activeStepIdx,
+    required List<String> tuningItems,
+    required List<String> edgeItems,
+  }) {
+    if (unifiedSteps.isEmpty) {
+      return SizedBox(
+        key: ValueKey('area3_script_setup_panel_${node.id}'),
+      );
+    }
+
+    final safeIdx = activeStepIdx.clamp(0, unifiedSteps.length - 1);
+    final activeSubStep = unifiedSteps[safeIdx];
+    final dockStage = activeSubStep.resolvedDockStage;
+    final activeTargetComp = _resolveStepTargetComponent(
+      activeSubStep,
+      featTitle: feat.title,
+    );
+    final assetSpec = _resolveFeatureAssetSpec(
+      feat: feat,
+      checkpointIndex: checkpointIndex,
+      activeStepIdx: safeIdx,
+      activeSubStep: activeSubStep,
+      activeTargetComp: activeTargetComp,
+    );
+
+    final rawCode = activeSubStep.codeFormula.trim();
+    final stepCodeLines =
+        rawCode.isNotEmpty ? rawCode.split('\n') : const <String>[];
+    final rawPipeTableLines = stepCodeLines
+        .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
+        .toList();
+    final stepDoInstruction = activeSubStep.instruction.trim();
+    final stepPathBadgeText = activeSubStep.stepPath.trim().isNotEmpty
+        ? activeSubStep.stepPath.trim()
+        : assetSpec.assetName;
+    final stepVerifyText = activeSubStep.verifyResult.trim();
+    final windowCtx = _resolveWindowContextForSubStep(
+      activeSubStep,
+      activeTargetLabel: activeTargetComp.displayLabel,
+    );
+
+    final List<String> sceneTreeLines = dockStage == GodotDockStage.scene &&
+            !(windowCtx.label == 'MAIN SCENE (.tscn)' &&
+                rawPipeTableLines.length >= 2)
+        ? _synthesizeSceneTreeLines(
+            activeSubStep,
+            activeTargetComp: activeTargetComp,
+            assetName: assetSpec.assetName,
+          )
+        : const [];
+
+    final bool showInspectorSheet = dockStage == GodotDockStage.inspector ||
+        (activeSubStep.area2Inspector ?? '').trim().isNotEmpty;
+    final List<String> effectiveTableLines = showInspectorSheet
+        ? _synthesizeInspectorTableLines(
+            node: node,
+            activeSubStep: activeSubStep,
+            activeTargetComp: activeTargetComp,
+            tuningItems: tuningItems,
+            is2D: assetSpec.is2D,
+          )
+        : (rawPipeTableLines.length >= 2
+            ? rawPipeTableLines
+            : _tryConvertConfigGraphToTableLines(
+                rawCode,
+                stepDo: stepDoInstruction,
+                stepRole: activeSubStep.stepRole ?? '',
+                defaultTarget: activeTargetComp.displayLabel,
+              ));
+
+    final effectiveResPath = _resolveEffectiveResPathForStep(
+      feat: feat,
+      node: node,
+      subStep: activeSubStep,
+    );
+    final scriptResPath = widget.workbench.extractPrimaryScriptResPath(
+      node.parameters['primarySharedScriptOrScene'] ??
+          feat.sections['primary_asset'],
+    );
+    final bool showInlineCloudSyncStrip =
+        (dockStage == GodotDockStage.code || dockStage == GodotDockStage.fix) &&
+            effectiveResPath.endsWith('.gd');
+
+    final Widget initialSetupWidget = _buildInitialSetupCard(
+      feat: feat,
+      node: node,
+      assetSpec: assetSpec,
+      tuningItems: tuningItems,
+      edgeItems: edgeItems,
+    );
+
+    String stepGuardChipText = '';
+    if (edgeItems.isNotEmpty) {
+      final bool mentionsGuardConcept = activeSubStep.isGuardStep ||
+          RegExp(
+            r'\b(?:guard|clamp|cooldown|null|is_valid|invalid|limit|prevent|cap)\b',
+            caseSensitive: false,
+          ).hasMatch(
+            '${activeSubStep.shortTitle} $stepDoInstruction $rawCode',
+          );
+      if (mentionsGuardConcept) {
+        stepGuardChipText = edgeItems.first
+            .replaceFirst(
+              RegExp(
+                r'^\[(?:STATE|PLAYTEST)?\s*GUARD\]\s*',
+                caseSensitive: false,
+              ),
+              '',
+            )
+            .trim();
+      }
+    }
+
+    final bool isSubDone = activeSubStep.subtask.completed;
+    final String stepTitle = activeSubStep.shortTitle.trim().isNotEmpty
+        ? activeSubStep.shortTitle.trim()
+        : activeSubStep.subtask.text;
+    final bool showCode = sceneTreeLines.isNotEmpty ||
+        effectiveTableLines.isNotEmpty ||
+        stepCodeLines.isNotEmpty;
+
+    return Padding(
+      key: ValueKey('area3_script_setup_panel_${node.id}'),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          initialSetupWidget,
+
+          // Step Target & Prompt Action Strip
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF181E2C),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFF262E40)),
+                    ),
+                    child: Text(
+                      'STEP ${safeIdx + 1}/${unifiedSteps.length}',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: fontMicro,
+                        fontWeight: weightBold,
+                        letterSpacing: 0.4,
+                        color: const Color(0xFF94A3B8),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0B0E15),
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: const Color(0xFF262E40)),
+                    ),
+                    child: Text.rich(
+                      TextSpan(
+                        children: [
+                          TextSpan(
+                            text: 'TARGET: ',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: fontMicro,
+                              fontWeight: weightBold,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                          TextSpan(
+                            text: '${assetSpec.assetIcon} ${assetSpec.assetName}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: fontMicro,
+                              fontWeight: weightSemi,
+                              color: const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          TextSpan(
+                            text: ' › ',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: fontMicro,
+                              fontWeight: weightSemi,
+                              color: const Color(0xFF64748B),
+                            ),
+                          ),
+                          TextSpan(
+                            text:
+                                '${activeTargetComp.icon} ${activeTargetComp.displayLabel}',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: fontMicro,
+                              fontWeight: weightSemi,
+                              color: const Color(0xFF38BDF8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              InkWell(
+                key: ValueKey('copy_task_ai_prompt_btn_${node.id}'),
+                onTap: () => _copyActiveFeaturePrompt(feat),
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4.5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF181E2C),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFF262E40)),
+                  ),
+                  child: Text(
+                    '✦ Copy Feature Prompt',
+                    style: GoogleFonts.inter(
+                      fontSize: fontMicro,
+                      fontWeight: weightSemi,
+                      color: const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // Focused Single Active Step Card
+          Container(
+            decoration: BoxDecoration(
+              color: const Color(0xFF141B29),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isSubDone
+                    ? accentEmerald.withValues(alpha: 0.45)
+                    : const Color(0xFF38BDF8).withValues(alpha: 0.48),
+              ),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  key: ValueKey('task_sheet_step_row_${node.id}_$safeIdx'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      InkWell(
+                        key: ValueKey('toggle_step_mark_${node.id}_$safeIdx'),
+                        onTap: () => _toggleHowToSubStepCompletion(
+                          feat,
+                          states,
+                          node,
+                          safeIdx,
+                        ),
+                        borderRadius: BorderRadius.circular(4),
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isSubDone
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFF07090E),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: isSubDone
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF38BDF8),
+                            ),
+                          ),
+                          child: Text(
+                            isSubDone ? '✓' : '',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: fontMicro,
+                              fontWeight: weightBold,
+                              height: 1.0,
+                              color: const Color(0xFF05101A),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 9),
+                      SizedBox(
+                        width: 24,
+                        child: Text(
+                          (safeIdx + 1).toString().padLeft(2, '0'),
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: fontBody,
+                            fontWeight: weightBold,
+                            color: const Color(0xFF38BDF8),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text(
+                              stepTitle,
+                              style: GoogleFonts.inter(
+                                fontSize: fontItem,
+                                fontWeight: weightBold,
+                                color: const Color(0xFFF8FAFC),
+                              ),
+                            ),
+                            Container(
+                              key: ValueKey(
+                                'window_context_badge_${node.id}_$safeIdx',
+                              ),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color:
+                                    windowCtx.accent.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                  color:
+                                      windowCtx.accent.withValues(alpha: 0.36),
+                                ),
+                              ),
+                              child: Text(
+                                '${windowCtx.icon} ${windowCtx.label}',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: windowCtx.accent,
+                                ),
+                              ),
+                            ),
+                            if (stepPathBadgeText.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF090D16),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: const Color(0xFF1E293B),
+                                  ),
+                                ),
+                                child: Text(
+                                  stepPathBadgeText,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w500,
+                                    color: const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        key: ValueKey('edit_howto_substep_${node.id}_$safeIdx'),
+                        borderRadius: BorderRadius.circular(5),
+                        onTap: () => _promptEditHowToSubStepDialog(
+                          feat,
+                          states,
+                          node,
+                          safeIdx,
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 3.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF131B2A),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: const Color(0xFF24324B)),
+                          ),
+                          child: Text(
+                            '✎',
+                            style: GoogleFonts.inter(
+                              fontSize: fontMicro,
+                              color: const Color(0xFF94A3B8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      InkWell(
+                        key: ValueKey('copy_howto_code_${node.id}_$safeIdx'),
+                        onTap: () => _copySubStepCodeFormula(
+                          safeIdx,
+                          activeSubStep.codeFormula,
+                        ),
+                        borderRadius: BorderRadius.circular(5),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF162032),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(color: const Color(0xFF283854)),
+                          ),
+                          child: Text(
+                            dockStage == GodotDockStage.scene
+                                ? '⧉ Copy tree'
+                                : '⧉ Copy code',
+                            style: GoogleFonts.inter(
+                              fontSize: fontMicro,
+                              fontWeight: weightSemi,
+                              color: const Color(0xFFCBD5E1),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF07090E),
+                    border: Border(
+                      top: BorderSide(color: Color(0xFF182234)),
+                    ),
+                  ),
+                  child: _buildStepDrawerBody(
+                    feat: feat,
+                    states: states,
+                    node: node,
+                    stepIdx: safeIdx,
+                    subStep: activeSubStep,
+                    windowCtx: windowCtx,
+                    showCode: showCode,
+                    isDark: isDark,
+                    stepDoInstruction: stepDoInstruction,
+                    stepGuardChipText: stepGuardChipText,
+                    sceneTreeLines: sceneTreeLines,
+                    effectiveTableLines: effectiveTableLines,
+                    stepCodeLines: stepCodeLines,
+                    stepPathBadgeText: stepPathBadgeText,
+                    stepVerifyText: stepVerifyText,
+                    assetName: assetSpec.assetName,
+                    parentClassLabel: assetSpec.parentClassLabel,
+                    is2D: assetSpec.is2D,
+                    scriptResPath: scriptResPath,
+                    effectiveResPath: effectiveResPath,
+                    showInlineCloudSyncStrip: showInlineCloudSyncStrip,
+                    tuningItems: tuningItems,
+                    edgeItems: edgeItems,
+                    fontMicro: fontMicro,
+                    fontBody: fontBody,
+                    weightRegular: weightRegular,
+                    weightSemi: weightSemi,
+                    weightBold: weightBold,
+                    textPrimary: textPrimary,
+                    onInspectorPropertyChanged: (propKey, newVal) =>
+                        _saveInlineTuningParam(
+                      feat: feat,
+                      states: states,
+                      node: node,
+                      activeStepIdx: safeIdx,
+                      rawValue: '$propKey: $newVal',
+                      propertyKey: propKey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1953,13 +1633,19 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         );
       }
       final matchedText = match.group(0)!;
+      final tokenKind = tokenKindByLiteral[matchedText];
+      final tokenColor = switch (tokenKind) {
+        'tune' => accentViolet,
+        'guard' => accentAmber,
+        _ => accentCyan,
+      };
       spans.add(
         TextSpan(
           text: matchedText,
           style: GoogleFonts.jetBrainsMono(
             fontSize: monoSize,
             fontWeight: isCodeBlock ? weightRegular : weightSemi,
-            color: accentCyan,
+            color: tokenColor,
             height: baseStyle.height,
           ),
         ),
@@ -1981,22 +1667,27 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
   }
 
   Widget _buildStepDrawerBody({
-    required String nodeId,
-    required int selectedTaskIdx,
-    required int sIdx,
+    required TierDocument feat,
+    required List<FeatureStateNode> states,
+    required FeatureStateNode node,
+    required int stepIdx,
     required TaskHowToSubStep subStep,
     required ({String icon, String label, Color accent}) windowCtx,
     required bool showCode,
     required bool isDark,
     required String stepDoInstruction,
     required String stepGuardChipText,
+    required List<String> sceneTreeLines,
     required List<String> effectiveTableLines,
-    required String stepRawCode,
     required List<String> stepCodeLines,
     required String stepPathBadgeText,
     required String stepVerifyText,
     required String assetName,
     required String parentClassLabel,
+    required bool is2D,
+    required String? scriptResPath,
+    required String effectiveResPath,
+    required bool showInlineCloudSyncStrip,
     required List<String> tuningItems,
     required List<String> edgeItems,
     required double fontMicro,
@@ -2005,13 +1696,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required FontWeight weightSemi,
     required FontWeight weightBold,
     required Color textPrimary,
+    void Function(String propertyKey, String newValue)?
+        onInspectorPropertyChanged,
   }) {
     final doItems = _parseDoActionItems(stepDoInstruction);
     final Widget? doWidget = doItems.isNotEmpty
         ? _buildVerticalDoList(
-            nodeId: nodeId,
-            selectedTaskIdx: selectedTaskIdx,
-            sIdx: sIdx,
+            nodeId: node.id,
+            stepIdx: stepIdx,
             items: doItems,
             tuningItems: tuningItems,
             edgeItems: edgeItems,
@@ -2026,9 +1718,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         ? Align(
             alignment: Alignment.centerLeft,
             child: Container(
-              key: ValueKey(
-                'step_guard_pill_${nodeId}_${selectedTaskIdx}_$sIdx',
-              ),
+              key: ValueKey('step_guard_pill_${node.id}_$stepIdx'),
               padding: const EdgeInsets.symmetric(
                 horizontal: 8,
                 vertical: 4,
@@ -2054,9 +1744,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
     final Widget? checkFooter = stepVerifyText.isNotEmpty
         ? _buildStepCheckFooter(
-            nodeId: nodeId,
-            selectedTaskIdx: selectedTaskIdx,
-            sIdx: sIdx,
+            nodeId: node.id,
+            stepIdx: stepIdx,
             subStep: subStep,
             stepVerifyText: stepVerifyText,
             tuningItems: tuningItems,
@@ -2064,25 +1753,39 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             fontMicro: fontMicro,
             weightRegular: weightRegular,
             weightBold: weightBold,
+            onToggleChecked: () => _toggleHowToSubStepCompletion(
+              feat,
+              states,
+              node,
+              stepIdx,
+            ),
           )
         : null;
 
     final Widget? rightVisual = showCode
         ? _buildStepRightVisualPane(
+            feat: feat,
+            node: node,
+            stepIdx: stepIdx,
             isDark: isDark,
+            sceneTreeLines: sceneTreeLines,
             effectiveTableLines: effectiveTableLines,
-            stepRawCode: stepRawCode,
             stepCodeLines: stepCodeLines,
             stepPathBadgeText: stepPathBadgeText,
             windowCtx: windowCtx,
             assetName: assetName,
             parentClassLabel: parentClassLabel,
+            is2D: is2D,
+            scriptResPath: scriptResPath,
+            effectiveResPath: effectiveResPath,
+            showInlineCloudSyncStrip: showInlineCloudSyncStrip,
             tuningItems: tuningItems,
             edgeItems: edgeItems,
             fontMicro: fontMicro,
             fontBody: fontBody,
             weightRegular: weightRegular,
             textPrimary: textPrimary,
+            onInspectorPropertyChanged: onInspectorPropertyChanged,
           )
         : null;
 
@@ -2152,32 +1855,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     );
   }
 
-  String _summarizeSubStepForCollapsedRow(
-    TaskHowToSubStep subStep, {
-    required List<String> rawTableLines,
-  }) {
-    if (rawTableLines.length >= 3) {
-      final firstData = rawTableLines
-          .skip(2)
-          .first
-          .split('|')
-          .map((c) => c.trim())
-          .where((c) => c.isNotEmpty)
-          .toList();
-      if (firstData.length >= 2) {
-        return firstData.take(3).join(' · ');
-      }
-    }
-    final formula = subStep.codeFormula.trim().split('\n').first.trim();
-    if (formula.isNotEmpty) {
-      final cleaned = formula.replaceAll('[', '').replaceAll(']', '');
-      return cleaned.length > 68 ? '${cleaned.substring(0, 65)}...' : cleaned;
-    }
-    final instr = subStep.instruction.trim();
-    if (instr.length > 68) return '${instr.substring(0, 65)}...';
-    return instr;
-  }
-
   Set<String> _extractHoverTokensFromDoText(String text) {
     const stopWords = <String>{
       'the',
@@ -2240,8 +1917,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
   Widget _buildVerticalDoList({
     required String nodeId,
-    required int selectedTaskIdx,
-    required int sIdx,
+    required int stepIdx,
     required List<String> items,
     required List<String> tuningItems,
     required List<String> edgeItems,
@@ -2251,7 +1927,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required FontWeight weightBold,
   }) {
     return Container(
-      key: ValueKey('step_do_instruction_${nodeId}_${selectedTaskIdx}_$sIdx'),
+      key: ValueKey('step_do_instruction_${nodeId}_$stepIdx'),
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: const Color(0xFF0A0F18),
@@ -2276,7 +1952,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           for (int i = 0; i < items.length; i++)
             Builder(
               builder: (context) {
-                final rowKey = '${nodeId}_${selectedTaskIdx}_${sIdx}_$i';
+                final rowKey = '${nodeId}_${stepIdx}_$i';
                 final isRowHovered = _hoveredDoRowKey == rowKey;
                 return MouseRegion(
                   key: ValueKey('step_do_item_hover_$rowKey'),
@@ -2373,8 +2049,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
 
   Widget _buildStepCheckFooter({
     required String nodeId,
-    required int selectedTaskIdx,
-    required int sIdx,
+    required int stepIdx,
     required TaskHowToSubStep subStep,
     required String stepVerifyText,
     required List<String> tuningItems,
@@ -2382,65 +2057,149 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required double fontMicro,
     required FontWeight weightRegular,
     required FontWeight weightBold,
+    required VoidCallback onToggleChecked,
   }) {
+    final isDone = subStep.subtask.completed;
     return Container(
-      key: ValueKey('step_check_footer_${nodeId}_${selectedTaskIdx}_$sIdx'),
+      key: ValueKey('step_check_footer_${nodeId}_$stepIdx'),
       padding: const EdgeInsets.only(top: 8),
       decoration: const BoxDecoration(
         border: Border(
           top: BorderSide(color: Color(0xFF141D2E)),
         ),
       ),
-      child: Text.rich(
-        TextSpan(
-          children: [
-            TextSpan(
-              text: subStep.isEditorCheck
-                  ? '↳ Editor Check: '
-                  : '↳ Playtest Check: ',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: fontMicro,
-                fontWeight: weightBold,
-                color: subStep.isEditorCheck
-                    ? const Color(0xFF38BDF8)
-                    : const Color(0xFF34D399),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: subStep.isEditorCheck
+                        ? '↳ Editor Check: '
+                        : '↳ Playtest Check: ',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: fontMicro,
+                      fontWeight: weightBold,
+                      color: subStep.isEditorCheck
+                          ? const Color(0xFF38BDF8)
+                          : const Color(0xFF34D399),
+                    ),
+                  ),
+                  _buildSemanticStepSpan(
+                    text: stepVerifyText,
+                    baseStyle: GoogleFonts.inter(
+                      fontSize: fontMicro,
+                      fontWeight: weightRegular,
+                      height: 1.4,
+                      color: const Color(0xFF94A3B8),
+                    ),
+                    tuningItems: tuningItems,
+                    edgeItems: edgeItems,
+                    isCodeBlock: false,
+                  ),
+                ],
+              ),
+              softWrap: true,
+            ),
+          ),
+          const SizedBox(width: 8),
+          InkWell(
+            key: ValueKey('step_check_toggle_btn_${nodeId}_$stepIdx'),
+            borderRadius: BorderRadius.circular(5),
+            onTap: onToggleChecked,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: isDone
+                    ? const Color(0xFF10B981).withValues(alpha: 0.14)
+                    : const Color(0xFF111827),
+                borderRadius: BorderRadius.circular(5),
+                border: Border.all(
+                  color: isDone
+                      ? const Color(0xFF34D399).withValues(alpha: 0.48)
+                      : const Color(0xFF26334D),
+                ),
+              ),
+              child: Text(
+                isDone ? '✓ Checked' : 'Mark Checked',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  fontWeight: weightBold,
+                  color: isDone
+                      ? const Color(0xFF6EE7B7)
+                      : const Color(0xFF94A3B8),
+                ),
               ),
             ),
-            _buildSemanticStepSpan(
-              text: stepVerifyText,
-              baseStyle: GoogleFonts.inter(
-                fontSize: fontMicro,
-                fontWeight: weightRegular,
-                height: 1.4,
-                color: const Color(0xFF94A3B8),
-              ),
-              tuningItems: tuningItems,
-              edgeItems: edgeItems,
-              isCodeBlock: false,
-            ),
-          ],
-        ),
-        softWrap: true,
+          ),
+        ],
       ),
     );
   }
 
   Widget? _buildStepRightVisualPane({
+    required TierDocument feat,
+    required FeatureStateNode node,
+    required int stepIdx,
     required bool isDark,
+    required List<String> sceneTreeLines,
     required List<String> effectiveTableLines,
-    required String stepRawCode,
     required List<String> stepCodeLines,
     required String stepPathBadgeText,
     required ({String icon, String label, Color accent}) windowCtx,
     required String assetName,
     required String parentClassLabel,
+    required bool is2D,
+    required String? scriptResPath,
+    required String effectiveResPath,
+    required bool showInlineCloudSyncStrip,
     required List<String> tuningItems,
     required List<String> edgeItems,
     required double fontMicro,
     required double fontBody,
     required FontWeight weightRegular,
     required Color textPrimary,
+    void Function(String propertyKey, String newValue)?
+        onInspectorPropertyChanged,
   }) {
+    if (sceneTreeLines.isNotEmpty && effectiveTableLines.length >= 2) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSceneStageDockPane(
+            node: node,
+            sceneTreeLines: sceneTreeLines,
+            assetName: assetName,
+            parentClassLabel: parentClassLabel,
+            is2D: is2D,
+            scriptResPath: scriptResPath,
+          ),
+          const SizedBox(height: 10),
+          _buildLevelPlacementTable(
+            effectiveTableLines,
+            isDark: isDark,
+            stepPath: stepPathBadgeText,
+            assetName: assetName,
+            parentClassLabel: parentClassLabel,
+            isLevelScene: windowCtx.label == 'MAIN SCENE (.tscn)',
+            isInputMap: windowCtx.label == 'INPUT MAP',
+            onPropertyChanged: onInspectorPropertyChanged,
+          ),
+        ],
+      );
+    }
+    if (sceneTreeLines.isNotEmpty) {
+      return _buildSceneStageDockPane(
+        node: node,
+        sceneTreeLines: sceneTreeLines,
+        assetName: assetName,
+        parentClassLabel: parentClassLabel,
+        is2D: is2D,
+        scriptResPath: scriptResPath,
+      );
+    }
     if (effectiveTableLines.length >= 2) {
       return _buildLevelPlacementTable(
         effectiveTableLines,
@@ -2450,10 +2209,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         parentClassLabel: parentClassLabel,
         isLevelScene: windowCtx.label == 'MAIN SCENE (.tscn)',
         isInputMap: windowCtx.label == 'INPUT MAP',
+        onPropertyChanged: onInspectorPropertyChanged,
       );
     }
     if (stepCodeLines.isNotEmpty) {
-      return _buildStepCodeLinesPane(
+      final codeCard = _buildStepCodeLinesPane(
         stepCodeLines: stepCodeLines,
         stepPathBadgeText: stepPathBadgeText,
         windowCtx: windowCtx,
@@ -2463,6 +2223,19 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         fontBody: fontBody,
         weightRegular: weightRegular,
         textPrimary: textPrimary,
+      );
+      if (!showInlineCloudSyncStrip) return codeCard;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          codeCard,
+          _buildInlineCodeSyncStrip(
+            feat: feat,
+            node: node,
+            stepIdx: stepIdx,
+            resPath: effectiveResPath,
+          ),
+        ],
       );
     }
     return null;
@@ -2906,6 +2679,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       instruction: subStep.instruction.trim(),
       codeFormula: rawCode,
       stepRole: subStep.stepRole ?? '',
+      dockStage: subStep.resolvedDockStage,
       isRenderedAsInspectorTable: tableLines.length >= 2,
       isRenderedAsSignalGraph: isEffectiveSignalGraph,
     );
@@ -2916,9 +2690,17 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required String instruction,
     required String codeFormula,
     String stepRole = '',
+    GodotDockStage? dockStage,
     bool isRenderedAsInspectorTable = false,
     bool isRenderedAsSignalGraph = false,
   }) {
+    if (dockStage == GodotDockStage.fix || stepRole == 'fix') {
+      return (
+        icon: '🛠',
+        label: 'FIX PATCH (.gd)',
+        accent: const Color(0xFFF59E0B),
+      );
+    }
     final lowerPath = stepPath.toLowerCase();
     final lowerInstr = instruction.toLowerCase();
     final lowerCode = codeFormula.toLowerCase();
@@ -2941,7 +2723,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     lowerInstr.contains('bind key') ||
                     lowerInstr.contains('inputmap'))))) {
       return (
-        icon: '🎮',
+        icon: '⌨',
         label: 'INPUT MAP',
         accent: const Color(0xFFA78BFA),
       );
@@ -2951,11 +2733,10 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             .where((l) => l.trim().startsWith('|') && l.trim().endsWith('|'))
             .length >=
         2;
-    final bool isInspectorNodeSetup = lowerPath.contains('inspector') ||
-        lowerPath.contains('scene dock') ||
-        lowerCode.contains('collisionshape') ||
-        lowerCode.contains('camera') ||
-        lowerCode.contains('characterbody');
+    final bool isInspectorNodeSetup = dockStage == GodotDockStage.inspector ||
+        lowerPath.contains('inspector') ||
+        lowerPath.contains('property') ||
+        stepRole == 'inspector_setup';
     if (lowerPath.contains('main scene') ||
         lowerPath.contains('level scene') ||
         lowerPath.contains('instantiate child scene') ||
@@ -2964,11 +2745,23 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         (lowerPath.contains('scene tree') &&
             (lowerInstr.contains('instantiate') ||
                 lowerInstr.contains('main'))) ||
-        (isPipeTable && !isInspectorNodeSetup)) {
+        (isPipeTable && !isInspectorNodeSetup && dockStage != GodotDockStage.inspector)) {
       return (
         icon: '🗺',
         label: 'MAIN SCENE (.tscn)',
         accent: const Color(0xFF10B981),
+      );
+    }
+    if (dockStage == GodotDockStage.scene ||
+        (!isInspectorNodeSetup &&
+            (lowerPath.contains('scene dock') ||
+                lowerPath.contains('scene tree') ||
+                lowerPath.contains('add child node') ||
+                stepRole == 'editor_setup'))) {
+      return (
+        icon: '🌲',
+        label: 'SCENE (.tscn)',
+        accent: const Color(0xFF34D399),
       );
     }
     final bool looksLikeCppFile = lowerPath.endsWith('.h') ||
@@ -2980,14 +2773,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         lowerCode.contains('extends ') ||
         lowerCode.contains('@export');
     if (isRenderedAsInspectorTable ||
-        (stepRole == 'editor_setup' && !looksLikeCppFile && !looksLikeGdScript) ||
-        lowerPath.contains('inspector') ||
-        lowerPath.contains('scene dock') ||
-        lowerPath.contains('scene tree') ||
-        lowerPath.contains('add child node')) {
+        isInspectorNodeSetup ||
+        (stepRole == 'editor_setup' && !looksLikeCppFile && !looksLikeGdScript)) {
       return (
-        icon: '📐',
-        label: 'SCENE TREE & INSPECTOR',
+        icon: '🎛',
+        label: 'PROPERTY & LAYER SHEET',
         accent: const Color(0xFF38BDF8),
       );
     }
@@ -3001,7 +2791,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         accent: const Color(0xFF22D3EE),
       );
     }
-    if (stepRole == 'wire_and_verify' &&
+    if ((dockStage == GodotDockStage.wire || stepRole == 'wire_and_verify') &&
         (lowerInstr.contains('f6') ||
             lowerInstr.contains('f5') ||
             lowerInstr.contains('run scene') ||
@@ -3034,6 +2824,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     String parentClassLabel = '',
     bool isLevelScene = false,
     bool isInputMap = false,
+    void Function(String propertyKey, String newValue)? onPropertyChanged,
   }) {
     return GodotInspectorPanel(
       tableLines: lines,
@@ -3044,6 +2835,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       isLevelScene: isLevelScene,
       isInputMap: isInputMap,
       highlightedTokens: _hoveredDoTokens,
+      contract: widget.workbench.activeGodotContract,
+      onPropertyChanged: onPropertyChanged,
     );
   }
 }
