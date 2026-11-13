@@ -98,7 +98,7 @@ class FullProductionBlueprintAgent {
     required List<String> unlockedDeferredExclusions,
     required List<String> scheduledInboxTitles,
     required String apiKey,
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;

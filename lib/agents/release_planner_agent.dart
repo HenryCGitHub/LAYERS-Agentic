@@ -716,7 +716,7 @@ class ReleasePlannerAgent {
     Map<String, List<TierDocument>> existingFeaturesByBeat = const {},
     Map<int, List<ProposedFeatureBlueprint>> deferredByBeatIndex = const {},
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
     FullProductionBlueprint? fullProductionBlueprint,
   }) async {
@@ -1038,7 +1038,7 @@ class ReleasePlannerAgent {
     final projectDoneWhen =
         SectionTextUtils.resolveDoneWhen(projectDoc.sections);
     final effectiveModel = modelName.contains('argon')
-        ? 'gemini-flash-latest'
+        ? GeminiAgentClient.pinnedLiveFlashModel
         : modelName;
     final progressiveDiagnosticInstructions = isSubsequentRelease
         ? '''
@@ -1130,7 +1130,7 @@ Call `commit_release_plan` with the structured release blueprint.
     required TierDocument projectDoc,
     required TierDocument releaseDoc,
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
@@ -1177,7 +1177,7 @@ Call `commit_release_plan` with the structured release blueprint.
         : '  (Decompose the project goal into engineering systems)';
 
     final effectiveModel = modelName.contains('argon')
-        ? 'gemini-flash-latest'
+        ? GeminiAgentClient.pinnedLiveFlashModel
         : modelName;
     final prompt = '''
 You are the Principal Game Architect (`$effectiveModel`) planning the top-level **Engineering Systems / Mechanics / Epics (`E01`..`EN`)** for "${projectDoc.title}" ($versionTag).
@@ -1523,7 +1523,7 @@ Call `commit_release_system_epics` with the structured system epics.
     required List<ProposedBeatBlueprint> allEpics,
     required List<String> alreadyPlannedFeatures,
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     final explicitVerTag = releaseDoc.sections['versionTag']?.trim();
@@ -1561,7 +1561,7 @@ Call `commit_release_system_epics` with the structured system epics.
     ].join('\n');
 
     final effectiveModel = modelName.contains('argon')
-        ? 'gemini-flash-latest'
+        ? GeminiAgentClient.pinnedLiveFlashModel
         : modelName;
     final prompt = '''
 You are the Systems Designer (`$effectiveModel`) planning the playable **Features (`1..M`)** inside **Epic E$epicNum · ${epicBlueprint.title}** for "${projectDoc.title}" ($versionTag).
@@ -1845,7 +1845,7 @@ Call `commit_epic_features` with the ordered playable features.
     required List<String> missingGaps,
     required List<String> alreadyPlannedChanges,
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
@@ -3813,7 +3813,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
     required String userMessage,
     TierDocument? projectDoc,
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     final cleanMsg = userMessage.trim();

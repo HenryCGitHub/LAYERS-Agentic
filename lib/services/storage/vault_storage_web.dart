@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../../agents/gemini_agent_client.dart';
 import '../../models/tier_document.dart';
 import '../local_vault_service.dart';
 import 'vault_storage_interface.dart';
@@ -87,8 +88,9 @@ class VaultStorageWebImpl implements VaultStorageBackend {
             'version': '2.0.0',
             'activeDocumentId': activeDocumentId,
             'apiKey': apiKey ?? '',
-            'modelName': modelName ?? 'gemini-flash-latest',
-            'planningModel': planningModel ?? 'gemini-flash-latest',
+            'modelName': modelName ?? GeminiAgentClient.pinnedLiveFlashModel,
+            'planningModel':
+                planningModel ?? GeminiAgentClient.pinnedLiveFlashModel,
             'thinkingLevel': thinkingLevel ?? 'LOW',
             'themeMode': themeMode ?? currentThemeMode ?? 'dark',
           }));

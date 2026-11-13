@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import '../models/tier_document.dart';
 import 'storage/vault_storage.dart';
+import 'storage/vault_storage_interface.dart';
 
 class VaultLoadResult {
   final Map<String, TierDocument> documents;
@@ -26,9 +28,14 @@ class VaultLoadResult {
 class LocalVaultService {
   LocalVaultService._();
 
+  @visibleForTesting
+  static VaultStorageBackend? testBackendOverride;
+
+  static VaultStorageBackend get _backend => testBackendOverride ?? vaultStorage;
+
   /// Loads all locally cached documents and settings.
   static Future<VaultLoadResult> loadVaultData() async {
-    return vaultStorage.loadVaultData();
+    return _backend.loadVaultData();
   }
 
   /// Saves user settings and AI configurations to local storage.
@@ -40,7 +47,7 @@ class LocalVaultService {
     String? thinkingLevel,
     String? themeMode,
   }) async {
-    return vaultStorage.saveSettings(
+    return _backend.saveSettings(
       activeDocumentId: activeDocumentId,
       apiKey: apiKey,
       modelName: modelName,
@@ -52,11 +59,11 @@ class LocalVaultService {
 
   /// Persists a single tier document to local storage.
   static Future<void> saveDocument(TierDocument doc) async {
-    return vaultStorage.saveDocument(doc);
+    return _backend.saveDocument(doc);
   }
 
   /// Deletes a document by id from local storage.
   static Future<void> deleteDocument(String id) async {
-    return vaultStorage.deleteDocument(id);
+    return _backend.deleteDocument(id);
   }
 }

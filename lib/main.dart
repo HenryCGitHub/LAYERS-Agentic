@@ -667,7 +667,8 @@ class WorkbenchShell extends StatelessWidget {
                       const SizedBox(width: 4),
                       Tooltip(
                         message:
-                            'Active AI Model: ${workbench.activeModelIndicatorLabel} (${workbench.conversationModel})',
+                            'Active AI Model: ${workbench.activeModelIndicatorLabel} (${workbench.conversationModel}, thinking: ${workbench.thinkingLevel})'
+                            '${workbench.activeModelIndicatorLabel.contains('Fallback') && workbench.aiFallbackReason != null ? '\nFallback reason: ${workbench.aiFallbackReason}' : ''}',
                         child: Container(
                           key: const ValueKey('active_model_indicator_pill'),
                           padding: const EdgeInsets.symmetric(

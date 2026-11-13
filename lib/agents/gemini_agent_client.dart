@@ -48,6 +48,7 @@ class GeminiAgentClient {
     lastResolvedModel = null;
     lastModelVersion = null;
     lastErrorStatus = null;
+    lastFallbackReason = null;
   }
 
   /// True for Gemini 4.x endpoints (`gemini-4-hydrogen`, etc.) where `minimal`/`none`
@@ -71,6 +72,9 @@ class GeminiAgentClient {
   /// Records which model endpoint actually served the most recent response (`gemini-4-hydrogen` vs `gemini-flash-latest`).
   static String? lastResolvedModel;
   static String? lastModelVersion;
+
+  /// Records why `gemini-4-hydrogen` failed over to `gemini-flash-latest` on the most recent call.
+  static String? lastFallbackReason;
 
   /// Pricing rates for Gemini 4 Hydrogen (`gemini-4-hydrogen`):
   /// $1.50 per 1 million input tokens.
@@ -367,6 +371,9 @@ class GeminiAgentClient {
     };
   }
 
+  static String _formatHttpStatusReason(int statusCode, String errMsg) =>
+      errMsg.isNotEmpty ? 'HTTP $statusCode: $errMsg' : 'HTTP $statusCode';
+
   static String _extractErrorMessage(String responseBody) {
     try {
       final decoded = jsonDecode(responseBody);
@@ -499,10 +506,8 @@ class GeminiAgentClient {
     String functionCallingMode = 'ANY',
     Map<String, dynamic>? responseSchema,
   }) async {
-    final trimmedPreferred = preferredModel.trim();
-    final List<String> modelsToTry = trimmedPreferred == fallbackFlashModel
-        ? const <String>[fallbackFlashModel, pinnedLiveFlashModel]
-        : const <String>[pinnedLiveFlashModel, fallbackFlashModel];
+    final List<String> modelsToTry =
+        const <String>[pinnedLiveFlashModel, fallbackFlashModel];
     final resolvedModel = modelsToTry.first;
     if (testMockResponder != null) {
       final mockRes = await testMockResponder!(prompt, resolvedModel);
@@ -551,6 +556,7 @@ class GeminiAgentClient {
 
     int? lastNon200Status;
     String? lastPolicyErrorMessage;
+    lastFallbackReason = null;
     bool refreshedProxyTokenOnce = false;
 
     for (final model in modelsToTry) {
@@ -674,26 +680,44 @@ class GeminiAgentClient {
             }
           } catch (_) {}
           final parsed = _parseCandidateResponseJson(response.body);
-          if (parsed != null) return parsed;
+          if (parsed != null) {
+            if (model == pinnedLiveFlashModel) {
+              lastFallbackReason = null;
+            }
+            return parsed;
+          }
+          if (model == pinnedLiveFlashModel) {
+            lastFallbackReason = 'HTTP 200: empty or unparseable JSON response';
+          }
         } else {
           final errMsg = _extractErrorMessage(response.body);
           if (_isProxyModelPolicyBlock(response.statusCode, errMsg)) {
             lastNon200Status = 403;
             lastPolicyErrorMessage = errMsg;
+            if (model == pinnedLiveFlashModel) {
+              lastFallbackReason =
+                  _formatHttpStatusReason(response.statusCode, errMsg);
+            }
             continue;
           }
           if (response.statusCode == 401 ||
               response.statusCode == 402 ||
               response.statusCode == 403) {
             // Fail fast on auth/billing/invite errors instead of retrying across models
-            lastErrorStatus = errMsg.isNotEmpty
-                ? 'HTTP ${response.statusCode}: $errMsg'
-                : 'HTTP ${response.statusCode}';
+            lastErrorStatus =
+                _formatHttpStatusReason(response.statusCode, errMsg);
             return null;
           }
           lastNon200Status = response.statusCode;
+          if (model == pinnedLiveFlashModel) {
+            lastFallbackReason =
+                _formatHttpStatusReason(response.statusCode, errMsg);
+          }
         }
-      } catch (_) {
+      } catch (err) {
+        if (model == pinnedLiveFlashModel) {
+          lastFallbackReason = '$err';
+        }
         // Proceed to JSON-mode fallback if tools were active, or next model
       }
 
@@ -740,25 +764,44 @@ class GeminiAgentClient {
               }
             } catch (_) {}
             final parsed = _parseCandidateResponseJson(fallbackRes.body);
-            if (parsed != null) return parsed;
+            if (parsed != null) {
+              if (model == pinnedLiveFlashModel) {
+                lastFallbackReason = null;
+              }
+              return parsed;
+            }
+            if (model == pinnedLiveFlashModel) {
+              lastFallbackReason =
+                  'HTTP 200: empty or unparseable JSON fallback response';
+            }
           } else {
             final errMsg = _extractErrorMessage(fallbackRes.body);
             if (_isProxyModelPolicyBlock(fallbackRes.statusCode, errMsg)) {
               lastNon200Status = 403;
               lastPolicyErrorMessage = errMsg;
+              if (model == pinnedLiveFlashModel) {
+                lastFallbackReason =
+                    _formatHttpStatusReason(fallbackRes.statusCode, errMsg);
+              }
               continue;
             }
             if (fallbackRes.statusCode == 401 ||
                 fallbackRes.statusCode == 402 ||
                 fallbackRes.statusCode == 403) {
-              lastErrorStatus = errMsg.isNotEmpty
-                  ? 'HTTP ${fallbackRes.statusCode}: $errMsg'
-                  : 'HTTP ${fallbackRes.statusCode}';
+              lastErrorStatus =
+                  _formatHttpStatusReason(fallbackRes.statusCode, errMsg);
               return null;
             }
             lastNon200Status = fallbackRes.statusCode;
+            if (model == pinnedLiveFlashModel) {
+              lastFallbackReason =
+                  _formatHttpStatusReason(fallbackRes.statusCode, errMsg);
+            }
           }
-        } catch (_) {
+        } catch (err) {
+          if (model == pinnedLiveFlashModel) {
+            lastFallbackReason = '$err';
+          }
           continue;
         }
       }

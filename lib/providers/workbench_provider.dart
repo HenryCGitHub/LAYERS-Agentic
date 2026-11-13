@@ -113,6 +113,7 @@ class WorkbenchProvider extends ChangeNotifier {
       GeminiAgentClient.hasKey(_apiKey) &&
       GeminiAgentClient.lastErrorStatus == null;
   String? get aiLastErrorStatus => GeminiAgentClient.lastErrorStatus;
+  String? get aiFallbackReason => GeminiAgentClient.lastFallbackReason;
 
   String _conversationModel = 'gemini-4-hydrogen';
   String get conversationModel => _conversationModel;

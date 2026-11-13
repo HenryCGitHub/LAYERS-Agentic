@@ -400,24 +400,30 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       _apiKey = GeminiAgentClient.resolveDefaultApiKey();
       String normalizeSavedModel(String raw) {
         final trimmed = raw.trim();
-        if (trimmed == GeminiAgentClient.pinnedLiveFlashModel ||
-            trimmed == GeminiAgentClient.fallbackFlashModel) {
-          return trimmed;
-        }
-        return GeminiAgentClient.pinnedLiveFlashModel;
+        return trimmed == GeminiAgentClient.pinnedLiveFlashModel
+            ? trimmed
+            : GeminiAgentClient.pinnedLiveFlashModel;
       }
 
-      if (loaded.modelName != null && loaded.modelName!.trim().isNotEmpty) {
-        _conversationModel = normalizeSavedModel(loaded.modelName!);
-      }
-      if (loaded.planningModel != null &&
-          loaded.planningModel!.trim().isNotEmpty) {
-        _planningModel = normalizeSavedModel(loaded.planningModel!);
-      }
-      if (loaded.thinkingLevel != null &&
-          loaded.thinkingLevel!.trim().isNotEmpty) {
-        _thinkingLevel = loaded.thinkingLevel!.trim().toUpperCase();
-      }
+      final hadSavedAiPrefs = loaded.modelName != null ||
+          loaded.planningModel != null ||
+          loaded.thinkingLevel != null;
+      final savedConversation = loaded.modelName?.trim();
+      final savedPlanning = loaded.planningModel?.trim();
+      final savedThinking = loaded.thinkingLevel?.trim().toUpperCase();
+
+      _conversationModel = savedConversation != null && savedConversation.isNotEmpty
+          ? normalizeSavedModel(savedConversation)
+          : GeminiAgentClient.pinnedLiveFlashModel;
+      _planningModel = savedPlanning != null && savedPlanning.isNotEmpty
+          ? normalizeSavedModel(savedPlanning)
+          : GeminiAgentClient.pinnedLiveFlashModel;
+      _thinkingLevel = 'LOW';
+
+      final needsAiPrefsMigration = hadSavedAiPrefs &&
+          (savedConversation != GeminiAgentClient.pinnedLiveFlashModel ||
+              savedPlanning != GeminiAgentClient.pinnedLiveFlashModel ||
+              savedThinking != 'LOW');
       final projs = savedProjects;
       if (projs.isNotEmpty) {
         final targetId = (loaded.activeDocumentId != null &&
@@ -425,6 +431,18 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
             ? loaded.activeDocumentId!
             : projs.first.id;
         _restoreProjectState(targetId);
+      }
+      if (needsAiPrefsMigration) {
+        await LocalVaultService.saveSettings(
+          activeDocumentId: _activeProjectId ??
+              loaded.activeDocumentId ??
+              'proj_main',
+          apiKey: '',
+          modelName: _conversationModel,
+          planningModel: _planningModel,
+          thinkingLevel: _thinkingLevel,
+          themeMode: _isDark ? 'dark' : 'light',
+        );
       }
     } catch (e) {
       debugPrint('initVault error: $e');

@@ -416,8 +416,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         }
 
         // Half-Screen Mode (< 1040px): Main Canvas gets 100% width; Outliner becomes a Slide-Over Overlay Drawer
+        final maxOverlayWidth = constraints.maxWidth * 0.85;
+        final minOverlayWidth =
+            maxOverlayWidth < 220.0 ? maxOverlayWidth : 220.0;
         final overlayWidth =
-            _outlinerWidth.clamp(220.0, constraints.maxWidth * 0.85);
+            _outlinerWidth.clamp(minOverlayWidth, maxOverlayWidth);
         return Stack(
           children: [
             Positioned.fill(

@@ -1128,7 +1128,7 @@ class ProjectConceptAgent {
   static Future<ProjectConceptBlueprint?> startConceptInterview(
     String rawSpark, {
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
     bool isGddExtraction = false,
   }) async {
@@ -1234,8 +1234,8 @@ Call `commit_concept_blueprint` with the structured blueprint.
     ProjectConceptBlueprint draft,
     String userMessage, {
     String apiKey = '',
-    String conversationModel = 'gemini-flash-latest',
-    String planningModel = 'gemini-flash-latest',
+    String conversationModel = GeminiAgentClient.pinnedLiveFlashModel,
+    String planningModel = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     final cleanMsg = ProjectConceptBlueprint.normalizeCommonTypos(
@@ -1512,7 +1512,7 @@ Call `$activeToolName` with the delta update.
     SparkIdeaIntakeResult? existingIntake,
     int suggestionVariantOffset = 0,
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     final cleanInput = userInput.trim();
@@ -1591,7 +1591,7 @@ Call `commit_spark_intake` with the structured summary.
     required SparkIdeaIntakeResult existingIntake,
     required int suggestionVariantOffset,
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
@@ -1657,7 +1657,7 @@ Call `propose_spark_expansion_cards` with 3 fresh expansion cards.
     required String optionKey,
     required List<String> currentOptions,
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     if (!GeminiAgentClient.hasKey(apiKey)) return null;
@@ -1729,7 +1729,7 @@ Call `$sectionToolName` with 3 fresh options.
   static Future<ProjectConceptBlueprint?> extractConceptFromGdd(
     String rawGdd, {
     String apiKey = '',
-    String modelName = 'gemini-flash-latest',
+    String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
     final cleanDoc = rawGdd.trim();

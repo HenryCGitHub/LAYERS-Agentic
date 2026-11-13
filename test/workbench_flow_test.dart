@@ -15,7 +15,11 @@ import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/project_pitch_screen.dart';
+import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/services/firestore_vault_service.dart';
+import 'package:layers_agentic/services/local_vault_service.dart';
+import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
+import 'package:layers_agentic/theme/app_theme.dart';
 import 'package:layers_agentic/utils/section_text_utils.dart';
 
 Future<Map<String, dynamic>?> _mockGeminiResponder(
@@ -11150,5 +11154,249 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(find.byTooltip('Copy Godot Transform'), findsWidgets);
       },
     );
+
+    test(
+      'initVault() auto-migrates persisted legacy gemini-flash-latest & HIGH settings to gemini-4-hydrogen + LOW',
+      () async {
+        final fakeBackend = _MemoryVaultStorageBackend(
+          const VaultLoadResult(
+            documents: {},
+            activeDocumentId: '',
+            modelName: 'gemini-flash-latest',
+            planningModel: 'gemini-3.8-flash',
+            thinkingLevel: 'HIGH',
+          ),
+        );
+        final prevBackend = LocalVaultService.testBackendOverride;
+        LocalVaultService.testBackendOverride = fakeBackend;
+        try {
+          final provider = WorkbenchProvider(enableAutoLoad: false);
+          await provider.initVault();
+
+          expect(
+            provider.conversationModel,
+            equals(GeminiAgentClient.pinnedLiveFlashModel),
+          );
+          expect(
+            provider.planningModel,
+            equals(GeminiAgentClient.pinnedLiveFlashModel),
+          );
+          expect(provider.thinkingLevel, equals('LOW'));
+          expect(fakeBackend.saveSettingsCount, greaterThanOrEqualTo(1));
+          expect(
+            fakeBackend.lastSavedModelName,
+            equals(GeminiAgentClient.pinnedLiveFlashModel),
+          );
+          expect(
+            fakeBackend.lastSavedPlanningModel,
+            equals(GeminiAgentClient.pinnedLiveFlashModel),
+          );
+          expect(fakeBackend.lastSavedThinkingLevel, equals('LOW'));
+        } finally {
+          LocalVaultService.testBackendOverride = prevBackend;
+        }
+      },
+    );
+
+    testWidgets(
+      'GeminiAgentClient tries gemini-4-hydrogen first with thinkingLevel LOW, surfaces fallback reason in top-bar tooltip, and clears on Hydrogen 200',
+      (tester) async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.resetCapabilityCacheForTest();
+        GeminiAgentClient.testMockResponder = null;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+
+        bool failHydrogen = true;
+        final requestedUrls = <String>[];
+        final capturedBodies = <Map<String, dynamic>>[];
+
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          requestedUrls.add(uri.toString());
+          if (body is String && body.isNotEmpty) {
+            capturedBodies.add(jsonDecode(body) as Map<String, dynamic>);
+          }
+          if (failHydrogen &&
+              uri.toString().contains(GeminiAgentClient.pinnedLiveFlashModel)) {
+            return http.Response(
+              '{"error":{"message":"proxy model policy blocked"}}',
+              403,
+            );
+          }
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': '{"ok": true}'},
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        };
+
+        try {
+          // 1. Even if caller passes preferredModel = fallbackFlashModel, Hydrogen goes first;
+          //    when Hydrogen returns 403, failover lands on gemini-flash-latest & records reason.
+          final fallbackRes = await GeminiAgentClient.generateJson(
+            prompt: 'Ping Hydrogen first',
+            apiKey: 'test-key-1234',
+            preferredModel: GeminiAgentClient.fallbackFlashModel,
+            thinkingLevel: 'LOW',
+          );
+
+          expect(fallbackRes, isNotNull);
+          expect(fallbackRes!['ok'], isTrue);
+          expect(
+            requestedUrls.first,
+            contains('models/${GeminiAgentClient.pinnedLiveFlashModel}:'),
+          );
+          expect(
+            requestedUrls.last,
+            contains('models/${GeminiAgentClient.fallbackFlashModel}:'),
+          );
+          final hydrogenGenCfg =
+              capturedBodies.first['generationConfig'] as Map<String, dynamic>;
+          expect(
+            hydrogenGenCfg['thinkingConfig'],
+            equals({'thinkingLevel': 'LOW'}),
+          );
+          expect(hydrogenGenCfg.containsKey('temperature'), isFalse);
+          expect(GeminiAgentClient.lastFallbackReason, contains('HTTP 403'));
+
+          // 2. Verify top-bar pill and tooltip reflect active fallback reason.
+          tester.view.physicalSize = const Size(1400, 900);
+          tester.view.devicePixelRatio = 1.0;
+          addTearDown(() {
+            tester.view.resetPhysicalSize();
+            tester.view.resetDevicePixelRatio();
+          });
+
+          final provider = WorkbenchProvider(enableAutoLoad: false);
+          expect(provider.activeModelIndicatorLabel, equals('⚡ Flash (Fallback)'));
+          expect(
+            provider.aiFallbackReason,
+            equals(GeminiAgentClient.lastFallbackReason),
+          );
+
+          await tester.pumpWidget(LayersAgenticApp(provider: provider));
+          await tester.pumpAndSettle();
+
+          final pillFinder = find.byKey(
+            const ValueKey('active_model_indicator_pill'),
+          );
+          expect(pillFinder, findsOneWidget);
+          final tooltip = tester.widget<Tooltip>(
+            find.ancestor(of: pillFinder, matching: find.byType(Tooltip)).first,
+          );
+          expect(tooltip.message, contains('Fallback reason:'));
+          expect(tooltip.message, contains('HTTP 403'));
+
+          // 3. Subsequent Hydrogen 200 clears lastFallbackReason & restores ⚡ Hydrogen badge.
+          failHydrogen = false;
+          final recoveryRes = await GeminiAgentClient.generateJson(
+            prompt: 'Ping Hydrogen recovery',
+            apiKey: 'test-key-1234',
+            preferredModel: GeminiAgentClient.fallbackFlashModel,
+            thinkingLevel: 'LOW',
+          );
+          expect(recoveryRes, isNotNull);
+          expect(recoveryRes!['ok'], isTrue);
+          expect(GeminiAgentClient.lastFallbackReason, isNull);
+          expect(provider.aiFallbackReason, isNull);
+          expect(provider.activeModelIndicatorLabel, equals('⚡ Hydrogen'));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+          GeminiAgentClient.resetCapabilityCacheForTest();
+        }
+      },
+    );
+
+    testWidgets(
+      'ReleaseWorkbenchScreen renders cleanly below 259px viewport width without clamp ArgumentError',
+      (tester) async {
+        tester.view.physicalSize = const Size(240, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        await tester.runAsync(() async {
+          await provider.startConceptInterview('Crop Shotgun Arena');
+          await provider.approveConceptAndBuildRelease();
+        });
+
+        final prevOnError = FlutterError.onError;
+        final nonOverflowErrors = <Object>[];
+        FlutterError.onError = (FlutterErrorDetails details) {
+          if (details.exceptionAsString().contains('A RenderFlex overflowed')) {
+            return;
+          }
+          nonOverflowErrors.add(details.exception);
+          prevOnError?.call(details);
+        };
+        try {
+          await tester.pumpWidget(
+            MaterialApp(
+              theme: AppTheme.darkTheme,
+              home: Scaffold(
+                body: ReleaseWorkbenchScreen(workbench: provider),
+              ),
+            ),
+          );
+          await tester.pump(const Duration(milliseconds: 50));
+
+          // Must render without throwing `ArgumentError: Invalid argument: 220` from .clamp(220.0, <220.0).
+          expect(nonOverflowErrors, isEmpty);
+          expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
+          expect(tester.takeException(), isNull);
+        } finally {
+          FlutterError.onError = prevOnError;
+        }
+      },
+    );
   });
+}
+
+class _MemoryVaultStorageBackend implements VaultStorageBackend {
+  final VaultLoadResult seedResult;
+  String? lastSavedModelName;
+  String? lastSavedPlanningModel;
+  String? lastSavedThinkingLevel;
+  int saveSettingsCount = 0;
+
+  _MemoryVaultStorageBackend(this.seedResult);
+
+  @override
+  Future<VaultLoadResult> loadVaultData() async => seedResult;
+
+  @override
+  Future<void> saveSettings({
+    required String activeDocumentId,
+    String? apiKey,
+    String? modelName,
+    String? planningModel,
+    String? thinkingLevel,
+    String? themeMode,
+  }) async {
+    saveSettingsCount++;
+    lastSavedModelName = modelName;
+    lastSavedPlanningModel = planningModel;
+    lastSavedThinkingLevel = thinkingLevel;
+  }
+
+  @override
+  Future<void> saveDocument(TierDocument doc) async {}
+
+  @override
+  Future<void> deleteDocument(String id) async {}
 }
