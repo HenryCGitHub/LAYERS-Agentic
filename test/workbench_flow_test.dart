@@ -8356,7 +8356,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await pumpWithResponse(
           tester,
           intakeJson([
-            {'kind': 'SETUP', 'question': 'What camera and engine?'},
+            {'kind': 'SETUP', 'question': 'What camera and platform?'},
           ]),
         );
         expect(find.byKey(const ValueKey('spark_missing_nudge')),
@@ -8372,6 +8372,49 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await tester.tap(find.byKey(const ValueKey('spark_undo_btn')));
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('spark_missing_nudge')), findsNothing);
+      });
+
+      testWidgets(
+          'SETUP nudge uses Camera and platform seed and strips/filters engine questions',
+          (tester) async {
+        final provider = await pumpWithResponse(
+          tester,
+          intakeJson([
+            {
+              'kind': 'SETUP',
+              'question':
+                  'Which game engine and target platform are you building for?',
+            },
+          ]),
+        );
+        expect(
+          find.text('SETUP · Which target platform are you building for?'),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('spark_missing_SETUP')));
+        await tester.pump();
+        final field = tester.widget<TextField>(
+          find.byKey(const ValueKey('spark_input_field')),
+        );
+        expect(field.controller!.text, equals('Camera and platform: '));
+
+        final before = provider.sparkIntake!.baseSummary;
+        await tester.tap(find.byKey(const ValueKey('ingest_idea_summary_btn')));
+        await tester.pumpAndSettle();
+        expect(field.controller!.text, equals('Camera and platform: '));
+        expect(provider.sparkIntake!.baseSummary, equals(before));
+      });
+
+      testWidgets('SETUP drops pure engine-choice question when Godot is fixed',
+          (tester) async {
+        final provider = await pumpWithResponse(
+          tester,
+          intakeJson([
+            {'kind': 'SETUP', 'question': 'Which game engine are you using?'},
+          ]),
+        );
+        expect(provider.sparkIntake!.missing, isEmpty);
+        expect(find.text('✓ Action, twist, and setup covered'), findsOneWidget);
       });
     });
 
@@ -11362,6 +11405,48 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         } finally {
           FlutterError.onError = prevOnError;
         }
+      },
+    );
+
+    test(
+      'Godot-only enforcement: ProjectConceptBlueprint.fromJson and techSpec option cards normalize non-Godot engines to Godot 4',
+      () {
+        final restored = ProjectConceptBlueprint.fromJson({
+          'title': 'Tidepool Blaster',
+          'sparkIdea': 'Coastal wave shooter',
+          'goal': 'Build a 2D coastal arena shooter.',
+          'techSpec': [
+            'Unity (C#)',
+            'PC Desktop',
+            '2D Sprite Sheets',
+            'Local JSON',
+          ],
+          'coreLoopBeats': ['Swim & Blast: Clear wave and buy upgrades'],
+          'exclusions': ['No online co-op'],
+          'doneWhen': 'Clear 3 waves -> shop opens cleanly.',
+          'releaseTrainTitles': ['v0.1: Prototype'],
+        });
+        expect(restored.techSpec.first, equals('Godot 4 (GDScript)'));
+
+        final parsedOptions = ProjectConceptAgent.parseSectionOptionsToolOutput(
+          'techSpec',
+          [
+            {
+              'label': 'Native Performance',
+              'engine': 'Unreal Engine 5 (C++)',
+              'platform': 'PC Desktop',
+              'assetPipeline': '3D Low-Poly Meshes',
+              'saveMode': 'ConfigFile (.cfg / .tres)',
+            },
+          ],
+        );
+        expect(parsedOptions, hasLength(1));
+        expect(
+          parsedOptions.first,
+          equals(
+            'Native Performance: Godot 4 (GDScript + GDExtension C++) · PC Desktop · 3D Low-Poly Meshes · ConfigFile (.cfg / .tres)',
+          ),
+        );
       },
     );
   });

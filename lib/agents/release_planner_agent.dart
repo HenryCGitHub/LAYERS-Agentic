@@ -1590,7 +1590,7 @@ ${GeminiAgentClient.compactStyleRules}
     ${epicIndex == 0 ? '1. `tier_1_world_space` FIRST: Feature #1 in E01 MUST be the Greybox Level/Arena/Grid Blockout & Collision surface BEFORE `tier_2_actor_locomotion` (Player/Vehicle/Tool movement) at Feature #2.' : '1. `tier_3_targets_hazards` BEFORE `tier_4_verbs_tools_combat`: Place any target entity, enemy, container, prop, or spawner BEFORE the weapon, projectile, tool, tether, or harvester that acts on it.'}
     2. `tier_5_loop_economy_hud` LAST: Place any HUD widget, counter, shop panel, round reset, or pressure/seal lock gate AFTER the base gameplay mechanics and state variables it reads or restricts.
 - MANDATORY SHARED ASSET, TUNING, GUARDS & MECHANIC-SPECIFIC TASKS ON EVERY FEATURE:
-  * Set `primarySharedScriptOrScene` to the exact engine scene/script/prefab/Blueprint filename for that feature (reusing an earlier feature's player/actor script when adding a player-attached ability, or naming a dedicated target/weapon/UI asset).
+  * Set `primarySharedScriptOrScene` to the exact Godot 4 scene (.tscn) and script (.gd) filename for that feature (reusing an earlier feature's player/actor script when adding a player-attached ability, or naming a dedicated target/weapon/UI asset).
   * Include 2–3 concrete `"paramName: numericValue unit"` entries in `tuningParams` and 1–2 `[TAG]` guard rules in `edgeCases`.
   * Include non-overlapping, foundation-first `tasks` (`stage_1_scene_or_data_foundation` -> `stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`) whose `title` names the specific scene node, UI widget, data resource, or gameplay calculation for that feature (NEVER use generic template phrases like `"Body & Collision"`, `"Prop & Collision"`, `"Action & Math"`, `"Cue & Clamp"`, `"Cue & Boundary Clamp"`, or passive `"Verification"` / `"Testing"` task titles).
 
@@ -3855,7 +3855,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
         ? ''
         : (is2dPlan
             ? 'Dimension Rule: 2D ONLY (use 2D scenes/nodes/colliders/Vector2; NEVER 3D nodes or Vector3).\n'
-            : 'Dimension Rule: 3D (use 3D actors/nodes/colliders/Vector3).\n');
+            : 'Dimension Rule: 3D (Godot 4 Node3D/CharacterBody3D/CollisionShape3D/Vector3).\n');
     final conceptHeader = projectDoc == null
         ? ''
         : 'Concept Context: Game Spec: $gameSpecText | Tech Spec: $techSpecText | Pillars: $pillarsText | Trade-Offs: $tradeOffsText\n$dimensionRule';

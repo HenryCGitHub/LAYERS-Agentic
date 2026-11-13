@@ -113,6 +113,29 @@ class ProjectConceptBlueprint {
     'Godot 4 Greybox (2D / Forward+)',
     'ConfigFile (.cfg / .tres)',
   ];
+
+  /// Ensures `techSpec[0]` is locked to Godot 4 (`Godot 4 (GDScript)` or
+  /// `Godot 4 (GDScript + GDExtension C++)`), upgrading legacy non-Godot values.
+  static List<String> normalizeGodotTechSpec(
+    List<String> techSpec, {
+    String contextHint = '',
+    bool preserveExistingGodotVariant = false,
+  }) {
+    if (techSpec.isEmpty) return techSpec;
+    final result = List<String>.from(techSpec);
+    final firstLower = result.first.toLowerCase();
+    if (preserveExistingGodotVariant && firstLower.contains('godot')) {
+      return result;
+    }
+    final corpus = '$firstLower ${techSpec.join(' ')} $contextHint'.toLowerCase();
+    final hasGdExtension = corpus.contains('gdextension') ||
+        corpus.contains('c++') ||
+        corpus.contains('cpp');
+    result[0] = hasGdExtension
+        ? 'Godot 4 (GDScript + GDExtension C++)'
+        : 'Godot 4 (GDScript)';
+    return result;
+  }
   static const List<String> defaultDesignPillars = [
     'Decisive Momentum: Every cycle rewards decisive movement and timing over hesitation',
     'Instant Recovery: Mistakes feel immediately readable and recoverable in a single button press',
@@ -480,7 +503,11 @@ class ProjectConceptBlueprint {
           <AgentQuestion>[],
       goal: json['goal']?.toString() ?? '',
       gameSpec: _parseStringList(json['gameSpec'], defaultGameSpec),
-      techSpec: _parseStringList(json['techSpec'], defaultTechSpec),
+      techSpec: normalizeGodotTechSpec(
+        _parseStringList(json['techSpec'], defaultTechSpec),
+        contextHint: '${json['sparkIdea'] ?? ''} ${json['goal'] ?? ''}',
+        preserveExistingGodotVariant: true,
+      ),
       designPillars: _parseStringList(json['designPillars']),
       tradeOffs: _parseStringList(json['tradeOffs']),
       coreLoopBeats: _parseStringList(json['coreLoopBeats']),

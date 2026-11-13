@@ -34,7 +34,7 @@ class SparkMissingPiece {
   /// Text dropped into the pitch input when the user taps this nudge.
   String get seed => switch (kind) {
         'TWIST' => 'Twist: ',
-        'SETUP' => 'Camera and engine: ',
+        'SETUP' => 'Camera and platform: ',
         _ => 'Core action: ',
       };
 }
@@ -107,21 +107,55 @@ class ProjectConceptAgent {
         .toList();
   }
 
+  static final RegExp _missingEngineChoiceRegex = RegExp(
+    r'\b(?:which|what)\s+(?:game\s+)?engine\b|\b(?:game\s+)?engine\b|\b(?:unity|unreal(?:\s+engine)?|gamemaker)\b',
+    caseSensitive: false,
+  );
+  static final RegExp _missingSetupContextRegex = RegExp(
+    r'\b(?:camera|view|perspective|2d|3d|top[\s-]?down|side[\s-]?scroll|first[\s-]?person|third[\s-]?person|isometric|platform|pc|web|mobile|console|steam\s*deck)\b',
+    caseSensitive: false,
+  );
+  static final RegExp _leadingEngineJoinRegex = RegExp(
+    r'\b(?:the\s+)?(?:game\s+)?engine\s*(?:,|&|\band\b|\bor\b)\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _trailingEngineJoinRegex = RegExp(
+    r'\s*(?:,|&|\band\b|\bor\b)\s*(?:the\s+)?(?:game\s+)?engine\b',
+    caseSensitive: false,
+  );
+
+  static String? _sanitizeMissingQuestion(String kind, String question) {
+    final trimmed = question.trim();
+    if (trimmed.isEmpty) return null;
+    if (kind != 'SETUP' || !_missingEngineChoiceRegex.hasMatch(trimmed)) {
+      return trimmed;
+    }
+    // Engine is fixed to Godot 4: omit pure engine-choice prompts, and strip
+    // engine clauses when camera view or target platform is still needed.
+    if (!_missingSetupContextRegex.hasMatch(trimmed)) {
+      return null;
+    }
+    final cleaned = trimmed
+        .replaceAll(_leadingEngineJoinRegex, '')
+        .replaceAll(_trailingEngineJoinRegex, '')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .replaceAll(RegExp(r'\s+([?.!,])'), r'$1')
+        .trim();
+    if (cleaned.isEmpty || _missingEngineChoiceRegex.hasMatch(cleaned)) {
+      return null;
+    }
+    return cleaned[0].toUpperCase() + cleaned.substring(1);
+  }
+
   static List<String> _normalizeTechSpecEngine(
     List<String> techSpec,
     List<String> gameSpec,
     String sparkText,
   ) {
-    if (techSpec.isEmpty) return techSpec;
-    final result = List<String>.from(techSpec);
-    final corpus = '${result.first} ${techSpec.join(' ')} $sparkText'.toLowerCase();
-    final hasGdExtension = corpus.contains('gdextension') ||
-        corpus.contains('c++') ||
-        corpus.contains('cpp');
-    result[0] = hasGdExtension
-        ? 'Godot 4 (GDScript + GDExtension C++)'
-        : 'Godot 4 (GDScript)';
-    return result;
+    return ProjectConceptBlueprint.normalizeGodotTechSpec(
+      techSpec,
+      contextHint: '${gameSpec.join(' ')} $sparkText',
+    );
   }
 
   /// Parses the optional `missing` array; returns `null` when absent/malformed.
@@ -133,8 +167,9 @@ class ProjectConceptAgent {
     for (final item in raw) {
       if (item is! Map) continue;
       final kind = (item['kind'] ?? '').toString().trim().toUpperCase();
-      final question = (item['question'] ?? '').toString().trim();
-      if (!kinds.contains(kind) || question.isEmpty || !seen.add(kind)) {
+      final rawQuestion = (item['question'] ?? '').toString().trim();
+      final question = _sanitizeMissingQuestion(kind, rawQuestion);
+      if (!kinds.contains(kind) || question == null || !seen.add(kind)) {
         continue;
       }
       result.add(SparkMissingPiece(kind: kind, question: question));
@@ -382,7 +417,7 @@ class ProjectConceptAgent {
         'missing': {
           'type': 'ARRAY',
           'description':
-              'At most 2 things the developer\'s own text does not state yet. Empty array when the action, twist, and setup are all present.',
+              'At most 2 things the developer\'s own text does not state yet. Empty array when the action, twist, and camera/platform setup are all present.',
           'items': {
             'type': 'OBJECT',
             'required': ['kind', 'question'],
@@ -390,7 +425,7 @@ class ProjectConceptAgent {
               'kind': {
                 'type': 'STRING',
                 'description':
-                    'TWIST (the risk or cost), SETUP (camera and engine), or ACTION (what the player does every few seconds).',
+                    'TWIST (the risk or cost), SETUP (camera view and target platform; NEVER ask about game engine because Godot 4 is fixed), or ACTION (what the player does every few seconds).',
               },
               'question': {
                 'type': 'STRING',
@@ -1071,7 +1106,8 @@ class ProjectConceptAgent {
             const ['engine', 'platform', 'assetPipeline', 'saveMode'],
           );
           if (cells.length >= 2) {
-            result.add('$label: ${cells.join(' · ')}');
+            final normalized = _normalizeTechSpecEngine(cells, const [], '');
+            result.add('$label: ${normalized.join(' · ')}');
           }
         } else if (optionKey == 'designPillars') {
           final pName =
@@ -1144,7 +1180,7 @@ class ProjectConceptAgent {
 """
 $cleanSpark
 """
-- FAITHFUL GDD EXTRACTION: Extract and preserve the exact title, mechanics, camera/controls, engine/platform, design pillars, trade-offs, core loop beats, exclusions, and completion criteria described in the pasted document rather than inventing unrelated systems.'''
+- FAITHFUL GDD EXTRACTION: Extract and preserve the exact title, mechanics, camera/controls, target platform (keeping engine locked to native Godot 4), design pillars, trade-offs, core loop beats, exclusions, and completion criteria described in the pasted document rather than inventing unrelated systems.'''
         : '''You are an indie game producer creating a Stage 1 Concept Blueprint for this spark idea:
 "$cleanSpark"''';
 
@@ -1245,7 +1281,7 @@ Call `commit_concept_blueprint` with the structured blueprint.
 
     final isSectionScoped = cleanMsg.startsWith('[Section ');
     final sectionScopeRule = isSectionScoped
-        ? '\n- SECTION-SCOPED REQUEST: Focus your update on the target `[Section ...]` named in Developer Direction while keeping locked upstream sections consistent. When updating `gameSpec`, always return all 4 cells `["Camera View", "Controls", "Player Mode", "Arena Structure"]`; when updating `techSpec`, always return all 4 cells `["Engine", "Platform", "Asset Pipeline", "Network / Save"]`.'
+        ? '\n- SECTION-SCOPED REQUEST: Focus your update on the target `[Section ...]` named in Developer Direction while keeping locked upstream sections consistent. When updating `gameSpec`, always return all 4 cells `["Camera View", "Controls", "Player Mode", "Arena Structure"]`; when updating `techSpec`, always return all 4 cells `["Godot 4 Workflow (GDScript or GDScript + GDExtension C++)", "Platform", "Asset Pipeline", "Network / Save"]`.'
         : '';
 
     final closeBracketIdx =
@@ -1538,7 +1574,7 @@ ${existingIntake != null ? 'Original Premise: "${existingIntake.rawIdea}"\nPrevi
 ${GeminiAgentClient.compactStyleRules}
 - `workingTitle` MUST be a concrete 2-3 word game title naming the setting/role/mechanic (NEVER just copy the first 3 words of the user's sentence).
 - `baseSummary` MUST be 2 natural sentences synthesizing the premise, core mechanics, and loop in game-design language (NEVER quote, echo, or replace the summary with the user's raw input sentence verbatim).
-- `missing` lists (max 2) only what the developer's own text truly lacks: `TWIST` (a risk or cost), `SETUP` (camera and engine), `ACTION` (what the player does every few seconds). Never invent one; return an empty array when all three are present.
+- `missing` lists (max 2) only what the developer's own text truly lacks: `TWIST` (a risk or cost), `SETUP` (camera view/dimension and target platform — Godot 4 is fixed for every project, NEVER ask which game engine), `ACTION` (what the player does every few seconds). Never invent one; return an empty array when all three are present.
 ${existingIntake != null ? '- Preserve the core genre, role, and setting of `Previous Summary` while smoothly integrating `User Update Direction` (never switch to an unrelated genre).' : ''}
 
 Call `commit_spark_intake` with the structured summary.

@@ -609,12 +609,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
               .where((s) => s.isNotEmpty)
               .toList();
           if (techParts.isNotEmpty) {
-            d.techSpec = [
+            d.techSpec = ProjectConceptBlueprint.normalizeGodotTechSpec([
               techParts[0],
               techParts.length > 1 ? techParts[1] : (d.techSpec.length > 1 ? d.techSpec[1] : ''),
               techParts.length > 2 ? techParts[2] : (d.techSpec.length > 2 ? d.techSpec[2] : ''),
               techParts.length > 3 ? techParts[3] : (d.techSpec.length > 3 ? d.techSpec[3] : ''),
-            ];
+            ]);
           }
           break;
         case 7:

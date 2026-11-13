@@ -4,6 +4,7 @@ extension _PitchSparkAndOutlinerExt on _ProjectPitchScreenState {
   static const int _kSparkMaxCharsPerLine = 80;
   static const Set<String> _kSparkNudgeSeeds = {
     'twist:',
+    'camera and platform:',
     'camera and engine:',
     'core action:',
   };
