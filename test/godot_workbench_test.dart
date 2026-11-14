@@ -12,6 +12,7 @@ import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/godot_project_contract.dart';
+import 'package:layers_agentic/models/godot_virtual_file.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
@@ -1730,7 +1731,7 @@ func _physics_process(delta: float) -> void:
     );
 
     test(
-      'Native Godot 4 plugin addon V2.4 files, Cloud Functions direct_agent/build_feature & web/layers_godot_plugin.zip enforce native EditorTheme GUI, Feature-First workflow, export tuners & 1-click self-update',
+      'Native Godot 4 plugin addon V2.5 files, Cloud Functions direct_agent/build_feature & web/layers_godot_plugin.zip enforce native EditorTheme GUI, Feature-First workflow, export tuners, input healing & 1-click self-update',
       () {
         final cfg = File('godot_plugin/addons/layers/plugin.cfg');
         final pluginGd = File('godot_plugin/addons/layers/layers_plugin.gd');
@@ -1755,7 +1756,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.4.0"'));
+        expect(cfgText, contains('version="2.5.0"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1798,6 +1799,7 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('CodeEdit.new()'));
         expect(dockText, contains('layers_step_executor.gd'));
         expect(dockText, contains('Broken? Ask Agent to Fix'));
+        expect(dockText, contains('Fix Latest Playtest Error'));
         expect(dockText, contains('Build Feature in Godot'));
         expect(dockText, contains('Apply to Scene & Script'));
         expect(dockText, contains('Playtest in Arena'));
@@ -1822,8 +1824,15 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('extract_feature_export_tuners'));
         expect(executorText, contains('can_attach_script_to_node'));
         expect(executorText, contains('evaluate_feature'));
+        expect(executorText, contains('reload_script_safely'));
+        expect(executorText, contains('sanitize_null_script_exports'));
+        expect(executorText, contains('ensure_scene_exists_and_open'));
+        expect(executorText, contains('heal_empty_project_input_actions'));
+        expect(executorText, contains('read_recent_godot_log_errors'));
 
         expect(fnText, contains('decodeThreeAreaNotesJs'));
+        expect(fnText, contains('extractBareGdScriptPathJs'));
+        expect(fnText, contains('last_godot_sync_ms'));
         expect(fnText, contains('"diagnose_fix"'));
         expect(fnText, contains('"build_feature"'));
         expect(fnText, contains('"direct_agent"'));
@@ -1852,6 +1861,283 @@ func _physics_process(delta: float) -> void:
         // Valid PK zip magic header ('P', 'K')
         expect(zipBytes[0], equals(0x50));
         expect(zipBytes[1], equals(0x4B));
+      },
+    );
+
+    test(
+      'shouldPreferRemoteDocumentOnSync preserves newer remote CODEFILEs, PROJECT sync timestamps, completed subtasks & playtestPassed progress',
+      () {
+        final localCode = TierDocument(
+          id: 'code_1',
+          title: 'player.gd',
+          tier: TierType.codeFile,
+          sections: {
+            GodotVirtualFile.resPathKey: 'res://scripts/player.gd',
+            GodotVirtualFile.updatedAtMsKey: '1000',
+            GodotVirtualFile.contentKey: 'extends CharacterBody3D\n',
+          },
+        );
+        final remoteNewerCode = TierDocument(
+          id: 'code_1',
+          title: 'player.gd',
+          tier: TierType.codeFile,
+          sections: {
+            GodotVirtualFile.resPathKey: 'res://scripts/player.gd',
+            GodotVirtualFile.updatedAtMsKey: '2500',
+            GodotVirtualFile.contentKey:
+                'extends CharacterBody3D\n@export var dash_speed: float = 16.0\n',
+          },
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localCode, remoteNewerCode),
+          isTrue,
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(remoteNewerCode, localCode),
+          isFalse,
+        );
+
+        final localProj = TierDocument(
+          id: 'proj_sync',
+          title: 'Synced Project',
+          tier: TierType.project,
+          childrenIds: ['rel_1'],
+        );
+        final remoteProj = TierDocument(
+          id: 'proj_sync',
+          title: 'Synced Project',
+          tier: TierType.project,
+          sections: {'last_godot_sync_ms': '88888'},
+          childrenIds: ['rel_1', 'code_1'],
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localProj, remoteProj),
+          isTrue,
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(remoteProj, localProj),
+          isFalse,
+        );
+
+        final localFeat = TierDocument(
+          id: 'feat_sync',
+          title: 'Claw Strike',
+          tier: TierType.feature,
+          subtasks: [Subtask(id: 's1', text: 'Build scene', completed: false)],
+        );
+        final remoteFeatDone = TierDocument(
+          id: 'feat_sync',
+          title: 'Claw Strike',
+          tier: TierType.feature,
+          subtasks: [Subtask(id: 's1', text: 'Build scene', completed: true)],
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localFeat, remoteFeatDone),
+          isTrue,
+        );
+
+        final localPlay = TierDocument(
+          id: 'feat_play',
+          title: 'Parry',
+          tier: TierType.feature,
+          sections: {'states': '[{"id":"cp1","parameters":{"playtestPassed":"false"}}]'},
+        );
+        final remotePlay = TierDocument(
+          id: 'feat_play',
+          title: 'Parry',
+          tier: TierType.feature,
+          sections: {'states': '[{"id":"cp1","parameters":{"playtestPassed":"true"}}]'},
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localPlay, remotePlay),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      'Stage 1 2D vs 3D game_spec resolution overrides ambiguous Forward+/Greybox tech_spec defaults cleanly',
+      () {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final proj3d = TierDocument(
+          id: 'proj_3d',
+          title: '3D Action Game',
+          tier: TierType.project,
+          sections: {
+            'game_spec': '3D Third-Person Action · PC/Console',
+            'tech_spec': 'Godot 4 Greybox (2D / Forward+)',
+          },
+        );
+        provider.documents[proj3d.id] = proj3d;
+        provider.switchProject(proj3d.id);
+        expect(provider.activeGodotContract.is3D, isTrue);
+
+        final proj2d = TierDocument(
+          id: 'proj_2d',
+          title: '2D Top-Down Game',
+          tier: TierType.project,
+          sections: {
+            'game_spec': '2D Top-Down Arena · Web/PC',
+            'tech_spec': 'Godot 4 Greybox (Forward+)',
+          },
+        );
+        provider.documents[proj2d.id] = proj2d;
+        provider.switchProject(proj2d.id);
+        expect(provider.activeGodotContract.is3D, isFalse);
+      },
+    );
+
+    test(
+      'activeProjectGodotFiles deduplicates duplicate CODEFILE docs by res_path keeping newest updatedAtMs, unions featureIds, and builds planner summary',
+      () {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final proj = TierDocument(
+          id: 'proj_dedup',
+          title: 'Crab Arena',
+          tier: TierType.project,
+        );
+        final olderDoc = GodotVirtualFile(
+          id: 'proj_dedup_code_crab_player_gd_111111',
+          projectId: proj.id,
+          resPath: 'res://scripts/crab_player.gd',
+          content: 'extends Node\n@export var legacy_speed: float = 1.0\n',
+          language: 'gdscript',
+          releaseVersion: 'v0.1',
+          featureIds: const ['feat_a'],
+          updatedAtMs: 1000,
+        ).toTierDocument();
+        final newerDoc = GodotVirtualFile(
+          id: 'proj_dedup_code_scripts_crab_player_gd_111111',
+          projectId: proj.id,
+          resPath: 'res://scripts/crab_player.gd',
+          content:
+              'extends CharacterBody3D\n@export var move_speed: float = 8.5\nfunc _physics_process(delta: float) -> void:\n\tpass\n',
+          language: 'gdscript',
+          releaseVersion: 'v0.1',
+          featureIds: const ['feat_b'],
+          updatedAtMs: 2500,
+        ).toTierDocument();
+        provider.documents[proj.id] = proj;
+        provider.documents[olderDoc.id] = olderDoc;
+        provider.documents[newerDoc.id] = newerDoc;
+        provider.switchProject(proj.id);
+
+        final files = provider.activeProjectGodotFiles;
+        expect(files, hasLength(1));
+        final resolved = provider.godotFileForResPath('res://scripts/crab_player.gd');
+        expect(resolved, isNotNull);
+        expect(resolved!.content, contains('move_speed'));
+        expect(resolved.content, isNot(contains('legacy_speed')));
+        expect(resolved.featureIds, containsAll(const ['feat_a', 'feat_b']));
+
+        final summary = provider.buildGodotCodebaseSummaryForPlanner(
+          featureIds: const ['feat_a'],
+        );
+        expect(summary, contains('res://scripts/crab_player.gd'));
+        expect(summary, contains('@export var move_speed: float = 8.5'));
+        expect(summary, contains('func _physics_process(delta: float)'));
+      },
+    );
+
+    test(
+      'computeActiveGodotEpicSnapshot completes 0-step playtest-passed features and skips empty intermediate Epics',
+      () {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        provider.setStage(WorkbenchStage.releaseWorkbench);
+
+        final proj = TierDocument(
+          id: 'proj_zero_step',
+          title: 'Zero Step & Empty Epic',
+          tier: TierType.project,
+          sections: {
+            'tech_spec': 'Godot 4 3D',
+            'active_release_id': 'rel_zs',
+          },
+          childrenIds: ['rel_zs'],
+        );
+        final rel = TierDocument(
+          id: 'rel_zs',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: proj.id,
+          childrenIds: ['epic_zs_1', 'epic_zs_2', 'epic_zs_3'],
+        );
+        final e1 = TierDocument(
+          id: 'epic_zs_1',
+          title: 'Player Base',
+          tier: TierType.epic,
+          parentId: rel.id,
+          childrenIds: ['feat_zs_1'],
+        );
+        final e2Empty = TierDocument(
+          id: 'epic_zs_2',
+          title: 'Pending Synth Epic',
+          tier: TierType.epic,
+          parentId: rel.id,
+          childrenIds: [],
+        );
+        final e3 = TierDocument(
+          id: 'epic_zs_3',
+          title: 'Wave Spawner',
+          tier: TierType.epic,
+          parentId: rel.id,
+          childrenIds: ['feat_zs_3'],
+        );
+
+        final f1ZeroStep = TierDocument(
+          id: 'feat_zs_1',
+          title: 'Camera Rig',
+          tier: TierType.feature,
+          parentId: e1.id,
+          phase: 'v0.1',
+        );
+        final cp1 = FeatureStateNode(
+          id: 'cp_zs_1',
+          name: '01 · BUILD',
+          trigger: 'Verify orbit camera in F6.',
+          parameters: {'releaseVersion': 'v0.1'},
+          checklist: const [],
+        );
+        FeatureStateNode.saveStatesToDocument(f1ZeroStep, [cp1]);
+
+        final f3 = TierDocument(
+          id: 'feat_zs_3',
+          title: 'Spawn Waves',
+          tier: TierType.feature,
+          parentId: e3.id,
+          phase: 'v0.1',
+        );
+        final cp3 = FeatureStateNode(
+          id: 'cp_zs_3',
+          name: '01 · BUILD',
+          trigger: 'Verify wave spawn.',
+          parameters: {'releaseVersion': 'v0.1'},
+          checklist: [
+            Subtask(id: 'st_zs_3', text: 'Create spawner', verification: 'OK'),
+          ],
+        );
+        FeatureStateNode.saveStatesToDocument(f3, [cp3]);
+
+        for (final d in [proj, rel, e1, e2Empty, e3, f1ZeroStep, f3]) {
+          provider.documents[d.id] = d;
+        }
+        provider.switchProject(proj.id);
+
+        expect(provider.computeActiveGodotEpicSnapshot().activeEpicId, e1.id);
+
+        // Pass playtest on 0-step feature -> skips empty e2Empty -> selects e3!
+        cp1.isPlaytestPassed = true;
+        provider.updateFeatureStates(f1ZeroStep.id, [cp1]);
+
+        final nextSnap = provider.computeActiveGodotEpicSnapshot();
+        expect(nextSnap.activeEpicId, e3.id);
+        expect(nextSnap.allEpicsCompleted, isFalse);
+
+        // Complete f3 -> entire release completes cleanly even with empty e2Empty!
+        cp3.checklist.first.completed = true;
+        cp3.isPlaytestPassed = true;
+        provider.updateFeatureStates(f3.id, [cp3]);
+        expect(provider.computeActiveGodotEpicSnapshot().allEpicsCompleted, isTrue);
       },
     );
   });

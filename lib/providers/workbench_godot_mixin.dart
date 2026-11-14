@@ -67,8 +67,7 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
         cp ??= states.last;
       }
       final steps = cp.flatSteps;
-      return steps.isNotEmpty &&
-          steps.every((s) => s.completed) &&
+      return (steps.isEmpty || steps.every((s) => s.completed)) &&
           cp.isPlaytestPassed;
     }
 
@@ -118,9 +117,13 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       );
     }
 
+    final hasAnyPopulated = candidates.any((c) => c.totalCount > 0);
     for (int idx = 0; idx < candidates.length; idx++) {
       final c = candidates[idx];
-      if (c.totalCount == 0 || c.doneCount < c.totalCount) {
+      final shouldPick = hasAnyPopulated
+          ? (c.totalCount > 0 && c.doneCount < c.totalCount)
+          : idx == 0;
+      if (shouldPick) {
         final code = 'E${(c.originalIndex + 1).toString().padLeft(2, '0')}';
         return ActiveGodotEpicSnapshot(
           releaseVersion: activeVer,
@@ -201,9 +204,40 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
   String get effectiveGodotCodeThinkingLevel =>
       _thinkingLevel.trim().toUpperCase() == 'HIGH' ? 'HIGH' : 'MEDIUM';
 
-  bool get _is3dGodotProject =>
-      _activeEngineLabel.toLowerCase().contains('3d') ||
-      (_activeEngineHint ?? '').toLowerCase().contains('3d');
+  bool get _is3dGodotProject {
+    final proj = activeProject;
+    final rawGameSpec =
+        (proj?.sections['game_spec'] ?? proj?.sections['gameSpec'] ?? '')
+            .trim();
+    final effectiveGameSpec = rawGameSpec.isNotEmpty
+        ? rawGameSpec
+        : (_conceptDraft?.gameSpec.join(' ') ?? '');
+    final gameLower = effectiveGameSpec.toLowerCase();
+    final gameHas3d = RegExp(
+      r'\b3d\b|third[- ]person|first[- ]person|\bfps\b',
+    ).hasMatch(gameLower);
+    final gameHas2d = RegExp(
+      r'\b2d\b|top[- ]down|side[- ]scroller|platformer\s*2d|pixel\s*art',
+    ).hasMatch(gameLower);
+    if (gameHas3d && !gameHas2d) return true;
+    if (gameHas2d && !gameHas3d) return false;
+
+    final rawTechSpec = (proj?.sections['tech_spec'] ??
+            proj?.sections['techSpec'] ??
+            proj?.sections['tech_stack'] ??
+            '')
+        .trim();
+    final effectiveTechSpec = rawTechSpec.isNotEmpty
+        ? rawTechSpec
+        : (_conceptDraft?.techSpec.join(' ') ?? '');
+    final techLower = effectiveTechSpec.toLowerCase();
+    final techHas3d = RegExp(r'\b3d\b').hasMatch(techLower);
+    final techHas2d = RegExp(r'\b2d\b').hasMatch(techLower);
+    if (techHas3d && !techHas2d) return true;
+    if (techHas2d && !techHas3d) return false;
+
+    return (_activeEngineHint ?? '').toLowerCase().contains('3d');
+  }
 
   GodotProjectContract get activeGodotContract {
     final proj = activeProject;
@@ -222,15 +256,32 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
     notifyListeners();
   }
 
+  Map<String, GodotVirtualFile> _dedupedProjectGodotFilesByPath() {
+    final pid = _activeProjectId;
+    if (pid == null) return const {};
+    final byPath = <String, GodotVirtualFile>{};
+    for (final doc in documents.values) {
+      if (doc.tier != TierType.codeFile || doc.parentId != pid) continue;
+      final vf = GodotVirtualFile.fromTierDocument(doc);
+      if (vf.resPath.isEmpty) continue;
+      final existing = byPath[vf.resPath];
+      if (existing == null) {
+        byPath[vf.resPath] = vf;
+      } else {
+        final winner = vf.updatedAtMs >= existing.updatedAtMs ? vf : existing;
+        final mergedFeatureIds = <String>{
+          ...existing.featureIds,
+          ...vf.featureIds,
+        }.toList();
+        byPath[vf.resPath] = winner.copyWith(featureIds: mergedFeatureIds);
+      }
+    }
+    return byPath;
+  }
+
   /// All cumulative `TierType.codeFile` artifacts belonging to the active project, sorted `.gd` first.
   List<GodotVirtualFile> get activeProjectGodotFiles {
-    final pid = _activeProjectId;
-    if (pid == null) return const [];
-    final files = documents.values
-        .where((d) => d.tier == TierType.codeFile && d.parentId == pid)
-        .map(GodotVirtualFile.fromTierDocument)
-        .where((vf) => vf.resPath.isNotEmpty)
-        .toList();
+    final files = _dedupedProjectGodotFilesByPath().values.toList();
     files.sort((a, b) {
       int weight(String p) => p.endsWith('.gd') ? 0 : (p.endsWith('.tres') ? 1 : 2);
       final wCmp = weight(a.resPath).compareTo(weight(b.resPath));
@@ -241,17 +292,9 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
   }
 
   GodotVirtualFile? godotFileForResPath(String resPath) {
-    final pid = _activeProjectId;
-    if (pid == null) return null;
     final norm = GodotVirtualFile.normalizeResPath(resPath);
     if (norm.isEmpty) return null;
-    for (final doc in documents.values) {
-      if (doc.tier == TierType.codeFile && doc.parentId == pid) {
-        final vf = GodotVirtualFile.fromTierDocument(doc);
-        if (vf.resPath == norm) return vf;
-      }
-    }
-    return null;
+    return _dedupedProjectGodotFilesByPath()[norm];
   }
 
   /// Extracts the `.gd` script `res://...` path from strings like `"res://scenes/player.tscn · res://scripts/player.gd"`.
@@ -398,6 +441,7 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
   String buildPromptGodotContext({
     String? primaryAssetHint,
     String? fallbackScriptPath,
+    String? featureId,
   }) {
     final buf = StringBuffer();
     final contractSummary = activeGodotContract.toPromptSummary();
@@ -406,19 +450,97 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       buf.writeln(contractSummary);
     }
 
-    final targetScript = extractPrimaryScriptResPath(primaryAssetHint) ??
+    String? targetScript = extractPrimaryScriptResPath(primaryAssetHint) ??
         extractPrimaryScriptResPath(fallbackScriptPath);
+    String currentCode = '';
     if (targetScript != null) {
-      final norm = GodotVirtualFile.normalizeResPath(targetScript);
-      final currentCode = godotFileForResPath(norm)?.content ?? '';
+      targetScript = GodotVirtualFile.normalizeResPath(targetScript);
+      currentCode = godotFileForResPath(targetScript)?.content ?? '';
+    }
+    final cleanFid = featureId?.trim() ?? '';
+    if ((targetScript == null || currentCode.trim().isEmpty) &&
+        cleanFid.isNotEmpty) {
+      for (final vf in activeProjectGodotFiles) {
+        if (vf.resPath.endsWith('.gd') &&
+            vf.featureIds.contains(cleanFid) &&
+            vf.content.trim().isNotEmpty) {
+          targetScript = vf.resPath;
+          currentCode = vf.content;
+          break;
+        }
+      }
+    }
+
+    if (targetScript != null && targetScript.isNotEmpty) {
       if (currentCode.trim().isNotEmpty) {
         final lines = currentCode.split('\n');
         final clipped = lines.length > 140 ? lines.take(140).join('\n') : currentCode;
-        buf.writeln('\nCURRENT CUMULATIVE SCRIPT ($norm — patch via `scriptPatches` with exact `targetBlock` -> `replaceBlock`):');
+        buf.writeln('\nCURRENT CUMULATIVE SCRIPT ($targetScript — patch via `scriptPatches` with exact `targetBlock` -> `replaceBlock`):');
         buf.writeln('```gdscript\n$clipped\n```');
       } else {
-        buf.writeln('\nNEW CUMULATIVE SCRIPT ($norm — initialize once via `scriptPatches` with `targetBlock: ""`).');
+        buf.writeln('\nNEW CUMULATIVE SCRIPT ($targetScript — initialize once via `scriptPatches` with `targetBlock: ""`).');
       }
+    }
+    return buf.toString().trim();
+  }
+
+  /// Summarizes synced `.gd` scripts (prioritizing [featureIds]) so `v0.2+` upgrade planners
+  /// extend existing `@export var` knobs and methods instead of reinventing files.
+  String buildGodotCodebaseSummaryForPlanner({
+    Iterable<String> featureIds = const [],
+  }) {
+    final gdFiles = activeProjectGodotFiles
+        .where((vf) => vf.resPath.endsWith('.gd') && vf.content.trim().isNotEmpty)
+        .toList();
+    if (gdFiles.isEmpty) return '';
+
+    final targetIds = featureIds
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+    gdFiles.sort((a, b) {
+      final aMatch = a.featureIds.any(targetIds.contains) ? 0 : 1;
+      final bMatch = b.featureIds.any(targetIds.contains) ? 0 : 1;
+      if (aMatch != bMatch) return aMatch.compareTo(bMatch);
+      return b.updatedAtMs.compareTo(a.updatedAtMs);
+    });
+
+    final buf = StringBuffer();
+    for (final vf in gdFiles.take(8)) {
+      final entryBuf = StringBuffer();
+      entryBuf.writeln('- ${vf.resPath}');
+      String? extendsLine;
+      final exports = <String>[];
+      final funcs = <String>[];
+      for (final rawLine in vf.content.split('\n')) {
+        final line = rawLine.trim();
+        if (line.isEmpty || line.startsWith('#')) continue;
+        if (extendsLine == null && line.startsWith('extends ')) {
+          extendsLine = line;
+        } else if (line.startsWith('@export ') && line.contains('var ')) {
+          if (exports.length < 6) {
+            exports.add(line);
+          }
+        } else if (line.startsWith('func ')) {
+          final sigEnd = line.indexOf(')');
+          final sig = sigEnd >= 0 ? line.substring(0, sigEnd + 1) : line;
+          if (funcs.length < 8) {
+            funcs.add(sig);
+          }
+        }
+      }
+      if (extendsLine != null) entryBuf.writeln('  $extendsLine');
+      if (exports.isNotEmpty) {
+        entryBuf.writeln('  exports: ${exports.join(' | ')}');
+      }
+      if (funcs.isNotEmpty) {
+        entryBuf.writeln('  funcs: ${funcs.join(', ')}');
+      }
+      final chunk = entryBuf.toString();
+      if (buf.isNotEmpty && buf.length + chunk.length > 1400) break;
+      buf.write(
+        chunk.length > 1400 && buf.isEmpty ? chunk.substring(0, 1400) : chunk,
+      );
     }
     return buf.toString().trim();
   }

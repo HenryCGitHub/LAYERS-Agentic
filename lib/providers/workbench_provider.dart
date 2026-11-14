@@ -474,13 +474,31 @@ class WorkbenchProvider extends ChangeNotifier {
   }
 
   String? get _activeEngineHint {
-    final draftTech = _conceptDraft?.techSpec;
-    if (draftTech != null && draftTech.isNotEmpty) {
-      return draftTech.join(' ');
+    final draft = _conceptDraft;
+    if (_activeProjectId == null && draft != null) {
+      final parts = <String>[
+        if (draft.gameSpec.isNotEmpty) draft.gameSpec.join(' '),
+        if (draft.techSpec.isNotEmpty) draft.techSpec.join(' '),
+      ];
+      if (parts.isNotEmpty) return parts.join(' ');
     }
-    return activeProject?.sections['tech_spec'] ??
-        activeProject?.sections['techSpec'] ??
-        activeProject?.sections['tech_stack'];
+    final proj = activeProject;
+    if (proj != null) {
+      final gSpec =
+          (proj.sections['game_spec'] ?? proj.sections['gameSpec'] ?? '').trim();
+      final tSpec = (proj.sections['tech_spec'] ??
+              proj.sections['techSpec'] ??
+              proj.sections['tech_stack'] ??
+              '')
+          .trim();
+      final combined = '$gSpec $tSpec'.trim();
+      if (combined.isNotEmpty) return combined;
+    }
+    if (draft != null &&
+        (draft.gameSpec.isNotEmpty || draft.techSpec.isNotEmpty)) {
+      return '${draft.gameSpec.join(' ')} ${draft.techSpec.join(' ')}'.trim();
+    }
+    return null;
   }
 
   String get _activeEngineLabel =>

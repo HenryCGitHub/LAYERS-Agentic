@@ -1885,6 +1885,7 @@ Call `commit_epic_features` with the ordered playable features.
     required String section1DoneWhen,
     required List<String> missingGaps,
     required List<String> alreadyPlannedChanges,
+    String godotCodebaseSummary = '',
     String apiKey = '',
     String modelName = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
@@ -1953,7 +1954,7 @@ ${missingGaps.isNotEmpty ? '- Identified Gaps: ${missingGaps.join(" | ")}\n' : '
 ${alreadyPlannedChanges.isNotEmpty ? '- Already Planned in Earlier Epics for $versionTag (DO NOT DUPLICATE): ${alreadyPlannedChanges.join(", ")}\n' : ''}
 Target Epic $epicCode ("${epicDoc.title}", id: "${epicDoc.id}"):
 ${existingFeatLines.isNotEmpty ? existingFeatLines.join('\n') : '(No existing features)'}
-
+${godotCodebaseSummary.trim().isNotEmpty ? '\nSynced Godot Scripts (extend these exact res:// paths, @export vars, and functions on UPGRADE):\n${godotCodebaseSummary.trim()}\n' : ''}
 - PHASE DIRECTIVE: $phaseUpgradeDirective
 ${GeminiAgentClient.compactStyleRules}
 - WHOLE-EPIC COMPLETION RULE (NO PARTIAL EPICS):

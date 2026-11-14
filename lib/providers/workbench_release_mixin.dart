@@ -3297,6 +3297,7 @@ Call `commit_tailored_task_substeps` with the tailored steps.
       final godotStepContext = buildPromptGodotContext(
         primaryAssetHint: existingPrimaryAsset,
         fallbackScriptPath: engineAssetHint,
+        featureId: feat.id,
       );
 
       final prompt = '''

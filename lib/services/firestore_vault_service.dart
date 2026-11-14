@@ -190,6 +190,34 @@ class FirestoreVaultService {
     }
   }
 
+  /// Fetches all user documents once from Firestore (returns null on error).
+  Future<Map<String, TierDocument>?> fetchAllDocuments({
+    required String uid,
+  }) async {
+    try {
+      final snap = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('documents')
+          .get();
+      final out = <String, TierDocument>{};
+      for (final doc in snap.docs) {
+        try {
+          final data = Map<String, dynamic>.from(doc.data());
+          data.putIfAbsent('id', () => doc.id);
+          final parsed = TierDocument.fromJson(data);
+          out[parsed.id] = parsed;
+        } catch (e) {
+          debugPrint('Firestore parse fetchAllDocuments doc ${doc.id}: $e');
+        }
+      }
+      return out;
+    } catch (e) {
+      debugPrint('Firestore fetchAllDocuments error: $e');
+      return null;
+    }
+  }
+
   /// Saves settings (activeDocumentId, etc.) in Firestore.
   Future<void> saveSettings({
     required String uid,

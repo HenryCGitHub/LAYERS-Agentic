@@ -245,14 +245,51 @@ function fnv1aHash6Js(text) {
 
 function stableCodeFileDocIdJs(projectId, resPath) {
   const norm = normalizeResPathJs(resPath) || "res://scripts/script.gd";
-  const fileName = norm.split("/").pop() || "script.gd";
+  const pathWithoutScheme = norm.replace(/^res:\/\//, "");
   const slug =
-    fileName
+    pathWithoutScheme
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "_")
       .replace(/^_+|_+$/g, "")
-      .slice(0, 32) || "script";
+      .slice(0, 48) || "script";
   return `${projectId}_code_${slug}_${fnv1aHash6Js(norm)}`;
+}
+
+function extractBareGdScriptPathJs(raw, existingCodeFiles = null) {
+  const text = String(raw || "");
+  if (!text) return "";
+  const explicit = extractResPathsListJs(text, ".gd");
+  if (explicit.length > 0) return explicit[0];
+  const re =
+    /(?:^|[\s>`"'(,])([A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\.gd)(?=$|[\s<`"'),:;])/g;
+  let match;
+  while ((match = re.exec(text)) !== null) {
+    const rel = String(match[1] || "").trim().replace(/^\/+/, "");
+    if (!rel || !rel.endsWith(".gd")) continue;
+    const baseName = rel.split("/").pop().toLowerCase();
+    const candidate = normalizeResPathJs(
+      rel.includes("/") ? `res://${rel}` : `res://scripts/${rel}`
+    );
+    if (existingCodeFiles && typeof existingCodeFiles === "object") {
+      if (
+        candidate &&
+        Object.prototype.hasOwnProperty.call(existingCodeFiles, candidate)
+      ) {
+        return candidate;
+      }
+      for (const key of Object.keys(existingCodeFiles)) {
+        const normKey = normalizeResPathJs(key);
+        if (
+          normKey.toLowerCase() === candidate.toLowerCase() ||
+          normKey.toLowerCase().endsWith(`/${baseName}`)
+        ) {
+          return normKey;
+        }
+      }
+    }
+    return candidate;
+  }
+  return "";
 }
 
 function extractResPathsListJs(rawText, extFilter = "") {
@@ -271,39 +308,74 @@ function extractResPathsListJs(rawText, extFilter = "") {
   return out;
 }
 
-function collectFeatureScriptPathsJs(feat, steps) {
+function collectFeatureScriptPathsJs(feat, steps, existingCodeFiles = null) {
   const ordered = [];
   const seen = new Set();
-  const addFrom = (txt) => {
-    for (const p of extractResPathsListJs(txt, ".gd")) {
-      if (!seen.has(p)) {
-        seen.add(p);
-        ordered.push(p);
-      }
+  const explicitSet = new Set();
+  const addPath = (p, isExplicit) => {
+    const norm = normalizeResPathJs(p);
+    if (!norm || !norm.endsWith(".gd")) return;
+    if (isExplicit) explicitSet.add(norm);
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      ordered.push(norm);
     }
   };
-  addFrom(feat?.sections?.primary_asset || "");
-  addFrom(feat?.sections?.assets || "");
-  addFrom(feat?.sections?.goal || "");
+  const addFrom = (txt, isExplicit = true) => {
+    for (const p of extractResPathsListJs(txt, ".gd")) {
+      addPath(p, isExplicit);
+    }
+    const bare = extractBareGdScriptPathJs(txt, existingCodeFiles);
+    if (bare) addPath(bare, isExplicit);
+  };
+  addFrom(feat?.sections?.primary_asset || "", true);
+  addFrom(feat?.sections?.assets || "", true);
+  addFrom(feat?.sections?.goal || "", true);
   for (const s of Array.isArray(steps) ? steps : []) {
-    addFrom(s?.stepPath || s?.resPath || "");
-    addFrom(s?.codeSnippet || s?.rawCopyCode || "");
-    addFrom(s?.locationLabel || "");
-    addFrom(s?.instruction || "");
-    addFrom(s?.area1Hierarchy || "");
-    addFrom(s?.area2Inspector || "");
+    addFrom(s?.codeSnippet || s?.rawCopyCode || "", true);
+    addFrom(s?.locationLabel || "", true);
+    addFrom(s?.instruction || "", true);
+    addFrom(s?.area1Hierarchy || "", true);
+    addFrom(s?.area2Inspector || "", true);
+    addFrom(s?.stepPath || s?.resPath || "", false);
+  }
+  if (
+    existingCodeFiles &&
+    typeof existingCodeFiles === "object" &&
+    ordered.length > 1
+  ) {
+    const snake = toSnakeCaseAssetJs(feat?.title || "gameplay_feature");
+    const derivedFallback = normalizeResPathJs(`res://scripts/${snake}.gd`);
+    const filtered = ordered.filter(
+      (p) =>
+        p !== derivedFallback ||
+        explicitSet.has(p) ||
+        Object.prototype.hasOwnProperty.call(existingCodeFiles, p)
+    );
+    if (filtered.length > 0) return filtered;
   }
   return ordered;
 }
 
 function collectProjectCodeFilesJs(docsById) {
   const out = {};
+  const latestTsByPath = {};
   if (!docsById || typeof docsById.values !== "function") return out;
   for (const d of docsById.values()) {
     if (!d || String(d.tier || "").toUpperCase() !== "CODEFILE") continue;
     const resPath = normalizeResPathJs(d?.sections?.res_path || "");
     if (!resPath) continue;
-    out[resPath] = String(d?.sections?.content || "");
+    const ts =
+      Number(
+        d?.sections?.updated_at_ms || d?.updatedAtMs || d?.updated_at_ms || 0
+      ) || 0;
+    if (
+      !Object.prototype.hasOwnProperty.call(out, resPath) ||
+      ts >= (latestTsByPath[resPath] || 0)
+    ) {
+      out[resPath] = String(d?.sections?.content || "");
+      latestTsByPath[resPath] = ts;
+    }
   }
   return out;
 }
@@ -513,6 +585,7 @@ async function runGodotAgentWithGemini({
   apiKey,
   mode,
   projectTitle,
+  projectDoc,
   feature,
   featDoc,
   codeFiles,
@@ -562,11 +635,19 @@ async function runGodotAgentWithGemini({
     "5. SIGNAL SAFETY: Connect signals ONLY to a node whose attached script defines methodName (typically targetPath: '.' for the scene root). NEVER connect a Timer signal to itself.",
     "6. FEEL TUNING: Expose key gameplay tuning numbers cleanly with '@export var ...' at the top of scripts (speeds, ranges, cooldowns, counts) so the native dock renders SpinBoxes automatically.",
     "7. MATERIALS & SHAPES: When creating meshes or colliders, specify explicit subResourceClass + subResourceProps (e.g. radius, height, size) and properties (monitoring, wait_time, one_shot, autostart, albedo_color, emission).",
+    "8. SCENE TREE & _ready() SAFETY: Never call 'get_parent().add_child(...)' synchronously inside '_ready()' (Godot throws 'Parent node is busy setting up children'). Use 'add_child.call_deferred(node)' or add spawned instances to a child container / post-ready method. Always call 'add_child(inst)' BEFORE setting 'inst.global_position' or 'inst.global_transform'.",
+    "9. CLEAN ENTITY LIFECYCLE: Enemies, projectiles, and temporary wave spawns MUST clean up cleanly with 'queue_free()' on death or expiry so wave spawner 'tree_exited' / child checks advance reliably.",
+    "10. CAMERA & CURSOR ACCESSIBILITY: Whenever capturing the mouse ('Input.mouse_mode = Input.MOUSE_MODE_CAPTURED'), ALWAYS wire an 'ESC' ('ui_cancel') release/capture toggle in '_unhandled_input'.",
+    "11. GROUNDED SPAWNS & INPUT BINDINGS: Spawn characters cleanly on the playable floor (never floating meters above Y=0 unless flying) and ensure every input action in 'inputOps' has a real Key or Mouse Button binding (never empty events).",
   ].join("\n");
 
+  const projSections = projectDoc?.sections || {};
   const contextPayload = {
     mode,
     projectTitle: String(projectTitle || "LAYERS Project"),
+    gameSpec: String(projSections.game_spec || projSections.gameSpec || "").slice(0, 800),
+    techSpec: String(projSections.tech_spec || projSections.techSpec || projSections.tech_stack || "").slice(0, 800),
+    godotContract: String(projSections.godot_contract || "").slice(0, 1400),
     arenaScenePath: String(arenaScenePath || ""),
     featureScenePath: String(featureScenePath || feature?.primaryAsset || ""),
     feature: {
@@ -746,6 +827,7 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
     apiKey,
     mode: action,
     projectTitle: projectDoc.title,
+    projectDoc,
     feature: featureObj,
     featDoc,
     codeFiles: basePayload.codeFiles,
@@ -839,7 +921,7 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
       }
     }
 
-    if (addedCodeIds.length > 0 && projSnap.exists) {
+    if (projSnap.exists) {
       const projData = projSnap.data() || {};
       const childrenIds = Array.isArray(projData.childrenIds)
         ? [...projData.childrenIds]
@@ -851,14 +933,19 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
           projChanged = true;
         }
       }
-      if (projChanged) {
-        tx.update(projRef, { childrenIds });
-        docsById.set(linkAuth.projectId, {
-          id: linkAuth.projectId,
-          ...projData,
-          childrenIds,
-        });
-      }
+      const nextProjSections = {
+        ...(projData.sections || {}),
+        last_godot_sync_ms: String(Date.now()),
+      };
+      const projUpdate = { sections: nextProjSections };
+      if (projChanged) projUpdate.childrenIds = childrenIds;
+      tx.update(projRef, projUpdate);
+      docsById.set(linkAuth.projectId, {
+        id: linkAuth.projectId,
+        ...projData,
+        sections: nextProjSections,
+        ...(projChanged ? { childrenIds } : {}),
+      });
     }
 
     if (action === "build_feature" && featSnap.exists) {
@@ -868,10 +955,17 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
         parsedStates,
         checkpointId || String(featureObj.checkpointId || "")
       );
-      if (changed) {
+      const fallbackPrimary = String(featureObj?.primaryAsset || "").trim();
+      const hasPrimary = Boolean(
+        String(fData?.sections?.primary_asset || "").trim()
+      );
+      if (changed || (!hasPrimary && fallbackPrimary)) {
         const nextSections = {
           ...(fData.sections || {}),
           states: JSON.stringify(updatedStates),
+          ...(!hasPrimary && fallbackPrimary
+            ? { primary_asset: fallbackPrimary }
+            : {}),
         };
         const nextSubtasks = rebuildDocSubtasksFromStates(updatedStates);
         tx.update(featRef, { sections: nextSections, subtasks: nextSubtasks });
@@ -1157,22 +1251,26 @@ function toSnakeCaseAssetJs(rawTitle) {
   return rawWords.length > 0 ? rawWords.slice(0, 3).join("_") : "gameplay_feature";
 }
 
-function flattenCheckpointSteps(cp, featDoc) {
+function flattenCheckpointSteps(cp, featDoc, existingCodeFiles = null) {
   if (!cp) return [];
   const leaves = collectLeafChecklistItems(cp.checklist || []);
   const snake = toSnakeCaseAssetJs(featDoc?.title || cp?.name || "gameplay_feature");
-  const primaryRes = extractResPath(
+  const primaryRaw =
     featDoc?.sections?.primary_asset ||
-      cp?.parameters?.primarySharedScriptOrScene ||
-      ""
-  );
+    cp?.parameters?.primarySharedScriptOrScene ||
+    "";
+  const primaryRes =
+    extractResPath(primaryRaw) ||
+    extractBareGdScriptPathJs(primaryRaw, existingCodeFiles);
   let fallbackScene = primaryRes.endsWith(".tscn") || primaryRes.endsWith(".scn") ? primaryRes : "";
   let fallbackScript = primaryRes.endsWith(".gd") ? primaryRes : "";
 
   for (const st of leaves) {
     const cand =
       extractResPath(st.codeLanguage || "") ||
-      extractResPath(st.specNotes || "");
+      extractBareGdScriptPathJs(st.codeLanguage || "", existingCodeFiles) ||
+      extractResPath(st.specNotes || "") ||
+      extractBareGdScriptPathJs(st.specNotes || "", existingCodeFiles);
     if (!fallbackScene && (cand.endsWith(".tscn") || cand.endsWith(".scn"))) {
       fallbackScene = cand;
     }
@@ -1180,7 +1278,35 @@ function flattenCheckpointSteps(cp, featDoc) {
       fallbackScript = cand;
     }
   }
+  if (!fallbackScript && featDoc?.sections?.assets) {
+    const assetScript =
+      extractResPath(featDoc.sections.assets) ||
+      extractBareGdScriptPathJs(featDoc.sections.assets, existingCodeFiles);
+    if (assetScript && assetScript.endsWith(".gd")) {
+      fallbackScript = assetScript;
+    }
+  }
   if (!fallbackScene) fallbackScene = `res://scenes/${snake}.tscn`;
+  if (!fallbackScript && fallbackScene) {
+    const sceneStem = fallbackScene
+      .split("/")
+      .pop()
+      .replace(/\.(tscn|scn)$/i, "");
+    const stemCandidate = normalizeResPathJs(`res://scripts/${sceneStem}.gd`);
+    if (existingCodeFiles && typeof existingCodeFiles === "object") {
+      if (Object.prototype.hasOwnProperty.call(existingCodeFiles, stemCandidate)) {
+        fallbackScript = stemCandidate;
+      } else {
+        for (const key of Object.keys(existingCodeFiles)) {
+          const normKey = normalizeResPathJs(key);
+          if (normKey.toLowerCase().endsWith(`/${sceneStem.toLowerCase()}.gd`)) {
+            fallbackScript = normKey;
+            break;
+          }
+        }
+      }
+    }
+  }
   if (!fallbackScript) fallbackScript = `res://scripts/${snake}.gd`;
 
   const cpVerifyFallback = String(
@@ -1195,7 +1321,10 @@ function flattenCheckpointSteps(cp, featDoc) {
     const role = resolveStepRoleBadge(st, decoded, title);
     const explicitPath =
       extractResPath(st.codeLanguage || "") ||
-      extractResPath(decoded.instruction || "");
+      extractBareGdScriptPathJs(st.codeLanguage || "", existingCodeFiles) ||
+      extractResPath(decoded.instruction || "") ||
+      extractBareGdScriptPathJs(decoded.instruction || "", existingCodeFiles) ||
+      extractBareGdScriptPathJs(st.specNotes || "", existingCodeFiles);
     const stepPath =
       explicitPath ||
       (role === "SCENE" || role === "INSP" || role === "WIRE"
@@ -1364,9 +1493,27 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
   const savedActiveRelId = String(
     projectDoc?.sections?.active_release_id || ""
   ).trim();
-  const activeRel =
-    releases.find((r) => r.id === savedActiveRelId) ||
-    (releases.length > 0 ? releases[releases.length - 1] : null);
+  const hasBuiltEpics = (rel) =>
+    Array.isArray(rel?.childrenIds) &&
+    rel.childrenIds.some((id) => {
+      const ep = docsById.get(id);
+      return ep && String(ep.tier || "").toUpperCase() === "EPIC";
+    });
+  const savedRel = releases.find((r) => r.id === savedActiveRelId) || null;
+  let activeRel = savedRel && hasBuiltEpics(savedRel) ? savedRel : null;
+  if (!activeRel) {
+    for (let i = releases.length - 1; i >= 0; i -= 1) {
+      if (hasBuiltEpics(releases[i])) {
+        activeRel = releases[i];
+        break;
+      }
+    }
+  }
+  if (!activeRel) {
+    activeRel =
+      savedRel ||
+      (releases.length > 0 ? releases[releases.length - 1] : null);
+  }
 
   if (!activeRel) {
     return {
@@ -1402,6 +1549,7 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     }
   }
 
+  const codeFiles = collectProjectCodeFilesJs(docsById);
   const candidateEpics = [];
   for (let i = 0; i < epics.length; i++) {
     const epic = epics[i];
@@ -1418,11 +1566,11 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     const mappedFeatures = scopedFeats.map((feat) => {
       const states = parseFeatureStates(feat);
       const cp = selectActiveCheckpoint(states, activeVer);
-      const steps = flattenCheckpointSteps(cp, feat);
+      const steps = flattenCheckpointSteps(cp, feat, codeFiles);
       const isPlaytestPassed =
         String(cp?.parameters?.playtestPassed || "") === "true";
       const allStepsDone =
-        steps.length > 0 && steps.every((s) => Boolean(s.completed));
+        steps.length === 0 || steps.every((s) => Boolean(s.completed));
       const doneWhen = String(
         cp?.parameters?.playtestGoal ||
           cp?.feedback ||
@@ -1435,7 +1583,7 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
         id: String(feat.id),
         title: String(feat.title || "Feature"),
         primaryAsset: extractResPath(feat?.sections?.primary_asset || ""),
-        scriptPaths: collectFeatureScriptPathsJs(feat, steps),
+        scriptPaths: collectFeatureScriptPathsJs(feat, steps, codeFiles),
         doneWhen,
         checkpointId: String(cp?.id || ""),
         isPlaytestPassed,
@@ -1460,10 +1608,15 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     });
   }
 
-  const activeIdx = candidateEpics.findIndex(
-    (e) => e.features.length === 0 || e.features.some((f) => !f.isCompleted)
+  let activeIdx = candidateEpics.findIndex(
+    (e) => e.features.length > 0 && e.features.some((f) => !f.isCompleted)
   );
-  const codeFiles = collectProjectCodeFilesJs(docsById);
+  if (activeIdx === -1 && candidateEpics.length > 0) {
+    const hasAnyPopulated = candidateEpics.some((e) => e.features.length > 0);
+    if (!hasAnyPopulated) {
+      activeIdx = 0;
+    }
+  }
   const arenaScenePath = detectArenaScenePathJs(
     docsById,
     candidateEpics,
@@ -2211,6 +2364,15 @@ exports.geminiProxy = onRequest(
         docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
       }
       linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
+      db.collection("users")
+        .doc(linkAuth.uid)
+        .collection("documents")
+        .doc(linkAuth.projectId)
+        .set(
+          { sections: { last_godot_sync_ms: String(Date.now()) } },
+          { merge: true }
+        )
+        .catch(() => {});
 
       const payload = computeActiveEpicPayload({
         docsById,
@@ -2452,6 +2614,15 @@ exports.geminiProxy = onRequest(
         docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
       }
       linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
+      db.collection("users")
+        .doc(linkAuth.uid)
+        .collection("documents")
+        .doc(linkAuth.projectId)
+        .set(
+          { sections: { last_godot_sync_ms: String(Date.now()) } },
+          { merge: true }
+        )
+        .catch(() => {});
 
       const payload = computeActiveEpicPayload({
         docsById,

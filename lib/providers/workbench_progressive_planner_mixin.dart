@@ -2091,20 +2091,24 @@ Concept Blueprint:
         notifyListeners();
       }
 
+      final beatExistingFeatures =
+          existingFeaturesByBeat[eb.id] ?? const <TierDocument>[];
       final updatedBeat = await ReleasePlannerAgent.planProgressiveEpicChanges(
         projectDoc: projectDoc,
         releaseDoc: releaseDoc,
         epicDoc: eb,
         epicIndex: bIdx,
         totalEpicsCount: existingBeats.length,
-        existingFeaturesInEpic:
-            existingFeaturesByBeat[eb.id] ?? const <TierDocument>[],
+        existingFeaturesInEpic: beatExistingFeatures,
         queuedDeferredInEpic:
             deferredByBeatIndex[bIdx] ?? const <ProposedFeatureBlueprint>[],
         section1Goal: workingBp.goal,
         section1DoneWhen: workingBp.doneWhen,
         missingGaps: workingBp.missingGaps,
         alreadyPlannedChanges: alreadyPlannedChanges,
+        godotCodebaseSummary: buildGodotCodebaseSummaryForPlanner(
+          featureIds: beatExistingFeatures.map((f) => f.id),
+        ),
         apiKey: _apiKey,
         modelName: _conversationModel,
         thinkingLevel: 'LOW',

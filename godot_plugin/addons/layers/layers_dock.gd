@@ -23,6 +23,7 @@ var _show_token_editor: bool = false
 var _available_remote_version: String = ""
 var _updating_plugin: bool = false
 var _checking_plugin_update: bool = false
+var _last_error_clear_unix: float = 0.0
 var _live_refresh_timer: Timer
 
 # Slim Top Self-Update Banner
@@ -96,6 +97,8 @@ func _ready() -> void:
 		exec_script = load(STEP_EXECUTOR_SCRIPT_PATH) as Script
 	if exec_script != null:
 		_executor = exec_script.new()
+		if _executor != null:
+			_executor.call("ensure_project_file_logging")
 
 	_live_refresh_timer = Timer.new()
 	_live_refresh_timer.one_shot = true
@@ -304,7 +307,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.4.0")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.5.0")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -618,6 +621,8 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	var total_cnt: int = int(eval_info.get("total", 0))
 	var ready_cnt: int = int(eval_info.get("ready", 0))
 	var all_ready: bool = bool(eval_info.get("all_ready", false))
+	var has_built_artifacts: bool = bool(eval_info.get("has_built_artifacts", false))
+	var can_pass_playtest: bool = all_ready or has_built_artifacts
 
 	var bold_font: Font = _editor_font("bold")
 	var mono_font: Font = _editor_font("source")
@@ -646,6 +651,9 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		state_lbl.add_theme_color_override("font_color", _editor_color("success_color", Color(0.36, 0.85, 0.56)))
 	elif all_ready:
 		state_lbl.text = "Ready to Test"
+		state_lbl.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
+	elif has_built_artifacts:
+		state_lbl.text = "Built (Ready)"
 		state_lbl.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
 	else:
 		state_lbl.text = "Setup Needed"
@@ -704,8 +712,8 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		build_vb.add_child(busy_btn)
 	elif not all_ready:
 		var build_btn := Button.new()
-		build_btn.text = "Build Feature in Godot"
-		build_btn.icon = _editor_icon("Add", "Tools")
+		build_btn.text = "Repair / Sync Setup" if has_built_artifacts else "Build Feature in Godot"
+		build_btn.icon = _editor_icon("Reload" if has_built_artifacts else "Add", "Tools")
 		build_btn.tooltip_text = "Build scene nodes, properties, InputMap actions, signals, and complete GDScript in 1 click."
 		build_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
 		build_vb.add_child(build_btn)
@@ -980,6 +988,20 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 			w_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
 			res_vb.add_child(w_lbl)
 
+	var log_errors: Array = _executor.call("read_recent_godot_log_errors", _last_error_clear_unix, 3) if _executor != null else []
+	if not log_errors.is_empty() and not _diagnosing_fix:
+		var err_lbl := Label.new()
+		err_lbl.text = str(log_errors[0])
+		err_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		err_lbl.add_theme_color_override("font_color", _editor_color("error_color", Color(0.95, 0.48, 0.48)))
+		agent_vb.add_child(err_lbl)
+
+		var fix_err_btn := Button.new()
+		fix_err_btn.text = "Fix Latest Playtest Error (%d)" % log_errors.size()
+		fix_err_btn.icon = _editor_icon("StatusError", "Tools")
+		fix_err_btn.pressed.connect(_on_fix_log_errors_pressed.bind(feat_id, cp_id, log_errors))
+		agent_vb.add_child(fix_err_btn)
+
 	_fix_input = LineEdit.new()
 	_fix_input.placeholder_text = "Make lunge faster, spawn 5 crabs, or paste Godot error..."
 	_fix_input.text = _fix_draft_text
@@ -997,7 +1019,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	# Sticky Footer CTA
 	_footer_box.visible = true
 	_primary_cta_btn.disabled = _building_feature
-	if not all_ready:
+	if not can_pass_playtest:
 		_primary_cta_btn.text = "Build Feature in Godot"
 		_primary_cta_btn.icon = _editor_icon("Add", "Tools")
 	else:
@@ -1077,9 +1099,23 @@ func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
 	_sync.direct_agent(feat_id, cp_id, prompt_txt, scene_snap, live_scripts, arena_scene, primary_scene, prompt_txt)
 
 
-func _on_agent_bundle_received(bundle: Dictionary, _payload_data: Dictionary) -> void:
+func _on_fix_log_errors_pressed(feat_id: String, cp_id: String, log_errors: Array) -> void:
+	var joined := PackedStringArray()
+	for e in log_errors:
+		var s := str(e).strip_edges()
+		if not s.is_empty():
+			joined.append(s)
+	_fix_draft_text = "\n".join(joined)
+	if _fix_input != null:
+		_fix_input.text = _fix_draft_text
+	_on_direct_agent_pressed(feat_id, cp_id)
+
+
+func _on_agent_bundle_received(bundle: Dictionary, payload_data: Dictionary) -> void:
 	_building_feature = false
 	_diagnosing_fix = false
+	if not payload_data.is_empty():
+		_payload = payload_data
 	if _executor == null:
 		return
 	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle)
@@ -1090,6 +1126,7 @@ func _on_agent_bundle_received(bundle: Dictionary, _payload_data: Dictionary) ->
 	_last_agent_warnings = apply_res.get("warnings", PackedStringArray())
 	if bool(apply_res.get("ok", false)):
 		_fix_draft_text = ""
+		_last_error_clear_unix = Time.get_unix_time_from_system()
 	_set_status(summary, not bool(apply_res.get("ok", true)))
 	_refresh_view()
 
@@ -1159,8 +1196,9 @@ func _on_primary_cta_pressed() -> void:
 		return
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
-	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, code_files, arena_scene) if _executor != null else { "all_ready": false }
-	if not bool(eval_info.get("all_ready", false)):
+	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, code_files, arena_scene) if _executor != null else { "all_ready": false, "has_built_artifacts": false }
+	var can_pass: bool = bool(eval_info.get("all_ready", false)) or bool(eval_info.get("has_built_artifacts", false))
+	if not can_pass:
 		_on_build_feature_pressed(feat)
 		return
 

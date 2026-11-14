@@ -1489,8 +1489,8 @@ func build_missing_scene_nodes(
 		if bool(sp.get("isRoot", false)):
 			var root_script_path: String = str(sp.get("attachScript", "")).strip_edges()
 			if not root_script_path.is_empty() and FileAccess.file_exists(root_script_path) and scene_root.get_script() == null and can_attach_script_to_node(scene_root, root_script_path):
-				var scr: Variant = ResourceLoader.load(root_script_path, "Script", ResourceLoader.CACHE_MODE_REPLACE)
-				if scr is Script:
+				var scr: Script = reload_script_safely(root_script_path)
+				if scr != null:
 					if undo_redo != null:
 						undo_redo.add_do_property(scene_root, "script", scr)
 						undo_redo.add_undo_property(scene_root, "script", null)
@@ -1582,6 +1582,7 @@ func build_missing_scene_nodes(
 			undo_redo.clear_history()
 
 	if added_cnt > 0 and step_path.ends_with(".tscn"):
+		sanitize_null_script_exports(scene_root)
 		editor_interface.save_scene()
 	if not created_nodes.is_empty():
 		select_and_inspect_node(editor_interface, created_nodes[0])
@@ -1626,8 +1627,8 @@ func instantiate_spec_node(sp: Dictionary) -> Node:
 
 	var attach_gd: String = str(sp.get("attachScript", "")).strip_edges()
 	if not attach_gd.is_empty() and FileAccess.file_exists(attach_gd) and can_attach_script_to_node(created, attach_gd):
-		var scr: Variant = ResourceLoader.load(attach_gd, "Script", ResourceLoader.CACHE_MODE_REPLACE)
-		if scr is Script:
+		var scr: Script = reload_script_safely(attach_gd)
+		if scr != null:
 			created.set_script(scr)
 
 	return created
@@ -1652,11 +1653,10 @@ func apply_input_and_inspector(
 			continue
 		var setting_key: String = "input/%s" % act
 		var ev: InputEvent = _build_input_event_for_label(key_lbl)
-		var ev_arr: Array = []
-		if ev != null:
-			ev_arr.append(ev)
-		if not _has_real_input_binding(act, setting_key):
-			ProjectSettings.set_setting(setting_key, {"deadzone": 0.2, "events": ev_arr})
+		if ev == null:
+			ev = _infer_default_input_event_for_action(act)
+		if ev != null and not _has_real_input_binding(act, setting_key):
+			ProjectSettings.set_setting(setting_key, {"deadzone": 0.2, "events": [ev]})
 			input_added += 1
 
 	if input_added > 0:
@@ -1705,6 +1705,7 @@ func apply_input_and_inspector(
 	if focused_node != null and editor_interface != null:
 		select_and_inspect_node(editor_interface, focused_node)
 	if props_applied > 0 and editor_interface != null and step_path.ends_with(".tscn"):
+		sanitize_null_script_exports(scene_root)
 		editor_interface.save_scene()
 
 	return {"ok": true, "inputCount": input_added, "propCount": props_applied}
@@ -1759,7 +1760,7 @@ func apply_or_create_script(
 	if wrote_file and editor_interface != null and editor_interface.get_resource_filesystem() != null:
 		editor_interface.get_resource_filesystem().scan()
 
-	var scr: Script = ResourceLoader.load(step_path, "Script", ResourceLoader.CACHE_MODE_REPLACE) as Script
+	var scr: Script = reload_script_safely(step_path)
 	if scr == null:
 		scr = load(step_path) as Script
 
@@ -1782,6 +1783,7 @@ func apply_or_create_script(
 				attach_to.set_script(scr)
 			attached_new = true
 			if editor_interface != null:
+				sanitize_null_script_exports(scene_root)
 				editor_interface.save_scene()
 
 	if editor_interface != null and scr != null:
@@ -1826,6 +1828,7 @@ func connect_step_signals(
 			connected_cnt += 1
 
 	if connected_cnt > 0:
+		sanitize_null_script_exports(scene_root)
 		editor_interface.save_scene()
 	if first_src != null:
 		select_and_inspect_node(editor_interface, first_src)
@@ -1905,10 +1908,10 @@ func open_res_path(editor_interface: EditorInterface, res_path: String) -> Strin
 		if FileAccess.file_exists(res_path):
 			editor_interface.open_scene_from_path(res_path)
 			return ""
-		return "%s does not exist yet — click Build Missing Scene Nodes." % res_path
+		return "%s does not exist yet — click Build Feature in Godot." % res_path
 	if not FileAccess.file_exists(res_path):
-		return "%s does not exist yet — click Create & Attach Script." % res_path
-	var res: Resource = ResourceLoader.load(res_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+		return "%s does not exist yet — click Build Feature in Godot." % res_path
+	var res: Resource = reload_script_safely(res_path) if res_path.ends_with(".gd") else ResourceLoader.load(res_path, "", ResourceLoader.CACHE_MODE_REPLACE)
 	if res is Script:
 		editor_interface.edit_script(res as Script)
 	elif res != null:
@@ -2039,18 +2042,44 @@ func _has_real_input_binding(act_name: String, setting_key: String) -> bool:
 	return false
 
 
-func _build_input_event_for_label(key_label: String) -> InputEvent:
-	var k: String = key_label.strip_edges().to_upper()
+func _match_single_input_token(raw_tok: String) -> InputEvent:
+	var k: String = raw_tok.strip_edges().to_upper()
+	while "  " in k:
+		k = k.replace("  ", " ")
 	if k.is_empty():
 		return null
-	if k == "LMB" or k == "MOUSE LEFT" or k == "LEFT CLICK":
+	if (
+		k == "LMB" or k == "MOUSE LEFT" or k == "LEFT CLICK" or
+		k == "LEFT MOUSE" or k == "LEFT MOUSE BUTTON" or k == "MOUSE BUTTON LEFT" or
+		k == "MOUSE 1" or k == "MB1" or k == "PRIMARY CLICK"
+	):
 		var mb := InputEventMouseButton.new()
 		mb.button_index = MOUSE_BUTTON_LEFT
 		return mb
-	if k == "RMB" or k == "MOUSE RIGHT" or k == "RIGHT CLICK":
+	if (
+		k == "RMB" or k == "MOUSE RIGHT" or k == "RIGHT CLICK" or
+		k == "RIGHT MOUSE" or k == "RIGHT MOUSE BUTTON" or k == "MOUSE BUTTON RIGHT" or
+		k == "MOUSE 2" or k == "MB2" or k == "SECONDARY CLICK"
+	):
 		var mb2 := InputEventMouseButton.new()
 		mb2.button_index = MOUSE_BUTTON_RIGHT
 		return mb2
+	if (
+		k == "MMB" or k == "MOUSE MIDDLE" or k == "MIDDLE CLICK" or
+		k == "MIDDLE MOUSE" or k == "MIDDLE MOUSE BUTTON" or k == "MOUSE BUTTON MIDDLE" or
+		k == "MOUSE 3" or k == "MB3"
+	):
+		var mb3 := InputEventMouseButton.new()
+		mb3.button_index = MOUSE_BUTTON_MIDDLE
+		return mb3
+	if k == "WHEEL UP" or k == "MOUSE WHEEL UP" or k == "SCROLL UP":
+		var mw_up := InputEventMouseButton.new()
+		mw_up.button_index = MOUSE_BUTTON_WHEEL_UP
+		return mw_up
+	if k == "WHEEL DOWN" or k == "MOUSE WHEEL DOWN" or k == "SCROLL DOWN":
+		var mw_dn := InputEventMouseButton.new()
+		mw_dn.button_index = MOUSE_BUTTON_WHEEL_DOWN
+		return mw_dn
 
 	var keycode: Key = KEY_NONE
 	match k:
@@ -2070,25 +2099,33 @@ func _build_input_event_for_label(key_label: String) -> InputEvent:
 			keycode = KEY_F
 		"R":
 			keycode = KEY_R
-		"SPACE", "SPACEBAR":
+		"G":
+			keycode = KEY_G
+		"C":
+			keycode = KEY_C
+		"V":
+			keycode = KEY_V
+		"SPACE", "SPACEBAR", "SPACE BAR":
 			keycode = KEY_SPACE
-		"SHIFT":
+		"SHIFT", "LEFT SHIFT":
 			keycode = KEY_SHIFT
-		"CTRL", "CONTROL":
+		"CTRL", "CONTROL", "LEFT CTRL":
 			keycode = KEY_CTRL
+		"ALT", "LEFT ALT":
+			keycode = KEY_ALT
 		"ESC", "ESCAPE":
 			keycode = KEY_ESCAPE
 		"ENTER", "RETURN":
 			keycode = KEY_ENTER
 		"TAB":
 			keycode = KEY_TAB
-		"UP", "ARROW UP":
+		"UP", "ARROW UP", "UP ARROW":
 			keycode = KEY_UP
-		"DOWN", "ARROW DOWN":
+		"DOWN", "ARROW DOWN", "DOWN ARROW":
 			keycode = KEY_DOWN
-		"LEFT", "ARROW LEFT":
+		"LEFT", "ARROW LEFT", "LEFT ARROW":
 			keycode = KEY_LEFT
-		"RIGHT", "ARROW RIGHT":
+		"RIGHT", "ARROW RIGHT", "RIGHT ARROW":
 			keycode = KEY_RIGHT
 		_:
 			keycode = OS.find_keycode_from_string(k)
@@ -2098,6 +2135,248 @@ func _build_input_event_for_label(key_label: String) -> InputEvent:
 	var ev := InputEventKey.new()
 	ev.physical_keycode = keycode
 	return ev
+
+
+func _build_input_event_for_label(key_label: String) -> InputEvent:
+	var direct := _match_single_input_token(key_label)
+	if direct != null:
+		return direct
+	var normalized := key_label.replace("(", "/").replace(")", "/").replace("|", "/").replace(",", "/")
+	for part in normalized.split("/", false):
+		var ev := _match_single_input_token(part)
+		if ev != null:
+			return ev
+	return null
+
+
+func _infer_default_input_event_for_action(act_name: String) -> InputEvent:
+	var a := act_name.strip_edges().to_lower()
+	if a.is_empty():
+		return null
+	if "strike" in a or "attack" in a or "fire" in a or "shoot" in a or "claw" in a or "slash" in a or "punch" in a or "primary" in a:
+		return _match_single_input_token("LMB")
+	if "parry" in a or "block" in a or "guard" in a or "aim" in a or "secondary" in a:
+		return _match_single_input_token("RMB")
+	if "dash" in a or "dodge" in a or "evade" in a or "sprint" in a:
+		return _match_single_input_token("SHIFT")
+	if "jump" in a:
+		return _match_single_input_token("SPACE")
+	if "interact" in a or "pickup" in a or a == "use":
+		return _match_single_input_token("E")
+	if "forward" in a or a == "move_up" or a == "up":
+		return _match_single_input_token("W")
+	if "back" in a or a == "move_down" or a == "down":
+		return _match_single_input_token("S")
+	if "left" in a:
+		return _match_single_input_token("A")
+	if "right" in a:
+		return _match_single_input_token("D")
+	return null
+
+
+func heal_empty_project_input_actions(feat: Dictionary = {}) -> int:
+	var key_hints := {}
+	for st in feat.get("steps", []):
+		for inp in parse_input_specs(st):
+			var act := String(inp.get("action", "")).strip_edges()
+			var kl := String(inp.get("keyLabel", "")).strip_edges()
+			if not act.is_empty() and not kl.is_empty():
+				key_hints[act] = kl
+
+	var healed := 0
+	for p_raw in ProjectSettings.get_property_list():
+		var p_info: Dictionary = p_raw
+		var pname := String(p_info.get("name", ""))
+		if not pname.begins_with("input/") or pname.begins_with("input/ui_"):
+			continue
+		var act := pname.substr("input/".length())
+		if _has_real_input_binding(act, pname):
+			continue
+		var hint_lbl := String(key_hints.get(act, ""))
+		var ev: InputEvent = _build_input_event_for_label(hint_lbl)
+		if ev == null:
+			ev = _infer_default_input_event_for_action(act)
+		if ev != null:
+			ProjectSettings.set_setting(pname, {"deadzone": 0.2, "events": [ev]})
+			healed += 1
+
+	if healed > 0:
+		ProjectSettings.save()
+		InputMap.load_from_project_settings()
+	return healed
+
+
+func reload_script_safely(rpath: String, source_code: String = "") -> Script:
+	if rpath.is_empty() or not FileAccess.file_exists(rpath):
+		return null
+	var code := source_code
+	if code.is_empty():
+		var rf := FileAccess.open(rpath, FileAccess.READ)
+		if rf != null:
+			code = rf.get_as_text()
+			rf.close()
+	var existing: Variant = ResourceLoader.load(rpath)
+	if existing is GDScript:
+		var gd_scr: GDScript = existing as GDScript
+		if not code.is_empty():
+			gd_scr.source_code = code
+		gd_scr.reload(true)
+		return gd_scr
+	var fallback: Variant = ResourceLoader.load(rpath, "Script", ResourceLoader.CACHE_MODE_REPLACE)
+	return fallback as Script if fallback is Script else null
+
+
+func sanitize_null_script_exports(scene_root: Node) -> int:
+	if scene_root == null:
+		return 0
+	var fixed := 0
+	var stack: Array[Node] = [scene_root]
+	while not stack.is_empty():
+		var cur: Node = stack.pop_back()
+		var scr: Variant = cur.get_script()
+		if scr is Script:
+			var sc_obj: Script = scr as Script
+			for p_raw in sc_obj.get_script_property_list():
+				var p_info: Dictionary = p_raw
+				var pname := String(p_info.get("name", ""))
+				if pname.is_empty():
+					continue
+				var pusage := int(p_info.get("usage", 0))
+				if (pusage & PROPERTY_USAGE_STORAGE) == 0:
+					continue
+				var ptype := int(p_info.get("type", TYPE_NIL))
+				if not (
+					ptype == TYPE_BOOL or ptype == TYPE_INT or ptype == TYPE_FLOAT or
+					ptype == TYPE_STRING or ptype == TYPE_VECTOR2 or ptype == TYPE_VECTOR2I or
+					ptype == TYPE_VECTOR3 or ptype == TYPE_VECTOR3I or ptype == TYPE_COLOR
+				):
+					continue
+				if cur.get(pname) == null:
+					var restored: Variant = sc_obj.get_property_default_value(pname)
+					if restored == null:
+						match ptype:
+							TYPE_BOOL:
+								restored = false
+							TYPE_INT:
+								restored = 0
+							TYPE_FLOAT:
+								restored = 0.0
+							TYPE_STRING:
+								restored = ""
+							TYPE_VECTOR2:
+								restored = Vector2.ZERO
+							TYPE_VECTOR2I:
+								restored = Vector2i.ZERO
+							TYPE_VECTOR3:
+								restored = Vector3.ZERO
+							TYPE_VECTOR3I:
+								restored = Vector3i.ZERO
+							TYPE_COLOR:
+								restored = Color.WHITE
+					cur.set(pname, restored)
+					fixed += 1
+		for ch in cur.get_children():
+			stack.append(ch)
+	return fixed
+
+
+func ensure_scene_exists_and_open(
+	editor_interface: EditorInterface,
+	scene_path: String,
+	root_type_hint: String = "",
+	root_name_hint: String = ""
+) -> Node:
+	if scene_path.ends_with(".tscn") and not FileAccess.file_exists(scene_path):
+		var rtype := root_type_hint.strip_edges()
+		if rtype.is_empty() or not ClassDB.class_exists(rtype) or not ClassDB.can_instantiate(rtype) or not ClassDB.is_parent_class(rtype, "Node"):
+			var lower_file := scene_path.get_file().to_lower()
+			if "player" in lower_file or "enemy" in lower_file or "crab" in lower_file or "boss" in lower_file:
+				rtype = "CharacterBody3D"
+			else:
+				rtype = "Node3D"
+		var rnode := ClassDB.instantiate(rtype) as Node
+		if rnode != null:
+			rnode.name = root_name_hint if not root_name_hint.is_empty() else scene_path.get_file().get_basename().to_pascal_case()
+			var packed := PackedScene.new()
+			if packed.pack(rnode) == OK:
+				_ensure_dir_for_res_path(scene_path)
+				ResourceSaver.save(packed, scene_path)
+			rnode.free()
+	if editor_interface != null:
+		if scene_path.ends_with(".tscn") and FileAccess.file_exists(scene_path):
+			var cur: Node = editor_interface.get_edited_scene_root()
+			if cur == null or cur.scene_file_path != scene_path:
+				editor_interface.open_scene_from_path(scene_path)
+		return editor_interface.get_edited_scene_root()
+	return null
+
+
+func ensure_main_scene_configured(arena_scene: String, fallback_scene: String = "") -> bool:
+	var cur_main := String(ProjectSettings.get_setting("application/run/main_scene", "")).strip_edges()
+	var resolved_exists := false
+	if not cur_main.is_empty():
+		if FileAccess.file_exists(cur_main) or ResourceLoader.exists(cur_main):
+			resolved_exists = true
+	if resolved_exists:
+		return false
+	var chosen := ""
+	if not arena_scene.is_empty() and FileAccess.file_exists(arena_scene):
+		chosen = arena_scene
+	elif not fallback_scene.is_empty() and FileAccess.file_exists(fallback_scene):
+		chosen = fallback_scene
+	if chosen.is_empty():
+		return false
+	ProjectSettings.set_setting("application/run/main_scene", chosen)
+	ProjectSettings.save()
+	return true
+
+
+func ensure_project_file_logging() -> void:
+	if not bool(ProjectSettings.get_setting("debug/file_logging/enable_file_logging", false)):
+		ProjectSettings.set_setting("debug/file_logging/enable_file_logging", true)
+		ProjectSettings.save()
+
+
+func read_recent_godot_log_errors(since_unix_sec: float = 0.0, max_errors: int = 3) -> Array:
+	var log_path := String(ProjectSettings.get_setting("debug/file_logging/log_path", "user://logs/godot.log")).strip_edges()
+	if log_path.is_empty() or not FileAccess.file_exists(log_path):
+		return []
+	if since_unix_sec > 0.0 and float(FileAccess.get_modified_time(log_path)) < since_unix_sec:
+		return []
+	var f := FileAccess.open(log_path, FileAccess.READ)
+	if f == null:
+		return []
+	var file_len := f.get_length()
+	if file_len > 16384:
+		f.seek(file_len - 16384)
+	var raw_text := f.get_as_text()
+	f.close()
+
+	var lines := raw_text.replace("\r\n", "\n").split("\n")
+	var out: Array = []
+	var seen := {}
+	for i in range(lines.size() - 1, -1, -1):
+		var ln := lines[i].strip_edges()
+		if ln.is_empty():
+			continue
+		var lower := ln.to_lower()
+		if "addons/layers/" in lower or "editoricons" in lower or "vulkan" in lower or "orphan string" in lower:
+			continue
+		var is_err := ("SCRIPT ERROR:" in ln) or ("Parse Error:" in ln) or ln.begins_with("ERROR:")
+		if not is_err:
+			continue
+		var entry := ln
+		if i + 1 < lines.size():
+			var next_ln := lines[i + 1].strip_edges()
+			if next_ln.begins_with("at:"):
+				entry = "%s (%s)" % [ln, next_ln]
+		if not seen.has(entry):
+			seen[entry] = true
+			out.append(entry)
+			if out.size() >= max_errors:
+				break
+	out.reverse()
+	return out
 
 
 func _check_inspector_prop_ok(node: Node, raw_prop: String, val_str: String) -> bool:
@@ -2606,22 +2885,48 @@ func resolve_feature_paths(feat: Dictionary, code_files: Dictionary = {}, arena_
 	}
 
 
+func _collect_attached_script_paths(root_node: Node) -> Dictionary:
+	var attached := {}
+	if root_node == null:
+		return attached
+	var stack: Array[Node] = [root_node]
+	while not stack.is_empty():
+		var cur: Node = stack.pop_back()
+		var scr: Variant = cur.get_script()
+		if scr is Script:
+			var rpath := String((scr as Script).resource_path).strip_edges()
+			if not rpath.is_empty():
+				attached[rpath] = true
+		for ch in cur.get_children():
+			stack.append(ch)
+	return attached
+
+
 func evaluate_feature(
 	feat: Dictionary,
 	editor_interface: EditorInterface,
 	code_files: Dictionary = {},
 	arena_hint: String = ""
 ) -> Dictionary:
+	heal_empty_project_input_actions(feat)
 	var paths := resolve_feature_paths(feat, code_files, arena_hint)
 	var primary_scene := String(paths.get("primary_scene", ""))
 	var script_paths: Array = paths.get("script_paths", [])
 	var items: Array[Dictionary] = []
 
-	var root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
-	var primary_open := root != null and (
+	var editor_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
+	var primary_open := editor_root != null and (
 		primary_scene.is_empty() or
-		root.scene_file_path == primary_scene
+		editor_root.scene_file_path == primary_scene
 	)
+	var eval_root: Node = editor_root
+	var temp_eval_root: Node = null
+	if not primary_open and not primary_scene.is_empty() and ResourceLoader.exists(primary_scene):
+		var ps := ResourceLoader.load(primary_scene, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+		if ps != null:
+			temp_eval_root = ps.instantiate()
+			if temp_eval_root != null:
+				eval_root = temp_eval_root
 
 	if not primary_scene.is_empty():
 		var exists := FileAccess.file_exists(primary_scene)
@@ -2645,8 +2950,8 @@ func evaluate_feature(
 				continue
 			seen_nodes[nname] = true
 			var ok_n := false
-			if primary_open:
-				var found := _resolve_spec_node(root, sp)
+			if eval_root != null:
+				var found := _resolve_spec_node(eval_root, sp)
 				if found != null:
 					ok_n = true
 					var sr_cls := String(sp.get("subResourceClass", ""))
@@ -2668,20 +2973,20 @@ func evaluate_feature(
 				continue
 			seen_inputs[act] = true
 			items.append({
-				"ok": _has_real_input_binding(act, String(inp.get("keyLabel", ""))),
+				"ok": _has_real_input_binding(act, "input/" + act),
 				"label": "Input: %s" % act,
 				"kind": "input",
 			})
 
-		for sig in parse_signal_specs(st, root):
+		for sig in parse_signal_specs(st, eval_root):
 			var sig_n := String(sig.get("signalName", sig.get("signal", "")))
 			var key := "%s.%s->%s" % [String(sig.get("source", "")), sig_n, String(sig.get("method", ""))]
 			if seen_signals.has(key):
 				continue
 			seen_signals[key] = true
 			var ok_sig := false
-			if primary_open and root != null:
-				var src_n := _find_node_recursive(root, String(sig.get("source", "")))
+			if eval_root != null:
+				var src_n := _find_node_recursive(eval_root, String(sig.get("source", "")))
 				if src_n != null and src_n.has_signal(sig_n):
 					for conn in src_n.get_signal_connection_list(sig_n):
 						var cb: Callable = conn.get("callable", Callable())
@@ -2694,6 +2999,9 @@ func evaluate_feature(
 				"kind": "signal",
 			})
 
+	var attached_in_scene := _collect_attached_script_paths(eval_root)
+	var valid_scripts := {}
+	var filtered_scripts: Array[String] = []
 	for spath in script_paths:
 		var sp_str := String(spath)
 		var exists := FileAccess.file_exists(sp_str)
@@ -2704,11 +3012,61 @@ func evaluate_feature(
 				var txt := f.get_as_text()
 				f.close()
 				valid = not txt.strip_edges().is_empty() and check_gdscript_compiles(txt).get("ok", false)
+		if valid:
+			valid_scripts[sp_str] = true
+
+	var scene_stem := primary_scene.get_file().get_basename().to_lower()
+	for spath in script_paths:
+		var sp_str := String(spath)
+		var is_valid := bool(valid_scripts.get(sp_str, false))
+		var is_ghost := (
+			not is_valid and
+			not valid_scripts.is_empty() and
+			not attached_in_scene.has(sp_str) and
+			sp_str.get_file().get_basename().to_lower() != scene_stem
+		)
+		if is_ghost:
+			continue
+		filtered_scripts.append(sp_str)
 		items.append({
-			"ok": valid,
+			"ok": is_valid,
 			"label": "Script: %s" % sp_str.get_file(),
 			"kind": "script",
 		})
+
+	for att_sp in attached_in_scene.keys():
+		var asp := String(att_sp)
+		if not (asp in filtered_scripts) and FileAccess.file_exists(asp):
+			filtered_scripts.append(asp)
+			if valid_scripts.is_empty():
+				var fa := FileAccess.open(asp, FileAccess.READ)
+				if fa != null:
+					var atxt := fa.get_as_text()
+					fa.close()
+					if not atxt.strip_edges().is_empty() and check_gdscript_compiles(atxt).get("ok", false):
+						valid_scripts[asp] = true
+						items.append({
+							"ok": true,
+							"label": "Script: %s" % asp.get_file(),
+							"kind": "script",
+						})
+
+	if temp_eval_root != null:
+		temp_eval_root.free()
+
+	var scene_ok := primary_scene.is_empty() or FileAccess.file_exists(primary_scene)
+	var any_script_ok := valid_scripts.size() > 0
+	if items.is_empty():
+		items.append({
+			"ok": scene_ok and any_script_ok,
+			"label": "Feature scene & script generated",
+			"kind": "script",
+		})
+
+	var has_built_artifacts := (
+		(not primary_scene.is_empty() and FileAccess.file_exists(primary_scene) and (filtered_scripts.is_empty() or any_script_ok)) or
+		(primary_scene.is_empty() and any_script_ok)
+	)
 
 	var ready := 0
 	for it in items:
@@ -2717,12 +3075,13 @@ func evaluate_feature(
 	return {
 		"total": items.size(),
 		"ready": ready,
-		"all_ready": items.is_empty() or ready == items.size(),
+		"all_ready": items.size() > 0 and ready == items.size(),
+		"has_built_artifacts": has_built_artifacts,
 		"missing_count": items.size() - ready,
 		"items": items,
 		"primary_scene": primary_scene,
 		"arena_scene": String(paths.get("arena_scene", "")),
-		"script_paths": script_paths,
+		"script_paths": filtered_scripts,
 	}
 
 
@@ -2733,14 +3092,17 @@ func build_feature_local(
 	code_files: Dictionary = {},
 	arena_hint: String = ""
 ) -> Dictionary:
+	heal_empty_project_input_actions(feat)
 	var paths := resolve_feature_paths(feat, code_files, arena_hint)
 	var primary_scene := String(paths.get("primary_scene", ""))
 	var arena_scene := String(paths.get("arena_scene", ""))
 	var actions := PackedStringArray()
 
+	var root: Node = null
 	if not primary_scene.is_empty() and editor_interface != null:
-		open_res_path(editor_interface, primary_scene)
-	var root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
+		root = ensure_scene_exists_and_open(editor_interface, primary_scene)
+	elif editor_interface != null:
+		root = editor_interface.get_edited_scene_root()
 	if root != null:
 		var detached := detach_incompatible_scripts(root)
 		for d in detached:
@@ -2762,7 +3124,7 @@ func build_feature_local(
 		else:
 			for inp in parse_input_specs(st):
 				var act := String(inp.get("action", ""))
-				if not act.is_empty() and not _has_real_input_binding(act, String(inp.get("keyLabel", ""))):
+				if not act.is_empty() and not _has_real_input_binding(act, "input/" + act):
 					apply_input_and_inspector(editor_interface, undo_redo, st, st_eval)
 					break
 
@@ -2778,6 +3140,7 @@ func build_feature_local(
 				if f != null:
 					f.store_string(synced_code + "\n")
 					f.close()
+					reload_script_safely(sp_str, synced_code + "\n")
 					actions.append("Synced %s" % sp_str.get_file())
 
 	for st in steps:
@@ -2814,6 +3177,7 @@ func build_feature_local(
 				)
 
 	if editor_interface != null and root != null:
+		sanitize_null_script_exports(root)
 		editor_interface.save_scene()
 
 	# Also wire arena instances cleanly if any step mentions arena_scene.
@@ -2824,8 +3188,7 @@ func build_feature_local(
 				inst_needed = true
 				break
 		if inst_needed:
-			open_res_path(editor_interface, arena_scene)
-			var arena_root := editor_interface.get_edited_scene_root()
+			var arena_root := ensure_scene_exists_and_open(editor_interface, arena_scene)
 			if arena_root != null:
 				detach_incompatible_scripts(arena_root)
 				for st in steps:
@@ -2834,8 +3197,10 @@ func build_feature_local(
 						continue
 					var st_eval: Dictionary = evaluate_step(feat, st, editor_interface)
 					build_missing_scene_nodes(editor_interface, undo_redo, st, st_eval)
+				sanitize_null_script_exports(arena_root)
 				editor_interface.save_scene()
 
+	ensure_main_scene_configured(arena_scene, primary_scene)
 	var summary := "Feature scaffold ready." if actions.is_empty() else "; ".join(actions)
 	return { "ok": true, "summary": summary, "actions": actions }
 
@@ -2848,6 +3213,7 @@ func apply_agent_bundle(
 	var applied_scripts := PackedStringArray()
 	var warnings := PackedStringArray()
 	var applied_ops := 0
+	var root_type_hints := {}
 
 	# 1. Compile-verify & save all scriptUpdates first.
 	for raw_u in bundle.get("scriptUpdates", []):
@@ -2869,8 +3235,14 @@ func apply_agent_bundle(
 			continue
 		f.store_string(content + "\n")
 		f.close()
-		ResourceLoader.load(rpath, "", ResourceLoader.CACHE_MODE_REPLACE)
+		reload_script_safely(rpath, content + "\n")
 		applied_scripts.append(rpath)
+		var uspath := String(u.get("scenePath", "")).strip_edges()
+		var uattach := String(u.get("attachTo", "")).strip_edges()
+		if not uspath.is_empty() and (uattach == "." or uattach == uspath.get_file().get_basename().to_pascal_case()):
+			var ext_cls := extract_script_extends(content)
+			if not ext_cls.is_empty():
+				root_type_hints[uspath] = ext_cls
 
 	# 2. Group sceneOps by scenePath and execute safely.
 	var ops_by_scene := {}
@@ -2887,21 +3259,30 @@ func apply_agent_bundle(
 		if not ops_by_scene.has(spath):
 			ops_by_scene[spath] = []
 		ops_by_scene[spath].append(op_dict)
+		if String(op_dict.get("op", "")).to_lower() == "attach_script" and String(op_dict.get("nodePath", ".")) == ".":
+			var sp_att := String(op_dict.get("scriptPath", "")).strip_edges()
+			if FileAccess.file_exists(sp_att):
+				var fa := FileAccess.open(sp_att, FileAccess.READ)
+				if fa != null:
+					var ext2 := extract_script_extends(fa.get_as_text())
+					fa.close()
+					if not ext2.is_empty():
+						root_type_hints[spath] = ext2
 
 	for spath_key in ops_by_scene.keys():
 		var spath_str := String(spath_key)
 		var scene_ops: Array = ops_by_scene[spath_str]
 		var target_root: Node = null
 		if editor_interface != null:
-			if not spath_str.is_empty():
-				open_res_path(editor_interface, spath_str)
-			target_root = editor_interface.get_edited_scene_root()
+			var rhint := String(root_type_hints.get(spath_str, ""))
+			target_root = ensure_scene_exists_and_open(editor_interface, spath_str, rhint)
 		if target_root == null:
 			warnings.append("Could not open scene %s for sceneOps." % spath_str)
 			continue
 		detach_incompatible_scripts(target_root)
 		applied_ops += apply_scene_ops_to_root(target_root, scene_ops, undo_redo, warnings)
 		if editor_interface != null:
+			sanitize_null_script_exports(target_root)
 			editor_interface.save_scene()
 
 	# Also attach scriptUpdates that specify attachTo + scenePath if not already handled in sceneOps.
@@ -2915,20 +3296,22 @@ func apply_agent_bundle(
 			var spath := String(u.get("scenePath", default_scene)).strip_edges()
 			if rpath.is_empty() or attach_to.is_empty() or spath.is_empty() or not FileAccess.file_exists(rpath):
 				continue
-			open_res_path(editor_interface, spath)
-			var sroot := editor_interface.get_edited_scene_root()
+			var sroot := ensure_scene_exists_and_open(editor_interface, spath, String(root_type_hints.get(spath, "")))
 			if sroot == null:
 				continue
 			var tnode: Node = sroot if (attach_to == "." or attach_to == sroot.name) else _resolve_node_by_rel_path(sroot, attach_to)
 			if tnode == null:
 				tnode = _find_node_recursive(sroot, attach_to)
 			if tnode != null and can_attach_script_to_node(tnode, rpath):
-				var scr_res: Variant = ResourceLoader.load(rpath, "", ResourceLoader.CACHE_MODE_REPLACE)
-				if scr_res is Script and tnode.get_script() != scr_res:
+				var scr_res: Script = reload_script_safely(rpath)
+				if scr_res != null and tnode.get_script() != scr_res:
 					tnode.set_script(scr_res)
+					sanitize_null_script_exports(sroot)
 					editor_interface.save_scene()
 					applied_ops += 1
 
+	heal_empty_project_input_actions()
+	ensure_main_scene_configured(default_scene, String(bundle.get("arenaScenePath", "")))
 	var summary := String(bundle.get("summary", "")).strip_edges()
 	if summary.is_empty():
 		summary = "Updated %d script(s), %d scene op(s)." % [applied_scripts.size(), applied_ops]
@@ -2983,8 +3366,8 @@ func apply_scene_ops_to_root(
 			if not can_attach_script_to_node(node, spath):
 				warnings.append("Blocked incompatible script %s on %s (%s)." % [spath.get_file(), node.name, node.get_class()])
 				continue
-			var scr_res: Variant = ResourceLoader.load(spath, "", ResourceLoader.CACHE_MODE_REPLACE)
-			if scr_res is Script:
+			var scr_res: Script = reload_script_safely(spath)
+			if scr_res != null:
 				node.set_script(scr_res)
 				count += 1
 		elif op == "ensure_node":
@@ -3018,8 +3401,8 @@ func apply_scene_ops_to_root(
 				count += 1
 			var attach_sp := String(op_dict.get("scriptPath", "")).strip_edges()
 			if not attach_sp.is_empty() and FileAccess.file_exists(attach_sp) and can_attach_script_to_node(node, attach_sp):
-				var sres: Variant = ResourceLoader.load(attach_sp, "", ResourceLoader.CACHE_MODE_REPLACE)
-				if sres is Script:
+				var sres: Script = reload_script_safely(attach_sp)
+				if sres != null:
 					node.set_script(sres)
 					count += 1
 		elif op == "set_property":
@@ -3197,11 +3580,12 @@ func apply_export_tuner_value(
 			break
 
 	if updated_disk:
+		var updated_src := "\n".join(lines)
 		var fw := FileAccess.open(script_path, FileAccess.WRITE)
 		if fw != null:
-			fw.store_string("\n".join(lines))
+			fw.store_string(updated_src)
 			fw.close()
-			ResourceLoader.load(script_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+			reload_script_safely(script_path, updated_src)
 
 	var updated_nodes := 0
 	if editor_interface != null:
@@ -3217,6 +3601,7 @@ func apply_export_tuner_value(
 				for ch in cur.get_children():
 					stack.append(ch)
 			if updated_nodes > 0:
+				sanitize_null_script_exports(root)
 				editor_interface.save_scene()
 
 	return {

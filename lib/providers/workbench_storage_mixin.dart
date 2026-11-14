@@ -1,5 +1,118 @@
 part of 'workbench_provider.dart';
 
+int _docEffectiveTimestampMs(TierDocument doc) {
+  final codeTs = int.tryParse(doc.sections['updated_at_ms'] ?? '') ?? 0;
+  final godotSyncTs =
+      int.tryParse(doc.sections['last_godot_sync_ms'] ?? '') ?? 0;
+  return codeTs > godotSyncTs ? codeTs : godotSyncTs;
+}
+
+int _countCompletedSubtasksRecursive(List<Subtask> tasks) {
+  int count = 0;
+  for (final t in tasks) {
+    if (t.completed) count++;
+    if (t.children.isNotEmpty) {
+      count += _countCompletedSubtasksRecursive(t.children);
+    }
+  }
+  return count;
+}
+
+int _countTotalSubtasksRecursive(List<Subtask> tasks) {
+  int count = 0;
+  for (final t in tasks) {
+    count++;
+    if (t.children.isNotEmpty) {
+      count += _countTotalSubtasksRecursive(t.children);
+    }
+  }
+  return count;
+}
+
+int _countOccurrences(String haystack, String needle) {
+  if (haystack.isEmpty || needle.isEmpty) return 0;
+  int count = 0;
+  int idx = 0;
+  while (true) {
+    final hit = haystack.indexOf(needle, idx);
+    if (hit < 0) break;
+    count++;
+    idx = hit + needle.length;
+  }
+  return count;
+}
+
+/// Returns `true` when [remoteDoc] carries newer timestamps or further Godot/build
+/// progress than [localDoc] so startup cloud sync merges instead of overwriting.
+bool shouldPreferRemoteDocumentOnSync(
+  TierDocument localDoc,
+  TierDocument remoteDoc,
+) {
+  final remoteTs = _docEffectiveTimestampMs(remoteDoc);
+  final localTs = _docEffectiveTimestampMs(localDoc);
+  if (remoteTs != localTs) {
+    return remoteTs > localTs;
+  }
+
+  final remoteCompleted = _countCompletedSubtasksRecursive(remoteDoc.subtasks);
+  final localCompleted = _countCompletedSubtasksRecursive(localDoc.subtasks);
+  if (remoteCompleted != localCompleted) {
+    return remoteCompleted > localCompleted;
+  }
+
+  final remoteStates = remoteDoc.sections['states'] ?? '';
+  final localStates = localDoc.sections['states'] ?? '';
+  final remotePlaytestPassed = _countOccurrences(
+    remoteStates,
+    '"playtestPassed":"true"',
+  ) +
+      _countOccurrences(remoteStates, '"playtestPassed": "true"');
+  final localPlaytestPassed = _countOccurrences(
+    localStates,
+    '"playtestPassed":"true"',
+  ) +
+      _countOccurrences(localStates, '"playtestPassed": "true"');
+  if (remotePlaytestPassed != localPlaytestPassed) {
+    return remotePlaytestPassed > localPlaytestPassed;
+  }
+
+  final remoteStatesDone = _countOccurrences(remoteStates, '"completed":true') +
+      _countOccurrences(remoteStates, '"completed": true');
+  final localStatesDone = _countOccurrences(localStates, '"completed":true') +
+      _countOccurrences(localStates, '"completed": true');
+  if (remoteStatesDone != localStatesDone) {
+    return remoteStatesDone > localStatesDone;
+  }
+
+  if (remoteDoc.isCompleted != localDoc.isCompleted) {
+    return remoteDoc.isCompleted;
+  }
+
+  final remoteTotalTasks = _countTotalSubtasksRecursive(remoteDoc.subtasks);
+  final localTotalTasks = _countTotalSubtasksRecursive(localDoc.subtasks);
+  if (remoteTotalTasks != localTotalTasks) {
+    return remoteTotalTasks > localTotalTasks;
+  }
+
+  if (remoteDoc.childrenIds.length != localDoc.childrenIds.length) {
+    return remoteDoc.childrenIds.length > localDoc.childrenIds.length;
+  }
+
+  final remotePrimary = (remoteDoc.sections['primary_asset'] ?? '').trim();
+  final localPrimary = (localDoc.sections['primary_asset'] ?? '').trim();
+  if (remotePrimary.isNotEmpty && localPrimary.isEmpty) {
+    return true;
+  }
+
+  final remoteCode = (remoteDoc.sections['content'] ?? '').trim();
+  final localCode = (localDoc.sections['content'] ?? '').trim();
+  if (remoteCode.isNotEmpty && localCode.isEmpty) {
+    return true;
+  }
+
+  return false;
+}
+
 /// Persistence, Cloud Firestore real-time sync, authentication, and multi-project vault operations
 /// for [WorkbenchProvider].
 extension WorkbenchStorageMixin on WorkbenchProvider {
@@ -77,12 +190,76 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
 
     bool initialLocalPushDone = false;
-    Future.wait([
-      for (final doc in documents.values)
-        _firestoreService.saveDocument(uid: uid, doc: doc),
-    ]).then((_) {
-      initialLocalPushDone = true;
-    });
+    () async {
+      try {
+        final remoteInitial = await _firestoreService.fetchAllDocuments(
+          uid: uid,
+        );
+        final docsToPush = <TierDocument>[];
+        if (remoteInitial != null && remoteInitial.isNotEmpty) {
+          bool mergedAny = false;
+          for (final entry in remoteInitial.entries) {
+            final docId = entry.key;
+            final remoteDoc = entry.value;
+            final localDoc = documents[docId];
+            if (localDoc == null) {
+              documents[docId] = remoteDoc;
+              LocalVaultService.saveDocument(remoteDoc);
+              mergedAny = true;
+              continue;
+            }
+            final preferRemote = shouldPreferRemoteDocumentOnSync(
+              localDoc,
+              remoteDoc,
+            );
+            final baseDoc = preferRemote ? remoteDoc : localDoc;
+            final otherDoc = preferRemote ? localDoc : remoteDoc;
+            final mergedChildren = <String>{
+              ...baseDoc.childrenIds,
+              ...otherDoc.childrenIds,
+            }.toList();
+            final childrenChanged =
+                mergedChildren.length != baseDoc.childrenIds.length;
+            final winner = childrenChanged
+                ? baseDoc.copyWith(childrenIds: mergedChildren)
+                : baseDoc;
+            if (preferRemote || childrenChanged) {
+              documents[docId] = winner;
+              LocalVaultService.saveDocument(winner);
+              mergedAny = true;
+            }
+            if (!preferRemote || childrenChanged) {
+              docsToPush.add(winner);
+            }
+          }
+          for (final localDoc in documents.values) {
+            if (!remoteInitial.containsKey(localDoc.id)) {
+              docsToPush.add(localDoc);
+            }
+          }
+          if (mergedAny && !_isAgentBusy) {
+            if (_activeProjectId == null ||
+                !documents.containsKey(_activeProjectId)) {
+              final projs = savedProjects;
+              if (projs.isNotEmpty) {
+                _restoreProjectState(projs.first.id);
+              }
+            } else if (_pendingFeatureStepQueue.isEmpty) {
+              _restoreProjectState(_activeProjectId!);
+            }
+            notifyListeners();
+          }
+        } else {
+          docsToPush.addAll(documents.values);
+        }
+        await Future.wait([
+          for (final doc in docsToPush)
+            _firestoreService.saveDocument(uid: uid, doc: doc),
+        ]);
+      } finally {
+        initialLocalPushDone = true;
+      }
+    }();
     if (_activeProjectId != null) {
       _firestoreService.saveSettings(
         uid: uid,
@@ -109,9 +286,9 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       uid: uid,
       onSync: (remoteDocs) {
         _lastCloudSyncAt = DateTime.now();
-        if (remoteDocs.isEmpty && !initialLocalPushDone) return;
+        if (!initialLocalPushDone) return;
         if (_isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) return;
-        if (initialLocalPushDone && remoteDocs.isNotEmpty) {
+        if (remoteDocs.isNotEmpty) {
           final removedIds = documents.keys
               .where((localId) => !remoteDocs.containsKey(localId))
               .toList();
@@ -130,8 +307,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           if (projs.isNotEmpty) {
             _restoreProjectState(projs.first.id);
           }
-        } else {
-          _restoreProjectState(_activeProjectId!);
         }
         notifyListeners();
       },
