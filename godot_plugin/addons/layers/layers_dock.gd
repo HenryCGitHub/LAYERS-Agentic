@@ -68,17 +68,25 @@ func _ready() -> void:
 	) as Script
 	if sync_script == null:
 		sync_script = load(SYNC_CLIENT_SCRIPT_PATH) as Script
-	_sync = sync_script.new()
-	add_child(_sync)
-	_sync.epic_updated.connect(_on_epic_updated)
-	_sync.sync_failed.connect(_on_sync_failed)
-	_sync.busy_changed.connect(_on_busy_changed)
-	_sync.update_available.connect(_on_plugin_update_available)
-	_sync.update_check_finished.connect(_on_plugin_update_check_finished)
-	_sync.update_ready_to_reload.connect(_on_plugin_update_ready_to_reload)
-	_sync.update_failed.connect(_on_plugin_update_failed)
+	if sync_script != null:
+		_sync = sync_script.new()
+	if _sync != null:
+		add_child(_sync)
+		_sync.epic_updated.connect(_on_epic_updated)
+		_sync.sync_failed.connect(_on_sync_failed)
+		_sync.busy_changed.connect(_on_busy_changed)
+		_sync.update_available.connect(_on_plugin_update_available)
+		_sync.update_check_finished.connect(_on_plugin_update_check_finished)
+		_sync.update_ready_to_reload.connect(_on_plugin_update_ready_to_reload)
+		_sync.update_failed.connect(_on_plugin_update_failed)
 
 	_build_ui()
+
+	if _sync == null:
+		_show_token_editor = true
+		_refresh_view()
+		_set_status("Failed to load layers_sync_client.gd — check Output panel.", true)
+		return
 
 	if _sync.has_link_token():
 		var cached: Dictionary = _sync.load_cached_epic()
@@ -180,7 +188,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % _sync.get_local_plugin_version()
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.2.1")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_font_size_override("font_size", 11)
@@ -362,7 +370,7 @@ func _refresh_view() -> void:
 	var epic_code: String = "E01"
 	if typeof(epic_raw) == TYPE_DICTIONARY and epic_raw.has("code"):
 		epic_code = str(epic_raw.get("code", "E01"))
-	_meta_label.text = "%s · Epic %d/%d · %s" % [ver, pos, max(total, 1), epic_code]
+	_meta_label.text = "%s · Epic %d/%d · %s" % [ver, pos, maxi(total, 1), epic_code]
 
 	if all_done:
 		_epic_label.text = str(_payload.get("releaseTitle", ver))
@@ -1785,6 +1793,8 @@ func _on_next_step_pressed() -> void:
 
 
 func _on_step_checkbox_toggled(pressed: bool, feat_id: String, cp_id: String, step_id: String) -> void:
+	if _sync == null:
+		return
 	var feat: Dictionary = _get_active_feature()
 	if not feat.is_empty() and str(feat.get("id", "")) == feat_id:
 		for st_raw in feat.get("steps", []):
@@ -1799,6 +1809,8 @@ func _on_step_checkbox_toggled(pressed: bool, feat_id: String, cp_id: String, st
 
 
 func _on_playtest_gate_toggled(pressed: bool, feat_id: String, cp_id: String) -> void:
+	if _sync == null:
+		return
 	var feat: Dictionary = _get_active_feature()
 	if not feat.is_empty() and str(feat.get("id", "")) == feat_id:
 		feat["isPlaytestPassed"] = pressed
@@ -1825,7 +1837,7 @@ func _on_fix_input_submitted(_text: String, feat_id: String, cp_id: String) -> v
 
 
 func _on_ask_agent_fix_pressed(feat_id: String, cp_id: String) -> void:
-	if _fix_input == null:
+	if _sync == null or _fix_input == null:
 		return
 	var issue: String = _fix_input.text.strip_edges()
 	if issue.is_empty():
@@ -1842,6 +1854,8 @@ func _on_ask_agent_fix_pressed(feat_id: String, cp_id: String) -> void:
 
 
 func _on_primary_cta_pressed() -> void:
+	if _sync == null:
+		return
 	var feat: Dictionary = _get_active_feature()
 	if feat.is_empty():
 		return
@@ -1909,6 +1923,8 @@ func _on_connect_submitted(_text: String) -> void:
 
 
 func _on_connect_pressed() -> void:
+	if _sync == null:
+		return
 	var token: String = _token_input.text.strip_edges()
 	if not token.begins_with("lyr_") or token.length() < 20:
 		_set_status("Enter a valid lyr_... Link Token.", true)
@@ -1928,6 +1944,8 @@ func _on_cancel_token_pressed() -> void:
 
 
 func _on_disconnect_pressed() -> void:
+	if _sync == null:
+		return
 	_sync.clear_link_token()
 	_payload = {}
 	_selected_feature_id = ""
@@ -1939,7 +1957,8 @@ func _on_disconnect_pressed() -> void:
 
 
 func _on_sync_pressed() -> void:
-	_sync.fetch_active_epic()
+	if _sync != null:
+		_sync.fetch_active_epic()
 
 
 func _on_open_web_pressed() -> void:

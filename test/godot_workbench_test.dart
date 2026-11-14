@@ -1752,8 +1752,12 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.2.0"'));
+        expect(cfgText, contains('version="2.2.1"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
+        final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
+        expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
+        expect(untypedConstArrayPattern.hasMatch(syncText), isFalse);
+        expect(untypedConstArrayPattern.hasMatch(dockText), isFalse);
         expect(pluginText, contains('get_undo_redo()'));
         expect(pluginText, contains('get_editor_interface()'));
         expect(pluginText, contains('ResourceLoader.CACHE_MODE_REPLACE'));

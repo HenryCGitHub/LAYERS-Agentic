@@ -16,10 +16,8 @@ const CACHE_JSON_PATH := "res://.layers/epic_cache.json"
 const PLUGIN_CFG_PATH := "res://addons/layers/plugin.cfg"
 const UPDATE_TMP_ZIP_PATH := "res://.layers/plugin_update.zip"
 const REMOTE_PLUGIN_CFG_URL := "https://raw.githubusercontent.com/HenryCGitHub/LAYERS-Agentic/main/godot_plugin/addons/layers/plugin.cfg"
-const REMOTE_ZIP_URLS := [
-	"https://raw.githubusercontent.com/HenryCGitHub/LAYERS-Agentic/main/web/layers_godot_plugin.zip",
-	"https://henrycgithub.github.io/LAYERS-Agentic/layers_godot_plugin.zip",
-]
+const REMOTE_ZIP_PRIMARY_URL := "https://raw.githubusercontent.com/HenryCGitHub/LAYERS-Agentic/main/web/layers_godot_plugin.zip"
+const REMOTE_ZIP_FALLBACK_URL := "https://henrycgithub.github.io/LAYERS-Agentic/layers_godot_plugin.zip"
 
 var _http: HTTPRequest
 var _update_http: HTTPRequest
@@ -308,6 +306,13 @@ func check_for_plugin_update(silent: bool = true) -> void:
 			update_failed.emit("Could not check GitHub for plugin updates (%s)." % error_string(err))
 
 
+func _get_remote_zip_urls() -> PackedStringArray:
+	return PackedStringArray([
+		REMOTE_ZIP_PRIMARY_URL,
+		REMOTE_ZIP_FALLBACK_URL,
+	])
+
+
 func download_and_apply_plugin_update() -> void:
 	if _update_http == null or _update_busy:
 		return
@@ -319,12 +324,13 @@ func download_and_apply_plugin_update() -> void:
 
 
 func _start_zip_download_attempt(idx: int) -> void:
-	if idx < 0 or idx >= REMOTE_ZIP_URLS.size():
+	var zip_urls: PackedStringArray = _get_remote_zip_urls()
+	if idx < 0 or idx >= zip_urls.size():
 		_update_busy = false
 		_update_mode = ""
 		update_failed.emit("Failed to download plugin update archive.")
 		return
-	var base_url := REMOTE_ZIP_URLS[idx]
+	var base_url: String = zip_urls[idx]
 	var url := "%s?t=%d" % [base_url, int(Time.get_unix_time_from_system() * 1000.0)]
 	var headers := PackedStringArray([
 		"Cache-Control: no-cache",
@@ -332,7 +338,7 @@ func _start_zip_download_attempt(idx: int) -> void:
 	])
 	var err := _update_http.request(url, headers, HTTPClient.METHOD_GET)
 	if err != OK:
-		if idx + 1 < REMOTE_ZIP_URLS.size():
+		if idx + 1 < zip_urls.size():
 			_update_zip_attempt_idx = idx + 1
 			_start_zip_download_attempt(_update_zip_attempt_idx)
 		else:
@@ -371,8 +377,9 @@ func _on_update_http_completed(result: int, response_code: int, _headers: Packed
 		return
 
 	if mode == "download":
+		var zip_urls: PackedStringArray = _get_remote_zip_urls()
 		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300 or body.size() < 200:
-			if _update_zip_attempt_idx + 1 < REMOTE_ZIP_URLS.size():
+			if _update_zip_attempt_idx + 1 < zip_urls.size():
 				_update_zip_attempt_idx += 1
 				_start_zip_download_attempt(_update_zip_attempt_idx)
 			else:
