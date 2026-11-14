@@ -3513,43 +3513,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         await tester.tapAt(Offset.zero);
         await tester.pumpAndSettle();
 
-        // ── 2. Two-Way GDScript Code Sync ──
-        final syncResult = await provider.syncFeatureTuningAndGuardsFromCode(
-          firstFeat.id,
-          '''
-          @export var move_speed: float = 12.5
-          @export var dash_cooldown: float = 0.25
-          @export var combo_window_sec: float = 0.45
-
-          # [GUARD] Cancel dash impulse immediately when player hits a solid wall normal
-          ''',
-        );
-        expect(syncResult.updatedVars, greaterThanOrEqualTo(3));
-        expect(syncResult.addedGuards, equals(1));
-
-        final syncedStates = FeatureStateNode.getStatesForDocument(firstFeat);
-        expect(
-          syncedStates.last.tuningParams.any((p) => p.contains('12.5')),
-          isTrue,
-        );
-        expect(
-          syncedStates.last.tuningParams
-              .any((p) => p.contains('0.25')),
-          isTrue,
-        );
-        expect(
-          syncedStates.last.tuningParams
-              .any((p) => p.contains('combo_window_sec: 0.45')),
-          isTrue,
-        );
-        expect(
-          syncedStates.last.edgeCases.any(
-            (g) => g.contains(
-                'Cancel dash impulse immediately when player hits a solid wall normal'),
-          ),
-          isTrue,
-        );
-
         // ── 3. Unified Playtest Run Sheet Modal + Live Reactive Rebuilds ──
         final playtestSheetBtn = find.byKey(
           const ValueKey('open_playtest_run_sheet_btn'),
@@ -6647,10 +6610,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           WorkbenchReleaseMixin.commitInboxFeatureTriageTool['name'],
           equals('commit_inbox_feature_triage'),
         );
-        expect(
-          WorkbenchReleaseMixin.commitCodeToSpecSyncTool['name'],
-          equals('commit_code_to_spec_sync'),
-        );
 
         // Verify Stage 1A Spark Intake & Expansion Tools and typed Section Option tools
         expect(
@@ -6940,15 +6899,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
 
         // 7. Pass 4 AI & Workflow Refinements
-        // 7a. commitCodeToSpecSyncTool supports primarySharedScriptOrScene
-        final codeSyncToolProps =
-            (WorkbenchReleaseMixin.commitCodeToSpecSyncTool['parameters']
-                as Map)['properties'] as Map;
-        expect(
-          codeSyncToolProps.containsKey('primarySharedScriptOrScene'),
-          isTrue,
-        );
-
         // 7b. buildActiveReleaseCodingAgentMarkdown and buildActiveFeatureCodingAgentPrompt output Primary Shared Asset
         liveDocForBpSync.sections['primary_asset'] =
             'GrappleHookController (res://scripts/grapple_hook_controller.gd)';
@@ -7794,31 +7744,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals('+Dash cooldown bar, +Ghost trail particles'),
         );
 
-        // 8. Regex-First Two-Way Code Sync (0 LLM calls when regex extracts tuning/guards)
+        // 8. Central LayersTextStyleGuide single source of truth & long task group title condensation
         await provider.startConceptInterview('Crop Shotgun Arena');
         await provider.approveConceptAndBuildRelease();
         final firstFeat = provider.selectedFeature!;
-        int llmCalls = 0;
         final prevResponder = GeminiAgentClient.testMockResponder;
         try {
-          GeminiAgentClient.testMockResponder = (
-            String prompt,
-            String preferredModel,
-          ) async {
-            if (prompt.contains('Code-to-Spec Synchronizer')) {
-              llmCalls++;
-            }
-            return <String, dynamic>{};
-          };
-
-          final syncRes = await provider.syncFeatureTuningAndGuardsFromCode(
-            firstFeat.id,
-            '@export var moveSpeed: float = 750.0\n# [GUARD] Block dash while airborne',
-          );
-          expect(syncRes.updatedVars, greaterThanOrEqualTo(1));
-          expect(syncRes.addedGuards, equals(1));
-          expect(llmCalls, equals(0));
-
           // 9. Central LayersTextStyleGuide single source of truth & long task group title condensation
           expect(
             GeminiAgentClient.compactStyleRules,
@@ -10580,10 +10511,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           );
           expect(
             find.byKey(const ValueKey('tailor_howto_btn_cp_v02_0')),
-            findsOneWidget,
-          );
-          expect(
-            find.byKey(const ValueKey('sync_feature_from_code_btn_cp_v02')),
             findsOneWidget,
           );
 

@@ -461,12 +461,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   /// Switches the active project and restores its Stage 1/2/3 blueprints and selection.
   void switchProject(String projectId) {
     if (!documents.containsKey(projectId)) return;
-    if (projectId != _activeProjectId) {
-      _godotSync.unlink();
-      _diskPulledFilesByResPath.clear();
-      _lastPatchWarningsByResPath.clear();
-      _unmatchedHunksByResPath.clear();
-    }
     _restoreProjectState(projectId);
     _persistSettings();
     notifyListeners();
@@ -477,10 +471,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _stepQueueGeneration++;
     _pendingFeatureStepQueue.clear();
     _synthesizingFeatureIds.clear();
-    _godotSync.unlink();
-    _diskPulledFilesByResPath.clear();
-    _lastPatchWarningsByResPath.clear();
-    _unmatchedHunksByResPath.clear();
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedBeatId = null;

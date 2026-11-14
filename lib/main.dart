@@ -442,8 +442,6 @@ class WorkbenchShell extends StatelessWidget {
                               _exportFullProjectSpec(context);
                             } else if (val == 'agents_md') {
                               _exportActiveReleaseAgentsMd(context);
-                            } else if (val == 'godot_files') {
-                              showGodotFilesAndSyncDialog(context, workbench);
                             } else if (val == 'godot_contract') {
                               showGodotContractDialog(context, workbench);
                             } else if (val == 'json_export') {
@@ -453,28 +451,6 @@ class WorkbenchShell extends StatelessWidget {
                             }
                           },
                           itemBuilder: (ctx) => [
-                            PopupMenuItem<String>(
-                              value: 'godot_files',
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.folder_copy_outlined,
-                                    size: 13,
-                                    color: Color(0xFF38BDF8),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Godot Files, Cloud & Folder Sync',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
                             PopupMenuItem<String>(
                               value: 'godot_contract',
                               child: Row(

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,102 +11,13 @@ import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/godot_project_contract.dart';
-import 'package:layers_agentic/models/godot_virtual_file.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/screens/widgets/godot_inspector_panel.dart';
 import 'package:layers_agentic/screens/widgets/godot_workbench_modals.dart';
-import 'package:layers_agentic/services/godot_folder_sync_interface.dart';
-import 'package:layers_agentic/services/godot_folder_sync_io.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
 import 'package:layers_agentic/utils/godot_gdscript_guard.dart';
-
-class _InMemoryFolderSyncBackend implements GodotFolderSyncBackend {
-  final Map<String, String> diskFiles = {};
-  final Map<String, String?> undoSnapshots = {};
-  bool linked = true;
-
-  @override
-  bool get isSupported => true;
-  @override
-  String get unsupportedReason => '';
-  @override
-  bool get isLinked => linked;
-  @override
-  String get linkedFolderLabel => linked ? '/mock/godot_project' : '';
-
-  @override
-  Future<GodotFolderSnapshot> linkAndPullFolder({String? directoryPath}) async {
-    linked = true;
-    return refreshLinkedFolder();
-  }
-
-  @override
-  Future<GodotFolderSnapshot> refreshLinkedFolder() async {
-    if (!linked) {
-      return const GodotFolderSnapshot(
-        folderLabel: '',
-        errorMessage: 'Folder not linked',
-      );
-    }
-    return GodotFolderSnapshot(
-      folderLabel: linkedFolderLabel,
-      projectGodotText: '[layer_names]\n2d_physics/layer_1="World"\n',
-      filesByResPath: Map<String, String>.from(diskFiles),
-    );
-  }
-
-  @override
-  Future<String?> readDiskFile(String resPath) async =>
-      diskFiles[GodotVirtualFile.normalizeResPath(resPath)];
-
-  @override
-  Future<GodotWriteResult> writeAllowedFile({
-    required String resPath,
-    required String content,
-  }) async {
-    final norm = GodotVirtualFile.normalizeResPath(resPath);
-    if (!isSafeWritableGodotResPath(norm)) {
-      return GodotWriteResult(success: false, resPath: norm, message: 'Blocked');
-    }
-    undoSnapshots[norm] = diskFiles[norm];
-    diskFiles[norm] = content;
-    return GodotWriteResult(
-      success: true,
-      resPath: norm,
-      message: 'Updated $norm on disk.',
-      canUndo: true,
-    );
-  }
-
-  @override
-  bool canUndo(String resPath) =>
-      undoSnapshots.containsKey(GodotVirtualFile.normalizeResPath(resPath));
-
-  @override
-  String? previousDiskContent(String resPath) =>
-      undoSnapshots[GodotVirtualFile.normalizeResPath(resPath)];
-
-  @override
-  Future<GodotWriteResult> undoLastWrite(String resPath) async {
-    final norm = GodotVirtualFile.normalizeResPath(resPath);
-    final prev = undoSnapshots.remove(norm);
-    if (prev == null) {
-      diskFiles.remove(norm);
-    } else {
-      diskFiles[norm] = prev;
-    }
-    return GodotWriteResult(
-      success: true,
-      resPath: norm,
-      message: 'Restored $norm.',
-    );
-  }
-
-  @override
-  void unlink() => linked = false;
-}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -145,34 +55,6 @@ void main() {
       expect(ini, contains('2d_physics/layer_1="World"'));
       expect(ini, contains('Events="*res://autoloads/events.gd"'));
       expect(ini, contains('jump={'));
-
-      const rawProjectGodot = '''
-config_version=5
-
-[application]
-config/name="Arena"
-
-[autoload]
-AudioMgr="*res://scripts/audio_mgr.gd"
-
-[input]
-dash={
-"deadzone": 0.5,
-"events": []
-}
-
-[layer_names]
-3d_physics/layer_4="Projectile"
-''';
-      final merged = contract.mergeFromProjectGodotIni(rawProjectGodot);
-      expect(merged.is3D, isTrue);
-      expect(merged.physicsLayers[4], 'Projectile');
-      expect(merged.physicsLayers[1], 'World');
-      expect(merged.inputActions, containsAll(['move_left', 'jump', 'dash']));
-      expect(
-        merged.autoloads.any((a) => a.name == 'AudioMgr' && a.resPath == 'res://scripts/audio_mgr.gd'),
-        isTrue,
-      );
     });
   });
 
@@ -260,76 +142,6 @@ func _physics_process(delta: float) -> void:
       expect(trace!.resPath, 'res://scripts/player.gd');
       expect(trace.lineNumber, 42);
       expect(trace.errorKind, 'Null Instance');
-    });
-  });
-
-  group('GodotFolderSyncIoImpl', () {
-    late Directory tempDir;
-
-    setUp(() {
-      tempDir = Directory.systemTemp.createTempSync('layers_godot_sync_test_');
-    });
-
-    tearDown(() {
-      if (tempDir.existsSync()) {
-        tempDir.deleteSync(recursive: true);
-      }
-    });
-
-    test('requires project.godot, ignores .godot cache, blocks .tscn writes, writes & restores .gd', () async {
-      final sync = GodotFolderSyncIoImpl();
-
-      final missingRes = await sync.linkAndPullFolder(directoryPath: tempDir.path);
-      expect(missingRes.ok, isFalse);
-      expect(missingRes.errorMessage, contains('project.godot'));
-
-      File('${tempDir.path}/project.godot').writeAsStringSync('''
-[layer_names]
-2d_physics/layer_1="World"
-2d_physics/layer_2="Player"
-''');
-      Directory('${tempDir.path}/scripts').createSync();
-      File('${tempDir.path}/scripts/player.gd').writeAsStringSync('extends CharacterBody2D\n');
-      Directory('${tempDir.path}/.godot').createSync();
-      File('${tempDir.path}/.godot/internal.gd').writeAsStringSync('should_skip\n');
-
-      final snap = await sync.linkAndPullFolder(directoryPath: tempDir.path);
-      expect(snap.ok, isTrue);
-      expect(snap.filesByResPath.containsKey('res://scripts/player.gd'), isTrue);
-      expect(snap.filesByResPath.keys.any((k) => k.contains('.godot')), isFalse);
-
-      // Refuse writing .tscn scenes or project.godot
-      final blockedSceneWrite = await sync.writeAllowedFile(
-        resPath: 'res://scenes/player.tscn',
-        content: '[gd_scene format=3]',
-      );
-      expect(blockedSceneWrite.success, isFalse);
-
-      // Compute diff and write .gd with Undo snapshot
-      const newScript = 'extends CharacterBody2D\n@export var speed: float = 300.0\n';
-      final diff = GodotVirtualFile.computeUnifiedDiff(
-        snap.filesByResPath['res://scripts/player.gd']!,
-        newScript,
-      );
-      expect(diff.any((d) => d.kind == GodotDiffLineKind.added && d.text.contains('speed')), isTrue);
-
-      final writeRes = await sync.writeAllowedFile(
-        resPath: 'res://scripts/player.gd',
-        content: newScript,
-      );
-      expect(writeRes.success, isTrue);
-      expect(sync.canUndo('res://scripts/player.gd'), isTrue);
-      expect(
-        File('${tempDir.path}/scripts/player.gd').readAsStringSync(),
-        contains('@export var speed: float = 300.0'),
-      );
-
-      final undoRes = await sync.undoLastWrite('res://scripts/player.gd');
-      expect(undoRes.success, isTrue);
-      expect(
-        File('${tempDir.path}/scripts/player.gd').readAsStringSync(),
-        'extends CharacterBody2D\n',
-      );
     });
   });
 
@@ -723,11 +535,8 @@ func _physics_process(delta: float) -> void:
       expect(changes.length, equals(countBeforeEsc));
     });
 
-    testWidgets('Godot Files modal shows Cloud file, Contract dialog, and Red/Green Diff confirmation', (tester) async {
-      final sync = _InMemoryFolderSyncBackend()
-        ..diskFiles['res://scripts/player.gd'] = 'extends Node\n';
-
-      final provider = WorkbenchProvider(godotSyncBackend: sync);
+    testWidgets('Contract dialog edits and saves Godot 4 Project Contract physics layers', (tester) async {
+      final provider = WorkbenchProvider();
       final proj = TierDocument(
         id: 'proj_ui',
         title: 'Modal Game',
@@ -735,11 +544,6 @@ func _physics_process(delta: float) -> void:
       );
       provider.documents[proj.id] = proj;
       provider.switchProject(proj.id);
-      await provider.linkGodotProjectFolder();
-      provider.upsertGodotVirtualFile(
-        resPath: 'res://scripts/player.gd',
-        content: 'extends Node\n@export var speed: int = 10\n',
-      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -747,8 +551,8 @@ func _physics_process(delta: float) -> void:
             builder: (ctx) => Scaffold(
               body: Center(
                 child: ElevatedButton(
-                  onPressed: () => showGodotFilesAndSyncDialog(ctx, provider),
-                  child: const Text('Open Godot Files'),
+                  onPressed: () => showGodotContractDialog(ctx, provider),
+                  child: const Text('Open Project Contract'),
                 ),
               ),
             ),
@@ -756,16 +560,10 @@ func _physics_process(delta: float) -> void:
         ),
       );
 
-      await tester.tap(find.text('Open Godot Files'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Active Godot 4 Files & Sync'), findsOneWidget);
-      expect(find.textContaining('Review Diff'), findsOneWidget);
-
-      // Edit Project Contract directly from the modal header button
-      await tester.tap(find.byKey(const ValueKey('godot_modal_open_contract_btn')));
+      await tester.tap(find.text('Open Project Contract'));
       await tester.pumpAndSettle();
       expect(find.text('Godot 4 Project Contract'), findsOneWidget);
+
       await tester.enterText(
         find.byKey(const ValueKey('contract_layers_input')),
         '1: World, 2: Player, 3: Enemy, 4: Loot',
@@ -773,27 +571,6 @@ func _physics_process(delta: float) -> void:
       await tester.tap(find.byKey(const ValueKey('contract_save_btn')));
       await tester.pumpAndSettle();
       expect(provider.activeGodotContract.physicsLayers[4], 'Loot');
-
-      await tester.tap(find.byKey(const ValueKey('godot_modal_review_diff_btn')));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('Review Disk Diff'), findsOneWidget);
-      expect(find.textContaining('+ @export var speed: int = 10'), findsOneWidget);
-
-      await tester.tap(find.byKey(const ValueKey('confirm_apply_disk_diff_btn')));
-      await tester.pumpAndSettle();
-
-      expect(
-        sync.diskFiles['res://scripts/player.gd'],
-        contains('@export var speed: int = 10'),
-      );
-      expect(find.byKey(const ValueKey('godot_modal_undo_disk_btn')), findsOneWidget);
-
-      await tester.tap(find.byKey(const ValueKey('godot_modal_undo_disk_btn')));
-      await tester.pumpAndSettle();
-      expect(
-        sync.diskFiles['res://scripts/player.gd'],
-        'extends Node\n',
-      );
     });
   });
 
@@ -899,12 +676,8 @@ func _physics_process(delta: float) -> void:
       WorkbenchProvider provider,
       TierDocument feat,
       FeatureStateNode cp,
-      _InMemoryFolderSyncBackend sync,
     })> seedDashWorkbench() async {
-      final sync = _InMemoryFolderSyncBackend()
-        ..diskFiles['res://scripts/player_dash.gd'] =
-            'extends CharacterBody2D\n';
-      final provider = WorkbenchProvider(godotSyncBackend: sync);
+      final provider = WorkbenchProvider();
       final proj = TierDocument(
         id: 'proj_dash_redesign',
         title: 'Dash Arena',
@@ -1019,7 +792,6 @@ func _physics_process(delta: float) -> void:
       provider.documents[epic.id] = epic;
       provider.documents[feat.id] = feat;
       provider.switchProject(proj.id);
-      await provider.linkGodotProjectFolder();
       provider.upsertGodotVirtualFile(
         resPath: 'res://scripts/player_dash.gd',
         content:
@@ -1027,7 +799,7 @@ func _physics_process(delta: float) -> void:
         featureIds: [feat.id],
       );
       provider.selectFeature(feat.id, triggerAiSynthesis: false);
-      return (provider: provider, feat: feat, cp: cp, sync: sync);
+      return (provider: provider, feat: feat, cp: cp);
     }
 
     testWidgets(
@@ -1107,7 +879,7 @@ func _physics_process(delta: float) -> void:
         expect(resolvedAfterReorder[1].shortTitle, contains('Dash Velocity'));
         expect(resolvedAfterReorder[2].shortTitle, contains('Dash Export'));
 
-        // 4. Select CODE step (now index 1) -> shows inline Plan B sync strip ("Patched in Cloud")
+        // 4. Select CODE step (now index 1) -> shows inline Script Reference strip
         await tester.tap(find.byKey(ValueKey('build_queue_step_${cp.id}_1')));
         await tester.pumpAndSettle();
         expect(
@@ -1115,8 +887,16 @@ func _physics_process(delta: float) -> void:
           findsOneWidget,
         );
         expect(
-          find.textContaining('Patched in Cloud · res://scripts/player_dash.gd'),
+          find.textContaining('Script Reference · res://scripts/player_dash.gd'),
           findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('inline_open_code_file_btn_${cp.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('inline_review_diff_btn_${cp.id}')),
+          findsNothing,
         );
 
         // 5. Select INSP step (now index 2) -> renders clean PROPERTY & LAYER SHEET (no Scene Tree chrome)
@@ -1200,7 +980,7 @@ func _physics_process(delta: float) -> void:
         );
         await tester.pumpAndSettle();
 
-        // 1. Switch workspace to Code File mode -> shows Cloud .gd file + starter .tscn tab + Plan B Review button
+        // 1. Switch workspace to Code File mode -> shows .gd tab + starter .tscn tab + Copy/Download buttons (no Review Diff)
         await tester.tap(
           find.byKey(ValueKey('workspace_mode_code_file_btn_${cp.id}')),
         );
@@ -1214,8 +994,16 @@ func _physics_process(delta: float) -> void:
           findsOneWidget,
         );
         expect(
-          find.byKey(ValueKey('code_mode_review_diff_btn_${cp.id}')),
+          find.byKey(ValueKey('code_mode_copy_btn_${cp.id}')),
           findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('code_mode_download_btn_${cp.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('code_mode_review_diff_btn_${cp.id}')),
+          findsNothing,
         );
         await tester.tap(
           find.byKey(ValueKey('code_mode_starter_tscn_tab_${cp.id}')),
@@ -1398,7 +1186,7 @@ func _physics_process(delta: float) -> void:
     );
 
     testWidgets(
-      'Code File mode scopes to active Feature files, supports Refresh Disk / Sync to Specs, and Sync Code modal loads active script',
+      'Code File mode scopes to active Feature files, toggles project files, and excludes removed sync controls',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -1409,17 +1197,13 @@ func _physics_process(delta: float) -> void:
 
         final setup = await seedDashWorkbench();
         final provider = setup.provider;
-        final feat = setup.feat;
         final cp = setup.cp;
-        final sync = setup.sync;
 
         // Add unrelated script on another feature
         provider.upsertGodotVirtualFile(
           resPath: 'res://scripts/enemy_patrol.gd',
           content: 'extends Node2D\n@export var patrol_speed: float = 120.0\n',
         );
-        sync.diskFiles['res://scripts/player_dash.gd'] =
-            'extends CharacterBody2D\n@export var dash_speed: float = 780.0\n';
 
         await tester.pumpWidget(
           MaterialApp(
@@ -1451,6 +1235,14 @@ func _physics_process(delta: float) -> void:
           ),
           findsNothing,
         );
+        expect(
+          find.byKey(ValueKey('code_mode_refresh_disk_btn_${cp.id}')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(ValueKey('code_mode_sync_to_specs_btn_${cp.id}')),
+          findsNothing,
+        );
 
         await tester.tap(
           find.byKey(ValueKey('code_mode_toggle_all_files_${cp.id}')),
@@ -1463,57 +1255,15 @@ func _physics_process(delta: float) -> void:
           findsOneWidget,
         );
 
-        // 2. Refresh Disk picks up new disk file cleanly without clobbering existing Cloud edits,
-        //    and Sync to Specs syncs updated @export var from the active Cloud script
-        sync.diskFiles['res://scripts/player_dash_extra.gd'] =
-            'extends Node2D\n';
-        await tester.tap(
-          find.byKey(ValueKey('code_mode_refresh_disk_btn_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          provider.godotFileForResPath('res://scripts/player_dash_extra.gd'),
-          isNotNull,
-        );
-
-        provider.upsertGodotVirtualFile(
-          resPath: 'res://scripts/player_dash.gd',
-          content:
-              'extends CharacterBody2D\n@export var dash_speed: float = 780.0\n',
-          featureIds: [feat.id],
-        );
-        await tester.pumpAndSettle();
-        expect(find.textContaining('780.0'), findsWidgets);
-        final syncSpecsBtn =
-            find.byKey(ValueKey('code_mode_sync_to_specs_btn_${cp.id}'));
-        await tester.ensureVisible(syncSpecsBtn);
-        await tester.tap(syncSpecsBtn);
-        await tester.pumpAndSettle();
-        final syncedCp = FeatureStateNode.getStatesForDocument(
-          provider.documents[feat.id]!,
-        ).first;
-        expect(
-          syncedCp.tuningParams.join(' '),
-          contains('780'),
-        );
-
-        // 3. Switch back to Runbook, open Sync Code modal, and 1-click load active script
+        // 2. Switch back to Runbook and confirm sync code button is removed
         await tester.tap(
           find.byKey(ValueKey('workspace_mode_runbook_btn_${cp.id}')),
         );
         await tester.pumpAndSettle();
-        await tester.tap(
+        expect(
           find.byKey(ValueKey('sync_feature_from_code_btn_${cp.id}')),
+          findsNothing,
         );
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(const ValueKey('load_active_code_into_sync_btn')),
-        );
-        await tester.pumpAndSettle();
-        final syncField = tester.widget<TextField>(
-          find.byKey(const ValueKey('sync_feature_code_input_field')),
-        );
-        expect(syncField.controller?.text, contains('dash_speed'));
       },
     );
 
@@ -1629,9 +1379,9 @@ func _physics_process(delta: float) -> void:
         await tester.pumpAndSettle();
 
         expect(find.text('✦ Tailor active step'), findsOneWidget);
-        expect(find.text('⇄ Sync code to specs'), findsOneWidget);
+        expect(find.text('⇄ Sync code to specs'), findsNothing);
         expect(find.text('⚑ Log playtest issue'), findsOneWidget);
-        expect(find.text('📦 Godot files & sync'), findsOneWidget);
+        expect(find.text('📦 Godot files & sync'), findsNothing);
         expect(find.text('⚙ Project contract'), findsOneWidget);
 
         await tester.tap(find.text('⚙ Project contract'));
@@ -1641,7 +1391,7 @@ func _physics_process(delta: float) -> void:
     );
 
     testWidgets(
-      'Code File mode generates starter .gd scaffold and supports inline Edit -> Save & Sync Specs',
+      'Code File mode generates starter .gd scaffold and supports inline Edit -> Save',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -1652,7 +1402,6 @@ func _physics_process(delta: float) -> void:
 
         final setup = await seedDashWorkbench();
         final provider = setup.provider;
-        final feat = setup.feat;
         final cp = setup.cp;
         provider.documents.removeWhere((_, d) => d.tier == TierType.codeFile);
 
@@ -1686,7 +1435,7 @@ func _physics_process(delta: float) -> void:
         expect(createdVf!.content, contains('extends CharacterBody2D'));
         expect(createdVf.content, contains('@export var dash_speed'));
 
-        // 2. Click Edit, change content to add dash_cooldown @export, Save & Sync Specs
+        // 2. Click Edit, change content to add dash_cooldown @export, Save
         await tester.tap(find.byKey(ValueKey('code_mode_edit_btn_${cp.id}')));
         await tester.pumpAndSettle();
         final editorInput =
@@ -1697,20 +1446,13 @@ func _physics_process(delta: float) -> void:
           'extends CharacterBody2D\n@export var dash_speed: float = 820.0\n@export var dash_cooldown: float = 0.75\n',
         );
         await tester.tap(
-          find.byKey(ValueKey('code_mode_save_sync_btn_${cp.id}')),
+          find.byKey(ValueKey('code_mode_save_btn_${cp.id}')),
         );
         await tester.pumpAndSettle();
 
         final editedVf =
             provider.godotFileForResPath('res://scripts/player_dash.gd');
         expect(editedVf?.content, contains('dash_cooldown: float = 0.75'));
-        final syncedCp = FeatureStateNode.getStatesForDocument(
-          provider.documents[feat.id]!,
-        ).first;
-        expect(
-          syncedCp.tuningParams.join(' '),
-          allOf(contains('820'), contains('dash_cooldown')),
-        );
       },
     );
 

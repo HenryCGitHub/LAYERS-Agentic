@@ -1091,26 +1091,12 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           _copyActiveFeaturePrompt(feat);
         } else if (action == 'tailor_step') {
           _promptTailorHowToDialog(feat, states, checkpointIndex, activeStepIdx);
-        } else if (action == 'sync_code') {
-          _showSyncFeatureFromCodeDialog(feat, node);
         } else if (action == 'log_issue') {
           _rebuild(() {
             _inlineBugDrawerNodeId =
                 _inlineBugDrawerNodeId == node.id ? null : node.id;
             _inlineBugInputCtrl.clear();
           });
-        } else if (action == 'godot_files') {
-          showGodotFilesAndSyncDialog(
-            context,
-            widget.workbench,
-            initialResPath: widget.workbench.extractPrimaryScriptResPath(
-                  feat.sections['primary_asset'],
-                ) ??
-                widget.workbench.extractPrimarySceneResPath(
-                  feat.sections['primary_asset'],
-                ),
-            activeFeature: feat,
-          );
         } else if (action == 'godot_contract') {
           showGodotContractDialog(context, widget.workbench);
         } else if (action == 'rename_feature') {
@@ -1177,17 +1163,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             ),
           ),
           PopupMenuItem<String>(
-            value: 'sync_code',
-            height: 34,
-            child: Text(
-              '⇄ Sync code to specs',
-              style: GoogleFonts.inter(
-                fontSize: 12.5,
-                color: const Color(0xFF7DD3FC),
-              ),
-            ),
-          ),
-          PopupMenuItem<String>(
             value: 'log_issue',
             height: 34,
             child: Text(
@@ -1196,14 +1171,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                 fontSize: 12.5,
                 color: const Color(0xFFFBBF24),
               ),
-            ),
-          ),
-          PopupMenuItem<String>(
-            value: 'godot_files',
-            height: 34,
-            child: Text(
-              '📦 Godot files & sync',
-              style: GoogleFonts.inter(fontSize: 12.5, color: textSecondary),
             ),
           ),
           PopupMenuItem<String>(
@@ -1994,22 +1961,18 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   ),
                   Tooltip(
                     message:
-                        'Inspect cumulative Godot files, Cloud Save & Folder Sync',
+                        'Open generated GDScript & Starter .tscn in Code File view',
                     child: InkWell(
                       key: ValueKey('desktop_shared_asset_badge_${node.id}'),
                       borderRadius: BorderRadius.circular(5),
-                      onTap: () => showGodotFilesAndSyncDialog(
-                        context,
-                        widget.workbench,
-                        initialResPath: widget.workbench
-                                .extractPrimaryScriptResPath(
-                              feat.sections['primary_asset'],
-                            ) ??
-                            widget.workbench.extractPrimarySceneResPath(
-                              feat.sections['primary_asset'],
-                            ),
-                        activeFeature: feat,
-                      ),
+                      onTap: () => _rebuild(() {
+                        _isCodeFileWorkspaceMode = true;
+                        _isShowingStarterTscnInCodeMode = false;
+                        _selectedCodeFileResPath = widget.workbench
+                            .extractPrimaryScriptResPath(
+                          feat.sections['primary_asset'],
+                        );
+                      }),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 7,
@@ -2042,14 +2005,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                                   color: const Color(0xFF64748B),
                                 ),
                               ),
-                            const Text(
-                              '📦 Sync',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w700,
-                                color: Color(0xFF38BDF8),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -2218,12 +2173,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                       label: '✦ Tailor',
                       fgColor: const Color(0xFFA5B4FC),
                     ),
-                  actionPill(
-                    key: ValueKey('sync_feature_from_code_btn_${node.id}'),
-                    onTap: () => _showSyncFeatureFromCodeDialog(feat, node),
-                    label: '⇄ Sync Code',
-                    fgColor: const Color(0xFF7DD3FC),
-                  ),
                   actionPill(
                     key: ValueKey('feature_gate_log_bug_btn_${node.id}'),
                     onTap: () {
@@ -2819,20 +2768,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         : selectedFile.resPath;
     final String activeContent =
         showingTscn ? starterTscnText : selectedFile.content;
-    final bool isEditingActiveFile = !showingTscn &&
-        selectedFile.isDiskWritable &&
-        _editingCodeFileResPath == selectedFile.resPath;
-    final diffLines = !showingTscn
-        ? widget.workbench.previewDiskDiffForResPath(selectedFile.resPath)
-        : const <GodotDiffLine>[];
-    final addedLineNums = <int>{
-      for (final d in diffLines)
-        if (d.kind == GodotDiffLineKind.added && d.newLineNumber != null)
-          d.newLineNumber!,
-    };
-    final addedCount = addedLineNums.length;
-    final canUndo =
-        !showingTscn && widget.workbench.canUndoDiskWrite(selectedFile.resPath);
+    final bool isEditingActiveFile =
+        !showingTscn && _editingCodeFileResPath == selectedFile.resPath;
     final lines = activeContent.split('\n');
 
     Widget toolbarBtn({
@@ -2867,7 +2804,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       );
     }
 
-    Future<void> saveInlineCodeEdits({required bool alsoSyncSpecs}) async {
+    void saveInlineCodeEdits() {
       final fileToSave = selectedFile;
       if (fileToSave == null) return;
       final savedResPath = fileToSave.resPath;
@@ -2880,24 +2817,10 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       _rebuild(() {
         _editingCodeFileResPath = null;
       });
-      if (alsoSyncSpecs) {
-        final res = await widget.workbench.syncFeatureTuningAndGuardsFromCode(
-          feat.id,
-          editedText,
-        );
-        if (!mounted) return;
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              'Saved $savedResPath & synced ${res.updatedVars} var(s), ${res.addedGuards} guard(s) ✓',
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Saved $savedResPath to Cloud ✓'),
+            content: Text('Saved $savedResPath ✓'),
             duration: const Duration(seconds: 2),
           ),
         );
@@ -3104,31 +3027,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           });
                         },
                       ),
-                    ] else if (!showingTscn)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 3.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: addedCount > 0
-                              ? const Color(0xFF0E293D)
-                              : const Color(0xFF091E16),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          addedCount > 0
-                              ? '+$addedCount lines pending sync'
-                              : 'Disk Diff: Clean',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: weightBold,
-                            color: addedCount > 0
-                                ? const Color(0xFF7DD3FC)
-                                : const Color(0xFF6EE7B7),
-                          ),
-                        ),
-                      ),
+                    ],
                     if (isEditingActiveFile) ...[
                       toolbarBtn(
                         key: ValueKey('code_mode_save_btn_${node.id}'),
@@ -3138,17 +3037,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         borderColor:
                             const Color(0xFF34D399).withValues(alpha: 0.55),
                         bold: true,
-                        onTap: () => saveInlineCodeEdits(alsoSyncSpecs: false),
-                      ),
-                      toolbarBtn(
-                        key: ValueKey('code_mode_save_sync_btn_${node.id}'),
-                        label: '✓ Save & Sync Specs',
-                        fgColor: const Color(0xFF7DD3FC),
-                        bgColor: const Color(0xFF0E293D),
-                        borderColor:
-                            const Color(0xFF38BDF8).withValues(alpha: 0.55),
-                        bold: true,
-                        onTap: () => saveInlineCodeEdits(alsoSyncSpecs: true),
+                        onTap: saveInlineCodeEdits,
                       ),
                       toolbarBtn(
                         key: ValueKey('code_mode_cancel_edit_btn_${node.id}'),
@@ -3159,7 +3048,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         }),
                       ),
                     ] else ...[
-                      if (!showingTscn && selectedFile.isDiskWritable)
+                      if (!showingTscn)
                         toolbarBtn(
                           key: ValueKey('code_mode_edit_btn_${node.id}'),
                           label: '✎ Edit',
@@ -3177,53 +3066,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                             });
                           },
                         ),
-                      if (widget.workbench.isGodotFolderLinked)
-                        toolbarBtn(
-                          key: ValueKey('code_mode_refresh_disk_btn_${node.id}'),
-                          label: '↻ Refresh Disk',
-                          onTap: () async {
-                            final snap = await widget.workbench
-                                .refreshLinkedGodotFolder();
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  snap.ok
-                                      ? 'Refreshed ${snap.filesByResPath.length} file(s) from linked Godot folder ✓'
-                                      : (snap.errorMessage ??
-                                          'Unable to refresh Godot folder'),
-                                ),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                        ),
-                      if (!showingTscn)
-                        toolbarBtn(
-                          key: ValueKey('code_mode_sync_to_specs_btn_${node.id}'),
-                          label: '⇄ Sync to Specs',
-                          fgColor: const Color(0xFF7DD3FC),
-                          bgColor: const Color(0xFF112236),
-                          borderColor:
-                              const Color(0xFF38BDF8).withValues(alpha: 0.45),
-                          bold: true,
-                          onTap: () async {
-                            final res = await widget.workbench
-                                .syncFeatureTuningAndGuardsFromCode(
-                              feat.id,
-                              activeContent,
-                            );
-                            if (!mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Synced ${res.updatedVars} tuning var(s) and ${res.addedGuards} guard(s) from $activePath ✓',
-                                ),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          },
-                        ),
                       toolbarBtn(
                         key: ValueKey('code_mode_copy_btn_${node.id}'),
                         label: showingTscn ? '⧉ Copy .tscn' : '⧉ Copy Full .gd',
@@ -3239,45 +3081,37 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           }
                         },
                       ),
-                      if (!showingTscn)
-                        toolbarBtn(
-                          key: ValueKey('code_mode_review_diff_btn_${node.id}'),
-                          label: widget.workbench.isGodotFolderLinked
-                              ? 'Review Diff → Write'
-                              : 'Sync to Folder…',
-                          fgColor: const Color(0xFF7DD3FC),
-                          bgColor: const Color(0xFF0E293D),
-                          borderColor:
-                              const Color(0xFF38BDF8).withValues(alpha: 0.45),
-                          bold: true,
-                          onTap: () => showGodotFilesAndSyncDialog(
-                            context,
-                            widget.workbench,
-                            initialResPath: activePath,
-                            activeFeature: feat,
-                          ),
-                        ),
-                      if (!showingTscn && canUndo)
-                        toolbarBtn(
-                          key: ValueKey('code_mode_undo_write_btn_${node.id}'),
-                          label: '↺ Undo Write',
-                          fgColor: const Color(0xFFFCD34D),
-                          bgColor: const Color(0xFF22160D),
-                          borderColor:
-                              const Color(0xFFF59E0B).withValues(alpha: 0.45),
-                          bold: true,
-                          onTap: () async {
-                            final res = await widget.workbench
-                                .undoLastDiskWrite(activePath);
-                            if (!mounted) return;
+                      toolbarBtn(
+                        key: ValueKey('code_mode_download_btn_${node.id}'),
+                        label: showingTscn ? '⬇ Download .tscn' : '⬇ Download .gd',
+                        fgColor: const Color(0xFF7DD3FC),
+                        bgColor: const Color(0xFF0E293D),
+                        borderColor:
+                            const Color(0xFF38BDF8).withValues(alpha: 0.45),
+                        bold: true,
+                        onTap: () {
+                          final fileName = activePath.split('/').last;
+                          final downloaded = triggerMarkdownFileDownload(
+                            filename: fileName,
+                            content: activeContent,
+                          );
+                          if (!downloaded) {
+                            Clipboard.setData(ClipboardData(text: activeContent));
+                          }
+                          if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text(res.message),
+                                content: Text(
+                                  downloaded
+                                      ? 'Downloaded $fileName ✓'
+                                      : 'Copied $activePath to clipboard ✓',
+                                ),
                                 duration: const Duration(seconds: 2),
                               ),
                             );
-                          },
-                        ),
+                          }
+                        },
+                      ),
                     ],
                   ],
                 ),
@@ -3321,66 +3155,38 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (int i = 0; i < lines.length; i++)
-                    Builder(
-                      builder: (context) {
-                        final lineNum = i + 1;
-                        final isAdded = addedLineNums.contains(lineNum);
-                        return Container(
-                          padding: isAdded
-                              ? const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                  vertical: 1,
-                                )
-                              : EdgeInsets.zero,
-                          decoration: isAdded
-                              ? BoxDecoration(
-                                  color: const Color(0xFF22C55E)
-                                      .withValues(alpha: 0.10),
-                                  border: const Border(
-                                    left: BorderSide(
-                                      color: Color(0xFF22C55E),
-                                      width: 2.5,
-                                    ),
-                                  ),
-                                )
-                              : null,
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              SizedBox(
-                                width: 34,
-                                child: Text(
-                                  lineNum.toString().padLeft(2, '0'),
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: fontMicro,
-                                    color: isAdded
-                                        ? const Color(0xFF4ADE80)
-                                        : const Color(0xFF475569),
-                                    height: 1.65,
-                                  ),
-                                ),
-                              ),
-                              Expanded(
-                                child: Text.rich(
-                                  _buildSemanticStepSpan(
-                                    text: lines[i],
-                                    baseStyle: GoogleFonts.jetBrainsMono(
-                                      fontSize: fontBody,
-                                      fontWeight: weightRegular,
-                                      color: textPrimary,
-                                      height: 1.65,
-                                    ),
-                                    tuningItems: tuningItems,
-                                    edgeItems: edgeItems,
-                                    isCodeBlock: true,
-                                  ),
-                                  softWrap: true,
-                                ),
-                              ),
-                            ],
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 34,
+                          child: Text(
+                            (i + 1).toString().padLeft(2, '0'),
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: fontMicro,
+                              color: const Color(0xFF475569),
+                              height: 1.65,
+                            ),
                           ),
-                        );
-                      },
+                        ),
+                        Expanded(
+                          child: Text.rich(
+                            _buildSemanticStepSpan(
+                              text: lines[i],
+                              baseStyle: GoogleFonts.jetBrainsMono(
+                                fontSize: fontBody,
+                                fontWeight: weightRegular,
+                                color: textPrimary,
+                                height: 1.65,
+                              ),
+                              tuningItems: tuningItems,
+                              edgeItems: edgeItems,
+                              isCodeBlock: true,
+                            ),
+                            softWrap: true,
+                          ),
+                        ),
+                      ],
                     ),
                 ],
               ),

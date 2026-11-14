@@ -328,18 +328,14 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               InkWell(
                 key: ValueKey('compact_shared_asset_badge_${node.id}'),
                 borderRadius: BorderRadius.circular(4),
-                onTap: () => showGodotFilesAndSyncDialog(
-                  context,
-                  widget.workbench,
-                  initialResPath: widget.workbench
-                          .extractPrimaryScriptResPath(
-                        feat.sections['primary_asset'],
-                      ) ??
-                      widget.workbench.extractPrimarySceneResPath(
-                        feat.sections['primary_asset'],
-                      ),
-                  activeFeature: feat,
-                ),
+                onTap: () => _rebuild(() {
+                  _isCodeFileWorkspaceMode = true;
+                  _isShowingStarterTscnInCodeMode = false;
+                  _selectedCodeFileResPath =
+                      widget.workbench.extractPrimaryScriptResPath(
+                    feat.sections['primary_asset'],
+                  );
+                }),
                 child: Text(
                   '${assetSpec.assetIcon} ${assetSpec.assetName}',
                   maxLines: 1,
@@ -528,17 +524,10 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
   }) {
     final normPath = GodotVirtualFile.normalizeResPath(resPath);
     final vf = widget.workbench.godotFileForResPath(normPath);
-    final diffLines = vf != null
-        ? widget.workbench.previewDiskDiffForResPath(normPath)
-        : const <GodotDiffLine>[];
-    final addedCount =
-        diffLines.where((l) => l.kind == GodotDiffLineKind.added).length;
-    final hasCloudFile = vf != null && vf.content.trim().isNotEmpty;
-    final statusLabel = !hasCloudFile
-        ? 'Cloud File: $normPath'
-        : (addedCount > 0
-            ? 'Patched in Cloud · $normPath (+$addedCount lines)'
-            : 'In Sync · $normPath');
+    final hasSavedScript = vf != null && vf.content.trim().isNotEmpty;
+    final statusLabel = hasSavedScript
+        ? 'Script Reference · $normPath'
+        : 'Starter Script · $normPath';
 
     return Container(
       key: ValueKey('inline_code_sync_strip_${node.id}_$stepIdx'),
@@ -547,12 +536,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       decoration: BoxDecoration(
         color: const Color(0xFF0A111D),
         borderRadius: BorderRadius.circular(7),
-        border: Border.all(
-          color: (addedCount > 0
-                  ? const Color(0xFF38BDF8)
-                  : const Color(0xFF1F2B3E))
-              .withValues(alpha: addedCount > 0 ? 0.45 : 1.0),
-        ),
+        border: Border.all(color: const Color(0xFF1F2B3E)),
       ),
       child: Wrap(
         spacing: 8,
@@ -568,11 +552,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 height: 7,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: addedCount > 0
-                      ? const Color(0xFF38BDF8)
-                      : (hasCloudFile
-                          ? const Color(0xFF34D399)
-                          : const Color(0xFF64748B)),
+                  color: hasSavedScript
+                      ? const Color(0xFF34D399)
+                      : const Color(0xFF64748B),
                 ),
               ),
               const SizedBox(width: 7),
@@ -584,82 +566,41 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: addedCount > 0
-                        ? const Color(0xFF7DD3FC)
-                        : const Color(0xFF94A3B8),
+                    color: const Color(0xFF94A3B8),
                   ),
                 ),
               ),
             ],
           ),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: [
-              InkWell(
-                key: ValueKey('inline_open_code_file_btn_${node.id}'),
+          InkWell(
+            key: ValueKey('inline_open_code_file_btn_${node.id}'),
+            borderRadius: BorderRadius.circular(5),
+            onTap: () {
+              _rebuild(() {
+                _isCodeFileWorkspaceMode = true;
+                _selectedCodeFileResPath = normPath;
+                _isShowingStarterTscnInCodeMode = false;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 3.5,
+              ),
+              decoration: BoxDecoration(
+                color: const Color(0xFF131B2A),
                 borderRadius: BorderRadius.circular(5),
-                onTap: () {
-                  _rebuild(() {
-                    _isCodeFileWorkspaceMode = true;
-                    _selectedCodeFileResPath = normPath;
-                    _isShowingStarterTscnInCodeMode = false;
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3.5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF131B2A),
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: const Color(0xFF26334D)),
-                  ),
-                  child: Text(
-                    'Show Full .gd',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFFCBD5E1),
-                    ),
-                  ),
+                border: Border.all(color: const Color(0xFF26334D)),
+              ),
+              child: Text(
+                'Show Full .gd',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFFCBD5E1),
                 ),
               ),
-              InkWell(
-                key: ValueKey('inline_review_diff_btn_${node.id}'),
-                borderRadius: BorderRadius.circular(5),
-                onTap: () => showGodotFilesAndSyncDialog(
-                  context,
-                  widget.workbench,
-                  initialResPath: normPath,
-                  activeFeature: feat,
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3.5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0E293D),
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(
-                      color: const Color(0xFF38BDF8).withValues(alpha: 0.45),
-                    ),
-                  ),
-                  child: Text(
-                    widget.workbench.isGodotFolderLinked
-                        ? 'Review Diff → Write'
-                        : 'Link Folder & Write',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      color: const Color(0xFF7DD3FC),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
         ],
       ),

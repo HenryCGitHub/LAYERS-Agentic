@@ -8,6 +8,7 @@ import '../models/tier_document.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/godot_gdscript_guard.dart';
+import '../utils/markdown_exporter.dart';
 import '../utils/section_text_utils.dart';
 import 'project_pitch_screen.dart';
 import 'widgets/godot_inspector_panel.dart';

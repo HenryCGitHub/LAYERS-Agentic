@@ -1,36 +1,7 @@
 part of 'workbench_provider.dart';
 
-/// Godot 4 Contract, cumulative Cloud-saved `TierType.codeFile` scripts, patch applier, and safe Folder Sync.
+/// Godot 4 Contract and cumulative Cloud-saved `TierType.codeFile` scripts + patch applier.
 extension WorkbenchGodotMixin on WorkbenchProvider {
-  bool get isCloudSaveReady =>
-      _isCloudSynced || (isUserLoggedIn && isSessionApprovedForAi);
-
-  bool get isGodotFolderSyncSupported => _godotSync.isSupported;
-  String get godotFolderSyncUnsupportedReason => _godotSync.unsupportedReason;
-  bool get isGodotFolderLinked => _godotSync.isLinked;
-  String get linkedGodotFolderLabel => _godotSync.linkedFolderLabel;
-
-  Map<String, String> get diskPulledGodotFiles =>
-      Map.unmodifiable(_diskPulledFilesByResPath);
-
-  List<String> patchWarningsForResPath(String resPath) =>
-      List.unmodifiable(
-        _lastPatchWarningsByResPath[GodotVirtualFile.normalizeResPath(resPath)] ??
-            const [],
-      );
-
-  List<GdScriptPatchHunk> unmatchedPatchHunksForResPath(String resPath) =>
-      List.unmodifiable(
-        _unmatchedHunksByResPath[GodotVirtualFile.normalizeResPath(resPath)] ??
-            const [],
-      );
-
-  bool isDocPendingCloudWrite(String docId) =>
-      _pendingCloudWriteDocIds.contains(docId);
-
-  bool canUndoDiskWrite(String resPath) =>
-      _godotSync.canUndo(GodotVirtualFile.normalizeResPath(resPath));
-
   /// Escalates to `MEDIUM` (unless already `HIGH`) strictly for `.gd` script synthesis/patching and `[FIX]` diagnoses.
   String get effectiveGodotCodeThinkingLevel =>
       _thinkingLevel.trim().toUpperCase() == 'HIGH' ? 'HIGH' : 'MEDIUM';
@@ -108,7 +79,6 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
     required String content,
     String? releaseVersion,
     Iterable<String> featureIds = const [],
-    String? lastDiskHash,
     bool silent = false,
   }) {
     final proj = activeProject;
@@ -135,7 +105,6 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
               : activeReleaseVersionTag),
       featureIds: mergedFeatureIds,
       updatedAtMs: DateTime.now().millisecondsSinceEpoch,
-      lastDiskHash: (lastDiskHash ?? existing?.lastDiskHash ?? '').trim(),
     );
 
     final doc = vf.toTierDocument();
@@ -147,7 +116,7 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
     return vf;
   }
 
-  /// Applies surgical `{targetBlock, replaceBlock}` hunks onto the stored (or disk-pulled) `.gd` file.
+  /// Applies surgical `{targetBlock, replaceBlock}` hunks onto the stored `.gd` file.
   GdScriptPatchResult applyScriptPatchesToVirtualFile({
     required String resPath,
     required List<GdScriptPatchHunk> hunks,
@@ -157,27 +126,12 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
   }) {
     final normPath = GodotVirtualFile.normalizeResPath(resPath);
     final existing = godotFileForResPath(normPath);
-    final diskBaseline = _diskPulledFilesByResPath[normPath] ?? '';
-    final baseContent =
-        (existing != null && existing.content.trim().isNotEmpty)
-            ? existing.content
-            : diskBaseline;
+    final baseContent = existing?.content ?? '';
 
     final result = GodotGdscriptGuard.applyPatchHunks(
       existingContent: baseContent,
       hunks: hunks,
     );
-
-    if (result.warnings.isNotEmpty) {
-      _lastPatchWarningsByResPath[normPath] = result.warnings;
-    } else {
-      _lastPatchWarningsByResPath.remove(normPath);
-    }
-    if (result.unmatchedHunks.isNotEmpty) {
-      _unmatchedHunksByResPath[normPath] = result.unmatchedHunks;
-    } else {
-      _unmatchedHunksByResPath.remove(normPath);
-    }
 
     if (result.appliedCount > 0 ||
         (existing == null && result.updatedContent.trim().isNotEmpty)) {
@@ -244,127 +198,7 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
     return false;
   }
 
-  /// Links a local Godot 4 project folder, performs read-only pull of `project.godot` + `.gd`/`.tres` files,
-  /// and seeds missing Cloud virtual files without overwriting existing Cloud edits.
-  Future<GodotFolderSnapshot> linkGodotProjectFolder({
-    String? directoryPath,
-  }) async {
-    final snapshot =
-        await _godotSync.linkAndPullFolder(directoryPath: directoryPath);
-    if (snapshot.ok) {
-      _ingestDiskSnapshot(snapshot);
-    } else {
-      notifyListeners();
-    }
-    return snapshot;
-  }
-
-  Future<GodotFolderSnapshot> refreshLinkedGodotFolder() async {
-    final snapshot = await _godotSync.refreshLinkedFolder();
-    if (snapshot.ok) {
-      _ingestDiskSnapshot(snapshot);
-    } else {
-      notifyListeners();
-    }
-    return snapshot;
-  }
-
-  void _ingestDiskSnapshot(GodotFolderSnapshot snapshot) {
-    _diskPulledFilesByResPath
-      ..clear()
-      ..addAll(snapshot.filesByResPath);
-
-    if (snapshot.projectGodotText != null &&
-        snapshot.projectGodotText!.trim().isNotEmpty) {
-      final updatedContract = activeGodotContract.mergeFromProjectGodotIni(
-        snapshot.projectGodotText!,
-      );
-      updateGodotContract(updatedContract);
-    }
-
-    // Seed disk-discovered files into Cloud `TierType.codeFile` only when missing or previously identical,
-    // so Cloud edits never get silently clobbered by a read-only pull.
-    for (final entry in snapshot.filesByResPath.entries) {
-      final normPath = GodotVirtualFile.normalizeResPath(entry.key);
-      final diskHash = GodotVirtualFile.computeContentHash(entry.value);
-      final existing = godotFileForResPath(normPath);
-      if (existing == null || existing.content.trim().isEmpty) {
-        upsertGodotVirtualFile(
-          resPath: normPath,
-          content: entry.value,
-          lastDiskHash: diskHash,
-          silent: true,
-        );
-      } else if (existing.contentHash == diskHash && existing.lastDiskHash != diskHash) {
-        upsertGodotVirtualFile(
-          resPath: normPath,
-          content: existing.content,
-          lastDiskHash: diskHash,
-          silent: true,
-        );
-      }
-    }
-    notifyListeners();
-  }
-
-  /// Computes a Red/Green unified diff comparing current disk contents against the Cloud virtual file.
-  List<GodotDiffLine> previewDiskDiffForResPath(String resPath) {
-    final norm = GodotVirtualFile.normalizeResPath(resPath);
-    final diskText = _diskPulledFilesByResPath[norm] ?? '';
-    final cloudText = godotFileForResPath(norm)?.content ?? '';
-    return GodotVirtualFile.computeUnifiedDiff(diskText, cloudText);
-  }
-
-  /// Writes a diff-reviewed `.gd` or `.tres` file to disk with an automatic Undo snapshot.
-  Future<GodotWriteResult> applyVirtualFileToDisk(String resPath) async {
-    final norm = GodotVirtualFile.normalizeResPath(resPath);
-    final vf = godotFileForResPath(norm);
-    if (vf == null) {
-      return GodotWriteResult(
-        success: false,
-        resPath: norm,
-        message: 'No stored file found for $norm.',
-      );
-    }
-    final res = await _godotSync.writeAllowedFile(
-      resPath: norm,
-      content: vf.content,
-    );
-    if (res.success) {
-      _diskPulledFilesByResPath[norm] = vf.content;
-      upsertGodotVirtualFile(
-        resPath: norm,
-        content: vf.content,
-        lastDiskHash: vf.contentHash,
-      );
-    }
-    notifyListeners();
-    return res;
-  }
-
-  /// Restores the prior on-disk version saved before the most recent `applyVirtualFileToDisk`.
-  Future<GodotWriteResult> undoLastDiskWrite(String resPath) async {
-    final norm = GodotVirtualFile.normalizeResPath(resPath);
-    final res = await _godotSync.undoLastWrite(norm);
-    if (res.success) {
-      final restored = await _godotSync.readDiskFile(norm);
-      if (restored != null) {
-        _diskPulledFilesByResPath[norm] = restored;
-      } else {
-        _diskPulledFilesByResPath.remove(norm);
-      }
-    }
-    notifyListeners();
-    return res;
-  }
-
-  void unlinkGodotProjectFolder() {
-    _godotSync.unlink();
-    _diskPulledFilesByResPath.clear();
-    notifyListeners();
-  }
-
-  /// Builds a concise prompt context containing the Godot Project Contract and current stored/disk `.gd` code
+  /// Builds a concise prompt context containing the Godot Project Contract and current stored `.gd` code
   /// so Gemini can emit surgical `{targetBlock, replaceBlock}` hunks without guessing existing symbols.
   String buildPromptGodotContext({
     String? primaryAssetHint,
@@ -381,9 +215,7 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
         extractPrimaryScriptResPath(fallbackScriptPath);
     if (targetScript != null) {
       final norm = GodotVirtualFile.normalizeResPath(targetScript);
-      final currentCode = _diskPulledFilesByResPath[norm] ??
-          godotFileForResPath(norm)?.content ??
-          '';
+      final currentCode = godotFileForResPath(norm)?.content ?? '';
       if (currentCode.trim().isNotEmpty) {
         final lines = currentCode.split('\n');
         final clipped = lines.length > 140 ? lines.take(140).join('\n') : currentCode;

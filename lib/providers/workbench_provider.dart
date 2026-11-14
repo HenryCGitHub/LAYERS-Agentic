@@ -14,7 +14,6 @@ import '../models/godot_virtual_file.dart';
 import '../models/tier_document.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_vault_service.dart';
-import '../services/godot_folder_sync.dart';
 import '../services/local_vault_service.dart';
 import '../utils/godot_gdscript_guard.dart';
 import '../utils/section_text_utils.dart';
@@ -45,12 +44,7 @@ class WorkbenchProvider extends ChangeNotifier {
 
   final AuthService _authService = AuthService();
   final FirestoreVaultService _firestoreService = FirestoreVaultService();
-  final GodotFolderSyncBackend _godotSync;
   final bool enableAutoLoad;
-
-  final Map<String, String> _diskPulledFilesByResPath = {};
-  final Map<String, List<String>> _lastPatchWarningsByResPath = {};
-  final Map<String, List<GdScriptPatchHunk>> _unmatchedHunksByResPath = {};
 
   /// Optional test-only email override so widget tests can verify Admin/Invitee UI deterministically.
   @visibleForTesting
@@ -332,8 +326,7 @@ class WorkbenchProvider extends ChangeNotifier {
 
   WorkbenchProvider({
     this.enableAutoLoad = false,
-    GodotFolderSyncBackend? godotSyncBackend,
-  }) : _godotSync = godotSyncBackend ?? godotFolderSync {
+  }) {
     _authService.addListener(_onAuthStateChanged);
     if (enableAutoLoad) {
       GeminiAgentClient.isProxyAuthenticated = () => isSessionApprovedForAi;

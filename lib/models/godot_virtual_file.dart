@@ -3,23 +3,6 @@ import 'dart:convert';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 
-enum GodotDiffLineKind { context, added, removed }
-
-/// Single line inside a unified diff preview for Godot disk sync or script revision review.
-class GodotDiffLine {
-  final GodotDiffLineKind kind;
-  final int? oldLineNumber;
-  final int? newLineNumber;
-  final String text;
-
-  const GodotDiffLine({
-    required this.kind,
-    this.oldLineNumber,
-    this.newLineNumber,
-    required this.text,
-  });
-}
-
 /// Cumulative Godot artifact (`res://...`) stored in Firestore/LocalVault as a `TierType.codeFile` document.
 class GodotVirtualFile {
   static const String resPathKey = 'res_path';
@@ -28,7 +11,6 @@ class GodotVirtualFile {
   static const String releaseVersionKey = 'release_version';
   static const String featureIdsKey = 'feature_ids';
   static const String updatedAtMsKey = 'updated_at_ms';
-  static const String lastDiskHashKey = 'last_disk_hash';
 
   final String id;
   final String projectId;
@@ -38,7 +20,6 @@ class GodotVirtualFile {
   final String releaseVersion;
   final List<String> featureIds;
   final int updatedAtMs;
-  final String lastDiskHash;
 
   const GodotVirtualFile({
     required this.id,
@@ -49,7 +30,6 @@ class GodotVirtualFile {
     required this.releaseVersion,
     this.featureIds = const [],
     this.updatedAtMs = 0,
-    this.lastDiskHash = '',
   });
 
   /// Canonicalizes paths to `res://...` with forward slashes.
@@ -87,16 +67,7 @@ class GodotVirtualFile {
     return 'text';
   }
 
-  /// Disk writes are strictly restricted to `.gd` and `.tres`; `.tscn` / `project.godot` remain read-only/copyable.
-  bool get isDiskWritable {
-    final lower = resPath.toLowerCase();
-    return lower.endsWith('.gd') || lower.endsWith('.tres');
-  }
-
   String get contentHash => computeContentHash(content);
-
-  bool get hasUnsyncedChangesComparedToLastDisk =>
-      lastDiskHash.isNotEmpty && lastDiskHash != contentHash;
 
   GodotVirtualFile copyWith({
     String? id,
@@ -107,7 +78,6 @@ class GodotVirtualFile {
     String? releaseVersion,
     List<String>? featureIds,
     int? updatedAtMs,
-    String? lastDiskHash,
   }) {
     final nextPath = resPath != null ? normalizeResPath(resPath) : this.resPath;
     return GodotVirtualFile(
@@ -119,7 +89,6 @@ class GodotVirtualFile {
       releaseVersion: releaseVersion ?? this.releaseVersion,
       featureIds: featureIds ?? this.featureIds,
       updatedAtMs: updatedAtMs ?? this.updatedAtMs,
-      lastDiskHash: lastDiskHash ?? this.lastDiskHash,
     );
   }
 
@@ -148,7 +117,6 @@ class GodotVirtualFile {
       releaseVersion: (doc.sections[releaseVersionKey] ?? doc.phase ?? 'v0.1').trim(),
       featureIds: parsedFeatures,
       updatedAtMs: int.tryParse(doc.sections[updatedAtMsKey] ?? '') ?? 0,
-      lastDiskHash: (doc.sections[lastDiskHashKey] ?? '').trim(),
     );
   }
 
@@ -175,12 +143,11 @@ class GodotVirtualFile {
         releaseVersionKey: releaseVersion,
         featureIdsKey: jsonEncode(featureIds.toSet().toList()),
         updatedAtMsKey: updatedAtMs.toString(),
-        if (lastDiskHash.isNotEmpty) lastDiskHashKey: lastDiskHash,
       },
     );
   }
 
-  /// Deterministic FNV-1a hash over normalized LF text for cheap disk vs Cloud comparison.
+  /// Deterministic FNV-1a hash over normalized LF text.
   static String computeContentHash(String text) {
     final normalized = text.replaceAll('\r\n', '\n');
     const int fnvPrime = 0x01000193;
@@ -192,121 +159,7 @@ class GodotVirtualFile {
     return hash.toRadixString(16).padLeft(8, '0');
   }
 
-  /// Computes a clean line-level diff between `oldText` and `newText` with surrounding context lines.
-  static List<GodotDiffLine> computeUnifiedDiff(
-    String oldText,
-    String newText, {
-    int contextLines = 3,
-  }) {
-    final oldLines = oldText.isEmpty
-        ? <String>[]
-        : oldText.replaceAll('\r\n', '\n').split('\n');
-    final newLines = newText.isEmpty
-        ? <String>[]
-        : newText.replaceAll('\r\n', '\n').split('\n');
-
-    final n = oldLines.length;
-    final m = newLines.length;
-    if (n == 0 && m == 0) return const [];
-
-    // Guard against quadratic DP on very large files by falling back to full replacement hunk.
-    if (n * m > 250000) {
-      return [
-        for (var i = 0; i < n; i++)
-          GodotDiffLine(
-            kind: GodotDiffLineKind.removed,
-            oldLineNumber: i + 1,
-            text: oldLines[i],
-          ),
-        for (var j = 0; j < m; j++)
-          GodotDiffLine(
-            kind: GodotDiffLineKind.added,
-            newLineNumber: j + 1,
-            text: newLines[j],
-          ),
-      ];
-    }
-
-    final dp = List.generate(n + 1, (_) => List<int>.filled(m + 1, 0));
-    for (var i = n - 1; i >= 0; i--) {
-      for (var j = m - 1; j >= 0; j--) {
-        if (oldLines[i] == newLines[j]) {
-          dp[i][j] = dp[i + 1][j + 1] + 1;
-        } else {
-          dp[i][j] = dp[i + 1][j] >= dp[i][j + 1] ? dp[i + 1][j] : dp[i][j + 1];
-        }
-      }
-    }
-
-    final raw = <GodotDiffLine>[];
-    var i = 0;
-    var j = 0;
-    while (i < n && j < m) {
-      if (oldLines[i] == newLines[j]) {
-        raw.add(GodotDiffLine(
-          kind: GodotDiffLineKind.context,
-          oldLineNumber: i + 1,
-          newLineNumber: j + 1,
-          text: oldLines[i],
-        ));
-        i++;
-        j++;
-      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-        raw.add(GodotDiffLine(
-          kind: GodotDiffLineKind.removed,
-          oldLineNumber: i + 1,
-          text: oldLines[i],
-        ));
-        i++;
-      } else {
-        raw.add(GodotDiffLine(
-          kind: GodotDiffLineKind.added,
-          newLineNumber: j + 1,
-          text: newLines[j],
-        ));
-        j++;
-      }
-    }
-    while (i < n) {
-      raw.add(GodotDiffLine(
-        kind: GodotDiffLineKind.removed,
-        oldLineNumber: i + 1,
-        text: oldLines[i],
-      ));
-      i++;
-    }
-    while (j < m) {
-      raw.add(GodotDiffLine(
-        kind: GodotDiffLineKind.added,
-        newLineNumber: j + 1,
-        text: newLines[j],
-      ));
-      j++;
-    }
-
-    final changedIndices = <int>[];
-    for (var idx = 0; idx < raw.length; idx++) {
-      if (raw[idx].kind != GodotDiffLineKind.context) {
-        changedIndices.add(idx);
-      }
-    }
-    if (changedIndices.isEmpty) return const [];
-
-    final visible = List<bool>.filled(raw.length, false);
-    for (final idx in changedIndices) {
-      final start = (idx - contextLines).clamp(0, raw.length - 1);
-      final end = (idx + contextLines).clamp(0, raw.length - 1);
-      for (var k = start; k <= end; k++) {
-        visible[k] = true;
-      }
-    }
-    return [
-      for (var idx = 0; idx < raw.length; idx++)
-        if (visible[idx]) raw[idx],
-    ];
-  }
-
-  /// Generates a clean starter Godot 4 `.tscn` text scaffold (copy/download only; never auto-overwrites disk).
+  /// Generates a clean starter Godot 4 `.tscn` text scaffold for copy/download.
   static String buildTscnStarterScaffold({
     required String rootNodeName,
     required String rootNodeType,
@@ -329,25 +182,6 @@ class GodotVirtualFile {
     for (final child in childNodes) {
       buf.writeln();
       buf.writeln('[node name="${child.name}" type="${child.type}" parent="."]');
-    }
-    return buf.toString().trimRight();
-  }
-
-  /// Generates a clean starter Godot 4 `.tres` `Resource` text file.
-  static String buildTresStarterResource({
-    required String scriptClassName,
-    required String scriptResPath,
-    Map<String, String> properties = const {},
-  }) {
-    final buf = StringBuffer()
-      ..writeln('[gd_resource type="Resource" script_class="$scriptClassName" load_steps=2 format=3]')
-      ..writeln()
-      ..writeln('[ext_resource type="Script" path="${normalizeResPath(scriptResPath)}" id="1_res"]')
-      ..writeln()
-      ..writeln('[resource]')
-      ..writeln('script = ExtResource("1_res")');
-    for (final entry in properties.entries) {
-      buf.writeln('${entry.key} = ${entry.value}');
     }
     return buf.toString().trimRight();
   }
