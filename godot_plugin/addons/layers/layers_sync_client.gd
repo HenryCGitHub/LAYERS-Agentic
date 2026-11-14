@@ -44,7 +44,7 @@ var _script_sync_in_flight: Dictionary = {}
 
 func _ready() -> void:
 	_http = HTTPRequest.new()
-	_http.timeout = 65.0
+	_http.timeout = 95.0
 	add_child(_http)
 	_http.request_completed.connect(_on_request_completed)
 
@@ -483,7 +483,7 @@ func _ensure_agent_http() -> void:
 	if _agent_http != null and is_instance_valid(_agent_http):
 		return
 	_agent_http = HTTPRequest.new()
-	_agent_http.timeout = 65.0
+	_agent_http.timeout = 95.0
 	add_child(_agent_http)
 	_agent_http.request_completed.connect(_on_agent_http_completed)
 
@@ -498,9 +498,11 @@ func build_feature(
 	scene_snapshot: Variant,
 	live_scripts: Dictionary,
 	arena_scene_path: String = "",
-	feature_scene_path: String = ""
+	feature_scene_path: String = "",
+	input_map_snapshot: Dictionary = {},
+	project_diagnostics: Array = []
 ) -> void:
-	_post_agent_update({
+	var payload := {
 		"action": "build_feature",
 		"featureId": feature_id,
 		"checkpointId": checkpoint_id,
@@ -508,7 +510,12 @@ func build_feature(
 		"liveScripts": live_scripts,
 		"arenaScenePath": arena_scene_path,
 		"featureScenePath": feature_scene_path,
-	})
+	}
+	if not input_map_snapshot.is_empty():
+		payload["inputMapSnapshot"] = input_map_snapshot
+	if not project_diagnostics.is_empty():
+		payload["projectDiagnostics"] = project_diagnostics
+	_post_agent_update(payload)
 
 
 func direct_agent(
@@ -519,9 +526,11 @@ func direct_agent(
 	live_scripts: Dictionary,
 	arena_scene_path: String = "",
 	feature_scene_path: String = "",
-	error_text: String = ""
+	error_text: String = "",
+	input_map_snapshot: Dictionary = {},
+	project_diagnostics: Array = []
 ) -> void:
-	_post_agent_update({
+	var payload := {
 		"action": "direct_agent",
 		"featureId": feature_id,
 		"checkpointId": checkpoint_id,
@@ -531,7 +540,12 @@ func direct_agent(
 		"liveScripts": live_scripts,
 		"arenaScenePath": arena_scene_path,
 		"featureScenePath": feature_scene_path,
-	})
+	}
+	if not input_map_snapshot.is_empty():
+		payload["inputMapSnapshot"] = input_map_snapshot
+	if not project_diagnostics.is_empty():
+		payload["projectDiagnostics"] = project_diagnostics
+	_post_agent_update(payload)
 
 
 func complete_feature_steps(feature_id: String, checkpoint_id: String) -> void:

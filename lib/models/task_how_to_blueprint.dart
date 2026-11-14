@@ -2372,28 +2372,76 @@ class TaskHowToBlueprint {
     );
     final pascal = asset.pascalName;
     final snake = asset.snakeName;
-    final hintCorpus = [
-      engineHint ?? '',
+    final featureCorpus = [
       checkpointNode.parameters['primarySharedScriptOrScene'] ?? '',
       checkpointNode.cleanStageTitle,
       ...checkpointNode.coveredScope,
       ...checkpointNode.tuningParams,
     ].join(' ').toLowerCase();
+    final hintCorpus = '${engineHint ?? ''} $featureCorpus'.toLowerCase();
     final is3D = RegExp(
       r'\b(?:3d|first[- ]?person|third[- ]?person|vector3|characterbody3d|node3d|raycast3d|rigidbody3d|camera3d|meshinstance3d)\b',
     ).hasMatch(hintCorpus);
-    final bodyType = is3D ? 'CharacterBody3D' : 'CharacterBody2D';
+    final isUi = RegExp(
+      r'\b(?:hud|ui|menu|overlay|draft|shop|upgrade|screen|card|inventory|bar|tooltip|dialogue)\b',
+    ).hasMatch(featureCorpus);
+    final isWorldOrSpawner = !isUi &&
+        RegExp(
+          r'\b(?:spawner|spawn|wave|arena|level|map|floor|environment|lighting|camera|portal|zone|boundary|director)\b',
+        ).hasMatch(featureCorpus);
+    final isEnemyOrAi = !isUi &&
+        !isWorldOrSpawner &&
+        RegExp(
+          r'\b(?:enemy|enemies|boss|mob|ai|patrol|pursuit|lunge|minion|turret|hazard|trap|crab_enemy)\b',
+        ).hasMatch(featureCorpus);
+    final isPlayer = !isUi && !isWorldOrSpawner && !isEnemyOrAi;
+
+    final bodyType = isUi
+        ? 'CanvasLayer'
+        : isWorldOrSpawner
+        ? (is3D ? 'Node3D' : 'Node2D')
+        : (is3D ? 'CharacterBody3D' : 'CharacterBody2D');
     final collisionNode = is3D ? 'CollisionShape3D' : 'CollisionShape2D';
     final capsuleShape = is3D ? 'CapsuleShape3D' : 'CapsuleShape2D';
     final parsedVars = filterDeclaredGameplayVariables(checkpointNode.tuningParams);
-    final primaryVarName =
-        parsedVars.isNotEmpty ? parsedVars.first.name : 'move_speed';
+    final primaryVarName = parsedVars.isNotEmpty
+        ? parsedVars.first.name
+        : (isEnemyOrAi
+            ? 'strike_range'
+            : isWorldOrSpawner
+            ? 'spawn_interval'
+            : 'move_speed');
     final primaryVarVal = parsedVars.isNotEmpty && parsedVars.first.value.isNotEmpty
         ? parsedVars.first.value.split(' ').first
-        : '240.0';
+        : (isEnemyOrAi ? '2.2' : isWorldOrSpawner ? '3.0' : '240.0');
     final guardText = checkpointNode.edgeCases.isNotEmpty
         ? checkpointNode.edgeCases.first
         : '[STATE GUARD] Prevent duplicate trigger while active';
+
+    String actionName = '${snake}_action';
+    String actionKey = 'Space';
+    if (isPlayer) {
+      if (RegExp(r'\b(?:dash|dodge)\b').hasMatch(featureCorpus)) {
+        actionName = 'dash';
+        actionKey = 'Shift';
+      } else if (RegExp(
+        r'\b(?:attack|melee|slash|claw|shoot|fire|strike)\b',
+      ).hasMatch(featureCorpus)) {
+        actionName = 'attack';
+        actionKey = 'LMB';
+      } else if (RegExp(r'\b(?:guard|block|parry)\b').hasMatch(featureCorpus)) {
+        actionName = 'guard';
+        actionKey = 'RMB';
+      } else if (RegExp(r'\bjump\b').hasMatch(featureCorpus)) {
+        actionName = 'jump';
+        actionKey = 'Space';
+      } else if (RegExp(
+        r'\b(?:interact|pickup|open)\b',
+      ).hasMatch(featureCorpus)) {
+        actionName = 'interact';
+        actionKey = 'E';
+      }
+    }
 
     final inspectorRows = <String>[
       '| Node | Property | Value |',
@@ -2402,9 +2450,40 @@ class TaskHowToBlueprint {
         '| $pascal | @export $primaryVarName | $primaryVarVal |',
       for (final v in parsedVars.take(3))
         '| $pascal | @export ${v.name} | ${v.value.isNotEmpty ? v.value : "1.0"} |',
-      '| Input Map | ${snake}_action | Space |',
-      '| $pascal | collision_mask | 1 |',
+      if (isPlayer) '| Input Map | $actionName | $actionKey |',
+      '| StateTimer | one_shot | true |',
+      if (isPlayer || isEnemyOrAi) '| $pascal | collision_mask | 1 |',
     ].join('\n');
+
+    final sceneHierarchy = isUi
+        ? '$pascal ($bodyType) 📜 $snake.gd\n├─ MarginContainer (MarginContainer)\n└─ StateTimer (Timer)'
+        : isWorldOrSpawner
+        ? '$pascal ($bodyType) 📜 $snake.gd\n└─ StateTimer (Timer)'
+        : '$pascal ($bodyType) 📜 $snake.gd\n├─ $collisionNode ($capsuleShape)\n└─ StateTimer (Timer)';
+
+    final sceneInstruction = isUi
+        ? 'Create res://scenes/$snake.tscn with root CanvasLayer "$pascal", a MarginContainer layout, and StateTimer, then attach res://scripts/$snake.gd.'
+        : isWorldOrSpawner
+        ? 'Create res://scenes/$snake.tscn with root $bodyType "$pascal" and StateTimer, then attach res://scripts/$snake.gd.'
+        : 'Create res://scenes/$snake.tscn with root $bodyType "$pascal", $collisionNode, and StateTimer, then attach res://scripts/$snake.gd.';
+
+    final sceneVerify = isUi
+        ? '$pascal appears in Scene Tree with MarginContainer and StateTimer (0 errors).'
+        : isWorldOrSpawner
+        ? '$pascal appears in Scene Tree with StateTimer (0 errors).'
+        : '$pascal appears in Scene Tree with $collisionNode and helper child nodes (0 errors).';
+
+    final numericVarVal = double.tryParse(primaryVarVal) != null
+        ? primaryVarVal
+        : (isEnemyOrAi ? '2.2' : isWorldOrSpawner ? '3.0' : '240.0');
+
+    final scriptCodeSnippet = isPlayer
+        ? 'extends $bodyType\n\n@export var $primaryVarName: float = $numericVarVal\n@onready var state_timer: Timer = \$StateTimer\n\nfunc _physics_process(delta: float) -> void:\n    # Guard: $guardText\n    if Input.is_action_just_pressed("$actionName") and state_timer.is_stopped():\n        _activate_$snake()'
+        : isEnemyOrAi
+        ? 'extends $bodyType\n\n@export var $primaryVarName: float = $numericVarVal\n@export var max_hp: int = 3\n@onready var state_timer: Timer = \$StateTimer\nvar hp: int = 3\n\nfunc _ready() -> void:\n    hp = max_hp\n\nfunc take_damage(amount: int) -> void:\n    # Guard: $guardText\n    hp = maxi(hp - amount, 0)\n    if hp <= 0:\n        queue_free()'
+        : isUi
+        ? 'extends $bodyType\n\n@export var $primaryVarName: float = $numericVarVal\n@onready var state_timer: Timer = \$StateTimer\n\nfunc _ready() -> void:\n    process_mode = Node.PROCESS_MODE_ALWAYS\n    visible = false'
+        : 'extends $bodyType\n\n@export var $primaryVarName: float = $numericVarVal\n@onready var state_timer: Timer = \$StateTimer\n\nfunc _on_state_timer_timeout() -> void:\n    # Guard: $guardText\n    pass';
 
     final playtestGoal = checkpointNode.playtestCondition;
     checkpointNode.checklist = [
@@ -2413,28 +2492,27 @@ class TaskHowToBlueprint {
         text: 'Build $pascal Scene Nodes',
         codeLanguage: 'Scene Dock → res://scenes/$snake.tscn',
         codeTargetFile: 'offline_default',
-        verification:
-            '$pascal appears in Scene Tree with $collisionNode and helper child nodes (0 errors).',
+        verification: sceneVerify,
         specNotes: encodeThreeAreaNotes(
-          instruction:
-              'Create res://scenes/$snake.tscn with root $bodyType "$pascal", $collisionNode, and StateTimer, then attach res://scripts/$snake.gd.',
-          area1Hierarchy:
-              '$pascal ($bodyType) 📜 $snake.gd\n├─ $collisionNode ($capsuleShape)\n└─ StateTimer (Timer)',
+          instruction: sceneInstruction,
+          area1Hierarchy: sceneHierarchy,
           verifyMode: 'editor',
           stepRole: 'editor_setup',
         ),
       ),
       Subtask(
         id: '${checkpointNode.id}_step_insp',
-        text: 'Set Layers, InputMap & Exports',
+        text: isPlayer ? 'Set Layers, InputMap & Exports' : 'Set Layers & Exports',
         codeLanguage: 'Inspector & Project Settings',
         codeTargetFile: 'offline_default',
-        verification:
-            'Input Map exposes ${snake}_action and Inspector shows tuned @export properties.',
+        verification: isPlayer
+            ? 'Input Map exposes $actionName and Inspector shows tuned @export properties.'
+            : 'Inspector shows tuned @export properties and StateTimer configuration.',
         codeSnippet: inspectorRows,
         specNotes: encodeThreeAreaNotes(
-          instruction:
-              'Bind ${snake}_action in Project Settings → Input Map, set StateTimer.one_shot = true, and verify initial @export values.',
+          instruction: isPlayer
+              ? 'Bind $actionName in Project Settings → Input Map, set StateTimer.one_shot = true, and verify initial @export values.'
+              : 'Configure StateTimer.one_shot = true and verify initial @export values in the Inspector.',
           area2Inspector: inspectorRows,
           verifyMode: 'editor',
           stepRole: 'inspector_setup',
@@ -2445,13 +2523,14 @@ class TaskHowToBlueprint {
         text: 'Code $pascal Core & Guard Logic',
         codeLanguage: 'res://scripts/$snake.gd',
         codeTargetFile: 'offline_default',
-        codeSnippet:
-            'extends $bodyType\n\n@export var $primaryVarName: float = ${double.tryParse(primaryVarVal) != null ? primaryVarVal : '240.0'}\n@onready var state_timer: Timer = \$StateTimer\n\nfunc _physics_process(delta: float) -> void:\n    # Guard: $guardText\n    if Input.is_action_just_pressed("${snake}_action") and state_timer.is_stopped():\n        _activate_$snake()',
-        verification:
-            'Triggering ${snake}_action executes cleanly and obeys "$guardText".',
+        codeSnippet: scriptCodeSnippet,
+        verification: isPlayer
+            ? 'Triggering $actionName executes cleanly and obeys "$guardText".'
+            : 'Logic executes via AI/timers/signals without Input polling and obeys "$guardText".',
         specNotes: encodeThreeAreaNotes(
-          instruction:
-              'Declare @export $primaryVarName and implement _activate_$snake() in res://scripts/$snake.gd with guard "$guardText".',
+          instruction: isPlayer
+              ? 'Declare @export $primaryVarName and implement _activate_$snake() in res://scripts/$snake.gd with guard "$guardText".'
+              : 'Declare @export $primaryVarName and implement $pascal logic in res://scripts/$snake.gd with guard "$guardText".',
           verifyMode: 'playtest',
           stepRole: 'script_logic',
         ),

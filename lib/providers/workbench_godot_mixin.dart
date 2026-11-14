@@ -447,6 +447,15 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       buf.writeln('GODOT 4 PROJECT CONTRACT (use exact layer numbers, action names, autoloads, and groups):');
       buf.writeln(contractSummary);
     }
+    buf.writeln(
+      'GODOT 4 COMBAT, 3D BASIS & INPUT RULES: '
+      '(1) Rotating via atan2(dir.x, dir.z) aligns +Z forward -> move +basis.z (NEVER -basis.z); look_at() aligns -Z -> move -basis.z. '
+      '(2) Parent combat pivots (ClawPivot/Muzzle/HitboxPivot) under the rotated VisualRig, never as unrotated siblings. '
+      '(3) Keep CollisionShape3D/2D centered under its Area so parent+child positions do not cancel, and ensure reach >= strikeRange. '
+      '(4) When toggling area.monitoring = true, also sweep area.get_overlapping_bodies() with a per-swing hit list. '
+      '(5) Every take_damage() must trigger visible/audio feedback + queue_free() at hp <= 0. '
+      '(6) Enemies, spawners, arenas, and UI scripts must NEVER poll Input.is_action_* or bind *_action on Space.',
+    );
 
     String? targetScript = extractPrimaryScriptResPath(primaryAssetHint) ??
         extractPrimaryScriptResPath(fallbackScriptPath);

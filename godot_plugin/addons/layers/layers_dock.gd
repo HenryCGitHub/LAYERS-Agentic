@@ -89,6 +89,9 @@ var _editor_logger: _LayersEditorLogger
 var _ignored_error_signatures: Dictionary = {}
 var _locally_built_keys: Dictionary = {}
 var _last_detected_error_count: int = 0
+var _cached_diagnostics: PackedStringArray = PackedStringArray()
+var _diagnostics_dirty: bool = true
+var _ignored_diagnostic_signatures: Dictionary = {}
 
 # Slim Top Self-Update Banner
 var _update_banner: PanelContainer
@@ -236,6 +239,7 @@ func refresh_from_focus() -> void:
 func on_editor_resource_saved(resource: Resource) -> void:
 	if _executor != null:
 		_executor.call("invalidate_eval_cache")
+	_diagnostics_dirty = true
 	if resource is Script:
 		var rp := String((resource as Script).resource_path).strip_edges()
 		if rp.begins_with("res://") and rp.ends_with(".gd") and not ("/addons/" in rp):
@@ -397,7 +401,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.1")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.2")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -967,6 +971,39 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		fix_err_btn.pressed.connect(_on_fix_log_errors_pressed.bind(feat_id, cp_id, log_errors))
 		agent_vb.add_child(fix_err_btn)
 
+	var diag_issues: Array = _get_active_project_diagnostics()
+	if not diag_issues.is_empty() and not _diagnosing_fix:
+		var diag_row := HBoxContainer.new()
+		diag_row.add_theme_constant_override("separation", _S(4))
+		agent_vb.add_child(diag_row)
+
+		var diag_lbl := Label.new()
+		diag_lbl.text = "%d static wiring/combat issue%s: %s" % [diag_issues.size(), "" if diag_issues.size() == 1 else "s", str(diag_issues[0])]
+		diag_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		diag_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		diag_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
+		diag_row.add_child(diag_lbl)
+
+		var dismiss_diag_btn := Button.new()
+		dismiss_diag_btn.flat = true
+		dismiss_diag_btn.theme_type_variation = &"FlatButton"
+		dismiss_diag_btn.icon = _editor_icon("Close")
+		if dismiss_diag_btn.icon == null:
+			dismiss_diag_btn.text = "x"
+		dismiss_diag_btn.tooltip_text = "Dismiss detected static issues"
+		dismiss_diag_btn.pressed.connect(func() -> void:
+			for di in diag_issues:
+				_ignored_diagnostic_signatures[str(di)] = true
+			_render_active_feature_workspace(feat)
+		)
+		diag_row.add_child(dismiss_diag_btn)
+
+		var fix_diag_btn := Button.new()
+		fix_diag_btn.text = "Fix Detected Issues (%d)" % diag_issues.size()
+		fix_diag_btn.icon = _editor_icon("StatusWarning", "Tools")
+		fix_diag_btn.pressed.connect(_on_fix_detected_diagnostics_pressed.bind(feat_id, cp_id, diag_issues))
+		agent_vb.add_child(fix_diag_btn)
+
 	_fix_input = TextEdit.new()
 	_fix_input.placeholder_text = "Make dash faster, add screen shake, or paste Godot error... (Shift+Enter for new line)"
 	_fix_input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
@@ -1010,6 +1047,62 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 # Feature Actions, Playtest, Export Tuners & Agent Director
 # ---------------------------------------------------------------------------
 
+func _get_active_project_diagnostics() -> Array:
+	if _executor == null:
+		return []
+	if _diagnostics_dirty:
+		var all_scenes: PackedStringArray = _executor.call("collect_project_scene_paths", "res://", 120)
+		var scene_arr: Array = []
+		for sc in all_scenes:
+			scene_arr.append(sc)
+		var all_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://")
+		_cached_diagnostics = _executor.call("diagnose_project_combat_and_wiring", scene_arr, all_scripts, editor_interface)
+		_diagnostics_dirty = false
+	var visible_diags: Array = []
+	for d in _cached_diagnostics:
+		var ds := str(d).strip_edges()
+		if not ds.is_empty() and not _ignored_diagnostic_signatures.has(ds):
+			visible_diags.append(ds)
+	return visible_diags
+
+
+func _collect_full_project_agent_context(feat: Dictionary, code_files: Dictionary, arena_scene: String) -> Dictionary:
+	if _executor == null:
+		return {}
+	var paths: Dictionary = _executor.call("resolve_feature_paths", feat, code_files, arena_scene)
+	var primary_scene: String = str(paths.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
+	var all_scenes: PackedStringArray = _executor.call("collect_project_scene_paths", "res://", 120)
+	var extra_scenes := PackedStringArray()
+	if not primary_scene.is_empty():
+		extra_scenes.append(primary_scene)
+	if not arena_scene.is_empty() and not (arena_scene in extra_scenes):
+		extra_scenes.append(arena_scene)
+	for sc in all_scenes:
+		if not (sc in extra_scenes):
+			extra_scenes.append(sc)
+
+	var scene_snap: Dictionary = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes)
+	var live_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://")
+	var feat_scripts: Dictionary = _executor.call("read_live_scripts_for_feature", feat, code_files, arena_scene)
+	for fsk in feat_scripts.keys():
+		if not live_scripts.has(fsk):
+			live_scripts[fsk] = feat_scripts[fsk]
+	var input_map_snap: Dictionary = _executor.call("capture_input_map_snapshot")
+	var scene_arr: Array = []
+	for sc in extra_scenes:
+		scene_arr.append(sc)
+	_cached_diagnostics = _executor.call("diagnose_project_combat_and_wiring", scene_arr, live_scripts, editor_interface)
+	_diagnostics_dirty = false
+	var active_diags := _get_active_project_diagnostics()
+	return {
+		"primary_scene": primary_scene,
+		"scene_snapshot": scene_snap,
+		"live_scripts": live_scripts,
+		"input_map_snapshot": input_map_snap,
+		"project_diagnostics": active_diags,
+	}
+
+
 func _on_build_feature_pressed(feat: Dictionary) -> void:
 	if _executor == null or _building_feature:
 		return
@@ -1032,20 +1125,16 @@ func _on_build_feature_pressed(feat: Dictionary) -> void:
 		_render_active_feature_workspace(feat)
 		return
 
-	var paths: Dictionary = _executor.call("resolve_feature_paths", feat, code_files, arena_scene)
-	var primary_scene: String = str(paths.get("primary_scene", ""))
-	var extra_scenes := PackedStringArray()
-	if not primary_scene.is_empty():
-		extra_scenes.append(primary_scene)
-	if not arena_scene.is_empty() and not (arena_scene in extra_scenes):
-		extra_scenes.append(arena_scene)
-
-	var scene_snap: Dictionary = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes)
-	var live_scripts: Dictionary = _executor.call("read_live_scripts_for_feature", feat, code_files, arena_scene)
+	var full_ctx: Dictionary = _collect_full_project_agent_context(feat, code_files, arena_scene)
+	var primary_scene: String = str(full_ctx.get("primary_scene", ""))
+	var scene_snap: Variant = full_ctx.get("scene_snapshot", {})
+	var live_scripts: Dictionary = full_ctx.get("live_scripts", {})
+	var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
+	var diag_issues: Array = full_ctx.get("project_diagnostics", [])
 	_building_feature = true
 	_set_status("Building %s with Gemini 4 Hydrogen..." % str(feat.get("title", "Feature")), false)
 	_render_active_feature_workspace(feat)
-	_sync.build_feature(feat_id, cp_id, scene_snap, live_scripts, arena_scene, primary_scene)
+	_sync.build_feature(feat_id, cp_id, scene_snap, live_scripts, arena_scene, primary_scene, input_map_snap, diag_issues)
 
 
 func _on_fix_input_gui_input(event: InputEvent, feat_id: String, cp_id: String) -> void:
@@ -1082,23 +1171,33 @@ func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
 	var feat: Dictionary = _get_active_feature()
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
-	var paths: Dictionary = _executor.call("resolve_feature_paths", feat, code_files, arena_scene) if _executor != null else {}
-	var primary_scene: String = str(paths.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
-
-	var extra_scenes := PackedStringArray()
-	if not primary_scene.is_empty():
-		extra_scenes.append(primary_scene)
-	if not arena_scene.is_empty() and not (arena_scene in extra_scenes):
-		extra_scenes.append(arena_scene)
-
-	var scene_snap: Dictionary = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes) if _executor != null else {}
-	var live_scripts: Dictionary = _executor.call("read_live_scripts_for_feature", feat, code_files, arena_scene) if _executor != null else {}
+	var full_ctx: Dictionary = _collect_full_project_agent_context(feat, code_files, arena_scene) if _executor != null else {}
+	var primary_scene: String = str(full_ctx.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
+	var scene_snap: Variant = full_ctx.get("scene_snapshot", {})
+	var live_scripts: Dictionary = full_ctx.get("live_scripts", {})
+	var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
+	var diag_issues: Array = full_ctx.get("project_diagnostics", [])
 
 	_diagnosing_fix = true
 	_set_status("Agent Director updating Scene & GDScript...", false)
 	if not feat.is_empty():
 		_render_active_feature_workspace(feat)
-	_sync.direct_agent(feat_id, cp_id, prompt_txt, scene_snap, live_scripts, arena_scene, primary_scene, prompt_txt)
+	_sync.direct_agent(feat_id, cp_id, prompt_txt, scene_snap, live_scripts, arena_scene, primary_scene, prompt_txt, input_map_snap, diag_issues)
+
+
+func _on_fix_detected_diagnostics_pressed(feat_id: String, cp_id: String, diag_issues: Array) -> void:
+	if _is_editor_playing() and editor_interface != null and editor_interface.has_method("stop_playing_scene"):
+		editor_interface.call("stop_playing_scene")
+		_was_playing_scene = false
+	var joined := PackedStringArray()
+	for d in diag_issues:
+		var s := str(d).strip_edges()
+		if not s.is_empty():
+			joined.append(s)
+	_fix_draft_text = "Fix all detected combat, hitbox, 3D forward-basis, and InputMap issues across scenes and scripts:\n" + "\n".join(joined)
+	if _fix_input != null:
+		_fix_input.text = _fix_draft_text
+	_on_direct_agent_pressed(feat_id, cp_id)
 
 
 func _on_fix_log_errors_pressed(feat_id: String, cp_id: String, log_errors: Array) -> void:
@@ -1142,6 +1241,7 @@ func _on_bundle_apply_timeout() -> void:
 	var pref_scene: String = str(active_feat.get("primaryAsset", "")).strip_edges()
 	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle, pref_scene)
 	_executor.call("invalidate_eval_cache")
+	_diagnostics_dirty = true
 	if editor_interface != null and editor_interface.get_resource_filesystem() != null:
 		editor_interface.get_resource_filesystem().scan()
 	var summary: String = str(apply_res.get("summary", bundle.get("summary", "Applied scene & script updates.")))
@@ -1156,22 +1256,19 @@ func _on_bundle_apply_timeout() -> void:
 		var integrity_errors: PackedStringArray = integrity.get("errors", PackedStringArray())
 		if was_initial_build and not feat_id.is_empty() and _auto_repair_attempted_for_feature_id != feat_id and _sync != null and _sync.has_link_token():
 			_auto_repair_attempted_for_feature_id = feat_id
-			var paths: Dictionary = _executor.call("resolve_feature_paths", active_feat, code_files, arena_scene)
-			var primary_scene: String = str(paths.get("primary_scene", pref_scene)).strip_edges()
-			var extra_scenes := PackedStringArray()
-			if not primary_scene.is_empty():
-				extra_scenes.append(primary_scene)
-			if not arena_scene.is_empty() and not (arena_scene in extra_scenes):
-				extra_scenes.append(arena_scene)
-			var scene_snap: Dictionary = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes)
-			var live_scripts: Dictionary = _executor.call("read_live_scripts_for_feature", active_feat, code_files, arena_scene)
+			var full_ctx: Dictionary = _collect_full_project_agent_context(active_feat, code_files, arena_scene)
+			var primary_scene: String = str(full_ctx.get("primary_scene", pref_scene)).strip_edges()
+			var scene_snap: Variant = full_ctx.get("scene_snapshot", {})
+			var live_scripts: Dictionary = full_ctx.get("live_scripts", {})
+			var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
+			var diag_issues: Array = full_ctx.get("project_diagnostics", [])
 			var err_joined := "\n".join(integrity_errors)
 			_diagnosing_fix = true
 			_last_agent_summary = ""
 			_last_agent_warnings = PackedStringArray()
 			_set_status("Auto-repairing scene/script wiring issue...", false)
 			_refresh_view()
-			_sync.direct_agent(feat_id, cp_id, "Fix post-build verification issues:\n" + err_joined, scene_snap, live_scripts, arena_scene, primary_scene, err_joined)
+			_sync.direct_agent(feat_id, cp_id, "Fix post-build verification issues:\n" + err_joined, scene_snap, live_scripts, arena_scene, primary_scene, err_joined, input_map_snap, diag_issues)
 			return
 		for ie in integrity_errors:
 			var ies := str(ie).strip_edges()
@@ -1352,6 +1449,7 @@ func _on_epic_updated(payload: Dictionary) -> void:
 	_payload = payload
 	_building_feature = false
 	_diagnosing_fix = false
+	_diagnostics_dirty = true
 	if _last_agent_summary.is_empty():
 		_set_status("Synced", false)
 	_refresh_view()

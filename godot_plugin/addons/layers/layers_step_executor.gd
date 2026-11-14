@@ -2,7 +2,7 @@
 extends RefCounted
 
 # Hierarchy-aware Scene, InputMap, Signal, and GDScript Step Engine
-# for LAYERS Godot 4 Editor Plugin (v2.7.1+).
+# for LAYERS Godot 4 Editor Plugin (v2.7.2+).
 
 var _eval_cache: Dictionary = {}
 var _eval_cache_epoch: int = 0
@@ -1865,7 +1865,7 @@ func apply_input_and_inspector(
 		var inp: Dictionary = inp_raw
 		var act: String = str(inp.get("action", "")).strip_edges()
 		var key_lbl: String = str(inp.get("keyLabel", "")).strip_edges()
-		if act.is_empty():
+		if act.is_empty() or _is_bogus_non_player_action_name(act):
 			continue
 		var setting_key: String = "input/%s" % act
 		var ev: InputEvent = _build_input_event_for_label(key_lbl)
@@ -2410,10 +2410,25 @@ func _infer_default_input_event_for_action(act_name: String) -> InputEvent:
 	return null
 
 
+func _is_bogus_non_player_action_name(act_name: String) -> bool:
+	var a: String = act_name.strip_edges().to_lower()
+	if a.is_empty():
+		return true
+	if "player" in a:
+		return false
+	if a.begins_with("enemy_") or a.begins_with("spawner_") or a.begins_with("wave_"):
+		return true
+	if a.ends_with("_action"):
+		for non_player_tok in ["enemy", "spawner", "wave", "arena", "hud", "panel", "totem", "draft", "camera", "boss", "mob", "hazard"]:
+			if non_player_tok in a:
+				return true
+	return false
+
+
 func apply_input_ops(input_ops: Array) -> int:
 	if input_ops.is_empty():
 		return 0
-	var added: int = 0
+	var changed: int = 0
 	for raw_op in input_ops:
 		if typeof(raw_op) != TYPE_DICTIONARY:
 			continue
@@ -2422,6 +2437,22 @@ func apply_input_ops(input_ops: Array) -> int:
 		if act.is_empty() or act.begins_with("ui_"):
 			continue
 		var setting_key := "input/%s" % act
+		var op_kind := String(op.get("op", "")).strip_edges().to_lower()
+		var should_remove: bool = bool(op.get("remove", false)) or op_kind == "remove_action"
+		if should_remove:
+			var removed_any := false
+			if ProjectSettings.has_setting(setting_key):
+				ProjectSettings.set_setting(setting_key, null)
+				removed_any = true
+			if InputMap.has_action(act):
+				InputMap.erase_action(act)
+				removed_any = true
+			if removed_any:
+				changed += 1
+			continue
+		if _is_bogus_non_player_action_name(act):
+			continue
+		var overwrite: bool = bool(op.get("overwrite", false))
 		var keys_raw: Variant = op.get("keys", [])
 		var key_list: Array = keys_raw if typeof(keys_raw) == TYPE_ARRAY else [keys_raw]
 		var events: Array = []
@@ -2436,14 +2467,14 @@ func apply_input_ops(input_ops: Array) -> int:
 			var fallback_ev := _infer_default_input_event_for_action(act)
 			if fallback_ev != null:
 				events.append(fallback_ev)
-		if not events.is_empty() and not _has_real_input_binding(act, setting_key):
+		if not events.is_empty() and (overwrite or not _has_real_input_binding(act, setting_key)):
 			ProjectSettings.set_setting(setting_key, {"deadzone": 0.2, "events": events})
-			added += 1
-	if added > 0:
+			changed += 1
+	if changed > 0:
 		ProjectSettings.save()
 		InputMap.load_from_project_settings()
 		invalidate_eval_cache()
-	return added
+	return changed
 
 
 func register_missing_script_input_actions(script_contents: Array) -> int:
@@ -2479,7 +2510,7 @@ func register_missing_script_input_actions(script_contents: Array) -> int:
 	var added: int = 0
 	for act_key in discovered.keys():
 		var act := String(act_key)
-		if act.is_empty() or act.begins_with("ui_"):
+		if act.is_empty() or act.begins_with("ui_") or _is_bogus_non_player_action_name(act):
 			continue
 		var setting_key := "input/%s" % act
 		if _has_real_input_binding(act, setting_key):
@@ -2511,7 +2542,7 @@ func heal_empty_project_input_actions(feat: Dictionary = {}) -> int:
 		if not pname.begins_with("input/") or pname.begins_with("input/ui_"):
 			continue
 		var act := pname.substr("input/".length())
-		if _has_real_input_binding(act, pname):
+		if _is_bogus_non_player_action_name(act) or _has_real_input_binding(act, pname):
 			continue
 		var hint_lbl := String(key_hints.get(act, ""))
 		var ev: InputEvent = _build_input_event_for_label(hint_lbl)
@@ -3223,7 +3254,7 @@ func _coerce_prop_value(val: Variant, prop_name: String = "") -> Variant:
 			return s.to_int()
 		if s.is_valid_float():
 			return s.to_float()
-	if (prop_name == "size" or prop_name == "position" or prop_name == "rotation_degrees" or prop_name == "scale") and typeof(val) == TYPE_ARRAY:
+	if (prop_name == "size" or prop_name == "position" or prop_name == "rotation_degrees" or prop_name == "rotation" or prop_name == "scale" or prop_name == "target_position" or prop_name == "global_position") and typeof(val) == TYPE_ARRAY:
 		var arr: Array = val
 		if arr.size() == 3:
 			return Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
@@ -3234,6 +3265,18 @@ func _coerce_prop_value(val: Variant, prop_name: String = "") -> Variant:
 		if carr.size() >= 3:
 			return Color(float(carr[0]), float(carr[1]), float(carr[2]), float(carr[3]) if carr.size() >= 4 else 1.0)
 	return val
+
+
+func _is_physics_or_rig_node(node: Node, node_type_hint: String = "", node_name_hint: String = "") -> bool:
+	var cls: String = node.get_class() if node != null else node_type_hint.strip_edges()
+	var nm: String = (String(node.name) if node != null else node_name_hint).to_lower()
+	for phys_cls in ["Area3D", "Area2D", "CollisionShape3D", "CollisionShape2D", "CollisionPolygon3D", "CollisionPolygon2D", "RayCast3D", "RayCast2D", "ShapeCast3D", "ShapeCast2D", "Marker3D", "Marker2D"]:
+		if cls == phys_cls:
+			return true
+	for tok in ["pivot", "hitbox", "hurtbox", "strike", "attack", "muzzle", "spawn", "collider"]:
+		if tok in nm:
+			return true
+	return false
 
 
 func _sync_existing_node_from_spec(
@@ -3258,11 +3301,16 @@ func _sync_existing_node_from_spec(
 					node.set("shape", new_shape)
 					changed = true
 			elif not sr_props.is_empty():
+				var dup_shape: Resource = (cur_shape as Resource).duplicate()
+				var shape_dirty := false
 				for k in sr_props.keys():
 					var cv: Variant = _coerce_prop_value(sr_props[k], String(k))
-					if cur_shape.get(k) != cv:
-						cur_shape.set(k, cv)
-						changed = true
+					if dup_shape.get(k) != cv:
+						dup_shape.set(k, cv)
+						shape_dirty = true
+				if shape_dirty:
+					node.set("shape", dup_shape)
+					changed = true
 		elif node is MeshInstance3D:
 			var cur_mesh: Variant = node.get("mesh")
 			if not (preserve_existing_visuals and cur_mesh != null):
@@ -3305,7 +3353,7 @@ func _sync_existing_node_from_spec(
 	for pk in props.keys():
 		var pk_str := String(pk)
 		if preserve_existing_visuals:
-			if pk_str in visual_transform_keys:
+			if (pk_str in visual_transform_keys) and not _is_physics_or_rig_node(node):
 				continue
 			if (node is Sprite2D or node is Sprite3D) and pk_str == "texture" and node.get("texture") != null:
 				continue
@@ -4318,6 +4366,17 @@ func apply_scene_ops_to_root(
 				if parent == null:
 					parent = scene_root
 				node = parent.get_node_or_null(node_name)
+				if node == null and parent != scene_root:
+					var root_direct: Node = scene_root.get_node_or_null(NodePath(node_name))
+					if root_direct != null and root_direct != parent and not root_direct.is_ancestor_of(parent):
+						if node_type.is_empty() or node_type == "Node" or root_direct.get_class() == node_type or root_direct.is_class(node_type):
+							if root_direct.get_parent() != null:
+								root_direct.get_parent().remove_child(root_direct)
+							parent.add_child(root_direct)
+							root_direct.owner = scene_root
+							_reown_subtree(root_direct, scene_root, scene_root)
+							node = root_direct
+							count += 1
 				if node == null:
 					if not ClassDB.class_exists(node_type) or not ClassDB.can_instantiate(node_type):
 						node_type = "Node"
@@ -4345,16 +4404,52 @@ func apply_scene_ops_to_root(
 					node.set_script(sres)
 					count += 1
 			count += _apply_groups_to_node(node, op_dict.get("groups", []))
+		elif op == "reparent_node":
+			var np_src := String(op_dict.get("nodePath", op_dict.get("nodeName", ""))).strip_edges()
+			var dst_p := String(op_dict.get("newParentPath", op_dict.get("parentPath", "."))).strip_edges()
+			var src_node := _resolve_op_node(scene_root, np_src)
+			var dst_parent := _resolve_op_node(scene_root, dst_p)
+			if src_node == null or dst_parent == null:
+				warnings.append("reparent_node target not found (%s -> %s)." % [np_src, dst_p])
+				continue
+			if src_node != scene_root and src_node != dst_parent and not src_node.is_ancestor_of(dst_parent) and src_node.get_parent() != dst_parent:
+				if src_node.get_parent() != null:
+					src_node.get_parent().remove_child(src_node)
+				dst_parent.add_child(src_node)
+				src_node.owner = scene_root
+				_reown_subtree(src_node, scene_root, scene_root)
+				count += 1
+			var rp_props: Variant = op_dict.get("properties", {})
+			if typeof(rp_props) == TYPE_DICTIONARY and not (rp_props as Dictionary).is_empty():
+				if _sync_existing_node_from_spec(src_node, {"props": rp_props}, _undo_redo, false):
+					count += 1
 		elif op == "set_property":
 			var np := String(op_dict.get("nodePath", "."))
 			var node := _resolve_op_node(scene_root, np)
 			if node == null:
 				warnings.append("set_property node not found: %s" % np)
 				continue
+			var sr_cls2 := String(op_dict.get("subResourceClass", "")).strip_edges()
+			var sr_props2: Dictionary = op_dict.get("subResourceProps", {})
+			if not sr_cls2.is_empty() or not sr_props2.is_empty():
+				if sr_cls2.is_empty() and (node is CollisionShape3D or node is CollisionShape2D) and node.get("shape") != null:
+					sr_cls2 = (node.get("shape") as Object).get_class()
+				if _sync_existing_node_from_spec(node, {"subResourceClass": sr_cls2, "subResourceProps": sr_props2, "props": {}}, _undo_redo, false):
+					count += 1
 			var props: Dictionary = op_dict.get("properties", {})
 			for pk in props.keys():
 				var pk_str := String(pk)
+				if preserve_existing_visuals and (pk_str in visual_transform_keys) and not _is_physics_or_rig_node(node):
+					continue
 				var raw_v: Variant = props[pk]
+				if (node is CollisionShape3D or node is CollisionShape2D) and (pk_str == "size" or pk_str == "radius" or pk_str == "height" or pk_str == "length"):
+					var sh_obj: Variant = node.get("shape")
+					if sh_obj is Resource:
+						var dup_sh: Resource = (sh_obj as Resource).duplicate()
+						dup_sh.set(pk_str, _coerce_prop_value(raw_v, pk_str))
+						node.set("shape", dup_sh)
+						count += 1
+						continue
 				if (pk_str == "material" or pk_str == "material_override") and typeof(raw_v) == TYPE_DICTIONARY:
 					_apply_material_dict_to_node(node, raw_v)
 				else:
@@ -4460,8 +4555,8 @@ func _scan_project_files_by_ext(root_dir: String, ext: String, cap: int = 80) ->
 	return results
 
 
-func collect_project_scene_paths(root_dir: String = "res://") -> PackedStringArray:
-	return _scan_project_files_by_ext(root_dir, ".tscn", 120)
+func collect_project_scene_paths(root_dir: String = "res://", max_scenes: int = 120) -> PackedStringArray:
+	return _scan_project_files_by_ext(root_dir, ".tscn", max_scenes)
 
 
 func read_all_live_project_scripts(root_dir: String = "res://") -> Dictionary:
@@ -4747,7 +4842,15 @@ func apply_export_tuner_value(
 	}
 
 
-func _snapshot_node_tree(root: Node, limit_nodes: int = 80) -> Array:
+func _round_vec3(v: Vector3) -> Array:
+	return [snappedf(v.x, 0.01), snappedf(v.y, 0.01), snappedf(v.z, 0.01)]
+
+
+func _round_vec2(v: Vector2) -> Array:
+	return [snappedf(v.x, 0.01), snappedf(v.y, 0.01)]
+
+
+func _snapshot_node_tree(root: Node, limit_nodes: int = 140) -> Array:
 	var out: Array = []
 	if root == null:
 		return out
@@ -4770,14 +4873,59 @@ func _snapshot_node_tree(root: Node, limit_nodes: int = 80) -> Array:
 			entry["script"] = scr_path
 		if not scr_extends.is_empty():
 			entry["scriptExtends"] = scr_extends
+		if cur is Node3D:
+			var n3: Node3D = cur as Node3D
+			entry["position"] = _round_vec3(n3.position)
+			if not n3.rotation_degrees.is_zero_approx():
+				entry["rotationDegrees"] = _round_vec3(n3.rotation_degrees)
+			if not n3.scale.is_equal_approx(Vector3.ONE):
+				entry["scale"] = _round_vec3(n3.scale)
+		elif cur is Node2D:
+			var n2: Node2D = cur as Node2D
+			entry["position"] = _round_vec2(n2.position)
+			if not is_zero_approx(n2.rotation_degrees):
+				entry["rotationDegrees"] = snappedf(n2.rotation_degrees, 0.01)
+			if not n2.scale.is_equal_approx(Vector2.ONE):
+				entry["scale"] = _round_vec2(n2.scale)
+		if cur is CollisionObject3D or cur is CollisionObject2D:
+			entry["collisionLayer"] = int(cur.get("collision_layer"))
+			entry["collisionMask"] = int(cur.get("collision_mask"))
 		if cur is CollisionShape3D or cur is CollisionShape2D:
 			var shp: Variant = cur.get("shape")
 			entry["shape"] = shp.get_class() if shp != null else "<EMPTY>"
+			if bool(cur.get("disabled")):
+				entry["disabled"] = true
+			if shp is BoxShape3D:
+				entry["shapeProps"] = { "size": _round_vec3((shp as BoxShape3D).size) }
+			elif shp is SphereShape3D:
+				entry["shapeProps"] = { "radius": snappedf((shp as SphereShape3D).radius, 0.01) }
+			elif shp is CapsuleShape3D:
+				var c3: CapsuleShape3D = shp as CapsuleShape3D
+				entry["shapeProps"] = { "radius": snappedf(c3.radius, 0.01), "height": snappedf(c3.height, 0.01) }
+			elif shp is CylinderShape3D:
+				var y3: CylinderShape3D = shp as CylinderShape3D
+				entry["shapeProps"] = { "radius": snappedf(y3.radius, 0.01), "height": snappedf(y3.height, 0.01) }
+			elif shp is RectangleShape2D:
+				entry["shapeProps"] = { "size": _round_vec2((shp as RectangleShape2D).size) }
+			elif shp is CircleShape2D:
+				entry["shapeProps"] = { "radius": snappedf((shp as CircleShape2D).radius, 0.01) }
+			elif shp is CapsuleShape2D:
+				var c2: CapsuleShape2D = shp as CapsuleShape2D
+				entry["shapeProps"] = { "radius": snappedf(c2.radius, 0.01), "height": snappedf(c2.height, 0.01) }
 		elif cur is MeshInstance3D:
 			var msh: Variant = cur.get("mesh")
 			entry["mesh"] = msh.get_class() if msh != null else "<EMPTY>"
 		elif cur is Area3D or cur is Area2D:
-			entry["monitoring"] = cur.get("monitoring")
+			entry["monitoring"] = bool(cur.get("monitoring"))
+			entry["monitorable"] = bool(cur.get("monitorable"))
+		elif cur is RayCast3D:
+			var r3: RayCast3D = cur as RayCast3D
+			entry["enabled"] = r3.enabled
+			entry["targetPosition"] = _round_vec3(r3.target_position)
+		elif cur is RayCast2D:
+			var r2: RayCast2D = cur as RayCast2D
+			entry["enabled"] = r2.enabled
+			entry["targetPosition"] = _round_vec2(r2.target_position)
 		elif cur is Timer:
 			entry["wait_time"] = cur.get("wait_time")
 			entry["one_shot"] = cur.get("one_shot")
@@ -4805,6 +4953,476 @@ func _snapshot_node_tree(root: Node, limit_nodes: int = 80) -> Array:
 		for ch in cur.get_children():
 			queue.append(ch)
 	return out
+
+
+func _describe_input_event(ev: InputEvent) -> String:
+	if ev == null:
+		return ""
+	var prefix := ""
+	if ev is InputEventWithModifiers:
+		var mods := ev as InputEventWithModifiers
+		if mods.ctrl_pressed:
+			prefix += "Ctrl+"
+		if mods.shift_pressed:
+			prefix += "Shift+"
+		if mods.alt_pressed:
+			prefix += "Alt+"
+	if ev is InputEventMouseButton:
+		var mb := ev as InputEventMouseButton
+		var b_lbl := ""
+		match mb.button_index:
+			MOUSE_BUTTON_LEFT:
+				b_lbl = "LMB"
+			MOUSE_BUTTON_RIGHT:
+				b_lbl = "RMB"
+			MOUSE_BUTTON_MIDDLE:
+				b_lbl = "MMB"
+			MOUSE_BUTTON_WHEEL_UP:
+				b_lbl = "WheelUp"
+			MOUSE_BUTTON_WHEEL_DOWN:
+				b_lbl = "WheelDown"
+			_:
+				b_lbl = "Mouse%d" % int(mb.button_index)
+		return prefix + b_lbl
+	if ev is InputEventKey:
+		var ke := ev as InputEventKey
+		var kc: Key = ke.physical_keycode if ke.physical_keycode != KEY_NONE else (ke.keycode if ke.keycode != KEY_NONE else ke.key_label)
+		var kl := OS.get_keycode_string(kc).strip_edges()
+		return (prefix + kl) if not kl.is_empty() else ""
+	return ev.as_text().strip_edges()
+
+
+func capture_input_map_snapshot() -> Dictionary:
+	var out := {}
+	for p_raw in ProjectSettings.get_property_list():
+		if typeof(p_raw) != TYPE_DICTIONARY:
+			continue
+		var pname := String((p_raw as Dictionary).get("name", ""))
+		if not pname.begins_with("input/") or pname.begins_with("input/ui_"):
+			continue
+		var act := pname.substr("input/".length()).strip_edges()
+		if act.is_empty():
+			continue
+		var labels := []
+		var raw_val: Variant = ProjectSettings.get_setting(pname)
+		if typeof(raw_val) == TYPE_DICTIONARY:
+			var evs: Variant = (raw_val as Dictionary).get("events", [])
+			if typeof(evs) == TYPE_ARRAY:
+				for ev_raw in (evs as Array):
+					if ev_raw is InputEvent:
+						var desc := _describe_input_event(ev_raw as InputEvent)
+						if not desc.is_empty() and not (desc in labels):
+							labels.append(desc)
+		out[act] = labels
+	return out
+
+
+func _strip_gd_comment(line: String) -> String:
+	var hash_i := line.find("#")
+	return line.substr(0, hash_i) if hash_i >= 0 else line
+
+
+func _script_has_standalone_root_rotation(src: String) -> bool:
+	for raw_line in src.split("\n"):
+		var clean := _strip_gd_comment(raw_line).strip_edges()
+		if clean.is_empty():
+			continue
+		if (
+			clean.begins_with("rotation.y =") or clean.begins_with("rotation.y=") or
+			clean.begins_with("rotation =") or clean.begins_with("rotation=") or
+			clean.begins_with("global_rotation.y =") or clean.begins_with("rotate_y(") or
+			clean.begins_with("look_at(") or clean.begins_with("self.rotation")
+		):
+			return true
+	return false
+
+
+func _detect_rotated_visual_child(src: String) -> Dictionary:
+	if _script_has_standalone_root_rotation(src):
+		return {}
+	var onready_map := {}
+	var rx_onready := RegEx.new()
+	rx_onready.compile("@onready\\s+var\\s+([A-Za-z_][A-Za-z0-9_]*)[^=\\n]*=\\s*(?:\\$([A-Za-z0-9_/]+)|get_node(?:_or_null)?\\([\"']([A-Za-z0-9_/]+)[\"']\\))")
+	for m in rx_onready.search_all(src):
+		var vname := m.get_string(1).strip_edges()
+		var npath := m.get_string(2).strip_edges()
+		if npath.is_empty():
+			npath = m.get_string(3).strip_edges()
+		if not vname.is_empty() and not npath.is_empty():
+			onready_map[vname] = npath
+
+	var rx_var_rot := RegEx.new()
+	rx_var_rot.compile("\\b([A-Za-z_][A-Za-z0-9_]*)\\.rotation(?:\\.y)?\\s*=")
+	var rx_dollar_rot := RegEx.new()
+	rx_dollar_rot.compile("\\$([A-Za-z0-9_/]+)\\.rotation(?:\\.y)?\\s*=")
+	for raw_line in src.split("\n"):
+		var clean := _strip_gd_comment(raw_line).strip_edges()
+		if clean.is_empty():
+			continue
+		var md := rx_dollar_rot.search(clean)
+		if md != null:
+			var np := md.get_string(1).strip_edges()
+			if "visual" in np.to_lower() or "rig" in np.to_lower() or "model" in np.to_lower() or "mesh" in np.to_lower() or "sprite" in np.to_lower():
+				return { "varName": "$" + np, "nodePath": np }
+		var mv := rx_var_rot.search(clean)
+		if mv != null:
+			var vn := mv.get_string(1).strip_edges()
+			if vn == "self":
+				continue
+			if onready_map.has(vn):
+				var np2 := String(onready_map[vn])
+				var np_l := np2.to_lower()
+				if "visual" in np_l or "rig" in np_l or "model" in np_l or "mesh" in np_l or "sprite" in np_l:
+					return { "varName": vn, "nodePath": np2 }
+	return {}
+
+
+func _is_non_player_entity_script(script_path: String, src: String) -> bool:
+	var fname := script_path.get_file().get_basename().to_lower()
+	if "player" in fname or "camera" in fname:
+		return false
+	for tok in ["enemy", "spawner", "wave", "boss", "mob", "hazard", "turret", "totem", "arena", "draft", "hud"]:
+		if tok in fname:
+			return true
+	if "add_to_group(\"enemies\")" in src or "add_to_group(\"enemy\")" in src:
+		return true
+	return false
+
+
+func _detect_silent_take_damage(src: String) -> bool:
+	var lines := src.split("\n")
+	var start_idx := -1
+	for i in range(lines.size()):
+		var trimmed := lines[i].strip_edges()
+		if trimmed.begins_with("func take_damage("):
+			start_idx = i
+			break
+	if start_idx == -1:
+		return false
+	var body_parts := PackedStringArray()
+	for j in range(start_idx + 1, lines.size()):
+		var ln := lines[j]
+		var trimmed := ln.strip_edges()
+		if not trimmed.is_empty() and not ln.begins_with("\t") and not ln.begins_with(" "):
+			break
+		body_parts.append(_strip_gd_comment(ln).to_lower())
+	var body_lower := "\n".join(body_parts)
+	if body_lower.strip_edges().is_empty():
+		return true
+	for sig_tok in [
+		"material", "modulate", "albedo", "emission", "tween", "flash",
+		"hit_flash", "particle", "velocity", "knockback", "health_changed",
+		"damaged", "emit", "print(", "audio", "sfx", "shake"
+	]:
+		if sig_tok in body_lower:
+			return false
+	return true
+
+
+func diagnose_project_combat_and_wiring(
+	scene_paths: Array = [],
+	live_scripts: Dictionary = {},
+	editor_interface: EditorInterface = null
+) -> PackedStringArray:
+	var findings := PackedStringArray()
+	var seen_findings := {}
+	var append_finding := func(msg: String) -> void:
+		var clean := msg.strip_edges()
+		if not clean.is_empty() and not seen_findings.has(clean):
+			seen_findings[clean] = true
+			findings.append(clean)
+
+	var scenes_to_check := PackedStringArray()
+	if scene_paths.is_empty():
+		scenes_to_check = collect_project_scene_paths("res://", 16)
+	else:
+		for raw_sp in scene_paths:
+			var sp := String(raw_sp).strip_edges()
+			if not sp.is_empty() and sp.ends_with(".tscn") and not (sp in scenes_to_check):
+				scenes_to_check.append(sp)
+		for proj_sp in collect_project_scene_paths("res://", 16):
+			if not (proj_sp in scenes_to_check):
+				scenes_to_check.append(proj_sp)
+
+	var scripts_map: Dictionary = live_scripts.duplicate() if not live_scripts.is_empty() else read_all_live_project_scripts("res://")
+	if scripts_map.is_empty():
+		scripts_map = read_all_live_project_scripts("res://")
+	else:
+		var disk_scripts := read_all_live_project_scripts("res://")
+		for dk in disk_scripts.keys():
+			if not scripts_map.has(dk):
+				scripts_map[dk] = disk_scripts[dk]
+
+	# 1. InputMap key collision audit & non-player Input.* polling check
+	var input_map := capture_input_map_snapshot()
+	var key_to_actions := {}
+	for act_key in input_map.keys():
+		var act := String(act_key)
+		var labels: Variant = input_map[act]
+		if typeof(labels) != TYPE_ARRAY:
+			continue
+		for lbl_raw in (labels as Array):
+			var lbl := String(lbl_raw).strip_edges()
+			if lbl.is_empty():
+				continue
+			if not key_to_actions.has(lbl):
+				key_to_actions[lbl] = []
+			var bucket: Array = key_to_actions[lbl]
+			if not (act in bucket):
+				bucket.append(act)
+
+	for lbl_key in key_to_actions.keys():
+		var acts: Array = key_to_actions[lbl_key]
+		if acts.size() < 2:
+			continue
+		for a_idx in range(acts.size()):
+			var a_name := String(acts[a_idx])
+			if not _is_bogus_non_player_action_name(a_name) and not a_name.ends_with("_action"):
+				continue
+			var others := PackedStringArray()
+			for b_idx in range(acts.size()):
+				if b_idx != a_idx:
+					others.append(String(acts[b_idx]))
+			if not others.is_empty():
+				append_finding.call(
+					"[INPUT COLLISION] Input action '%s' shares [%s] with %s in project.godot — pressing %s triggers both simultaneously." % [
+						a_name, String(lbl_key), ", ".join(others), String(lbl_key)
+					]
+				)
+
+	var rx_inp := RegEx.new()
+	rx_inp.compile("(?:Input\\.(?:is_action_pressed|is_action_just_pressed|is_action_just_released|get_action_strength)|event\\.is_action(?:_pressed|_released)?)\\s*\\(\\s*[\"']([A-Za-z0-9_.:/-]+)[\"']")
+	var rx_atan2_pos := RegEx.new()
+	rx_atan2_pos.compile("atan2\\s*\\(\\s*[A-Za-z_][A-Za-z0-9_.]*\\.x\\s*,\\s*[A-Za-z_][A-Za-z0-9_.]*\\.z\\s*\\)")
+	var rx_neg_basis_z := RegEx.new()
+	rx_neg_basis_z.compile("-\\s*(?:global_transform|transform|visual_rig\\.global_transform)\\.basis\\.z\\b")
+	var rx_look_at := RegEx.new()
+	rx_look_at.compile("\\blook_at\\s*\\(")
+	var rx_pos_basis_motion := RegEx.new()
+	rx_pos_basis_motion.compile("(?:velocity|impulse|dir|forward|move)\\s*[+*]?=\\s*(?:global_transform|transform)\\.basis\\.z\\b")
+	var rx_monitoring_on := RegEx.new()
+	rx_monitoring_on.compile("\\.monitoring\\s*=\\s*true|set_deferred\\s*\\(\\s*[\"']monitoring[\"']\\s*,\\s*true\\s*\\)")
+	var rx_range_export := RegEx.new()
+	rx_range_export.compile("@export\\s+var\\s+(strike_?[Rr]ange|attack_?[Rr]ange|melee_?[Rr]ange|hit_?[Rr]ange)\\s*(?::\\s*float)?\\s*=\\s*([0-9]+(?:\\.[0-9]+)?)")
+
+	for sp_key in scripts_map.keys():
+		var sp := String(sp_key)
+		var src := String(scripts_map[sp])
+		var active_lines := PackedStringArray()
+		for raw_l in src.split("\n"):
+			var cl := _strip_gd_comment(raw_l)
+			if not cl.strip_edges().is_empty():
+				active_lines.append(cl)
+		var active_src := "\n".join(active_lines)
+
+		if _is_non_player_entity_script(sp, active_src):
+			for mi in rx_inp.search_all(active_src):
+				var polled_act := mi.get_string(1).strip_edges()
+				if not polled_act.is_empty() and not polled_act.begins_with("ui_"):
+					append_finding.call(
+						"[NON-PLAYER INPUT] %s polls Input action '%s' on a non-player script — player input will hijack enemy/spawner state." % [
+							sp.get_file(), polled_act
+						]
+					)
+
+		var uses_atan2_pos := rx_atan2_pos.search(active_src) != null
+		var uses_neg_basis := rx_neg_basis_z.search(active_src) != null
+		var uses_look_at := rx_look_at.search(active_src) != null
+		var uses_pos_basis := rx_pos_basis_motion.search(active_src) != null
+		if uses_atan2_pos and uses_neg_basis and not uses_look_at:
+			append_finding.call(
+				"[3D BASIS FLIP] %s orients yaw with atan2(x, z) (+Z forward) but applies velocity/impulse along -basis.z (moves 180 deg backwards away from target)." % sp.get_file()
+			)
+		elif uses_look_at and not uses_atan2_pos and uses_pos_basis and not uses_neg_basis:
+			append_finding.call(
+				"[3D BASIS FLIP] %s orients with look_at() (-Z forward) but moves along +basis.z (moves backwards away from target)." % sp.get_file()
+			)
+
+		if rx_monitoring_on.search(active_src) != null and ("body_entered" in active_src):
+			if not ("get_overlapping_bodies" in active_src) and not ("get_overlapping_areas" in active_src):
+				append_finding.call(
+					"[HITBOX OVERLAP] %s enables hitbox monitoring=true dynamically without checking get_overlapping_bodies() — targets already overlapping at attack start can be missed." % sp.get_file()
+				)
+
+		if _detect_silent_take_damage(src):
+			append_finding.call(
+				"[SILENT HIT FEEDBACK] %s take_damage() changes HP with zero visible hit flash, knockback, or signal feedback." % sp.get_file()
+			)
+
+	# 2. Instanced Scene Transform, Pivot, Reach & Collision Layer/Mask Audit
+	var scene_roots: Array[Dictionary] = []
+	var temp_roots: Array[Node] = []
+	var ed_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
+	var all_char_layers: int = 0
+
+	for sc_path in scenes_to_check:
+		var sroot: Node = null
+		if ed_root != null and ed_root.scene_file_path == sc_path:
+			sroot = ed_root
+		elif ResourceLoader.exists(sc_path):
+			var ps := ResourceLoader.load(sc_path, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+			if ps != null:
+				sroot = ps.instantiate()
+				if sroot != null:
+					temp_roots.append(sroot)
+		if sroot == null:
+			continue
+		scene_roots.append({ "path": sc_path, "root": sroot })
+		if sroot is CharacterBody3D or sroot is CharacterBody2D:
+			all_char_layers |= int(sroot.get("collision_layer"))
+
+	var rx_combat_area := RegEx.new()
+	rx_combat_area.compile("(?i)(hitbox|strike|attack|claw|slash|bite|melee|weapon|muzzle)")
+
+	for item in scene_roots:
+		var sc_path := String(item["path"])
+		var sroot: Node = item["root"] as Node
+		var root_scr_path := ""
+		var root_src := ""
+		var scr: Variant = sroot.get_script()
+		if scr is Script:
+			root_scr_path = String((scr as Script).resource_path).strip_edges()
+			if not root_scr_path.is_empty() and scripts_map.has(root_scr_path):
+				root_src = String(scripts_map[root_scr_path])
+			elif not root_scr_path.is_empty() and FileAccess.file_exists(root_scr_path):
+				var fa := FileAccess.open(root_scr_path, FileAccess.READ)
+				if fa != null:
+					root_src = fa.get_as_text()
+					fa.close()
+			else:
+				root_src = String((scr as Script).source_code)
+
+		var root_active_lines := PackedStringArray()
+		for rl in root_src.split("\n"):
+			var cl2 := _strip_gd_comment(rl)
+			if not cl2.strip_edges().is_empty():
+				root_active_lines.append(cl2)
+		var root_active_src := "\n".join(root_active_lines)
+
+		var rig_info := _detect_rotated_visual_child(root_src) if not root_src.is_empty() else {}
+		var rig_var := String(rig_info.get("varName", ""))
+		var rig_node_path := String(rig_info.get("nodePath", ""))
+		var rig_leaf := rig_node_path.get_file()
+		var range_match := rx_range_export.search(root_src)
+		var attack_range_name := range_match.get_string(1) if range_match != null else ""
+		var attack_range_val := range_match.get_string(2).to_float() if range_match != null else 0.0
+		var root_atan2_pos := rx_atan2_pos.search(root_active_src) != null and rx_look_at.search(root_active_src) == null
+
+		var stack: Array[Node] = [sroot]
+		while not stack.is_empty():
+			var cur: Node = stack.pop_back()
+			for ch in cur.get_children():
+				stack.append(ch)
+			if not (cur is Area3D or cur is Area2D):
+				continue
+			var rel_area_path := String(sroot.get_path_to(cur))
+			if rx_combat_area.search(rel_area_path) == null:
+				continue
+
+			# Find child CollisionShape
+			var cs_node: Node = null
+			for ach in cur.get_children():
+				if ach is CollisionShape3D or ach is CollisionShape2D:
+					cs_node = ach
+					break
+
+			if cur is Area3D:
+				var area_rel_pos := Vector3.ZERO
+				var walk: Node = cur
+				while walk != null and walk != sroot:
+					if walk is Node3D:
+						area_rel_pos += (walk as Node3D).position
+					walk = walk.get_parent()
+				var child_pos := (cs_node as Node3D).position if cs_node is Node3D else Vector3.ZERO
+				var shape_total_pos := area_rel_pos + child_pos
+				var area_horiz := Vector2(area_rel_pos.x, area_rel_pos.z).length()
+				var child_horiz := Vector2(child_pos.x, child_pos.z).length()
+				var total_horiz := Vector2(shape_total_pos.x, shape_total_pos.z).length()
+
+				if area_horiz >= 0.45 and child_horiz >= 0.45 and total_horiz < 0.35:
+					append_finding.call(
+						"[HITBOX OFFSET CANCELLED] %s: '%s' position %s + child '%s' position %s cancel horizontally to %.2fm (centered on owner body instead of forward)." % [
+							sc_path.get_file(), rel_area_path, str(_round_vec3(area_rel_pos)), cs_node.name, str(_round_vec3(child_pos)), total_horiz
+						]
+					)
+				elif root_atan2_pos and shape_total_pos.z < -0.25 and total_horiz >= 0.35:
+					append_finding.call(
+						"[HITBOX FACING SIGN] %s rotates +Z forward (atan2), but hitbox '%s' is offset behind at z=%.2fm." % [
+							sc_path.get_file(), rel_area_path, shape_total_pos.z
+						]
+					)
+
+				if not rig_node_path.is_empty():
+					var under_rig := (
+						rel_area_path == rig_node_path or
+						rel_area_path.begins_with(rig_node_path + "/") or
+						(not rig_leaf.is_empty() and ((rig_leaf + "/") in rel_area_path))
+					)
+					var syncs_rig_rot := false
+					if not rig_var.is_empty():
+						var rig_tok: String = rig_var.substr(1) if rig_var.begins_with("$") else rig_var
+						var rx_pivot_sync := RegEx.new()
+						rx_pivot_sync.compile("(?:pivot|hitbox|attack|strike|muzzle)[A-Za-z0-9_]*\\.rotation(?:\\.y)?\\s*=[^\\n]*\\b" + rig_tok + "\\b")
+						syncs_rig_rot = rx_pivot_sync.search(root_active_src) != null
+					if not under_rig and not syncs_rig_rot:
+						var label_scr := root_scr_path.get_file() if not root_scr_path.is_empty() else sc_path.get_file()
+						append_finding.call(
+							"[UNROTATED HITBOX PIVOT] %s rotates '%s' instead of root, but '%s' is a sibling outside '%s' and never inherits facing rotation." % [
+								label_scr, rig_node_path, rel_area_path, rig_node_path
+							]
+						)
+
+				if attack_range_val > 0.0 and cs_node is CollisionShape3D and (cs_node as CollisionShape3D).shape != null:
+					var sh3: Shape3D = (cs_node as CollisionShape3D).shape
+					var half_ext: float = 0.5
+					if sh3 is BoxShape3D:
+						var bsz: Vector3 = (sh3 as BoxShape3D).size
+						half_ext = 0.5 * maxf(bsz.x, bsz.z)
+					elif sh3 is SphereShape3D:
+						half_ext = (sh3 as SphereShape3D).radius
+					elif sh3 is CapsuleShape3D:
+						half_ext = (sh3 as CapsuleShape3D).radius
+					elif sh3 is CylinderShape3D:
+						half_ext = (sh3 as CylinderShape3D).radius
+					var front_reach: float = total_horiz + half_ext
+					var has_bad_back_lunge := rx_neg_basis_z.search(root_active_src) != null
+					var has_forward_lunge := ("lunge" in root_active_src.to_lower() or "dash" in root_active_src.to_lower()) and not has_bad_back_lunge
+					if attack_range_val > front_reach + 0.55 and not has_forward_lunge:
+						append_finding.call(
+							"[HITBOX REACH GAP] %s attacks at %s=%.2fm, while '%s' only reaches %.2fm from root." % [
+								sc_path.get_file(), attack_range_name, attack_range_val, rel_area_path, front_reach
+							]
+						)
+
+			elif cur is Area2D and cs_node is CollisionShape2D:
+				var area_rel_2d := Vector2.ZERO
+				var walk2: Node = cur
+				while walk2 != null and walk2 != sroot:
+					if walk2 is Node2D:
+						area_rel_2d += (walk2 as Node2D).position
+					walk2 = walk2.get_parent()
+				var child_pos_2d := (cs_node as Node2D).position
+				var total_2d := area_rel_2d + child_pos_2d
+				if area_rel_2d.length() >= 12.0 and child_pos_2d.length() >= 12.0 and total_2d.length() < 8.0:
+					append_finding.call(
+						"[HITBOX OFFSET CANCELLED] %s: '%s' %s + '%s' %s cancel out to %.1fpx." % [
+							sc_path.get_file(), rel_area_path, str(_round_vec2(area_rel_2d)), cs_node.name, str(_round_vec2(child_pos_2d)), total_2d.length()
+						]
+					)
+
+			if all_char_layers != 0:
+				var amask: int = int(cur.get("collision_mask"))
+				if (amask & all_char_layers) == 0:
+					append_finding.call(
+						"[COLLISION MASK MISMATCH] %s '%s' collision_mask=%d misses CharacterBody collision_layer bits (%d)." % [
+							sc_path.get_file(), rel_area_path, amask, all_char_layers
+						]
+					)
+
+	for tr in temp_roots:
+		if is_instance_valid(tr):
+			tr.free()
+	return findings
 
 
 func verify_built_feature_integrity(
@@ -4884,6 +5502,34 @@ func verify_built_feature_integrity(
 
 	if temp_root != null:
 		temp_root.free()
+
+	var feat_diags := diagnose_project_combat_and_wiring(
+		[primary_scene, arena_hint] if not primary_scene.is_empty() else [],
+		read_all_live_project_scripts("res://"),
+		editor_interface
+	)
+	var p_file := primary_scene.get_file()
+	var is_relevant_fn := func(msg: String) -> bool:
+		if not p_file.is_empty() and (p_file in msg):
+			return true
+		for ck in checked_scripts.keys():
+			if String(ck).get_file() in msg:
+				return true
+		return false
+	for diag_msg in feat_diags:
+		var critical := (
+			diag_msg.begins_with("[3D BASIS FLIP]") or
+			diag_msg.begins_with("[HITBOX OFFSET CANCELLED]") or
+			diag_msg.begins_with("[UNROTATED HITBOX PIVOT]") or
+			diag_msg.begins_with("[NON-PLAYER INPUT]") or
+			diag_msg.begins_with("[COLLISION MASK MISMATCH]") or
+			diag_msg.begins_with("[INPUT COLLISION]")
+		)
+		if critical and (is_relevant_fn.call(diag_msg) or diag_msg.begins_with("[INPUT COLLISION]")):
+			if not (diag_msg in errors):
+				errors.append(diag_msg)
+		elif not (diag_msg in warnings):
+			warnings.append(diag_msg)
 
 	return {
 		"ok": errors.is_empty(),

@@ -1778,7 +1778,11 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       final godotFixContext = buildPromptGodotContext(
         primaryAssetHint: traceMatch?.resPath ?? primaryAsset,
         fallbackScriptPath: primaryAsset,
+        featureId: featureId,
       );
+      final godotCodebaseSummary = engineLabel.toLowerCase().contains('godot')
+          ? buildGodotCodebaseSummaryForPlanner(featureIds: [featureId])
+          : '';
       final traceHintLine = traceMatch != null
           ? 'Parsed Godot Debugger Trace: ${traceMatch.summaryChipLabel}\n'
           : '';
@@ -1786,7 +1790,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       final prompt = '''
 You are the Playtest Root-Cause Debugger for LAYERS-Agentic ($engineLabel).
 Diagnose this reported playtest bug on Feature "$featTitle" (Checkpoint "${cpNode.cleanStageTitle}") and return 1 cohesive root-cause [FIX] step (or 2 if Scene + Script both need edits):
-$specContext$primaryAssetLine$traceHintLine${godotFixContext.isNotEmpty ? '$godotFixContext\n' : ''}${existingStepsSummary.isNotEmpty ? 'Existing Checkpoint Steps & Scripts (patch these exact assets): $existingStepsSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}$existingCodeExcerptBlock
+$specContext$primaryAssetLine$traceHintLine${godotFixContext.isNotEmpty ? '$godotFixContext\n' : ''}${godotCodebaseSummary.isNotEmpty ? 'Synced Project GDScript Codebase (check cross-entity combat, hitboxes, 3D facing, & InputMap collisions):\n$godotCodebaseSummary\n' : ''}${existingStepsSummary.isNotEmpty ? 'Existing Checkpoint Steps & Scripts (patch these exact assets): $existingStepsSummary\n' : ''}${structuralSnapshot.isNotEmpty ? 'Existing Scene & Script Structure:\n$structuralSnapshot\n' : ''}$existingCodeExcerptBlock
 Reported Bug: "$issueDescription"
 Active Tuning Parameters: ${cpNode.tuningParams.join(', ')}
 Active Guards: ${cpNode.edgeCases.join(', ')}

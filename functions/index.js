@@ -443,6 +443,7 @@ function findCodeFileDocByResPathJs(docsById, resPath) {
 const VALID_SCENE_OPS = new Set([
   "ensure_node",
   "set_property",
+  "reparent_node",
   "attach_script",
   "detach_script",
   "connect_signal",
@@ -479,6 +480,9 @@ function normalizeAgentBundle(rawObj, mode, opts = {}) {
       scenePath: normalizeResPathJs(opObj.scenePath || opObj.scene_path || ""),
       nodePath: String(opObj.nodePath || opObj.node_path || "").trim(),
       parentPath: String(opObj.parentPath || opObj.parent_path || "").trim(),
+      newParentPath: String(
+        opObj.newParentPath || opObj.new_parent_path || ""
+      ).trim(),
       nodeName: String(opObj.nodeName || opObj.node_name || "").trim(),
       nodeType: String(opObj.nodeType || opObj.node_type || "").trim(),
       subResourceClass: String(
@@ -521,8 +525,15 @@ function normalizeAgentBundle(rawObj, mode, opts = {}) {
       ? [inp.key]
       : [];
     const keys = rawKeys.map((k) => String(k || "").trim()).filter(Boolean);
+    const remove =
+      Boolean(inp.remove) ||
+      String(inp.op || inp.type || "").trim().toLowerCase() === "remove_action";
+    const overwrite = Boolean(inp.overwrite);
     if (!action) continue;
-    inputOps.push({ action, keys });
+    const normInput = { action, keys };
+    if (remove) normInput.remove = true;
+    if (overwrite) normInput.overwrite = true;
+    inputOps.push(normInput);
   }
   const arenaScenePath = normalizeResPathJs(
     obj.arenaScenePath || obj.arena_scene_path || opts.arenaScenePath || ""
@@ -545,7 +556,13 @@ function normalizeAgentBundle(rawObj, mode, opts = {}) {
   };
 }
 
-async function callGeminiFlashJson({ apiKey, systemInstruction, userPrompt }) {
+async function callGeminiFlashJson({
+  apiKey,
+  systemInstruction,
+  userPrompt,
+  thinkingLevel = "LOW",
+  maxOutputTokens = 16384,
+}) {
   const models = ["gemini-4-hydrogen", "gemini-flash-latest"];
   let lastError = "Gemini request failed.";
   for (const modelId of models) {
@@ -557,7 +574,7 @@ async function callGeminiFlashJson({ apiKey, systemInstruction, userPrompt }) {
       contents: [{ role: "user", parts: [{ text: userPrompt }] }],
       generationConfig: {
         temperature: 0.2,
-        maxOutputTokens: 8192,
+        maxOutputTokens,
         responseMimeType: "application/json",
       },
     };
@@ -568,7 +585,7 @@ async function callGeminiFlashJson({ apiKey, systemInstruction, userPrompt }) {
               ...basePayload,
               generationConfig: {
                 ...basePayload.generationConfig,
-                thinkingConfig: { thinkingLevel: "LOW" },
+                thinkingConfig: { thinkingLevel },
               },
             },
             basePayload,
@@ -625,6 +642,8 @@ async function runGodotAgentWithGemini({
   codeFiles,
   liveScripts,
   sceneSnapshot,
+  inputMapSnapshot,
+  projectDiagnostics,
   prompt,
   errorText,
   arenaScenePath,
@@ -659,7 +678,8 @@ async function runGodotAgentWithGemini({
     "2. scriptUpdates: array of { resPath, attachTo, scenePath, language: 'gdscript', content }. Always output COMPLETE, cohesive, compile-clean Godot 4 .gd files (no '+ ' diff prefixes, no 'const X := [...]' untyped const arrays, no speculative preload() on missing files; prefer '@export var foo_scene: PackedScene' + set_property sceneOp).",
     "3. sceneOps: array of structured scene mutations. Supported op values:",
     "   - ensure_node: { op:'ensure_node', scenePath, parentPath, nodeName, nodeType, subResourceClass, subResourceProps, properties, groups }",
-    "   - set_property: { op:'set_property', scenePath, nodePath, properties }",
+    "   - set_property: { op:'set_property', scenePath, nodePath, properties, subResourceClass?, subResourceProps? } (on CollisionShape3D/2D you can also update shape size/radius/height cleanly via properties or subResourceClass+subResourceProps)",
+    "   - reparent_node: { op:'reparent_node', scenePath, nodePath, newParentPath }",
     "   - attach_script: { op:'attach_script', scenePath, nodePath, scriptPath }",
     "   - detach_script: { op:'detach_script', scenePath, nodePath }",
     "   - connect_signal: { op:'connect_signal', scenePath, sourcePath, signalName, targetPath, methodName }",
@@ -674,8 +694,14 @@ async function runGodotAgentWithGemini({
     "9. CLEAN ENTITY LIFECYCLE: Enemies, projectiles, and temporary wave spawns MUST clean up cleanly with 'queue_free()' on death or expiry so wave spawner 'tree_exited' / child checks advance reliably.",
     "10. CAMERA & CURSOR ACCESSIBILITY: Whenever capturing the mouse ('Input.mouse_mode = Input.MOUSE_MODE_CAPTURED'), ALWAYS wire an 'ESC' ('ui_cancel') release/capture toggle in '_unhandled_input'.",
     "11. GROUNDED SPAWNS & INPUT BINDINGS: Spawn characters cleanly on the playable floor (never floating meters above Y=0 unless flying) and ensure every input action in 'inputOps' has a real Key or Mouse Button binding (never empty events).",
-    "12. INPUT OPS: Whenever GDScript uses custom Input actions (Input.is_action_*, Input.get_vector, Input.get_axis, event.is_action_*), declare them in inputOps: [{ action: 'action_name', keys: ['SHIFT'] }] using standard tokens ('W','A','S','D','SPACE','SHIFT','CTRL','E','Q','F','R','TAB','LMB','RMB','MMB').",
+    "12. INPUT OPS: Whenever GDScript uses custom Input actions (Input.is_action_*, Input.get_vector, Input.get_axis, event.is_action_*), declare them in inputOps: [{ action: 'action_name', keys: ['SHIFT'] }] using standard tokens ('W','A','S','D','SPACE','SHIFT','CTRL','E','Q','F','R','TAB','LMB','RMB','MMB'). Pass overwrite: true to replace conflicting bindings, or { action: 'bad_action', remove: true } to erase stale/colliding actions from ProjectSettings.",
     "13. UI OVERLAYS, PAUSE & BOUND SIGNALS: UI panels/HUDs/menus/draft overlays in 3D games MUST use a 'CanvasLayer' or 'Control' scene root (NEVER parent Control/Container nodes directly under a 'Node3D', because Node3D.visible=false does NOT hide CanvasItem children). When pausing gameplay ('get_tree().paused = true') for clickable UI, ALWAYS set 'process_mode = Node.PROCESS_MODE_ALWAYS' AND 'Input.mouse_mode = Input.MOUSE_MODE_VISIBLE' on open (restoring 'MOUSE_MODE_CAPTURED' on close if 3D mouselook is active). NEVER emit 0-arg 'connect_signal' sceneOps for callbacks requiring bound arguments (connect '.bind(...)' in '_ready()' instead). Attach reusable sub-scene scripts directly to the sub-scene root (scenePath: 'res://scenes/foo.tscn', attachTo: '.'), populate '@export var ...: NodePath' properties on arena instances (with a 'get_tree().get_first_node_in_group(\"player\")' fallback in '_ready()'), and use 'ProgressBar' inside explicit layout containers ('MarginContainer'/'VBoxContainer'/'HBoxContainer' with 'custom_minimum_size') rather than textureless 'TextureProgressBar' or controls stacked at (0, 0).",
+    "14. 3D FORWARD BASIS & VISUAL RIG ALIGNMENT: Ensure every character's movement/lunge/knockback/projectile direction matches the rotated node's forward axis. Rotating a VisualRig via 'atan2(dir.x, dir.z)' aligns '+Z' forward, so forward lunges/projectiles MUST use '+visual_rig.global_transform.basis.z' (or '+dir'); 'look_at(pos + dir, Vector3.UP)' aligns '-Z' forward, so forward lunges use '-basis.z'. NEVER mix atan2(+Z) facing with -basis.z movement (that moves 180 degrees backwards!). All combat pivots and sensors ('ClawPivot', 'HitboxPivot', 'StrikeArea', 'Muzzle', 'AttackPoint') MUST be parented under the rotated visual root (e.g. '$VisualRig') so hitbox aiming follows facing — use 'reparent_node' if a combat pivot is an unrotated sibling of the visual rig.",
+    "15. HITBOX CUMULATIVE TRANSFORM & REACH MATCH: Check 'HitboxArea.position + CollisionShape.position' from 'liveSceneSnapshot'. NEVER let child CollisionShape offsets cancel the parent Area offset (e.g. Area at (0,0.5,-1.1) + Shape at (0,0.5,1.0) puts the collider at y=1.0, z=-0.1). Keep the child CollisionShape centered at (0,0,0) under its Area3D/2D (or small vertical offset only) and verify effective forward extent reaches at least the script's 'strikeRange'/'attackRange'/'melee_reach'.",
+    "16. INSTANT WINDOW HIT DETECTION: Toggling 'area.monitoring = true' does NOT fire 'body_entered' for bodies ALREADY inside the Area when the attack starts! Whenever opening an active hit window (or during active swing frames), explicitly call 'area.get_overlapping_bodies()' (and 'get_overlapping_areas()' if hurtbox Areas exist) guarded by a per-swing 'hit_targets' Set/Array so targets only take 1 hit per swing. Ensure explicit, compatible 'collision_layer' / 'collision_mask' bits on Player, Enemy, and attack Area nodes.",
+    "17. OBSERVABLE 'take_damage()' & FEEDBACK: NEVER emit silent 'take_damage(amount)' that only mutates health numbers. Every Entity 'take_damage()' MUST trigger observable audiovisual/kinetic feedback (albedo flash or modulate tween, knockback impulse, hit particle/shake or SFX, optional HUD signal/update, and death cleanup via 'queue_free()' when health <= 0).",
+    "18. NON-PLAYER INPUT ISOLATION: Enemies, AI spawners, wave managers, traps, projectiles, and arena roots MUST NEVER call 'Input.is_action_*' or invent actions like '*_action' on SPACE. Enemies attack/lunge via AI state, distance checks, and timers; spawners advance waves via timers or wave signals. Always emit '{ action: \"stale_action\", remove: true }' in 'inputOps' to prune any bogus non-player or colliding Space bindings shown in 'liveInputMap'.",
+    "19. CROSS-ENTITY MULTI-SCENE REPAIRS: When 'projectDiagnostics' or 'userPrompt' reports broken combat, mutual damage, hitbox offsets, 3D facing, or input collisions, inspect ALL scenes in 'liveSceneSnapshot', ALL scripts in 'liveScripts', and 'liveInputMap' together, then emit coordinated fixes across EVERY broken entity/scene ('sceneOps' + 'scriptUpdates' + 'inputOps') in one bundle.",
   ].join("\n");
 
   const projSections = projectDoc?.sections || {};
@@ -701,14 +727,21 @@ async function runGodotAgentWithGemini({
     errorText: String(errorText || "").trim(),
     liveScripts: mergedScripts,
     liveSceneSnapshot: sceneSnapshot || {},
+    liveInputMap:
+      inputMapSnapshot && typeof inputMapSnapshot === "object"
+        ? inputMapSnapshot
+        : {},
+    projectDiagnostics: Array.isArray(projectDiagnostics)
+      ? projectDiagnostics
+      : [],
   };
 
   const userPrompt = [
     mode === "build_feature"
       ? "TASK: Synthesize the complete, playable GDScript files and exact sceneOps needed to build this Feature cleanly into the Godot project so it compiles and playtests immediately."
       : mode === "diagnose_fix"
-      ? "TASK: Diagnose the Godot runtime/editor/scene problem from the error text, live scripts, and live scene snapshot, then return real scriptUpdates and/or sceneOps that completely fix it."
-      : "TASK: Apply the developer's requested gameplay tweak or bug fix cleanly across both live scripts (scriptUpdates) and Godot scenes (sceneOps).",
+      ? "TASK: Diagnose the Godot runtime/editor/scene problem from the error text, projectDiagnostics, liveInputMap, liveScripts, and liveSceneSnapshot, then return real scriptUpdates, sceneOps, and inputOps that completely fix all broken entities and wiring."
+      : "TASK: Apply the developer's requested gameplay tweak or bug fix cleanly across all affected live scripts (scriptUpdates), Godot scenes (sceneOps), and ProjectSettings InputMap (inputOps), also resolving any listed projectDiagnostics issues.",
     "PROJECT CONTEXT JSON:",
     JSON.stringify(contextPayload),
   ].join("\n\n");
@@ -717,6 +750,9 @@ async function runGodotAgentWithGemini({
     apiKey,
     systemInstruction,
     userPrompt,
+    thinkingLevel:
+      mode === "direct_agent" || mode === "diagnose_fix" ? "MEDIUM" : "LOW",
+    maxOutputTokens: 16384,
   });
   if (!aiResp.ok) {
     return { ok: false, error: aiResp.error || "Gemini agent request failed." };
@@ -1072,6 +1108,8 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
     codeFiles: basePayload.codeFiles,
     liveScripts: body.liveScripts,
     sceneSnapshot: body.sceneSnapshot,
+    inputMapSnapshot: body.inputMapSnapshot,
+    projectDiagnostics: body.projectDiagnostics,
     prompt: body.prompt,
     errorText: body.errorText,
     arenaScenePath: body.arenaScenePath || basePayload.arenaScenePath,

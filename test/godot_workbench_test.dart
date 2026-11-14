@@ -1616,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.1"'));
+        expect(cfgText, contains('version="2.7.2"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1641,6 +1641,8 @@ func _physics_process(delta: float) -> void:
         expect(syncText, contains('scripts_synced'));
         expect(syncText, contains('build_feature'));
         expect(syncText, contains('direct_agent'));
+        expect(syncText, contains('inputMapSnapshot'));
+        expect(syncText, contains('projectDiagnostics'));
         expect(syncText, contains('agent_bundle_received'));
         expect(syncText, contains('check_for_plugin_update'));
         expect(syncText, contains('download_and_apply_plugin_update'));
@@ -1673,7 +1675,11 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('Stop Playtest (F8)'));
         expect(dockText, contains('Open Scene'));
         expect(dockText, contains('is_playing_scene'));
-        expect(dockText, isNot(contains('collect_project_scene_paths')));
+        expect(dockText, contains('collect_project_scene_paths'));
+        expect(dockText, contains('capture_input_map_snapshot'));
+        expect(dockText, contains('diagnose_project_combat_and_wiring'));
+        expect(dockText, contains('read_all_live_project_scripts'));
+        expect(dockText, contains('Fix Detected Issues'));
         expect(dockText, contains('sync_live_scripts'));
         expect(dockText, contains('_bundle_apply_timer'));
         expect(dockText, contains('_post_playtest_log_timer'));
@@ -1716,6 +1722,11 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('heal_empty_project_input_actions'));
         expect(executorText, contains('read_recent_godot_log_errors'));
         expect(executorText, contains('read_editor_and_playtest_errors'));
+        expect(executorText, contains('reparent_node'));
+        expect(executorText, contains('capture_input_map_snapshot'));
+        expect(executorText, contains('diagnose_project_combat_and_wiring'));
+        expect(executorText, contains('shapeProps'));
+        expect(executorText, contains('collisionLayer'));
 
         expect(fnText, contains('decodeThreeAreaNotesJs'));
         expect(fnText, contains('extractBareGdScriptPathJs'));
@@ -1728,6 +1739,11 @@ func _physics_process(delta: float) -> void:
         expect(fnText, contains('"direct_agent"'));
         expect(fnText, contains('"sync_scripts"'));
         expect(fnText, contains('"add_to_group"'));
+        expect(fnText, contains('"reparent_node"'));
+        expect(fnText, contains('inputMapSnapshot'));
+        expect(fnText, contains('projectDiagnostics'));
+        expect(fnText, contains('get_overlapping_bodies'));
+        expect(fnText, contains('16384'));
         expect(fnText, contains('inputOps'));
         expect(fnText, contains('sceneOps'));
         expect(fnText, contains('scriptUpdates'));
@@ -2048,6 +2064,81 @@ func _physics_process(delta: float) -> void:
         cp3.isPlaytestPassed = true;
         provider.updateFeatureStates(f3.id, [cp3]);
         expect(provider.computeActiveGodotEpicSnapshot().allEpicsCompleted, isTrue);
+      },
+    );
+
+    test(
+      'populateDefaultUnifiedSteps avoids bogus InputMap polling on enemies/spawners/UI and picks semantic keys on player features',
+      () {
+        final enemyNode = FeatureStateNode(
+          id: 'cp_enemy',
+          name: '01 · BUILD',
+          trigger: 'Enemy attacks player and dies cleanly at 0 hp.',
+          parameters: {'primarySharedScriptOrScene': 'res://scripts/crab_enemy.gd'},
+          coveredScope: ['Enemy pursuit', 'Telegraphed claw strike'],
+        );
+        TaskHowToBlueprint.populateDefaultUnifiedSteps(
+          enemyNode,
+          engineHint: 'Godot 4 (3D)',
+        );
+        final enemyDump = enemyNode.checklist
+            .map((s) => '${s.text} ${s.codeSnippet ?? ''} ${s.specNotes ?? ''}')
+            .join('\n');
+        expect(enemyDump, isNot(contains('_action')));
+        expect(enemyDump, isNot(contains('Input.is_action')));
+        expect(enemyDump, contains('take_damage'));
+
+        final spawnerNode = FeatureStateNode(
+          id: 'cp_spawner',
+          name: '01 · BUILD',
+          trigger: 'Spawner creates 3 enemy waves in order.',
+          parameters: {'primarySharedScriptOrScene': 'res://scripts/three_wave_spawner.gd'},
+          coveredScope: ['3-wave spawner'],
+        );
+        TaskHowToBlueprint.populateDefaultUnifiedSteps(
+          spawnerNode,
+          engineHint: 'Godot 4 (3D)',
+        );
+        final spawnerDump = spawnerNode.checklist
+            .map((s) => '${s.text} ${s.codeSnippet ?? ''} ${s.specNotes ?? ''}')
+            .join('\n');
+        expect(spawnerDump, isNot(contains('_action')));
+        expect(spawnerDump, isNot(contains('Input.is_action')));
+        expect(spawnerDump, contains('Node3D'));
+
+        final uiNode = FeatureStateNode(
+          id: 'cp_ui',
+          name: '01 · BUILD',
+          trigger: 'HUD shows HP and opens Draft screen.',
+          parameters: {'primarySharedScriptOrScene': 'res://scripts/hud_overlay.gd'},
+          coveredScope: ['HUD health bar', 'Upgrade draft menu'],
+        );
+        TaskHowToBlueprint.populateDefaultUnifiedSteps(
+          uiNode,
+          engineHint: 'Godot 4 (3D)',
+        );
+        final uiDump = uiNode.checklist
+            .map((s) => '${s.text} ${s.codeSnippet ?? ''} ${s.specNotes ?? ''}')
+            .join('\n');
+        expect(uiDump, isNot(contains('_action')));
+        expect(uiDump, contains('CanvasLayer'));
+
+        final dashNode = FeatureStateNode(
+          id: 'cp_dash',
+          name: '01 · BUILD',
+          trigger: 'Player dashes with invulnerability.',
+          parameters: {'primarySharedScriptOrScene': 'res://scripts/crab_player.gd'},
+          coveredScope: ['Player dash & i-frames'],
+        );
+        TaskHowToBlueprint.populateDefaultUnifiedSteps(
+          dashNode,
+          engineHint: 'Godot 4 (3D)',
+        );
+        final dashDump = dashNode.checklist
+            .map((s) => '${s.text} ${s.codeSnippet ?? ''} ${s.specNotes ?? ''}')
+            .join('\n');
+        expect(dashDump, contains('Input Map | dash | Shift'));
+        expect(dashDump, contains('Input.is_action_just_pressed("dash")'));
       },
     );
   });
