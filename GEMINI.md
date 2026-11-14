@@ -17,13 +17,16 @@
      - **Progressive AI Releases (`v0.1` → `v0.2` → `v0.3+`)**: Clicking **`+ New Release (v0.2) ✦`** inside the Workbench opens the **Progressive AI Release Co-Pilot** (`gemini-flash-latest`) with 1-click AI direction presets, `UPGRADE` / `NEW` checkboxes, and non-destructive live-tree merging (`NEW`, `UPGRADING`, `STABLE ✓`, `SUPERSEDED`).
      - **Act 2 · Full Production Blueprint (`lib/agents/full_production_blueprint_agent.dart` & `lib/screens/workbench_full_production_blueprint_part.dart`)**: After `03 · Vertical Slice`, **Next Release** opens the 6-section Full Production Blueprint (`01 v1.0 Goal`, `02 Content & World Scale`, `03 Full-Game Loop`, `04 Promoted Systems`, `05 Permanent Cuts`, `06 v1.0 Done When`). Approving builds the `v0.N` **Full-Game Skeleton** (new Full Production Epics tagged `act: fullProduction`, core Epics `STABLE ✓`), followed by **Production Passes** (1–2 Full Production Epics per release), the **`v1.0` Launch Release** (Release Build Export + `0` open `[FIX]`), then `v1.1+` Post-Launch.
 
-## 1. Goal Contract & Loop Engineering Workflow
-- **Architecture, UI & New Features (Plan-First)**:
-  1. Investigate read-only, then present a concise `implementation_plan.md` defining **Goal**, **In Scope**, **Affected Files**, and objective **Done When** checks (use `/grill-me` upfront when design choices are ambiguous).
-  2. Stop and wait for explicit user approval before editing project code files.
-- **Bug Fixes & `/goal` Agentic Loops (Test-First Autonomous Loop)**:
-  - Once a concrete Goal Contract or failing reproduction is established (unit test in `test/` or headless Godot probe per `.agents/skills/godot-headless-loop/SKILL.md`), iterate autonomously through **`Edit → ./scripts/verify_loop.sh → Self-Repair`** without pausing between incremental edits until all checks exit `0`.
-  - Hand back / re-plan only if a design assumption breaks or a verification gate contradicts the spec.
+## 1. Default Auto-Goal & Auto-Grill Loop Workflow
+- **Auto-Goal (Self-Derived Goal Contracts — Always On)**:
+  - On any symptom report, audit request, or open-ended prompt, inspect the codebase, tests, and headless Godot probes first to derive a concrete **Goal Contract** (`Goal`, `In Scope`, and machine-verifiable `Done When` checks).
+  - When a prompt is open-ended (e.g., *"audit LAYERS"* or a broad symptom with multiple gaps), automatically select the **#1 highest-impact safe goal** and run its verification loop immediately rather than pausing on a backlog menu.
+- **Auto-Grill (Upfront Clarification via `ask_question` — Only on Real UX/Scope Forks)**:
+  - Resolve pure engineering, data-structure, and Godot API trade-offs internally against the codebase and headless probes—never ask the user technical minutiae.
+  - When genuine product, UX, or scope trade-offs exist, ask 1–3 concise multiple-choice questions upfront using `ask_question` (`(Recommended)` option first) before editing.
+- **Execution Gate (When to Pause vs. Loop Immediately)**:
+  - **Clear / Small-to-Medium Tasks, Bug Fixes & `/goal` Runs**: Once Auto-Grill resolves any ambiguity (or immediately if unambiguous), write/run a failing test or headless Godot probe first, then iterate autonomously (`Edit → ./scripts/verify_loop.sh → Self-Repair`) to `0` errors without an extra `implementation_plan.md` pause.
+  - **Major UI Redesigns & Core Architecture Changes**: Present a concise `implementation_plan.md` (`Goal`, `In Scope`, `Affected Files`, `Done When`) and wait for explicit user approval before editing project code files.
 - **External User Godot Projects (`/Users/henry/Godot/Projects/*`)**:
   - User game files (`project.godot`, `scenes/*`, `scripts/*`) are strictly **read-only** reference fixtures (enforced by `.agents/hooks.json`). Always fix LAYERS's plugin/agent instead, syncing only `addons/layers/*` when explicitly verifying in Godot.
 
