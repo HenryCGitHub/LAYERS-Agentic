@@ -4,10 +4,14 @@ extends Node
 signal epic_updated(payload: Dictionary)
 signal sync_failed(message: String)
 signal busy_changed(is_busy: bool)
+signal agent_bundle_received(agent_bundle: Dictionary, payload: Dictionary)
 signal update_available(local_ver: String, remote_ver: String)
 signal update_check_finished(up_to_date: bool, local_ver: String, remote_ver: String)
 signal update_ready_to_reload(new_ver: String, updated_gd_paths: PackedStringArray)
 signal update_failed(message: String)
+
+var _agent_http: HTTPRequest = null
+var _agent_busy: bool = false
 
 const DEFAULT_SYNC_BASE_URL := "https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy"
 const CONFIG_DIR := "res://.layers"
@@ -35,7 +39,7 @@ var _latest_known_remote_ver: String = ""
 
 func _ready() -> void:
 	_http = HTTPRequest.new()
-	_http.timeout = 45.0
+	_http.timeout = 65.0
 	add_child(_http)
 	_http.request_completed.connect(_on_request_completed)
 
@@ -235,6 +239,8 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	elif typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
 		_write_cache(parsed)
 		epic_updated.emit(parsed)
+		if parsed.has("agentBundle") and typeof(parsed.get("agentBundle")) == TYPE_DICTIONARY:
+			agent_bundle_received.emit(parsed.get("agentBundle"), parsed)
 	else:
 		sync_failed.emit("Unexpected sync response.")
 
@@ -460,3 +466,122 @@ func _apply_downloaded_zip_bytes(zip_bytes: PackedByteArray) -> void:
 	_update_mode = ""
 	var new_ver := get_local_plugin_version()
 	update_ready_to_reload.emit(new_ver, updated_gd_paths)
+
+
+func _ensure_agent_http() -> void:
+	if _agent_http != null and is_instance_valid(_agent_http):
+		return
+	_agent_http = HTTPRequest.new()
+	_agent_http.timeout = 65.0
+	add_child(_agent_http)
+	_agent_http.request_completed.connect(_on_agent_http_completed)
+
+
+func is_agent_busy() -> bool:
+	return _agent_busy
+
+
+func build_feature(
+	feature_id: String,
+	checkpoint_id: String,
+	scene_snapshot: Variant,
+	live_scripts: Dictionary,
+	arena_scene_path: String = "",
+	feature_scene_path: String = ""
+) -> void:
+	_post_agent_update({
+		"action": "build_feature",
+		"featureId": feature_id,
+		"checkpointId": checkpoint_id,
+		"sceneSnapshot": scene_snapshot,
+		"liveScripts": live_scripts,
+		"arenaScenePath": arena_scene_path,
+		"featureScenePath": feature_scene_path,
+	})
+
+
+func direct_agent(
+	feature_id: String,
+	checkpoint_id: String,
+	prompt_text: String,
+	scene_snapshot: Variant,
+	live_scripts: Dictionary,
+	arena_scene_path: String = "",
+	feature_scene_path: String = "",
+	error_text: String = ""
+) -> void:
+	_post_agent_update({
+		"action": "direct_agent",
+		"featureId": feature_id,
+		"checkpointId": checkpoint_id,
+		"prompt": prompt_text,
+		"errorText": error_text,
+		"sceneSnapshot": scene_snapshot,
+		"liveScripts": live_scripts,
+		"arenaScenePath": arena_scene_path,
+		"featureScenePath": feature_scene_path,
+	})
+
+
+func complete_feature_steps(feature_id: String, checkpoint_id: String) -> void:
+	_post_agent_update({
+		"action": "complete_feature_steps",
+		"featureId": feature_id,
+		"checkpointId": checkpoint_id,
+	})
+
+
+func _post_agent_update(payload_body: Dictionary) -> void:
+	if _link_token.is_empty():
+		sync_failed.emit("Link token not configured. Open Settings to paste your Project Link Token.")
+		return
+	if _agent_busy:
+		sync_failed.emit("Agent is already applying a change. Please wait a moment.")
+		return
+	_ensure_agent_http()
+	_agent_busy = true
+	busy_changed.emit(true)
+
+	var url := "%s/godotLink/update" % _sync_base_url.trim_suffix("/")
+	var headers := PackedStringArray([
+		"Content-Type: application/json",
+		"Authorization: Bearer %s" % _link_token,
+	])
+	var json_str := JSON.stringify(payload_body)
+	var err := _agent_http.request(url, headers, HTTPClient.METHOD_POST, json_str)
+	if err != OK:
+		_agent_busy = false
+		busy_changed.emit(_is_busy)
+		sync_failed.emit("Failed to send Agent request (HTTPRequest error %d)." % err)
+
+
+func _on_agent_http_completed(
+	result: int,
+	response_code: int,
+	_headers: PackedStringArray,
+	body: PackedByteArray
+) -> void:
+	_agent_busy = false
+	busy_changed.emit(_is_busy)
+	if result != HTTPRequest.RESULT_SUCCESS:
+		sync_failed.emit("Network error communicating with LAYERS Agent (code %d)." % result)
+		return
+	var text := body.get_string_from_utf8()
+	var parsed: Variant = JSON.parse_string(text)
+	if response_code < 200 or response_code >= 300:
+		var err_msg := "Agent request failed (HTTP %d)." % response_code
+		if typeof(parsed) == TYPE_DICTIONARY and parsed.has("error"):
+			var err_obj: Variant = parsed.get("error")
+			if typeof(err_obj) == TYPE_DICTIONARY:
+				err_msg = String(err_obj.get("message", err_msg))
+			elif typeof(err_obj) == TYPE_STRING:
+				err_msg = String(err_obj)
+		sync_failed.emit(err_msg)
+		return
+	if typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
+		_write_cache(parsed)
+		epic_updated.emit(parsed)
+		if parsed.has("agentBundle") and typeof(parsed.get("agentBundle")) == TYPE_DICTIONARY:
+			agent_bundle_received.emit(parsed.get("agentBundle"), parsed)
+	else:
+		sync_failed.emit("Unexpected Agent response from LAYERS Cloud.")

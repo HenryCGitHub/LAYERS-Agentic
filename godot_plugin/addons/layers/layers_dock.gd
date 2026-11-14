@@ -12,11 +12,13 @@ var _sync: Node
 var _executor: RefCounted
 var _payload: Dictionary = {}
 var _selected_feature_id: String = ""
-var _selected_step_idx: int = 0
-var _show_code_preview: bool = false
-var _fix_drawer_open: bool = false
+var _show_blueprint_details: bool = false
+var _selected_script_preview_path: String = ""
+var _building_feature: bool = false
 var _diagnosing_fix: bool = false
 var _fix_draft_text: String = ""
+var _last_agent_summary: String = ""
+var _last_agent_warnings: PackedStringArray = PackedStringArray()
 var _show_token_editor: bool = false
 var _available_remote_version: String = ""
 var _updating_plugin: bool = false
@@ -46,10 +48,6 @@ var _sync_btn: Button
 var _web_btn: Button
 var _settings_btn: Button
 var _feature_picker: OptionButton
-var _step_nav_row: HBoxContainer
-var _prev_step_btn: Button
-var _step_picker: OptionButton
-var _next_step_btn: Button
 var _complete_card: VBoxContainer
 var _step_scroll: ScrollContainer
 var _body_container: VBoxContainer
@@ -59,9 +57,8 @@ var _status_label: Label
 
 # Dynamic Controls Bound Per Render
 var _fix_input: LineEdit
-var _check_tree: Tree
-var _tree_row_lookup: Dictionary = {}
-var _current_step_path: String = ""
+var _blueprint_tree: Tree
+var _active_tuner_controls: Array[Control] = []
 
 
 func _ready() -> void:
@@ -82,6 +79,7 @@ func _ready() -> void:
 	if _sync != null:
 		add_child(_sync)
 		_sync.epic_updated.connect(_on_epic_updated)
+		_sync.agent_bundle_received.connect(_on_agent_bundle_received)
 		_sync.sync_failed.connect(_on_sync_failed)
 		_sync.busy_changed.connect(_on_busy_changed)
 		_sync.update_available.connect(_on_plugin_update_available)
@@ -179,16 +177,31 @@ func _on_tree_mutated(node: Node) -> void:
 		notify_editor_state_changed()
 
 
+func _any_tuner_focused() -> bool:
+	for ctrl in _active_tuner_controls:
+		if ctrl == null or not is_instance_valid(ctrl):
+			continue
+		if ctrl.has_focus():
+			return true
+		if ctrl is SpinBox:
+			var le: LineEdit = (ctrl as SpinBox).get_line_edit()
+			if le != null and le.has_focus():
+				return true
+	return false
+
+
 func _on_live_refresh_timeout() -> void:
 	if _show_token_editor or not _workspace_panel.visible:
 		return
 	if _fix_input != null and _fix_input.has_focus():
 		return
+	if _any_tuner_focused():
+		return
 	var feat: Dictionary = _get_active_feature()
 	if feat.is_empty():
 		return
 	var prev_scroll: int = _step_scroll.scroll_vertical if _step_scroll != null else 0
-	_render_active_step_workspace(feat)
+	_render_active_feature_workspace(feat)
 	if _step_scroll != null:
 		_step_scroll.set_deferred("scroll_vertical", prev_scroll)
 
@@ -291,7 +304,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.3.0")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.4.0")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -303,7 +316,7 @@ func _build_ui() -> void:
 	_check_update_btn.pressed.connect(_on_check_plugin_update_pressed)
 	ver_row.add_child(_check_update_btn)
 
-	# 3. Connected Native Workspace
+	# 3. Connected Native Feature-First Workspace
 	_workspace_panel = VBoxContainer.new()
 	_workspace_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_workspace_panel.add_theme_constant_override("separation", _S(6))
@@ -368,35 +381,6 @@ func _build_ui() -> void:
 	_feature_picker.item_selected.connect(_on_feature_selected)
 	_workspace_panel.add_child(_feature_picker)
 
-	# Step Selector Row: [Back] [1/7 · Create Coastal Arena Scene v] [Forward]
-	_step_nav_row = HBoxContainer.new()
-	_step_nav_row.add_theme_constant_override("separation", _S(4))
-	_workspace_panel.add_child(_step_nav_row)
-
-	_prev_step_btn = Button.new()
-	_prev_step_btn.icon = _editor_icon("Back")
-	if _prev_step_btn.icon == null:
-		_prev_step_btn.text = "<"
-	_prev_step_btn.tooltip_text = "Previous step"
-	_prev_step_btn.custom_minimum_size = Vector2(float(_S(28)), 0.0)
-	_prev_step_btn.pressed.connect(_on_prev_step_pressed)
-	_step_nav_row.add_child(_prev_step_btn)
-
-	_step_picker = OptionButton.new()
-	_step_picker.clip_text = true
-	_step_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_step_picker.item_selected.connect(_on_step_selected)
-	_step_nav_row.add_child(_step_picker)
-
-	_next_step_btn = Button.new()
-	_next_step_btn.icon = _editor_icon("Forward")
-	if _next_step_btn.icon == null:
-		_next_step_btn.text = ">"
-	_next_step_btn.tooltip_text = "Next step"
-	_next_step_btn.custom_minimum_size = Vector2(float(_S(28)), 0.0)
-	_next_step_btn.pressed.connect(_on_next_step_pressed)
-	_step_nav_row.add_child(_next_step_btn)
-
 	_workspace_panel.add_child(HSeparator.new())
 
 	# All Epics Complete State
@@ -423,7 +407,7 @@ func _build_ui() -> void:
 	done_web_btn.pressed.connect(_on_open_web_pressed)
 	_complete_card.add_child(done_web_btn)
 
-	# Scrollable Active Step Workspace
+	# Scrollable Feature Workspace
 	_step_scroll = ScrollContainer.new()
 	_step_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_step_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -431,17 +415,17 @@ func _build_ui() -> void:
 
 	_body_container = VBoxContainer.new()
 	_body_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_body_container.add_theme_constant_override("separation", _S(6))
+	_body_container.add_theme_constant_override("separation", _S(8))
 	_step_scroll.add_child(_body_container)
 
-	# Footer CTA
+	# Sticky Footer CTA
 	_footer_box = VBoxContainer.new()
 	_footer_box.add_theme_constant_override("separation", _S(4))
 	_workspace_panel.add_child(_footer_box)
 	_footer_box.add_child(HSeparator.new())
 
 	_primary_cta_btn = Button.new()
-	_primary_cta_btn.text = "Complete & Next Step"
+	_primary_cta_btn.text = "Build Feature in Godot"
 	_primary_cta_btn.pressed.connect(_on_primary_cta_pressed)
 	_footer_box.add_child(_primary_cta_btn)
 
@@ -485,7 +469,6 @@ func _refresh_view() -> void:
 		_meta_label.text = "LAYERS"
 		_epic_label.text = "Loading active Epic..."
 		_feature_picker.visible = false
-		_step_nav_row.visible = false
 		_complete_card.visible = false
 		_footer_box.visible = false
 		_clear_body()
@@ -506,7 +489,6 @@ func _refresh_view() -> void:
 	if all_done:
 		_epic_label.text = str(_payload.get("releaseTitle", ver))
 		_feature_picker.visible = false
-		_step_nav_row.visible = false
 		_complete_card.visible = true
 		_footer_box.visible = false
 		_clear_body()
@@ -516,7 +498,6 @@ func _refresh_view() -> void:
 	if typeof(epic_raw) != TYPE_DICTIONARY or (epic_raw as Dictionary).is_empty():
 		_epic_label.text = "No active Epic yet — plan in Web Studio."
 		_feature_picker.visible = false
-		_step_nav_row.visible = false
 		_footer_box.visible = false
 		_clear_body()
 		return
@@ -529,7 +510,6 @@ func _refresh_view() -> void:
 	_feature_picker.visible = features.size() > 0
 
 	if features.is_empty():
-		_step_nav_row.visible = false
 		_footer_box.visible = false
 		_clear_body()
 		var empty_lbl := Label.new()
@@ -538,20 +518,25 @@ func _refresh_view() -> void:
 		_body_container.add_child(empty_lbl)
 		return
 
+	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+
 	var chosen_idx: int = -1
 	var first_incomplete_idx: int = -1
 	for i in range(features.size()):
 		var f: Dictionary = features[i]
 		var f_id: String = str(f.get("id", ""))
 		var f_title: String = str(f.get("title", "Feature"))
-		var f_steps: Array = f.get("steps", [])
-		var done_cnt: int = 0
-		for st in f_steps:
-			if typeof(st) == TYPE_DICTIONARY and bool((st as Dictionary).get("completed", false)):
-				done_cnt += 1
-		var f_done: bool = bool(f.get("isCompleted", false))
-		_feature_picker.add_item("%s (%d/%d)" % [f_title, done_cnt, f_steps.size()], i)
-		var f_icon: Texture2D = _editor_icon("StatusSuccess" if f_done else "Folder", "Node")
+		var f_done: bool = bool(f.get("isCompleted", false)) or bool(f.get("isPlaytestPassed", false))
+		var f_ready := false
+		if _executor != null:
+			var f_eval: Dictionary = _executor.call("evaluate_feature", f, editor_interface, code_files, arena_scene)
+			f_ready = bool(f_eval.get("all_ready", false))
+		_feature_picker.add_item(f_title, i)
+		var f_icon: Texture2D = _editor_icon(
+			"StatusSuccess" if f_done else ("PlayScene" if f_ready else "PackedScene"),
+			"Node"
+		)
 		if f_icon != null:
 			_feature_picker.set_item_icon(i, f_icon)
 		if f_id == _selected_feature_id:
@@ -566,18 +551,11 @@ func _refresh_view() -> void:
 	var next_feat_id: String = str(active_feat.get("id", ""))
 	if next_feat_id != _selected_feature_id:
 		_selected_feature_id = next_feat_id
-		_selected_step_idx = _find_first_incomplete_step_idx(active_feat)
-		_show_code_preview = false
+		_selected_script_preview_path = ""
+		_last_agent_summary = ""
+		_last_agent_warnings = PackedStringArray()
 
-	_render_active_step_workspace(active_feat)
-
-
-func _find_first_incomplete_step_idx(feat: Dictionary) -> int:
-	var steps: Array = feat.get("steps", [])
-	for i in range(steps.size()):
-		if typeof(steps[i]) == TYPE_DICTIONARY and not bool((steps[i] as Dictionary).get("completed", false)):
-			return i
-	return steps.size()
+	_render_active_feature_workspace(active_feat)
 
 
 func _get_active_feature() -> Dictionary:
@@ -594,607 +572,552 @@ func _get_active_feature() -> Dictionary:
 
 func _clear_body() -> void:
 	_fix_input = null
-	_check_tree = null
-	_tree_row_lookup = {}
+	_blueprint_tree = null
+	_active_tuner_controls.clear()
 	for child in _body_container.get_children():
 		_body_container.remove_child(child)
 		child.queue_free()
 
 
-func _render_active_step_workspace(feat: Dictionary) -> void:
+func _create_native_card() -> Dictionary:
+	var panel := PanelContainer.new()
+	var sb: StyleBox = _editor_stylebox("panel", "Tree")
+	if sb != null:
+		panel.add_theme_stylebox_override("panel", sb)
+	_body_container.add_child(panel)
+
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", _S(8))
+	margin.add_theme_constant_override("margin_right", _S(8))
+	margin.add_theme_constant_override("margin_top", _S(6))
+	margin.add_theme_constant_override("margin_bottom", _S(6))
+	panel.add_child(margin)
+
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", _S(6))
+	margin.add_child(vb)
+	return { "panel": panel, "vb": vb }
+
+
+func _render_active_feature_workspace(feat: Dictionary) -> void:
 	_clear_body()
 
 	var feat_id: String = str(feat.get("id", ""))
 	var cp_id: String = str(feat.get("checkpointId", ""))
-	var steps: Array = feat.get("steps", [])
-	var max_idx: int = steps.size()
-	_selected_step_idx = clampi(_selected_step_idx, 0, max_idx)
-
-	# Populate Step Dropdown with Actual Step Titles + Native Role Icons
-	_step_nav_row.visible = true
-	_step_picker.clear()
-	for i in range(steps.size()):
-		if typeof(steps[i]) != TYPE_DICTIONARY:
-			continue
-		var st: Dictionary = steps[i]
-		var st_done: bool = bool(st.get("completed", false))
-		var st_title: String = str(st.get("title", "Step %d" % (i + 1))).strip_edges()
-		_step_picker.add_item("%d/%d · %s" % [i + 1, steps.size(), st_title], i)
-		var s_icon: Texture2D = _step_picker_icon(st, st_done)
-		if s_icon != null:
-			_step_picker.set_item_icon(i, s_icon)
-
-	var gate_passed: bool = bool(feat.get("isPlaytestPassed", false))
-	_step_picker.add_item("Playtest Gate", max_idx)
-	var gate_icon: Texture2D = _editor_icon("StatusSuccess" if gate_passed else "PlayScene", "Play")
-	if gate_icon != null:
-		_step_picker.set_item_icon(_step_picker.item_count - 1, gate_icon)
-	_step_picker.select(_selected_step_idx)
-
-	_prev_step_btn.disabled = _selected_step_idx <= 0
-	_next_step_btn.disabled = _selected_step_idx >= max_idx
-	_footer_box.visible = true
-
-	if _selected_step_idx == max_idx:
-		_render_playtest_gate(feat, feat_id, cp_id, gate_passed)
-		_render_agent_fix_drawer(feat, feat_id, cp_id)
-		_primary_cta_btn.text = "Playtest Passed — Next Feature"
-		_primary_cta_btn.icon = _editor_icon("StatusSuccess" if gate_passed else "Forward")
-		return
-
-	var step: Dictionary = steps[_selected_step_idx]
-	var step_id: String = str(step.get("id", ""))
-	var role: String = str(step.get("role", "CODE"))
-	var live_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
-	var step_path: String = _executor.call("resolve_effective_step_path", step, feat, live_root) if _executor != null else str(step.get("stepPath", "res://scenes/main.tscn"))
-	_current_step_path = step_path
-
-	var instruction: String = str(step.get("instruction", "")).strip_edges()
-	if instruction.is_empty():
-		instruction = "Complete `%s` in `%s`." % [str(step.get("title", "Step")), step_path]
-	var diagnosis: String = str(step.get("diagnosis", "")).strip_edges()
-	var verify_result: String = str(step.get("verifyResult", "")).strip_edges()
-	var is_done: bool = bool(step.get("completed", false))
-
-	# 1. Target Resource Bar (CheckBox + Clickable res:// Path + Quick Run F6)
-	var target_row := HBoxContainer.new()
-	target_row.add_theme_constant_override("separation", _S(4))
-	_body_container.add_child(target_row)
-
-	var step_cb := CheckBox.new()
-	step_cb.button_pressed = is_done
-	step_cb.tooltip_text = "Mark step completed"
-	step_cb.toggled.connect(_on_step_checkbox_toggled.bind(feat_id, cp_id, step_id))
-	target_row.add_child(step_cb)
-
-	var path_btn := Button.new()
-	var is_gd: bool = step_path.ends_with(".gd")
-	path_btn.text = step_path
-	path_btn.icon = _editor_icon("Script" if is_gd else "PackedScene", "File")
-	path_btn.flat = true
-	path_btn.theme_type_variation = &"FlatButton"
-	path_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	path_btn.clip_text = true
-	path_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	path_btn.tooltip_text = "Open %s in Godot" % step_path
-	path_btn.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.76, 0.96)))
-	path_btn.pressed.connect(_on_open_res_path_pressed.bind(step_path))
-	target_row.add_child(path_btn)
-
-	var quick_f6 := Button.new()
-	quick_f6.flat = true
-	quick_f6.theme_type_variation = &"FlatButton"
-	quick_f6.icon = _editor_icon("PlayScene", "Play")
-	if quick_f6.icon == null:
-		quick_f6.text = "F6"
-	quick_f6.tooltip_text = "Run Scene (F6)"
-	quick_f6.pressed.connect(_on_run_scene_pressed.bind(step_path))
-	target_row.add_child(quick_f6)
-
-	# 2. Agent Root-Cause Diagnosis (only present on [FIX] steps)
-	if not diagnosis.is_empty():
-		var diag_panel := PanelContainer.new()
-		var diag_sb: StyleBox = _editor_stylebox("panel", "Tree")
-		if diag_sb != null:
-			diag_panel.add_theme_stylebox_override("panel", diag_sb)
-		_body_container.add_child(diag_panel)
-
-		var diag_hb := HBoxContainer.new()
-		diag_hb.add_theme_constant_override("separation", _S(6))
-		diag_panel.add_child(diag_hb)
-
-		var diag_icon := TextureRect.new()
-		diag_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		diag_icon.texture = _editor_icon("StatusError")
-		diag_hb.add_child(diag_icon)
-
-		var diag_lbl := Label.new()
-		diag_lbl.text = diagnosis
-		diag_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		diag_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		diag_lbl.add_theme_color_override("font_color", _editor_color("error_color", Color(0.96, 0.56, 0.62)))
-		diag_hb.add_child(diag_lbl)
-
-	# 3. Clean Native BBCode Instructions (RichTextLabel — ZERO raw backticks)
-	var instr_rtl := RichTextLabel.new()
-	instr_rtl.bbcode_enabled = true
-	instr_rtl.fit_content = true
-	instr_rtl.scroll_active = false
-	instr_rtl.selection_enabled = true
-	instr_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var mono_font: Font = _editor_font("source")
-	if mono_font != null:
-		instr_rtl.add_theme_font_override("mono_font", mono_font)
-	instr_rtl.add_theme_color_override("default_color", _editor_color("font_color", Color(0.88, 0.90, 0.94)))
-	instr_rtl.text = _markdown_to_bbcode(instruction)
-	_body_container.add_child(instr_rtl)
-
-	# 4. Evaluate Step Capabilities & Render Native Godot Tree Widget
-	var eval_info: Dictionary = _executor.call("evaluate_step", feat, step, editor_interface) if _executor != null else {"rows": [], "readyCount": 0, "totalCount": 0, "allReady": false}
-	var rows: Array = eval_info.get("rows", [])
-	var ready_cnt: int = int(eval_info.get("readyCount", 0))
-	var total_cnt: int = int(eval_info.get("totalCount", rows.size()))
-	var all_ready: bool = bool(eval_info.get("allReady", false))
-
-	var check_hdr_row := HBoxContainer.new()
-	check_hdr_row.add_theme_constant_override("separation", _S(4))
-	_body_container.add_child(check_hdr_row)
-
-	var check_hdr := Label.new()
-	check_hdr.text = "Live Scene & Editor Check"
-	check_hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var bold_font: Font = _editor_font("bold")
-	if bold_font != null:
-		check_hdr.add_theme_font_override("font", bold_font)
-	check_hdr.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
-	check_hdr_row.add_child(check_hdr)
-
-	var check_cnt_lbl := Label.new()
-	check_cnt_lbl.text = "%d/%d ready" % [ready_cnt, total_cnt]
-	check_cnt_lbl.add_theme_color_override(
-		"font_color",
-		_editor_color("success_color", Color(0.35, 0.85, 0.56)) if all_ready else _editor_color("warning_color", Color(0.94, 0.74, 0.34))
-	)
-	check_hdr_row.add_child(check_cnt_lbl)
-
-	_build_native_check_tree(rows)
-
-	# 5. Capability-Driven Native Godot Action Buttons
-	_build_capability_actions(step, role, step_path, eval_info)
-
-	# 6. Collapsible Native CodeEdit Preview (for CODE & FIX steps)
-	var clean_code: String = _executor.call("resolve_step_code_text", step) if _executor != null else str(step.get("codeSnippet", ""))
-	if not clean_code.is_empty() and (role == "CODE" or role == "FIX"):
-		var toggle_code_btn := Button.new()
-		toggle_code_btn.text = "GDScript Preview"
-		toggle_code_btn.icon = _editor_icon("GuiTreeArrowDown" if _show_code_preview else "GuiTreeArrowRight", "Script")
-		toggle_code_btn.flat = true
-		toggle_code_btn.theme_type_variation = &"FlatButton"
-		toggle_code_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		toggle_code_btn.pressed.connect(_on_toggle_code_preview_pressed)
-		_body_container.add_child(toggle_code_btn)
-
-		if _show_code_preview:
-			var code_view := CodeEdit.new()
-			code_view.text = clean_code
-			code_view.editable = false
-			code_view.gutters_draw_line_numbers = true
-			code_view.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
-			if mono_font != null:
-				code_view.add_theme_font_override("font", mono_font)
-			var line_count: int = clean_code.split("\n").size()
-			code_view.custom_minimum_size = Vector2(0.0, float(_S(clampi(line_count * 20 + 18, 84, 210))))
-			_body_container.add_child(code_view)
-
-	# 7. Verify Result Line
-	if not verify_result.is_empty():
-		var ver_hb := HBoxContainer.new()
-		ver_hb.add_theme_constant_override("separation", _S(6))
-		_body_container.add_child(ver_hb)
-
-		var ver_icon := TextureRect.new()
-		ver_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		ver_icon.texture = _editor_icon("StatusSuccess" if all_ready else "GuiRadioUnchecked", "StatusSuccess")
-		ver_hb.add_child(ver_icon)
-
-		var ver_lbl := Label.new()
-		ver_lbl.text = "Verify: %s" % verify_result.replace("->", "→")
-		ver_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		ver_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		ver_lbl.add_theme_color_override("font_color", _editor_color("success_color" if all_ready else "disabled_font_color", Color(0.65, 0.75, 0.72)))
-		ver_hb.add_child(ver_lbl)
-
-	# 8. Collapsible AI Fix Bar
-	_render_agent_fix_drawer(feat, feat_id, cp_id)
-
-	# 9. Primary Footer CTA
-	var is_last_step: bool = (_selected_step_idx == max_idx - 1)
-	if all_ready or is_done:
-		_primary_cta_btn.text = "Complete & Go to Playtest" if is_last_step else "Complete & Next Step"
-		_primary_cta_btn.icon = _editor_icon("StatusSuccess")
-	else:
-		_primary_cta_btn.text = "Complete Manually & Next"
-		_primary_cta_btn.icon = _editor_icon("Forward")
-
-
-func _build_native_check_tree(rows: Array) -> void:
-	_check_tree = Tree.new()
-	_check_tree.hide_root = true
-	_check_tree.columns = 2
-	_check_tree.column_titles_visible = false
-	_check_tree.select_mode = Tree.SELECT_ROW
-	_check_tree.set_column_expand(0, true)
-	_check_tree.set_column_expand(1, false)
-	_check_tree.set_column_custom_minimum_width(1, _S(48))
-	var target_h: int = _S(clampf(float(maxi(rows.size(), 1)) * 27.0 + 12.0, 56.0, 236.0))
-	_check_tree.custom_minimum_size = Vector2(0.0, float(target_h))
-	_check_tree.item_activated.connect(_on_check_tree_item_activated)
-	_check_tree.button_clicked.connect(_on_check_tree_button_clicked)
-	_body_container.add_child(_check_tree)
-
-	var root_item: TreeItem = _check_tree.create_item()
-	var item_by_id: Dictionary = {}
-	_tree_row_lookup = {}
-
-	var ok_icon: Texture2D = _editor_icon("StatusSuccess")
-	var pending_icon: Texture2D = _editor_icon("GuiRadioUnchecked", "StatusWarning")
-	var inspect_icon: Texture2D = _editor_icon("GuiVisibilityVisible", "Search")
-	var ok_col: Color = _editor_color("success_color", Color(0.36, 0.85, 0.56))
-	var muted_col: Color = _editor_color("disabled_font_color", Color(0.66, 0.70, 0.76))
-
-	for r_raw in rows:
-		if typeof(r_raw) != TYPE_DICTIONARY:
-			continue
-		var r: Dictionary = r_raw
-		var r_id: String = str(r.get("id", ""))
-		var p_id: String = str(r.get("parentId", ""))
-		var title: String = str(r.get("title", ""))
-		var subtitle: String = str(r.get("subtitle", ""))
-		var icon_name: String = str(r.get("iconName", "Node"))
-		var r_ok: bool = bool(r.get("ok", false))
-		var focus_path: String = str(r.get("focusPath", ""))
-		var res_path: String = str(r.get("resPath", ""))
-
-		var parent_item: TreeItem = root_item
-		if not p_id.is_empty() and item_by_id.has(p_id):
-			parent_item = item_by_id[p_id] as TreeItem
-
-		var item: TreeItem = _check_tree.create_item(parent_item)
-		var label_txt: String = title if subtitle.is_empty() else "%s  (%s)" % [title, subtitle]
-		item.set_text(0, label_txt)
-		item.set_tooltip_text(0, label_txt)
-		var cls_icon: Texture2D = _editor_icon(icon_name, "Node")
-		if cls_icon != null:
-			item.set_icon(0, cls_icon)
-
-		if r_ok:
-			item.set_custom_color(0, ok_col)
-			if ok_icon != null:
-				item.set_icon(1, ok_icon)
-		else:
-			item.set_custom_color(0, _editor_color("font_color", Color(0.88, 0.90, 0.94)))
-			if pending_icon != null:
-				item.set_icon(1, pending_icon)
-				item.set_icon_modulate(1, muted_col)
-
-		if not focus_path.is_empty() or not res_path.is_empty():
-			if inspect_icon != null:
-				item.add_button(1, inspect_icon, 0, false, "Focus in Scene / Open in Editor")
-
-		var key_id: String = r_id if not r_id.is_empty() else str(_tree_row_lookup.size())
-		item.set_metadata(0, key_id)
-		_tree_row_lookup[key_id] = r
-		if not r_id.is_empty():
-			item_by_id[r_id] = item
-
-
-func _build_capability_actions(step: Dictionary, role: String, step_path: String, eval_info: Dictionary) -> void:
-	var missing_nodes: Array = eval_info.get("missingNodeSpecs", [])
-	var missing_instances: Array = eval_info.get("missingInstanceSpecs", [])
-	var missing_inputs: Array = eval_info.get("missingInputSpecs", [])
-	var missing_insp: Array = eval_info.get("missingInspSpecs", [])
-	var sig_specs: Array = eval_info.get("sigSpecs", [])
-	var missing_sigs: Array = eval_info.get("missingSigSpecs", [])
-	var has_code: bool = bool(eval_info.get("hasCode", false))
-	var code_exists: bool = bool(eval_info.get("codeExists", false))
-	var code_attached: bool = bool(eval_info.get("codeAttached", false))
-	var code_merged: bool = bool(eval_info.get("codeMerged", false))
-	var is_playtest_step: bool = bool(eval_info.get("isPlaytestStep", false))
-	var needs_scene_file: bool = step_path.ends_with(".tscn") and not FileAccess.file_exists(step_path)
-
-	var did_add_action: bool = false
-
-	# 1. Missing Scene Nodes / Child Scene Instances / Missing .tscn File
-	if not missing_nodes.is_empty() or not missing_instances.is_empty() or (needs_scene_file and (role == "SCENE" or not eval_info.get("nodeSpecs", []).is_empty())):
-		var build_btn := Button.new()
-		build_btn.text = "Build Missing Scene Nodes"
-		build_btn.icon = _editor_icon("Add")
-		build_btn.tooltip_text = "Create missing nodes, shapes, meshes & scene file (Ctrl+Z supported)"
-		build_btn.pressed.connect(_on_action_build_scene_nodes.bind(step, eval_info))
-		_body_container.add_child(build_btn)
-		did_add_action = true
-
-	# 2. Missing InputMap Key Bindings or Inspector Properties
-	if not missing_inputs.is_empty() or not missing_insp.is_empty():
-		var insp_btn := Button.new()
-		insp_btn.text = "Apply Input & Inspector Settings" if (not missing_inputs.is_empty() and not missing_insp.is_empty()) else ("Bind InputMap Keys" if not missing_inputs.is_empty() else "Apply Inspector Settings")
-		insp_btn.icon = _editor_icon("Edit", "Tools")
-		insp_btn.pressed.connect(_on_action_apply_input_and_inspector.bind(step, eval_info))
-		_body_container.add_child(insp_btn)
-		did_add_action = true
-	elif role == "INSP" and not did_add_action:
-		var focus_btn := Button.new()
-		focus_btn.text = "Focus Node in Inspector"
-		focus_btn.icon = _editor_icon("GuiVisibilityVisible", "Search")
-		focus_btn.pressed.connect(_on_action_apply_input_and_inspector.bind(step, eval_info))
-		_body_container.add_child(focus_btn)
-		did_add_action = true
-
-	# 3. GDScript Create / Merge / Attach / Open + Copy
-	if has_code:
-		var code_row := HBoxContainer.new()
-		code_row.add_theme_constant_override("separation", _S(6))
-		_body_container.add_child(code_row)
-
-		var script_btn := Button.new()
-		script_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if role == "FIX":
-			if not code_merged:
-				script_btn.text = "Apply Fix Patch to Script"
-				script_btn.icon = _editor_icon("ScriptExtend", "Script")
-			else:
-				script_btn.text = "Open Patched Script"
-				script_btn.icon = _editor_icon("Script")
-			script_btn.pressed.connect(_on_action_apply_fix_patch.bind(step, step_path))
-		else:
-			if not code_exists:
-				script_btn.text = "Create & Attach Script"
-				script_btn.icon = _editor_icon("ScriptCreate", "Script")
-			elif not code_merged:
-				script_btn.text = "Apply Step Code to Script"
-				script_btn.icon = _editor_icon("ScriptExtend", "Script")
-			elif not code_attached:
-				script_btn.text = "Attach & Open Script"
-				script_btn.icon = _editor_icon("Script")
-			else:
-				script_btn.text = "Open Script in Editor"
-				script_btn.icon = _editor_icon("Script")
-			script_btn.pressed.connect(_on_action_apply_or_create_script.bind(step, eval_info))
-		code_row.add_child(script_btn)
-
-		var copy_btn := Button.new()
-		copy_btn.text = "Copy Code"
-		copy_btn.icon = _editor_icon("ActionCopy")
-		copy_btn.pressed.connect(_on_copy_step_code_pressed.bind(step))
-		code_row.add_child(copy_btn)
-		did_add_action = true
-
-	# 4. Signal Wiring (ONLY shown when actual signal specs exist)
-	if not sig_specs.is_empty():
-		var w_row := HBoxContainer.new()
-		w_row.add_theme_constant_override("separation", _S(6))
-		_body_container.add_child(w_row)
-
-		var conn_btn := Button.new()
-		conn_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		if not missing_sigs.is_empty():
-			conn_btn.text = "Connect Signal" if sig_specs.size() == 1 else "Connect %d Signals" % sig_specs.size()
-			conn_btn.icon = _editor_icon("Signals")
-		else:
-			conn_btn.text = "Signal Connected" if sig_specs.size() == 1 else "%d Signals Connected" % sig_specs.size()
-			conn_btn.icon = _editor_icon("StatusSuccess")
-		conn_btn.pressed.connect(_on_action_connect_signals.bind(step, eval_info))
-		w_row.add_child(conn_btn)
-
-		var f6_w_btn := Button.new()
-		f6_w_btn.text = "Run Scene (F6)"
-		f6_w_btn.icon = _editor_icon("PlayScene", "Play")
-		f6_w_btn.pressed.connect(_on_run_scene_pressed.bind(step_path))
-		w_row.add_child(f6_w_btn)
-		did_add_action = true
-
-	# 5. Playtest Verification Button (e.g., Verify Floor Collision)
-	if is_playtest_step and sig_specs.is_empty() and missing_nodes.is_empty() and missing_inputs.is_empty() and not needs_scene_file:
-		var run_btn := Button.new()
-		run_btn.text = "Run Scene (F6)"
-		run_btn.icon = _editor_icon("PlayScene", "Play")
-		run_btn.pressed.connect(_on_run_scene_pressed.bind(step_path))
-		_body_container.add_child(run_btn)
-		did_add_action = true
-
-	# 6. Fallback when Scene nodes are already complete
-	if not did_add_action and step_path.ends_with(".tscn"):
-		var open_scene_btn := Button.new()
-		open_scene_btn.text = "Open Scene in Godot"
-		open_scene_btn.icon = _editor_icon("PackedScene")
-		open_scene_btn.pressed.connect(_on_open_res_path_pressed.bind(step_path))
-		_body_container.add_child(open_scene_btn)
-
-
-func _render_playtest_gate(feat: Dictionary, feat_id: String, cp_id: String, gate_passed: bool) -> void:
-	var goal_hdr := Label.new()
-	goal_hdr.text = "Feature End Goal (Playtest Gate)"
-	var bold_font: Font = _editor_font("bold")
-	if bold_font != null:
-		goal_hdr.add_theme_font_override("font", bold_font)
-	goal_hdr.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
-	_body_container.add_child(goal_hdr)
-
+	var feat_title: String = str(feat.get("title", "Feature")).strip_edges()
 	var done_when: String = str(feat.get("doneWhen", "Press F6 and verify this feature with 0 console errors.")).strip_edges()
-	var goal_lbl := Label.new()
-	goal_lbl.text = done_when
-	goal_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_body_container.add_child(goal_lbl)
+	var gate_passed: bool = bool(feat.get("isPlaytestPassed", false))
 
-	var gate_cb := CheckBox.new()
-	gate_cb.text = "Playtest Passed (0 Console Errors)"
-	gate_cb.button_pressed = gate_passed
-	gate_cb.toggled.connect(_on_playtest_gate_toggled.bind(feat_id, cp_id))
-	_body_container.add_child(gate_cb)
+	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, code_files, arena_scene) if _executor != null else {
+		"total": 0, "ready": 0, "all_ready": false, "items": [], "primary_scene": str(feat.get("primaryAsset", "")), "arena_scene": arena_scene, "script_paths": feat.get("scriptPaths", [])
+	}
+	var primary_scene: String = str(eval_info.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
+	var script_paths: Array = eval_info.get("script_paths", feat.get("scriptPaths", []))
+	var total_cnt: int = int(eval_info.get("total", 0))
+	var ready_cnt: int = int(eval_info.get("ready", 0))
+	var all_ready: bool = bool(eval_info.get("all_ready", false))
 
-	var run_btn := Button.new()
-	run_btn.text = "Run Current Scene (F6)"
-	run_btn.icon = _editor_icon("PlayScene", "Play")
-	run_btn.pressed.connect(_on_run_scene_pressed.bind(str(feat.get("primaryAsset", ""))))
-	_body_container.add_child(run_btn)
+	var bold_font: Font = _editor_font("bold")
+	var mono_font: Font = _editor_font("source")
 
+	# -----------------------------------------------------------------------
+	# 1. Feature Goal & Clickable Asset Chips
+	# -----------------------------------------------------------------------
+	var goal_card := _create_native_card()
+	var goal_vb: VBoxContainer = goal_card["vb"]
 
-func _render_agent_fix_drawer(_feat: Dictionary, feat_id: String, cp_id: String) -> void:
-	var drawer := PanelContainer.new()
-	var drawer_sb: StyleBox = _editor_stylebox("panel", "Tree")
-	if drawer_sb != null:
-		drawer.add_theme_stylebox_override("panel", drawer_sb)
-	_body_container.add_child(drawer)
+	var hdr_row := HBoxContainer.new()
+	hdr_row.add_theme_constant_override("separation", _S(6))
+	goal_vb.add_child(hdr_row)
 
-	var vb := VBoxContainer.new()
-	vb.add_theme_constant_override("separation", _S(6))
-	drawer.add_child(vb)
+	var title_lbl := Label.new()
+	title_lbl.text = feat_title
+	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	title_lbl.clip_text = true
+	if bold_font != null:
+		title_lbl.add_theme_font_override("font", bold_font)
+	hdr_row.add_child(title_lbl)
 
-	var toggle_btn := Button.new()
-	toggle_btn.text = "Broken? Ask Agent to Fix"
-	toggle_btn.icon = _editor_icon("GuiTreeArrowDown" if _fix_drawer_open else "GuiTreeArrowRight", "Tools")
-	toggle_btn.flat = true
-	toggle_btn.theme_type_variation = &"FlatButton"
-	toggle_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	toggle_btn.pressed.connect(_on_toggle_fix_drawer_pressed)
-	vb.add_child(toggle_btn)
+	var state_lbl := Label.new()
+	if gate_passed:
+		state_lbl.text = "Passed ✓"
+		state_lbl.add_theme_color_override("font_color", _editor_color("success_color", Color(0.36, 0.85, 0.56)))
+	elif all_ready:
+		state_lbl.text = "Ready to Test"
+		state_lbl.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
+	else:
+		state_lbl.text = "Setup Needed"
+		state_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
+	hdr_row.add_child(state_lbl)
 
-	if not _fix_drawer_open:
-		return
+	var goal_rtl := RichTextLabel.new()
+	goal_rtl.bbcode_enabled = true
+	goal_rtl.fit_content = true
+	goal_rtl.scroll_active = false
+	goal_rtl.selection_enabled = true
+	goal_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if mono_font != null:
+		goal_rtl.add_theme_font_override("mono_font", mono_font)
+	goal_rtl.add_theme_color_override("default_color", _editor_color("font_color", Color(0.88, 0.90, 0.94)))
+	goal_rtl.text = _markdown_to_bbcode(done_when)
+	goal_vb.add_child(goal_rtl)
 
-	var hint_lbl := Label.new()
-	hint_lbl.text = "Sends live Scene Tree + .gd scripts to Gemini 4 Hydrogen for a 1-click patch."
-	hint_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint_lbl.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
-	vb.add_child(hint_lbl)
+	var chips_flow := HFlowContainer.new()
+	chips_flow.add_theme_constant_override("h_separation", _S(4))
+	chips_flow.add_theme_constant_override("v_separation", _S(4))
+	var chip_paths: Array[String] = []
+	if not primary_scene.is_empty():
+		chip_paths.append(primary_scene)
+	for sp in script_paths:
+		var sps := str(sp).strip_edges()
+		if not sps.is_empty() and not (sps in chip_paths):
+			chip_paths.append(sps)
+	if not arena_scene.is_empty() and not (arena_scene in chip_paths):
+		chip_paths.append(arena_scene)
+
+	if not chip_paths.is_empty():
+		goal_vb.add_child(chips_flow)
+		for cp_res in chip_paths:
+			var chip_btn := Button.new()
+			chip_btn.flat = true
+			chip_btn.theme_type_variation = &"FlatButton"
+			chip_btn.text = cp_res.get_file()
+			chip_btn.icon = _editor_icon("Script" if cp_res.ends_with(".gd") else "PackedScene", "File")
+			chip_btn.tooltip_text = "Open %s in Godot" % cp_res
+			chip_btn.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.76, 0.96)))
+			chip_btn.pressed.connect(_on_open_res_path_pressed.bind(cp_res))
+			chips_flow.add_child(chip_btn)
+
+	# -----------------------------------------------------------------------
+	# 2. 1-Click Feature Builder + Collapsible Blueprint Details
+	# -----------------------------------------------------------------------
+	var build_card := _create_native_card()
+	var build_vb: VBoxContainer = build_card["vb"]
+
+	if _building_feature:
+		var busy_btn := Button.new()
+		busy_btn.text = "Building Feature with Gemini 4 Hydrogen..."
+		busy_btn.icon = _editor_icon("Tools")
+		busy_btn.disabled = true
+		build_vb.add_child(busy_btn)
+	elif not all_ready:
+		var build_btn := Button.new()
+		build_btn.text = "Build Feature in Godot"
+		build_btn.icon = _editor_icon("Add", "Tools")
+		build_btn.tooltip_text = "Build scene nodes, properties, InputMap actions, signals, and complete GDScript in 1 click."
+		build_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
+		build_vb.add_child(build_btn)
+	else:
+		var built_row := HBoxContainer.new()
+		built_row.add_theme_constant_override("separation", _S(6))
+		build_vb.add_child(built_row)
+
+		var ok_icon := TextureRect.new()
+		ok_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ok_icon.texture = _editor_icon("StatusSuccess")
+		built_row.add_child(ok_icon)
+
+		var built_lbl := Label.new()
+		built_lbl.text = "Feature Built (%d/%d ready)" % [ready_cnt, maxi(total_cnt, 1)]
+		built_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		built_lbl.add_theme_color_override("font_color", _editor_color("success_color", Color(0.36, 0.85, 0.56)))
+		built_row.add_child(built_lbl)
+
+		var rebuild_btn := Button.new()
+		rebuild_btn.flat = true
+		rebuild_btn.theme_type_variation = &"FlatButton"
+		rebuild_btn.text = "Rebuild / Repair"
+		rebuild_btn.icon = _editor_icon("Reload", "Tools")
+		rebuild_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
+		built_row.add_child(rebuild_btn)
+
+	var bp_toggle := Button.new()
+	bp_toggle.flat = true
+	bp_toggle.theme_type_variation = &"FlatButton"
+	bp_toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	bp_toggle.icon = _editor_icon("GuiTreeArrowDown" if _show_blueprint_details else "GuiTreeArrowRight", "Tools")
+	bp_toggle.text = "Blueprint Details (%d/%d ready)" % [ready_cnt, total_cnt]
+	bp_toggle.pressed.connect(func() -> void:
+		_show_blueprint_details = not _show_blueprint_details
+		_render_active_feature_workspace(feat)
+	)
+	build_vb.add_child(bp_toggle)
+
+	if _show_blueprint_details:
+		_blueprint_tree = Tree.new()
+		_blueprint_tree.hide_root = true
+		_blueprint_tree.custom_minimum_size = Vector2(0.0, float(_S(115)))
+		build_vb.add_child(_blueprint_tree)
+		var tree_root := _blueprint_tree.create_item()
+		for item_raw in eval_info.get("items", []):
+			if typeof(item_raw) != TYPE_DICTIONARY:
+				continue
+			var it: Dictionary = item_raw
+			var tr := _blueprint_tree.create_item(tree_root)
+			tr.set_text(0, str(it.get("label", "")))
+			var it_ok: bool = bool(it.get("ok", false))
+			tr.set_icon(0, _editor_icon("StatusSuccess" if it_ok else "StatusWarning", "Node"))
+			tr.set_custom_color(0, _editor_color("font_color" if it_ok else "warning_color", Color(0.86, 0.90, 0.94)))
+
+		if not script_paths.is_empty():
+			if _selected_script_preview_path.is_empty() or not (_selected_script_preview_path in script_paths):
+				_selected_script_preview_path = str(script_paths[0])
+
+			var scr_hdr := HBoxContainer.new()
+			scr_hdr.add_theme_constant_override("separation", _S(4))
+			build_vb.add_child(scr_hdr)
+
+			if script_paths.size() > 1:
+				var scr_picker := OptionButton.new()
+				scr_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				scr_picker.clip_text = true
+				for idx in range(script_paths.size()):
+					var sp_str := str(script_paths[idx])
+					scr_picker.add_item(sp_str.get_file(), idx)
+					if sp_str == _selected_script_preview_path:
+						scr_picker.select(idx)
+				scr_picker.item_selected.connect(func(sel_idx: int) -> void:
+					if sel_idx >= 0 and sel_idx < script_paths.size():
+						_selected_script_preview_path = str(script_paths[sel_idx])
+						_render_active_feature_workspace(feat)
+				)
+				scr_hdr.add_child(scr_picker)
+			else:
+				var scr_lbl := Label.new()
+				scr_lbl.text = _selected_script_preview_path
+				scr_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				scr_lbl.clip_text = true
+				scr_hdr.add_child(scr_lbl)
+
+			var open_scr_btn := Button.new()
+			open_scr_btn.flat = true
+			open_scr_btn.theme_type_variation = &"FlatButton"
+			open_scr_btn.text = "Open in Script Editor"
+			open_scr_btn.icon = _editor_icon("Script")
+			open_scr_btn.pressed.connect(_on_open_res_path_pressed.bind(_selected_script_preview_path))
+			scr_hdr.add_child(open_scr_btn)
+
+			var preview_code := ""
+			if FileAccess.file_exists(_selected_script_preview_path):
+				var f := FileAccess.open(_selected_script_preview_path, FileAccess.READ)
+				if f != null:
+					preview_code = f.get_as_text()
+					f.close()
+			if preview_code.is_empty():
+				preview_code = str(code_files.get(_selected_script_preview_path, "# Build Feature in Godot to generate %s" % _selected_script_preview_path.get_file()))
+
+			var code_edit := CodeEdit.new()
+			code_edit.editable = false
+			code_edit.gutters_draw_line_numbers = true
+			code_edit.custom_minimum_size = Vector2(0.0, float(_S(140)))
+			code_edit.text = preview_code
+			if mono_font != null:
+				code_edit.add_theme_font_override("font", mono_font)
+			build_vb.add_child(code_edit)
+
+	# -----------------------------------------------------------------------
+	# 3. Playtest in Arena (F6) + Live @export Feel Tuning
+	# -----------------------------------------------------------------------
+	var play_card := _create_native_card()
+	var play_vb: VBoxContainer = play_card["vb"]
+
+	var play_hdr := Label.new()
+	play_hdr.text = "Playtest & Feel Tuning"
+	if bold_font != null:
+		play_hdr.add_theme_font_override("font", bold_font)
+	play_vb.add_child(play_hdr)
+
+	var play_row := HBoxContainer.new()
+	play_row.add_theme_constant_override("separation", _S(6))
+	play_vb.add_child(play_row)
+
+	var arena_btn := Button.new()
+	arena_btn.text = "Playtest in Arena (F6)"
+	arena_btn.icon = _editor_icon("PlayScene", "Play")
+	arena_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	arena_btn.pressed.connect(_on_playtest_arena_pressed.bind(arena_scene, primary_scene))
+	play_row.add_child(arena_btn)
+
+	if not primary_scene.is_empty() and primary_scene != arena_scene:
+		var feat_run_btn := Button.new()
+		feat_run_btn.text = "Run Feature"
+		feat_run_btn.icon = _editor_icon("PlayCustom", "Play")
+		feat_run_btn.tooltip_text = "Run %s isolated" % primary_scene.get_file()
+		feat_run_btn.pressed.connect(_on_run_scene_pressed.bind(primary_scene))
+		play_row.add_child(feat_run_btn)
+
+	var tuners: Array = _executor.call("extract_feature_export_tuners", script_paths) if _executor != null else []
+	if not tuners.is_empty():
+		var tune_sub := Label.new()
+		tune_sub.text = "Live Feel Tuning (@export)"
+		tune_sub.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
+		play_vb.add_child(tune_sub)
+
+		for t_raw in tuners:
+			if typeof(t_raw) != TYPE_DICTIONARY:
+				continue
+			var t: Dictionary = t_raw
+			var t_script: String = str(t.get("script_path", ""))
+			var t_name: String = str(t.get("name", ""))
+			var t_label: String = str(t.get("label", t_name))
+			var t_type: String = str(t.get("type", "float"))
+			var t_val: Variant = t.get("value", 0.0)
+
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", _S(6))
+			play_vb.add_child(row)
+
+			var lbl := Label.new()
+			lbl.text = t_label
+			lbl.tooltip_text = "%s :: @export var %s" % [t_script.get_file(), t_name]
+			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			lbl.clip_text = true
+			row.add_child(lbl)
+
+			if t_type == "bool":
+				var cb := CheckBox.new()
+				cb.button_pressed = bool(t_val)
+				cb.toggled.connect(func(pressed: bool) -> void:
+					_on_export_tuner_changed(t_script, t_name, pressed)
+				)
+				_active_tuner_controls.append(cb)
+				row.add_child(cb)
+			elif t_type == "int" or t_type == "float":
+				var sb_ctrl := SpinBox.new()
+				sb_ctrl.custom_minimum_size = Vector2(float(_S(92)), 0.0)
+				sb_ctrl.allow_greater = true
+				sb_ctrl.allow_lesser = true
+				sb_ctrl.min_value = float(t.get("min", 0.0))
+				sb_ctrl.max_value = float(t.get("max", 100.0))
+				sb_ctrl.step = 1.0 if t_type == "int" else float(t.get("step", 0.1))
+				sb_ctrl.value = float(t_val)
+				sb_ctrl.value_changed.connect(func(nv: float) -> void:
+					var typed_val: Variant = int(round(nv)) if t_type == "int" else nv
+					_on_export_tuner_changed(t_script, t_name, typed_val)
+				)
+				_active_tuner_controls.append(sb_ctrl)
+				row.add_child(sb_ctrl)
+			elif t_type == "packed_scene":
+				var ps_btn := Button.new()
+				ps_btn.flat = true
+				ps_btn.theme_type_variation = &"FlatButton"
+				var ps_val := str(t_val)
+				ps_btn.text = ps_val.get_file() if not ps_val.is_empty() else "Set Scene"
+				ps_btn.icon = _editor_icon("PackedScene")
+				ps_btn.pressed.connect(_on_open_res_path_pressed.bind(t_script))
+				row.add_child(ps_btn)
+	else:
+		var tune_hint := Label.new()
+		tune_hint.text = "Expose @export vars in your script to tune feel live here."
+		tune_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		tune_hint.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.66, 0.70, 0.76)))
+		play_vb.add_child(tune_hint)
+
+	# -----------------------------------------------------------------------
+	# 4. Unified Agent Director (Direct Tweak + Real Scene & Script Fix)
+	# -----------------------------------------------------------------------
+	var agent_card := _create_native_card()
+	var agent_vb: VBoxContainer = agent_card["vb"]
+
+	var agent_hdr := Label.new()
+	agent_hdr.text = "Agent Director · Tweak or Fix"
+	if bold_font != null:
+		agent_hdr.add_theme_font_override("font", bold_font)
+	agent_vb.add_child(agent_hdr)
+
+	var agent_sub := Label.new()
+	agent_sub.text = "Request any tweak or Broken? Ask Agent to Fix — edits .gd + .tscn directly."
+	agent_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	agent_sub.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
+	agent_vb.add_child(agent_sub)
+
+	if not _last_agent_summary.is_empty():
+		var res_panel := PanelContainer.new()
+		var res_sb: StyleBox = _editor_stylebox("panel", "Tree")
+		if res_sb != null:
+			res_panel.add_theme_stylebox_override("panel", res_sb)
+		agent_vb.add_child(res_panel)
+
+		var res_vb := VBoxContainer.new()
+		res_vb.add_theme_constant_override("separation", _S(4))
+		res_panel.add_child(res_vb)
+
+		var res_hb := HBoxContainer.new()
+		res_hb.add_theme_constant_override("separation", _S(4))
+		res_vb.add_child(res_hb)
+
+		var res_icon := TextureRect.new()
+		res_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		res_icon.texture = _editor_icon("StatusSuccess")
+		res_hb.add_child(res_icon)
+
+		var res_lbl := Label.new()
+		res_lbl.text = _last_agent_summary
+		res_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		res_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		res_lbl.add_theme_color_override("font_color", _editor_color("success_color", Color(0.36, 0.85, 0.56)))
+		res_hb.add_child(res_lbl)
+
+		var dismiss_btn := Button.new()
+		dismiss_btn.flat = true
+		dismiss_btn.theme_type_variation = &"FlatButton"
+		dismiss_btn.icon = _editor_icon("Close")
+		if dismiss_btn.icon == null:
+			dismiss_btn.text = "x"
+		dismiss_btn.pressed.connect(func() -> void:
+			_last_agent_summary = ""
+			_last_agent_warnings = PackedStringArray()
+			_render_active_feature_workspace(feat)
+		)
+		res_hb.add_child(dismiss_btn)
+
+		for w in _last_agent_warnings:
+			var w_lbl := Label.new()
+			w_lbl.text = "Warning: %s" % w
+			w_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			w_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
+			res_vb.add_child(w_lbl)
 
 	_fix_input = LineEdit.new()
-	_fix_input.placeholder_text = "Describe bug or paste Godot Output error..."
+	_fix_input.placeholder_text = "Make lunge faster, spawn 5 crabs, or paste Godot error..."
 	_fix_input.text = _fix_draft_text
 	_fix_input.text_changed.connect(func(txt: String) -> void: _fix_draft_text = txt)
 	_fix_input.text_submitted.connect(_on_fix_input_submitted.bind(feat_id, cp_id))
-	vb.add_child(_fix_input)
+	agent_vb.add_child(_fix_input)
 
-	var ask_btn := Button.new()
-	ask_btn.text = "Diagnosing Live Project..." if _diagnosing_fix else "Diagnose & Fix"
-	ask_btn.icon = _editor_icon("Tools")
-	ask_btn.disabled = _diagnosing_fix
-	ask_btn.pressed.connect(_on_ask_agent_fix_pressed.bind(feat_id, cp_id))
-	vb.add_child(ask_btn)
+	var apply_btn := Button.new()
+	apply_btn.text = "Applying Agent Changes..." if _diagnosing_fix else "Apply to Scene & Script"
+	apply_btn.icon = _editor_icon("Tools")
+	apply_btn.disabled = _diagnosing_fix
+	apply_btn.pressed.connect(_on_direct_agent_pressed.bind(feat_id, cp_id))
+	agent_vb.add_child(apply_btn)
+
+	# Sticky Footer CTA
+	_footer_box.visible = true
+	_primary_cta_btn.disabled = _building_feature
+	if not all_ready:
+		_primary_cta_btn.text = "Build Feature in Godot"
+		_primary_cta_btn.icon = _editor_icon("Add", "Tools")
+	else:
+		_primary_cta_btn.text = "Playtest Passed — Next Feature"
+		_primary_cta_btn.icon = _editor_icon("StatusSuccess" if gate_passed else "Forward")
 
 
 # ---------------------------------------------------------------------------
-# Action & Tree Callbacks
+# Feature Actions, Playtest, Export Tuners & Agent Director
 # ---------------------------------------------------------------------------
 
-func _on_check_tree_button_clicked(item: TreeItem, _column: int, _id: int, _mouse_button_index: int) -> void:
-	_focus_or_open_tree_item(item)
-
-
-func _on_check_tree_item_activated() -> void:
-	if _check_tree == null:
+func _on_build_feature_pressed(feat: Dictionary) -> void:
+	if _executor == null or _building_feature:
 		return
-	var item: TreeItem = _check_tree.get_selected()
-	if item != null:
-		_focus_or_open_tree_item(item)
+	var feat_id: String = str(feat.get("id", ""))
+	var cp_id: String = str(feat.get("checkpointId", ""))
+	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 
+	var local_res: Dictionary = _executor.call("build_feature_local", feat, editor_interface, undo_redo, code_files, arena_scene)
+	if editor_interface != null and editor_interface.get_resource_filesystem() != null:
+		editor_interface.get_resource_filesystem().scan()
 
-func _focus_or_open_tree_item(item: TreeItem) -> void:
-	if item == null:
+	if _sync == null or not _sync.has_link_token():
+		var local_sum := str(local_res.get("summary", "Built local feature scaffold."))
+		_last_agent_summary = local_sum
+		_set_status(local_sum, not bool(local_res.get("ok", true)))
+		_render_active_feature_workspace(feat)
 		return
-	var key_id: String = str(item.get_metadata(0))
-	if not _tree_row_lookup.has(key_id):
-		return
-	var row: Dictionary = _tree_row_lookup[key_id]
-	var focus_path: String = str(row.get("focusPath", ""))
-	var res_path: String = str(row.get("resPath", ""))
 
-	if not focus_path.is_empty() and editor_interface != null:
-		var root: Node = editor_interface.get_edited_scene_root()
-		if root != null:
-			var target: Node = root if focus_path == "." else root.get_node_or_null(NodePath(focus_path))
-			if target != null and _executor != null:
-				_executor.call("select_and_inspect_node", editor_interface, target)
-				_set_status("Focused %s in Scene & Inspector" % target.name, false)
-				return
-	if not res_path.is_empty():
-		_on_open_res_path_pressed(res_path)
+	var paths: Dictionary = _executor.call("resolve_feature_paths", feat, code_files, arena_scene)
+	var primary_scene: String = str(paths.get("primary_scene", ""))
+	var extra_scenes := PackedStringArray()
+	if not primary_scene.is_empty():
+		extra_scenes.append(primary_scene)
+	if not arena_scene.is_empty() and not (arena_scene in extra_scenes):
+		extra_scenes.append(arena_scene)
+
+	var scene_snap: Dictionary = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes)
+	var live_scripts: Dictionary = _executor.call("read_live_scripts_for_feature", feat, code_files, arena_scene)
+	_building_feature = true
+	_set_status("Building %s with Gemini 4 Hydrogen..." % str(feat.get("title", "Feature")), false)
+	_render_active_feature_workspace(feat)
+	_sync.build_feature(feat_id, cp_id, scene_snap, live_scripts, arena_scene, primary_scene)
 
 
-func _on_action_build_scene_nodes(step: Dictionary, eval_info: Dictionary) -> void:
-	if _executor == null:
+func _on_fix_input_submitted(_text: String, feat_id: String, cp_id: String) -> void:
+	_on_direct_agent_pressed(feat_id, cp_id)
+
+
+func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
+	if _sync == null or _diagnosing_fix:
 		return
-	var res: Dictionary = _executor.call("build_missing_scene_nodes", editor_interface, undo_redo, step, eval_info)
-	if not bool(res.get("ok", false)):
-		_set_status(str(res.get("message", "Could not build scene nodes.")), true)
+	var prompt_txt: String = (_fix_input.text if _fix_input != null else _fix_draft_text).strip_edges()
+	if prompt_txt.is_empty():
+		_set_status("Type a gameplay tweak or paste a Godot error first.", true)
 		return
-	var added_cnt: int = int(res.get("addedCount", 0))
-	_set_status("Built %d node(s) with Ctrl+Z support" % added_cnt if added_cnt > 0 else "Scene hierarchy already up to date", false)
 	var feat: Dictionary = _get_active_feature()
+	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+	var paths: Dictionary = _executor.call("resolve_feature_paths", feat, code_files, arena_scene) if _executor != null else {}
+	var primary_scene: String = str(paths.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
+
+	var extra_scenes := PackedStringArray()
+	if not primary_scene.is_empty():
+		extra_scenes.append(primary_scene)
+	if not arena_scene.is_empty() and not (arena_scene in extra_scenes):
+		extra_scenes.append(arena_scene)
+
+	var scene_snap: Dictionary = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes) if _executor != null else {}
+	var live_scripts: Dictionary = _executor.call("read_live_scripts_for_feature", feat, code_files, arena_scene) if _executor != null else {}
+
+	_diagnosing_fix = true
+	_set_status("Agent Director updating Scene & GDScript...", false)
 	if not feat.is_empty():
-		_render_active_step_workspace(feat)
+		_render_active_feature_workspace(feat)
+	_sync.direct_agent(feat_id, cp_id, prompt_txt, scene_snap, live_scripts, arena_scene, primary_scene, prompt_txt)
 
 
-func _on_action_apply_input_and_inspector(step: Dictionary, eval_info: Dictionary) -> void:
+func _on_agent_bundle_received(bundle: Dictionary, _payload_data: Dictionary) -> void:
+	_building_feature = false
+	_diagnosing_fix = false
 	if _executor == null:
 		return
-	var res: Dictionary = _executor.call("apply_input_and_inspector", editor_interface, undo_redo, step, eval_info)
-	var inp_cnt: int = int(res.get("inputCount", 0))
-	var prop_cnt: int = int(res.get("propCount", 0))
-	_set_status("Bound %d InputMap action(s), updated %d property change(s)" % [inp_cnt, prop_cnt], false)
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
+	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle)
+	if editor_interface != null and editor_interface.get_resource_filesystem() != null:
+		editor_interface.get_resource_filesystem().scan()
+	var summary := str(apply_res.get("summary", bundle.get("summary", "Applied scene & script updates.")))
+	_last_agent_summary = summary
+	_last_agent_warnings = apply_res.get("warnings", PackedStringArray())
+	if bool(apply_res.get("ok", false)):
+		_fix_draft_text = ""
+	_set_status(summary, not bool(apply_res.get("ok", true)))
+	_refresh_view()
 
 
-func _on_action_apply_or_create_script(step: Dictionary, eval_info: Dictionary) -> void:
+func _on_export_tuner_changed(script_path: String, prop_name: String, new_val: Variant) -> void:
 	if _executor == null:
 		return
-	var res: Dictionary = _executor.call("apply_or_create_script", editor_interface, undo_redo, step, eval_info)
-	if not bool(res.get("ok", false)):
-		_set_status(str(res.get("message", "Could not update script.")), true)
-		return
-	var p: String = str(res.get("path", ""))
-	if bool(res.get("wroteFile", false)):
-		_set_status("Updated %s & opened in Script Editor" % p.get_file(), false)
+	var res: Dictionary = _executor.call("apply_export_tuner_value", script_path, prop_name, new_val, editor_interface, undo_redo)
+	if bool(res.get("ok", false)):
+		_set_status("Updated %s = %s" % [prop_name, str(new_val)], false)
 	else:
-		_set_status("Opened %s in Script Editor" % p.get_file(), false)
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
+		_set_status(str(res.get("error", "Could not update @export var %s" % prop_name)), true)
 
 
-func _on_action_connect_signals(step: Dictionary, eval_info: Dictionary) -> void:
-	if _executor == null:
+func _on_playtest_arena_pressed(arena_scene: String, primary_scene: String) -> void:
+	if editor_interface == null:
 		return
-	var res: Dictionary = _executor.call("connect_step_signals", editor_interface, step, eval_info)
-	var cnt: int = int(res.get("connectedCount", 0))
-	if cnt > 0:
-		_set_status("Connected %d signal(s) persistently" % cnt, false)
-	else:
-		_set_status("Select source node in Node -> Signals dock to finish wiring.", false)
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
-
-
-func _on_action_apply_fix_patch(step: Dictionary, step_path: String) -> void:
-	if _executor == null:
+	if not arena_scene.is_empty() and arena_scene.ends_with(".tscn") and FileAccess.file_exists(arena_scene):
+		editor_interface.play_custom_scene(arena_scene)
 		return
-	var res: Dictionary = _executor.call("apply_fix_patch", editor_interface, step, step_path)
-	if bool(res.get("applied", false)):
-		_set_status("Applied AI fix patch to %s" % str(res.get("path", "")).get_file(), false)
-	else:
-		_set_status("Copied clean fix snippet & opened %s — paste at target function." % str(res.get("path", "")).get_file(), false)
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
-
-
-func _on_copy_step_code_pressed(step: Dictionary) -> void:
-	var clean: String = _executor.call("resolve_step_code_text", step) if _executor != null else str(step.get("codeSnippet", ""))
-	DisplayServer.clipboard_set(clean)
-	_set_status("Copied clean GDScript to clipboard", false)
+	var main_scene: String = str(ProjectSettings.get_setting("application/run/main_scene", "")).strip_edges()
+	if not main_scene.is_empty() and main_scene.ends_with(".tscn") and FileAccess.file_exists(main_scene):
+		editor_interface.play_custom_scene(main_scene)
+		return
+	if not primary_scene.is_empty() and primary_scene.ends_with(".tscn") and FileAccess.file_exists(primary_scene):
+		editor_interface.play_custom_scene(primary_scene)
+		return
+	editor_interface.play_current_scene()
 
 
 func _on_open_res_path_pressed(res_path: String) -> void:
@@ -1216,65 +1139,76 @@ func _on_run_scene_pressed(target_scene_path: String = "") -> void:
 	editor_interface.play_current_scene()
 
 
-# ---------------------------------------------------------------------------
-# Live Scene & Script Snapshots for Agent Fix
-# ---------------------------------------------------------------------------
-
-func _capture_live_scene_snapshot() -> String:
-	if editor_interface == null:
-		return "(No EditorInterface)"
-	var root: Node = editor_interface.get_edited_scene_root()
-	if root == null:
-		return "(No edited scene open in Godot)"
-	var lines: PackedStringArray = []
-	lines.append("Edited Scene: %s" % root.scene_file_path)
-	_append_node_snapshot(root, 0, lines)
-	return "\n".join(lines)
-
-
-func _append_node_snapshot(node: Node, depth: int, lines: PackedStringArray) -> void:
-	if node == null or lines.size() > 80:
+func _on_feature_selected(idx: int) -> void:
+	var epic_raw: Variant = _payload.get("activeEpic", null)
+	if typeof(epic_raw) != TYPE_DICTIONARY:
 		return
-	var indent: String = "  ".repeat(depth)
-	var scr: Variant = node.get_script()
-	var scr_note: String = " [script: %s]" % (scr as Script).resource_path if scr is Script else ""
-	lines.append("%s- %s (%s)%s" % [indent, node.name, node.get_class(), scr_note])
-	for child in node.get_children():
-		_append_node_snapshot(child, depth + 1, lines)
+	var features: Array = (epic_raw as Dictionary).get("features", [])
+	if idx >= 0 and idx < features.size():
+		var f: Dictionary = features[idx]
+		_selected_feature_id = str(f.get("id", ""))
+		_selected_script_preview_path = ""
+		_last_agent_summary = ""
+		_last_agent_warnings = PackedStringArray()
+		_render_active_feature_workspace(f)
 
 
-func _capture_live_scripts_snapshot(feat: Dictionary) -> String:
-	var seen: Dictionary = {}
-	var chunks: PackedStringArray = []
-	var steps: Array = feat.get("steps", [])
-	for s_raw in steps:
-		if typeof(s_raw) == TYPE_DICTIONARY:
-			var sp: String = str((s_raw as Dictionary).get("stepPath", "")).strip_edges()
-			if sp.ends_with(".gd") and FileAccess.file_exists(sp):
-				seen[sp] = true
-	if editor_interface != null and editor_interface.get_edited_scene_root() != null:
-		_collect_scene_scripts(editor_interface.get_edited_scene_root(), seen)
-
-	for path in seen.keys():
-		if chunks.size() >= 5:
-			break
-		var f := FileAccess.open(str(path), FileAccess.READ)
-		if f != null:
-			chunks.append("=== %s ===\n%s" % [str(path), f.get_as_text().substr(0, 6000)])
-			f.close()
-	return "\n\n".join(chunks)
-
-
-func _collect_scene_scripts(node: Node, seen: Dictionary) -> void:
-	if node == null:
+func _on_primary_cta_pressed() -> void:
+	var feat: Dictionary = _get_active_feature()
+	if feat.is_empty():
 		return
-	var scr: Variant = node.get_script()
-	if scr is Script:
-		var rp: String = (scr as Script).resource_path
-		if rp.begins_with("res://") and FileAccess.file_exists(rp):
-			seen[rp] = true
-	for child in node.get_children():
-		_collect_scene_scripts(child, seen)
+	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, code_files, arena_scene) if _executor != null else { "all_ready": false }
+	if not bool(eval_info.get("all_ready", false)):
+		_on_build_feature_pressed(feat)
+		return
+
+	if _sync == null:
+		return
+	var feat_id: String = str(feat.get("id", ""))
+	var cp_id: String = str(feat.get("checkpointId", ""))
+	feat["isPlaytestPassed"] = true
+	feat["isCompleted"] = true
+
+	var epic_raw: Variant = _payload.get("activeEpic", null)
+	if typeof(epic_raw) == TYPE_DICTIONARY:
+		var features: Array = (epic_raw as Dictionary).get("features", [])
+		for f_raw in features:
+			if typeof(f_raw) == TYPE_DICTIONARY:
+				var fd: Dictionary = f_raw
+				if str(fd.get("id", "")) != feat_id and not bool(fd.get("isCompleted", false)):
+					_selected_feature_id = str(fd.get("id", ""))
+					break
+
+	_set_status("Playtest passed — advancing to next feature...", false)
+	_sync.set_playtest_passed(feat_id, cp_id, true)
+
+
+func _on_epic_updated(payload: Dictionary) -> void:
+	_payload = payload
+	_building_feature = false
+	_diagnosing_fix = false
+	if _last_agent_summary.is_empty():
+		_set_status("Synced", false)
+	_refresh_view()
+
+
+func _on_sync_failed(message: String) -> void:
+	_building_feature = false
+	_diagnosing_fix = false
+	_set_status(message, true)
+	var feat: Dictionary = _get_active_feature()
+	if not feat.is_empty() and _workspace_panel.visible:
+		_render_active_feature_workspace(feat)
+
+
+func _on_busy_changed(is_busy: bool) -> void:
+	if _sync_btn != null:
+		_sync_btn.disabled = is_busy
+	if is_busy and _status_label != null and not _diagnosing_fix and not _building_feature:
+		_status_label.text = "Syncing..."
+		_status_label.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
 
 
 # ---------------------------------------------------------------------------
@@ -1331,26 +1265,6 @@ func _editor_stylebox(box_name: String, theme_type: String) -> StyleBox:
 	return null
 
 
-func _step_picker_icon(st: Dictionary, is_done: bool) -> Texture2D:
-	if is_done:
-		return _editor_icon("StatusSuccess")
-	var st_role: String = str(st.get("role", "CODE"))
-	match st_role:
-		"SCENE":
-			return _editor_icon("PackedScene", "Node")
-		"INSP":
-			return _editor_icon("Edit", "Tools")
-		"CODE":
-			return _editor_icon("Script", "TextFile")
-		"WIRE":
-			if str(st.get("verifyMode", "")) == "playtest" and not ("-->" in str(st.get("codeSnippet", "")) or "──►" in str(st.get("codeSnippet", "")) or "->" in str(st.get("codeSnippet", ""))):
-				return _editor_icon("PlayScene", "Play")
-			return _editor_icon("Signals", "PlayScene")
-		"FIX":
-			return _editor_icon("StatusError", "Tools")
-	return _editor_icon("Node")
-
-
 func _markdown_to_bbcode(raw: String) -> String:
 	var out_lines := PackedStringArray()
 	var code_bg: Color = _editor_color("dark_color_2", Color(0.10, 0.12, 0.15))
@@ -1394,170 +1308,8 @@ func _set_status(msg: String, is_error: bool) -> void:
 
 
 # ---------------------------------------------------------------------------
-# Signal Handlers & Navigation
+# Settings, Link Token & 1-Click GitHub Plugin Self-Update
 # ---------------------------------------------------------------------------
-
-func _on_feature_selected(idx: int) -> void:
-	var epic_raw: Variant = _payload.get("activeEpic", null)
-	if typeof(epic_raw) != TYPE_DICTIONARY:
-		return
-	var features: Array = (epic_raw as Dictionary).get("features", [])
-	if idx >= 0 and idx < features.size():
-		var f: Dictionary = features[idx]
-		_selected_feature_id = str(f.get("id", ""))
-		_selected_step_idx = _find_first_incomplete_step_idx(f)
-		_show_code_preview = false
-		_render_active_step_workspace(f)
-
-
-func _on_step_selected(idx: int) -> void:
-	_selected_step_idx = idx
-	_show_code_preview = false
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
-
-
-func _on_prev_step_pressed() -> void:
-	_selected_step_idx = maxi(0, _selected_step_idx - 1)
-	_show_code_preview = false
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
-
-
-func _on_next_step_pressed() -> void:
-	var feat: Dictionary = _get_active_feature()
-	if feat.is_empty():
-		return
-	var steps: Array = feat.get("steps", [])
-	_selected_step_idx = mini(steps.size(), _selected_step_idx + 1)
-	_show_code_preview = false
-	_render_active_step_workspace(feat)
-
-
-func _on_step_checkbox_toggled(pressed: bool, feat_id: String, cp_id: String, step_id: String) -> void:
-	if _sync == null:
-		return
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty() and str(feat.get("id", "")) == feat_id:
-		for st_raw in feat.get("steps", []):
-			if typeof(st_raw) == TYPE_DICTIONARY and str((st_raw as Dictionary).get("id", "")) == step_id:
-				(st_raw as Dictionary)["completed"] = pressed
-				break
-		if not pressed:
-			feat["isPlaytestPassed"] = false
-			feat["isCompleted"] = false
-	_set_status("Syncing...", false)
-	_sync.toggle_step(feat_id, cp_id, step_id, pressed)
-
-
-func _on_playtest_gate_toggled(pressed: bool, feat_id: String, cp_id: String) -> void:
-	if _sync == null:
-		return
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty() and str(feat.get("id", "")) == feat_id:
-		feat["isPlaytestPassed"] = pressed
-	_set_status("Syncing Playtest Gate...", false)
-	_sync.set_playtest_passed(feat_id, cp_id, pressed)
-
-
-func _on_toggle_code_preview_pressed() -> void:
-	_show_code_preview = not _show_code_preview
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
-
-
-func _on_toggle_fix_drawer_pressed() -> void:
-	_fix_drawer_open = not _fix_drawer_open
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
-
-
-func _on_fix_input_submitted(_text: String, feat_id: String, cp_id: String) -> void:
-	_on_ask_agent_fix_pressed(feat_id, cp_id)
-
-
-func _on_ask_agent_fix_pressed(feat_id: String, cp_id: String) -> void:
-	if _sync == null or _fix_input == null:
-		return
-	var issue: String = _fix_input.text.strip_edges()
-	if issue.is_empty():
-		_set_status("Describe the bug or paste a Godot error first.", true)
-		return
-	var feat: Dictionary = _get_active_feature()
-	var scene_snap: String = _capture_live_scene_snapshot()
-	var scripts_snap: String = _capture_live_scripts_snapshot(feat)
-	_diagnosing_fix = true
-	_set_status("Inspecting live Scene Tree + .gd scripts...", false)
-	if not feat.is_empty():
-		_render_active_step_workspace(feat)
-	_sync.diagnose_fix(feat_id, cp_id, issue, scene_snap, scripts_snap)
-
-
-func _on_primary_cta_pressed() -> void:
-	if _sync == null:
-		return
-	var feat: Dictionary = _get_active_feature()
-	if feat.is_empty():
-		return
-	var feat_id: String = str(feat.get("id", ""))
-	var cp_id: String = str(feat.get("checkpointId", ""))
-	var steps: Array = feat.get("steps", [])
-
-	if _selected_step_idx >= steps.size():
-		_set_status("Passing Playtest Gate...", false)
-		_sync.set_playtest_passed(feat_id, cp_id, true)
-		return
-
-	var st: Dictionary = steps[_selected_step_idx]
-	var step_id: String = str(st.get("id", ""))
-	st["completed"] = true
-	_selected_step_idx = mini(steps.size(), _selected_step_idx + 1)
-	_show_code_preview = false
-	_set_status("Step completed", false)
-	_refresh_view()
-	_sync.toggle_step(feat_id, cp_id, step_id, true)
-
-
-func _on_epic_updated(payload: Dictionary) -> void:
-	_payload = payload
-	_diagnosing_fix = false
-
-	var created_fix_id: String = str(payload.get("createdFixStepId", "")).strip_edges()
-	if not created_fix_id.is_empty():
-		_fix_drawer_open = false
-		_fix_draft_text = ""
-		_show_code_preview = true
-		var feat: Dictionary = _get_active_feature()
-		var steps: Array = feat.get("steps", []) if not feat.is_empty() else []
-		for i in range(steps.size()):
-			if typeof(steps[i]) == TYPE_DICTIONARY and str((steps[i] as Dictionary).get("id", "")) == created_fix_id:
-				_selected_step_idx = i
-				break
-		_set_status("Gemini 4 Hydrogen created [FIX] patch", false)
-	else:
-		_set_status("Synced", false)
-	_refresh_view()
-
-
-func _on_sync_failed(message: String) -> void:
-	_diagnosing_fix = false
-	_set_status(message, true)
-	var feat: Dictionary = _get_active_feature()
-	if not feat.is_empty() and _workspace_panel.visible:
-		_render_active_step_workspace(feat)
-
-
-func _on_busy_changed(is_busy: bool) -> void:
-	if _sync_btn != null:
-		_sync_btn.disabled = is_busy
-	if is_busy and _status_label != null and not _diagnosing_fix:
-		_status_label.text = "Syncing..."
-		_status_label.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
-
 
 func _on_connect_submitted(_text: String) -> void:
 	_on_connect_pressed()
@@ -1574,7 +1326,7 @@ func _on_connect_pressed() -> void:
 	_show_token_editor = false
 	_payload = {}
 	_selected_feature_id = ""
-	_selected_step_idx = 0
+	_last_agent_summary = ""
 	_refresh_view()
 	_sync.fetch_active_epic()
 
@@ -1590,7 +1342,7 @@ func _on_disconnect_pressed() -> void:
 	_sync.clear_link_token()
 	_payload = {}
 	_selected_feature_id = ""
-	_selected_step_idx = 0
+	_last_agent_summary = ""
 	_show_token_editor = true
 	_status_label.text = "Disconnected"
 	_status_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.66, 0.70, 0.76)))

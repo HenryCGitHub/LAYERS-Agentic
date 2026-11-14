@@ -1730,7 +1730,7 @@ func _physics_process(delta: float) -> void:
     );
 
     test(
-      'Native Godot 4 plugin addon V2.3 files, Cloud Functions diagnose_fix & web/layers_godot_plugin.zip enforce native EditorTheme GUI, hierarchy-aware executor, undoable actions & 1-click self-update',
+      'Native Godot 4 plugin addon V2.4 files, Cloud Functions direct_agent/build_feature & web/layers_godot_plugin.zip enforce native EditorTheme GUI, Feature-First workflow, export tuners & 1-click self-update',
       () {
         final cfg = File('godot_plugin/addons/layers/plugin.cfg');
         final pluginGd = File('godot_plugin/addons/layers/layers_plugin.gd');
@@ -1755,7 +1755,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.3.0"'));
+        expect(cfgText, contains('version="2.4.0"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1774,6 +1774,9 @@ func _physics_process(delta: float) -> void:
         expect(syncText, contains('/godotLink/epic'));
         expect(syncText, contains('/godotLink/update'));
         expect(syncText, contains('"diagnose_fix"'));
+        expect(syncText, contains('build_feature'));
+        expect(syncText, contains('direct_agent'));
+        expect(syncText, contains('agent_bundle_received'));
         expect(syncText, contains('check_for_plugin_update'));
         expect(syncText, contains('download_and_apply_plugin_update'));
         expect(syncText, contains('layers_step_executor.gd'));
@@ -1795,6 +1798,9 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('CodeEdit.new()'));
         expect(dockText, contains('layers_step_executor.gd'));
         expect(dockText, contains('Broken? Ask Agent to Fix'));
+        expect(dockText, contains('Build Feature in Godot'));
+        expect(dockText, contains('Apply to Scene & Script'));
+        expect(dockText, contains('Playtest in Arena'));
         expect(dockText, contains('OS.shell_open'));
         expect(dockText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(dockText, isNot(contains('preload(')));
@@ -1812,9 +1818,18 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('merge_step_code_into_existing'));
         expect(executorText, contains('parse_signal_specs'));
         expect(executorText, contains('undo_redo'));
+        expect(executorText, contains('apply_agent_bundle'));
+        expect(executorText, contains('extract_feature_export_tuners'));
+        expect(executorText, contains('can_attach_script_to_node'));
+        expect(executorText, contains('evaluate_feature'));
 
         expect(fnText, contains('decodeThreeAreaNotesJs'));
         expect(fnText, contains('"diagnose_fix"'));
+        expect(fnText, contains('"build_feature"'));
+        expect(fnText, contains('"direct_agent"'));
+        expect(fnText, contains('sceneOps'));
+        expect(fnText, contains('scriptUpdates'));
+        expect(fnText, contains('codeFiles'));
         expect(fnText, contains('gemini-4-hydrogen'));
         expect(fnText, contains('gemini-flash-latest'));
 

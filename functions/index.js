@@ -223,6 +223,681 @@ function stripDiffLinePrefixes(rawCode) {
     .trim();
 }
 
+function normalizeResPathJs(rawPath) {
+  let clean = String(rawPath || "").trim().replace(/\\/g, "/");
+  if (!clean) return "";
+  if (clean.startsWith("res://")) {
+    clean = clean.slice("res://".length);
+  }
+  clean = clean.replace(/^\/+/, "").replace(/\/{2,}/g, "/");
+  return clean ? `res://${clean}` : "";
+}
+
+function fnv1aHash6Js(text) {
+  let h = 0x811c9dc5;
+  const s = String(text || "");
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, "0").slice(0, 6);
+}
+
+function stableCodeFileDocIdJs(projectId, resPath) {
+  const norm = normalizeResPathJs(resPath) || "res://scripts/script.gd";
+  const fileName = norm.split("/").pop() || "script.gd";
+  const slug =
+    fileName
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 32) || "script";
+  return `${projectId}_code_${slug}_${fnv1aHash6Js(norm)}`;
+}
+
+function extractResPathsListJs(rawText, extFilter = "") {
+  const matches = String(rawText || "").match(/res:\/\/[A-Za-z0-9_./-]+/g) || [];
+  const out = [];
+  const seen = new Set();
+  for (const m of matches) {
+    const norm = normalizeResPathJs(m);
+    if (!norm) continue;
+    if (extFilter && !norm.toLowerCase().endsWith(extFilter)) continue;
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      out.push(norm);
+    }
+  }
+  return out;
+}
+
+function collectFeatureScriptPathsJs(feat, steps) {
+  const ordered = [];
+  const seen = new Set();
+  const addFrom = (txt) => {
+    for (const p of extractResPathsListJs(txt, ".gd")) {
+      if (!seen.has(p)) {
+        seen.add(p);
+        ordered.push(p);
+      }
+    }
+  };
+  addFrom(feat?.sections?.primary_asset || "");
+  addFrom(feat?.sections?.assets || "");
+  addFrom(feat?.sections?.goal || "");
+  for (const s of Array.isArray(steps) ? steps : []) {
+    addFrom(s?.stepPath || s?.resPath || "");
+    addFrom(s?.codeSnippet || s?.rawCopyCode || "");
+    addFrom(s?.locationLabel || "");
+    addFrom(s?.instruction || "");
+    addFrom(s?.area1Hierarchy || "");
+    addFrom(s?.area2Inspector || "");
+  }
+  return ordered;
+}
+
+function collectProjectCodeFilesJs(docsById) {
+  const out = {};
+  if (!docsById || typeof docsById.values !== "function") return out;
+  for (const d of docsById.values()) {
+    if (!d || String(d.tier || "").toUpperCase() !== "CODEFILE") continue;
+    const resPath = normalizeResPathJs(d?.sections?.res_path || "");
+    if (!resPath) continue;
+    out[resPath] = String(d?.sections?.content || "");
+  }
+  return out;
+}
+
+function detectArenaScenePathJs(docsById, candidateEpics, activeIdx) {
+  const allTscns = [];
+  const seen = new Set();
+  const pushTscn = (raw) => {
+    for (const p of extractResPathsListJs(raw, ".tscn")) {
+      if (!seen.has(p)) {
+        seen.add(p);
+        allTscns.push(p);
+      }
+    }
+  };
+  if (Array.isArray(candidateEpics)) {
+    for (const ep of candidateEpics) {
+      for (const f of ep?.features || []) {
+        pushTscn(f?.primaryAsset || "");
+        for (const s of f?.steps || []) {
+          pushTscn(s?.stepPath || s?.resPath || "");
+          pushTscn(s?.area1Hierarchy || "");
+          pushTscn(s?.instruction || "");
+        }
+      }
+    }
+  }
+  if (docsById && typeof docsById.values === "function") {
+    for (const d of docsById.values()) {
+      pushTscn(d?.sections?.primary_asset || "");
+      pushTscn(d?.sections?.assets || "");
+    }
+  }
+  const preferredKeywords = ["arena", "main", "world", "level", "island", "stage", "game"];
+  for (const kw of preferredKeywords) {
+    const match = allTscns.find((p) => p.toLowerCase().includes(kw));
+    if (match) return match;
+  }
+  if (
+    Array.isArray(candidateEpics) &&
+    activeIdx >= 0 &&
+    candidateEpics[activeIdx]?.features?.length
+  ) {
+    for (const f of candidateEpics[activeIdx].features) {
+      if (String(f?.primaryAsset || "").endsWith(".tscn")) {
+        return f.primaryAsset;
+      }
+    }
+  }
+  return allTscns[0] || "";
+}
+
+function findCodeFileDocByResPathJs(docsById, resPath) {
+  const norm = normalizeResPathJs(resPath);
+  if (!norm || !docsById) return null;
+  for (const d of docsById.values()) {
+    if (!d || String(d.tier || "").toUpperCase() !== "CODEFILE") continue;
+    if (normalizeResPathJs(d?.sections?.res_path || "") === norm) {
+      return d;
+    }
+  }
+  return null;
+}
+
+const VALID_SCENE_OPS = new Set([
+  "ensure_node",
+  "set_property",
+  "attach_script",
+  "detach_script",
+  "connect_signal",
+  "instance_scene",
+  "remove_node",
+]);
+
+function normalizeAgentBundle(rawObj, mode) {
+  const obj = rawObj && typeof rawObj === "object" ? rawObj : {};
+  const rawUpdates = Array.isArray(obj.scriptUpdates) ? obj.scriptUpdates : [];
+  const scriptUpdates = [];
+  for (const u of rawUpdates) {
+    if (!u || typeof u !== "object") continue;
+    const resPath = normalizeResPathJs(u.resPath || u.res_path || "");
+    const content = stripDiffLinePrefixes(u.content || "");
+    if (!resPath || !content) continue;
+    scriptUpdates.push({
+      resPath,
+      attachTo: String(u.attachTo || u.attach_to || "").trim(),
+      scenePath: normalizeResPathJs(u.scenePath || u.scene_path || ""),
+      language: String(u.language || "gdscript").trim().toLowerCase(),
+      content,
+    });
+  }
+  const rawOps = Array.isArray(obj.sceneOps) ? obj.sceneOps : [];
+  const sceneOps = [];
+  for (const opObj of rawOps) {
+    if (!opObj || typeof opObj !== "object") continue;
+    const op = String(opObj.op || opObj.type || "").trim().toLowerCase();
+    if (!VALID_SCENE_OPS.has(op)) continue;
+    const normalized = {
+      op,
+      scenePath: normalizeResPathJs(opObj.scenePath || opObj.scene_path || ""),
+      nodePath: String(opObj.nodePath || opObj.node_path || "").trim(),
+      parentPath: String(opObj.parentPath || opObj.parent_path || "").trim(),
+      nodeName: String(opObj.nodeName || opObj.node_name || "").trim(),
+      nodeType: String(opObj.nodeType || opObj.node_type || "").trim(),
+      subResourceClass: String(
+        opObj.subResourceClass || opObj.sub_resource_class || ""
+      ).trim(),
+      subResourceProps:
+        opObj.subResourceProps && typeof opObj.subResourceProps === "object"
+          ? opObj.subResourceProps
+          : {},
+      properties:
+        opObj.properties && typeof opObj.properties === "object"
+          ? opObj.properties
+          : {},
+      scriptPath: normalizeResPathJs(opObj.scriptPath || opObj.script_path || ""),
+      sourcePath: String(opObj.sourcePath || opObj.source_path || "").trim(),
+      signalName: String(opObj.signalName || opObj.signal_name || "").trim(),
+      targetPath: String(opObj.targetPath || opObj.target_path || "").trim(),
+      methodName: String(opObj.methodName || opObj.method_name || "").trim(),
+      instancePath: normalizeResPathJs(
+        opObj.instancePath || opObj.instance_path || ""
+      ),
+    };
+    sceneOps.push(normalized);
+  }
+  return {
+    mode: String(obj.mode || mode || "direct_agent").trim(),
+    summary: String(obj.summary || "").trim(),
+    diagnosis: String(obj.diagnosis || "").trim(),
+    scriptUpdates,
+    sceneOps,
+  };
+}
+
+async function callGeminiFlashJson({ apiKey, systemInstruction, userPrompt }) {
+  const models = ["gemini-4-hydrogen", "gemini-flash-latest"];
+  let lastError = "Gemini request failed.";
+  for (const modelId of models) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${encodeURIComponent(
+      apiKey
+    )}`;
+    const basePayload = {
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 8192,
+        responseMimeType: "application/json",
+      },
+    };
+    const payloads =
+      modelId === "gemini-4-hydrogen"
+        ? [
+            {
+              ...basePayload,
+              generationConfig: {
+                ...basePayload.generationConfig,
+                thinkingConfig: { thinkingLevel: "LOW" },
+              },
+            },
+            basePayload,
+          ]
+        : [basePayload];
+    for (const payload of payloads) {
+      try {
+        const resp = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+          const errTxt = await resp.text();
+          lastError = `${modelId} HTTP ${resp.status}: ${errTxt.slice(0, 220)}`;
+          if (resp.status === 400 && payload !== payloads[payloads.length - 1]) {
+            continue;
+          }
+          break;
+        }
+        const jsonResp = await resp.json();
+        const parts = jsonResp?.candidates?.[0]?.content?.parts || [];
+        const rawText = parts
+          .filter((p) => p && !p.thought && typeof p.text === "string")
+          .map((p) => p.text)
+          .join("\n")
+          .trim();
+        if (!rawText) {
+          lastError = `${modelId} returned empty response.`;
+          continue;
+        }
+        const cleanJson = rawText
+          .replace(/^```json\s*/i, "")
+          .replace(/^```\s*/i, "")
+          .replace(/```\s*$/i, "")
+          .trim();
+        const parsed = JSON.parse(cleanJson);
+        return { ok: true, model: modelId, data: parsed };
+      } catch (err) {
+        lastError = `${modelId}: ${String(err && err.message ? err.message : err)}`;
+      }
+    }
+  }
+  return { ok: false, error: lastError };
+}
+
+async function runGodotAgentWithGemini({
+  apiKey,
+  mode,
+  projectTitle,
+  feature,
+  featDoc,
+  codeFiles,
+  liveScripts,
+  sceneSnapshot,
+  prompt,
+  errorText,
+  arenaScenePath,
+  featureScenePath,
+}) {
+  const mergedScripts = { ...(codeFiles || {}) };
+  if (liveScripts && typeof liveScripts === "object") {
+    for (const [k, v] of Object.entries(liveScripts)) {
+      const norm = normalizeResPathJs(k);
+      if (norm && typeof v === "string") mergedScripts[norm] = v;
+    }
+  }
+
+  const featureStepsSummary = (feature?.steps || []).map((s, idx) => ({
+    index: idx + 1,
+    role: s.role || s.stepRole || "",
+    title: s.title || "",
+    stepPath: s.stepPath || s.resPath || "",
+    locationLabel: s.locationLabel || "",
+    instruction: s.instruction || "",
+    area1Hierarchy: s.area1Hierarchy || "",
+    area2Inspector: s.area2Inspector || "",
+    codeSnippet: String(s.codeSnippet || s.rawCopyCode || "").slice(0, 2400),
+    verifyResult: s.verifyResult || "",
+  }));
+
+  const systemInstruction = [
+    "You are LAYERS Godot Agent Co-Builder targeting Godot 4.7.2.stable.",
+    "Return strictly valid JSON with keys: mode, summary, diagnosis, scriptUpdates, sceneOps.",
+    "STRICT ENGINE & OUTPUT RULES:",
+    "1. NEVER emit push_warning(...) placeholders or stub comments. Emit real runnable GDScript and real sceneOps.",
+    "2. scriptUpdates: array of { resPath, attachTo, scenePath, language: 'gdscript', content }. Always output COMPLETE, cohesive, compile-clean Godot 4 .gd files (no '+ ' diff prefixes, no 'const X := [...]' untyped const arrays, no speculative preload() on missing files; prefer '@export var foo_scene: PackedScene' + set_property sceneOp).",
+    "3. sceneOps: array of structured scene mutations. Supported op values:",
+    "   - ensure_node: { op:'ensure_node', scenePath, parentPath, nodeName, nodeType, subResourceClass, subResourceProps, properties }",
+    "   - set_property: { op:'set_property', scenePath, nodePath, properties }",
+    "   - attach_script: { op:'attach_script', scenePath, nodePath, scriptPath }",
+    "   - detach_script: { op:'detach_script', scenePath, nodePath }",
+    "   - connect_signal: { op:'connect_signal', scenePath, sourcePath, signalName, targetPath, methodName }",
+    "   - instance_scene: { op:'instance_scene', scenePath, parentPath, nodeName, instancePath, properties }",
+    "   - remove_node: { op:'remove_node', scenePath, nodePath }",
+    "4. ClassDB SAFETY: NEVER attach a script whose 'extends <Class>' is incompatible with the target node's Godot class (e.g. NEVER attach a CharacterBody3D script to a Node3D arena root — emit detach_script if live snapshot shows a mismatch!).",
+    "5. SIGNAL SAFETY: Connect signals ONLY to a node whose attached script defines methodName (typically targetPath: '.' for the scene root). NEVER connect a Timer signal to itself.",
+    "6. FEEL TUNING: Expose key gameplay tuning numbers cleanly with '@export var ...' at the top of scripts (speeds, ranges, cooldowns, counts) so the native dock renders SpinBoxes automatically.",
+    "7. MATERIALS & SHAPES: When creating meshes or colliders, specify explicit subResourceClass + subResourceProps (e.g. radius, height, size) and properties (monitoring, wait_time, one_shot, autostart, albedo_color, emission).",
+  ].join("\n");
+
+  const contextPayload = {
+    mode,
+    projectTitle: String(projectTitle || "LAYERS Project"),
+    arenaScenePath: String(arenaScenePath || ""),
+    featureScenePath: String(featureScenePath || feature?.primaryAsset || ""),
+    feature: {
+      id: feature?.id || featDoc?.id || "",
+      title: feature?.title || featDoc?.title || "Feature",
+      primaryAsset: feature?.primaryAsset || "",
+      doneWhen: feature?.doneWhen || "",
+      goal: String(featDoc?.sections?.goal || ""),
+      scriptPaths: feature?.scriptPaths || [],
+      steps: featureStepsSummary,
+    },
+    userPrompt: String(prompt || "").trim(),
+    errorText: String(errorText || "").trim(),
+    liveScripts: mergedScripts,
+    liveSceneSnapshot: sceneSnapshot || {},
+  };
+
+  const userPrompt = [
+    mode === "build_feature"
+      ? "TASK: Synthesize the complete, playable GDScript files and exact sceneOps needed to build this Feature cleanly into the Godot project so it compiles and playtests immediately."
+      : mode === "diagnose_fix"
+      ? "TASK: Diagnose the Godot runtime/editor/scene problem from the error text, live scripts, and live scene snapshot, then return real scriptUpdates and/or sceneOps that completely fix it."
+      : "TASK: Apply the developer's requested gameplay tweak or bug fix cleanly across both live scripts (scriptUpdates) and Godot scenes (sceneOps).",
+    "PROJECT CONTEXT JSON:",
+    JSON.stringify(contextPayload),
+  ].join("\n\n");
+
+  const aiResp = await callGeminiFlashJson({
+    apiKey,
+    systemInstruction,
+    userPrompt,
+  });
+  if (!aiResp.ok) {
+    return { ok: false, error: aiResp.error || "Gemini agent request failed." };
+  }
+  const bundle = normalizeAgentBundle(aiResp.data, mode);
+  if (!bundle.summary) {
+    bundle.summary =
+      mode === "build_feature"
+        ? `Built ${feature?.title || "feature"} script(s) & scene ops.`
+        : "Applied scene and script updates.";
+  }
+  return { ok: true, model: aiResp.model, bundle };
+}
+
+function markFeatureScaffoldStepsCompletedJs(states, checkpointId) {
+  let changed = false;
+  const markItems = (items) => {
+    if (!Array.isArray(items)) return items;
+    return items.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const children = Array.isArray(item.children) ? item.children : [];
+      if (children.length > 0) {
+        const nextChildren = markItems(children);
+        const nextItem = { ...item, children: nextChildren };
+        const counts = countLeafChecklist(nextItem);
+        const allChildDone = counts.total > 0 && counts.done === counts.total;
+        if (Boolean(item.completed) !== allChildDone) {
+          changed = true;
+        }
+        return { ...nextItem, completed: allChildDone };
+      }
+      const notes = decodeThreeAreaNotesJs(item.specNotes || "");
+      const isFix = notes.stepRole === "fix" || String(item.title || "").startsWith("[FIX]");
+      if (!isFix && !item.completed) {
+        changed = true;
+        return { ...item, completed: true };
+      }
+      return item;
+    });
+  };
+  const updatedStates = (Array.isArray(states) ? states : []).map((st) => {
+    if (!st || typeof st !== "object") return st;
+    if (checkpointId && String(st.id || "") !== checkpointId) return st;
+    return { ...st, checklist: markItems(st.checklist || []) };
+  });
+  return { updatedStates, changed };
+}
+
+async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
+  const action = String(body.action || "").trim();
+  const featureId = String(body.featureId || "").trim();
+  const checkpointId = String(body.checkpointId || "").trim();
+
+  if (!featureId) {
+    res.status(400).json({
+      error: { code: 400, message: "Missing featureId." },
+    });
+    return;
+  }
+
+  const db = getFirestore();
+  const docsCol = db.collection("users").doc(linkAuth.uid).collection("documents");
+  const docsSnap = await docsCol.get();
+  const docsById = new Map();
+  for (const snap of docsSnap.docs) {
+    docsById.set(snap.id, { id: snap.id, ...snap.data() });
+  }
+
+  const featDoc = docsById.get(featureId);
+  const projectDoc = docsById.get(linkAuth.projectId);
+  if (!featDoc || !projectDoc) {
+    res.status(404).json({
+      error: { code: 404, message: "Linked project or feature not found." },
+    });
+    return;
+  }
+
+  const basePayload = computeActiveEpicPayload({
+    docsById,
+    projectId: linkAuth.projectId,
+    webStudioUrl: linkAuth.webStudioUrl,
+  });
+  const activeVer = String(basePayload.releaseVersion || "v0.1");
+
+  let featureObj = null;
+  for (const f of basePayload?.activeEpic?.features || []) {
+    if (String(f.id) === featureId) {
+      featureObj = f;
+      break;
+    }
+  }
+  if (!featureObj) {
+    featureObj = {
+      id: featureId,
+      title: String(featDoc.title || "Feature"),
+      primaryAsset: extractResPath(featDoc?.sections?.primary_asset || ""),
+      doneWhen: "",
+      steps: [],
+      scriptPaths: [],
+    };
+  }
+
+  if (action === "complete_feature_steps") {
+    const featRef = docsCol.doc(featureId);
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(featRef);
+      if (!snap.exists) return;
+      const d = snap.data() || {};
+      const parsedStates = parseFeatureStates({ sections: d.sections });
+      const { updatedStates, changed } = markFeatureScaffoldStepsCompletedJs(
+        parsedStates,
+        checkpointId || String(featureObj.checkpointId || "")
+      );
+      if (!changed) return;
+      const nextSections = {
+        ...(d.sections || {}),
+        states: JSON.stringify(updatedStates),
+      };
+      const nextSubtasks = rebuildDocSubtasksFromStates(updatedStates);
+      tx.update(featRef, { sections: nextSections, subtasks: nextSubtasks });
+      docsById.set(featureId, {
+        id: featureId,
+        ...d,
+        sections: nextSections,
+        subtasks: nextSubtasks,
+      });
+    });
+    const nextPayload = computeActiveEpicPayload({
+      docsById,
+      projectId: linkAuth.projectId,
+      webStudioUrl: linkAuth.webStudioUrl,
+    });
+    res.status(200).json(nextPayload);
+    return;
+  }
+
+  const apiKey = String(GEMINI_API_KEY.value() || "").trim();
+  if (!apiKey) {
+    res.status(500).json({
+      error: { code: 500, message: "Server Gemini API key is not configured." },
+    });
+    return;
+  }
+
+  const agentResp = await runGodotAgentWithGemini({
+    apiKey,
+    mode: action,
+    projectTitle: projectDoc.title,
+    feature: featureObj,
+    featDoc,
+    codeFiles: basePayload.codeFiles,
+    liveScripts: body.liveScripts,
+    sceneSnapshot: body.sceneSnapshot,
+    prompt: body.prompt,
+    errorText: body.errorText,
+    arenaScenePath: body.arenaScenePath || basePayload.arenaScenePath,
+    featureScenePath: body.featureScenePath || featureObj.primaryAsset,
+  });
+
+  if (!agentResp.ok) {
+    res.status(502).json({
+      error: {
+        code: 502,
+        message: agentResp.error || "Gemini agent request failed.",
+      },
+    });
+    return;
+  }
+
+  const bundle = agentResp.bundle;
+  const nowMs = Date.now();
+  const dedupedUpdates = new Map();
+  for (const u of bundle.scriptUpdates || []) {
+    dedupedUpdates.set(u.resPath, u);
+  }
+
+  const pendingCodeWrites = [];
+  for (const u of dedupedUpdates.values()) {
+    const existing = findCodeFileDocByResPathJs(docsById, u.resPath);
+    const docId = existing
+      ? existing.id
+      : stableCodeFileDocIdJs(linkAuth.projectId, u.resPath);
+    pendingCodeWrites.push({
+      docId,
+      ref: docsCol.doc(docId),
+      update: u,
+    });
+  }
+
+  const projRef = docsCol.doc(linkAuth.projectId);
+  const featRef = docsCol.doc(featureId);
+
+  await db.runTransaction(async (tx) => {
+    // 1. All reads before any writes (Firestore transaction requirement).
+    const [projSnap, featSnap, ...codeSnaps] = await Promise.all([
+      tx.get(projRef),
+      tx.get(featRef),
+      ...pendingCodeWrites.map((w) => tx.get(w.ref)),
+    ]);
+
+    const addedCodeIds = [];
+    for (let i = 0; i < pendingCodeWrites.length; i++) {
+      const w = pendingCodeWrites[i];
+      const existingSnap = codeSnaps[i];
+      const existingData = existingSnap.exists ? existingSnap.data() || {} : {};
+      let featureIds = [];
+      try {
+        const parsedIds = JSON.parse(existingData?.sections?.feature_ids || "[]");
+        if (Array.isArray(parsedIds)) featureIds = parsedIds.map(String);
+      } catch (_) {}
+      if (!featureIds.includes(featureId)) featureIds.push(featureId);
+
+      const fileName = w.update.resPath.split("/").pop() || "script.gd";
+      const codeDoc = {
+        id: w.docId,
+        title: fileName,
+        tier: "CODEFILE",
+        parentId: linkAuth.projectId,
+        childrenIds: [],
+        sections: {
+          ...(existingData.sections || {}),
+          res_path: w.update.resPath,
+          content: w.update.content,
+          language: w.update.language || "gdscript",
+          release_version: activeVer,
+          feature_ids: JSON.stringify(featureIds),
+          updated_at_ms: String(nowMs),
+        },
+        subtasks: Array.isArray(existingData.subtasks) ? existingData.subtasks : [],
+        phase: String(existingData.phase || ""),
+        isInbox: false,
+        isIcebox: false,
+        isCompleted: false,
+      };
+      tx.set(w.ref, codeDoc, { merge: true });
+      docsById.set(w.docId, codeDoc);
+      if (!existingSnap.exists) {
+        addedCodeIds.push(w.docId);
+      }
+    }
+
+    if (addedCodeIds.length > 0 && projSnap.exists) {
+      const projData = projSnap.data() || {};
+      const childrenIds = Array.isArray(projData.childrenIds)
+        ? [...projData.childrenIds]
+        : [];
+      let projChanged = false;
+      for (const cid of addedCodeIds) {
+        if (!childrenIds.includes(cid)) {
+          childrenIds.push(cid);
+          projChanged = true;
+        }
+      }
+      if (projChanged) {
+        tx.update(projRef, { childrenIds });
+        docsById.set(linkAuth.projectId, {
+          id: linkAuth.projectId,
+          ...projData,
+          childrenIds,
+        });
+      }
+    }
+
+    if (action === "build_feature" && featSnap.exists) {
+      const fData = featSnap.data() || {};
+      const parsedStates = parseFeatureStates({ sections: fData.sections });
+      const { updatedStates, changed } = markFeatureScaffoldStepsCompletedJs(
+        parsedStates,
+        checkpointId || String(featureObj.checkpointId || "")
+      );
+      if (changed) {
+        const nextSections = {
+          ...(fData.sections || {}),
+          states: JSON.stringify(updatedStates),
+        };
+        const nextSubtasks = rebuildDocSubtasksFromStates(updatedStates);
+        tx.update(featRef, { sections: nextSections, subtasks: nextSubtasks });
+        docsById.set(featureId, {
+          id: featureId,
+          ...fData,
+          sections: nextSections,
+          subtasks: nextSubtasks,
+        });
+      }
+    }
+  });
+
+  const finalPayload = computeActiveEpicPayload({
+    docsById,
+    projectId: linkAuth.projectId,
+    webStudioUrl: linkAuth.webStudioUrl,
+  });
+  res.status(200).json({
+    ...finalPayload,
+    agentBundle: bundle,
+    model: agentResp.model,
+  });
+}
+
+
 function decodeThreeAreaNotesJs(rawSpecNotes) {
   const empty = {
     instruction: "",
@@ -760,6 +1435,7 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
         id: String(feat.id),
         title: String(feat.title || "Feature"),
         primaryAsset: extractResPath(feat?.sections?.primary_asset || ""),
+        scriptPaths: collectFeatureScriptPathsJs(feat, steps),
         doneWhen,
         checkpointId: String(cp?.id || ""),
         isPlaytestPassed,
@@ -787,6 +1463,12 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
   const activeIdx = candidateEpics.findIndex(
     (e) => e.features.length === 0 || e.features.some((f) => !f.isCompleted)
   );
+  const codeFiles = collectProjectCodeFilesJs(docsById);
+  const arenaScenePath = detectArenaScenePathJs(
+    docsById,
+    candidateEpics,
+    activeIdx >= 0 ? activeIdx : 0
+  );
 
   if (candidateEpics.length > 0 && activeIdx === -1) {
     return {
@@ -799,6 +1481,8 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       totalEpics: candidateEpics.length,
       allEpicsCompleted: true,
       webStudioUrl,
+      codeFiles,
+      arenaScenePath,
       activeEpic: null,
     };
   }
@@ -813,6 +1497,8 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     totalEpics: candidateEpics.length,
     allEpicsCompleted: false,
     webStudioUrl,
+    codeFiles,
+    arenaScenePath,
     activeEpic: activeIdx >= 0 ? candidateEpics[activeIdx] : null,
   };
 }
@@ -1556,6 +2242,16 @@ exports.geminiProxy = onRequest(
       const checkpointId = String(body.checkpointId || "").trim();
       const action = String(body.action || "").trim();
       const stepId = String(body.stepId || "").trim();
+
+      if (
+        action === "build_feature" ||
+        action === "direct_agent" ||
+        action === "diagnose_fix" ||
+        action === "complete_feature_steps"
+      ) {
+        await handleGodotAgentActionRoute({ req, res, linkAuth, body });
+        return;
+      }
 
       if (
         !featureId ||
