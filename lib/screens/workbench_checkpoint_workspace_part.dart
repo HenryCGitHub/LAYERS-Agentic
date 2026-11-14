@@ -758,28 +758,40 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
               ),
               const SizedBox(width: 10),
               Expanded(
-                child: TextField(
-                  key: ValueKey('feature_gate_bug_input_${node.id}'),
-                  controller: _inlineBugInputCtrl,
-                  style: GoogleFonts.inter(fontSize: 12.5, color: textPrimary),
-                  decoration: InputDecoration(
-                    hintText:
-                        'Describe bug, feel tweak, or paste Godot Debugger trace (res://...gd:42)...',
-                    hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
-                    filled: true,
-                    fillColor: bgRecessed,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderSubtle),
-                    ),
+                child: Focus(
+                  onKeyEvent: (_, event) => handleEnterSubmitShiftNewline(
+                    event,
+                    _inlineBugInputCtrl,
+                    onSubmit: () =>
+                        _submitInlinePlaytestBug(feat, states, index, node),
                   ),
-                  onSubmitted: (_) =>
-                      _submitInlinePlaytestBug(feat, states, index, node),
+                  child: TextField(
+                    key: ValueKey('feature_gate_bug_input_${node.id}'),
+                    controller: _inlineBugInputCtrl,
+                    minLines: 1,
+                    maxLines: 5,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
+                    style: GoogleFonts.inter(fontSize: 12.5, color: textPrimary),
+                    decoration: InputDecoration(
+                      hintText:
+                          'Describe bug, feel tweak, or paste Godot Debugger trace (res://...gd:42) — Shift+Enter for new line...',
+                      hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
+                      filled: true,
+                      fillColor: bgRecessed,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(6),
+                        borderSide: BorderSide(color: borderSubtle),
+                      ),
+                    ),
+                    onSubmitted: (_) =>
+                        _submitInlinePlaytestBug(feat, states, index, node),
+                  ),
                 ),
               ),
               const SizedBox(width: 8),

@@ -2,7 +2,7 @@
 extends RefCounted
 
 # Hierarchy-aware Scene, InputMap, Signal, and GDScript Step Engine
-# for LAYERS Godot 4 Editor Plugin (v2.7.0+).
+# for LAYERS Godot 4 Editor Plugin (v2.7.1+).
 
 var _eval_cache: Dictionary = {}
 var _eval_cache_epoch: int = 0
@@ -45,6 +45,7 @@ func _build_eval_cache_key(
 	editor_root: Node
 ) -> String:
 	var feat_id := String(feat.get("id", feat.get("title", "")))
+	var cp_id := String(feat.get("checkpointId", ""))
 	var steps_raw: Variant = feat.get("steps", [])
 	var steps: Array = steps_raw if typeof(steps_raw) == TYPE_ARRAY else []
 	var step_done_bits := PackedStringArray()
@@ -66,21 +67,23 @@ func _build_eval_cache_key(
 		var mt: int = int(FileAccess.get_modified_time(sp)) if FileAccess.file_exists(sp) else -1
 		sp_mtimes.append("%s=%d" % [sp, mt])
 
-	var primary_open := editor_root != null and (
-		primary_scene.is_empty() or
-		editor_root.scene_file_path == primary_scene
-	)
+	var primary_open := editor_root != null and not primary_scene.is_empty() and editor_root.scene_file_path == primary_scene
 	var tree_sig := _compute_live_tree_signature(editor_root) if primary_open else "closed"
+	var has_built_flag := 1 if feat.has("isBuiltInGodot") else 0
 	var is_built_remote := 1 if bool(feat.get("isBuiltInGodot", false)) else 0
-	return "%d|%s|%s|%s|%d|%d|%d|%d|%s|%s|%s" % [
+	var is_gate_passed := 1 if bool(feat.get("isPlaytestPassed", false)) else 0
+	return "%d|%s|%s|%s|%s|%d|%d|%d|%d|%d|%d|%s|%s|%s" % [
 		_eval_cache_epoch,
 		feat_id,
+		cp_id,
 		"".join(step_done_bits),
 		primary_scene,
 		scene_mtime,
 		proj_mtime,
 		code_files_count,
+		has_built_flag,
 		is_built_remote,
+		is_gate_passed,
 		arena_hint,
 		";".join(sp_mtimes),
 		tree_sig,
@@ -2778,6 +2781,37 @@ func ensure_project_file_logging() -> void:
 		ProjectSettings.save()
 
 
+func _is_ignored_godot_error_noise(text: String) -> bool:
+	var lower := text.to_lower()
+	return (
+		"addons/layers/" in lower or
+		"progress_dialog.cpp" in lower or
+		"editoricons" in lower or
+		"vulkan" in lower or
+		"orphan string" in lower
+	)
+
+
+func _is_debugger_errors_tree(err_tree: Tree, dbg_root: Node) -> bool:
+	if err_tree == null or err_tree.columns != 2:
+		return false
+	for conn_raw in err_tree.get_signal_connection_list("item_selected"):
+		var conn: Dictionary = conn_raw
+		if "_error_selected" in str(conn.get("callable", "")):
+			return true
+	if "error" in err_tree.name.to_lower():
+		return true
+	var cur: Node = err_tree.get_parent()
+	while cur != null and cur != dbg_root:
+		if "error" in cur.name.to_lower():
+			return true
+		for ch in cur.get_children():
+			if ch is Button and (ch as Button).text.strip_edges() == "Expand All":
+				return true
+		cur = cur.get_parent()
+	return false
+
+
 func read_recent_godot_log_errors(since_unix_sec: float = 0.0, max_errors: int = 3) -> Array:
 	var log_path := String(ProjectSettings.get_setting("debug/file_logging/log_path", "user://logs/godot.log")).strip_edges()
 	if log_path.is_empty() or not FileAccess.file_exists(log_path):
@@ -2798,10 +2832,7 @@ func read_recent_godot_log_errors(since_unix_sec: float = 0.0, max_errors: int =
 	var seen := {}
 	for i in range(lines.size() - 1, -1, -1):
 		var ln := lines[i].strip_edges()
-		if ln.is_empty():
-			continue
-		var lower := ln.to_lower()
-		if "addons/layers/" in lower or "editoricons" in lower or "vulkan" in lower or "orphan string" in lower:
+		if ln.is_empty() or _is_ignored_godot_error_noise(ln):
 			continue
 		var is_err := ("SCRIPT ERROR:" in ln) or ("Parse Error:" in ln) or ln.begins_with("ERROR:")
 		if not is_err:
@@ -2817,6 +2848,119 @@ func read_recent_godot_log_errors(since_unix_sec: float = 0.0, max_errors: int =
 			if out.size() >= max_errors:
 				break
 	out.reverse()
+	return out
+
+
+func read_editor_and_playtest_errors(
+	base_control: Node,
+	extra_logger_errors: Array = [],
+	ignored_signatures: Dictionary = {},
+	since_unix_sec: float = 0.0,
+	max_errors: int = 3,
+	warning_icon: Texture2D = null
+) -> Array:
+	var out: Array = []
+	var seen := {}
+
+	var append_err := func(raw_msg: String) -> void:
+		var msg := raw_msg.strip_edges().left(340)
+		if msg.is_empty() or _is_ignored_godot_error_noise(msg) or ignored_signatures.has(msg) or seen.has(msg):
+			return
+		seen[msg] = true
+		out.append(msg)
+
+	# 1. Live Godot Editor Debugger -> Errors Tree (ScriptEditorDebugger)
+	if base_control != null:
+		var stack: Array[Node] = [base_control]
+		var debugger_roots: Array[Node] = []
+		var editor_log_roots: Array[Node] = []
+		while not stack.is_empty():
+			var cur: Node = stack.pop_back()
+			var cls := cur.get_class()
+			var nm := String(cur.name)
+			if cls == "ScriptEditorDebugger" or "ScriptEditorDebugger" in nm:
+				debugger_roots.append(cur)
+			elif cls == "EditorLog" or "EditorLog" in nm:
+				editor_log_roots.append(cur)
+			for ch in cur.get_children():
+				stack.append(ch)
+
+		for dbg in debugger_roots:
+			var t_stack: Array[Node] = [dbg]
+			while not t_stack.is_empty():
+				var tn: Node = t_stack.pop_back()
+				if tn is Tree and _is_debugger_errors_tree(tn as Tree, dbg):
+					var err_tree: Tree = tn as Tree
+					var root_item: TreeItem = err_tree.get_root()
+					if root_item != null:
+						var item: TreeItem = root_item.get_first_child()
+						while item != null:
+							var is_warn := (warning_icon != null and item.get_icon(0) == warning_icon)
+							var col0 := item.get_text(0).strip_edges()
+							var col1 := item.get_text(1).strip_edges()
+							if col0.begins_with("W ") or "[warning]" in col0.to_lower():
+								is_warn = true
+							var sub_parts := PackedStringArray()
+							var sub: TreeItem = item.get_first_child()
+							while sub != null:
+								var s0 := sub.get_text(0).strip_edges()
+								var s1 := sub.get_text(1).strip_edges()
+								var combined_sub := ("%s %s" % [s0, s1]).strip_edges()
+								if "warning>" in combined_sub.to_lower():
+									is_warn = true
+								if not combined_sub.is_empty() and not ("<c++ source>" in combined_sub.to_lower()):
+									sub_parts.append(combined_sub)
+								sub = sub.get_next()
+							if not is_warn:
+								var head := ("%s %s" % [col0, col1]).strip_edges()
+								if not sub_parts.is_empty():
+									head = ("%s — %s" % [head, " | ".join(sub_parts)]).strip_edges()
+								append_err.call(head)
+							item = item.get_next()
+				else:
+					for ch2 in tn.get_children():
+						t_stack.append(ch2)
+
+		# 2. Live OS.add_logger ring buffer passed from layers_dock.gd
+		for raw_le in extra_logger_errors:
+			append_err.call(String(raw_le))
+
+		# 3. EditorLog RichTextLabel tail (compile-time Parse Errors printed to Output)
+		for elog in editor_log_roots:
+			var l_stack: Array[Node] = [elog]
+			while not l_stack.is_empty():
+				var ln_node: Node = l_stack.pop_back()
+				if ln_node is RichTextLabel:
+					var parsed := (ln_node as RichTextLabel).get_parsed_text()
+					if parsed.length() > 8192:
+						parsed = parsed.right(8192)
+					var e_lines := parsed.replace("\r\n", "\n").split("\n")
+					for li in range(e_lines.size()):
+						var eln := e_lines[li].strip_edges()
+						if eln.is_empty() or _is_ignored_godot_error_noise(eln):
+							continue
+						var is_e := ("SCRIPT ERROR:" in eln) or ("Parse Error:" in eln) or eln.begins_with("ERROR:")
+						if not is_e:
+							continue
+						var full_e := eln
+						if li + 1 < e_lines.size():
+							var nxt := e_lines[li + 1].strip_edges()
+							if nxt.begins_with("at:"):
+								full_e = "%s (%s)" % [eln, nxt]
+						append_err.call(full_e)
+				else:
+					for ch3 in ln_node.get_children():
+						l_stack.append(ch3)
+	else:
+		for raw_le in extra_logger_errors:
+			append_err.call(String(raw_le))
+
+	# 4. Fallback: user://logs/godot.log
+	for raw_fe in read_recent_godot_log_errors(since_unix_sec, max_errors):
+		append_err.call(String(raw_fe))
+
+	if out.size() > max_errors:
+		out = out.slice(out.size() - max_errors, out.size())
 	return out
 
 
@@ -3587,11 +3731,8 @@ func evaluate_feature(
 		cache_key = _build_eval_cache_key(feat, primary_scene, script_paths, arena_hint, code_files.size(), editor_root)
 	var items: Array[Dictionary] = []
 
-	var primary_open := editor_root != null and (
-		primary_scene.is_empty() or
-		editor_root.scene_file_path == primary_scene
-	)
-	var eval_root: Node = editor_root
+	var primary_open := editor_root != null and not primary_scene.is_empty() and editor_root.scene_file_path == primary_scene
+	var eval_root: Node = editor_root if primary_open else null
 	var temp_eval_root: Node = null
 	var temp_arena_root: Node = null
 	var checked_arena_load: bool = false
@@ -3736,30 +3877,41 @@ func evaluate_feature(
 	if temp_arena_root != null:
 		temp_arena_root.free()
 
-	var scene_ok := primary_scene.is_empty() or FileAccess.file_exists(primary_scene)
+	var arena_ok := arena_scene.is_empty() or FileAccess.file_exists(arena_scene)
 	var any_script_ok := valid_scripts.size() > 0
+	var has_remote_flag := feat.has("isBuiltInGodot")
 	var is_built_remote := bool(feat.get("isBuiltInGodot", false))
+	var is_gate_passed := bool(feat.get("isPlaytestPassed", false))
+	var unbuilt_remote_checkpoint := has_remote_flag and not is_built_remote and not is_gate_passed
+
+	var disk_artifacts_ok := (
+		(not primary_scene.is_empty() and FileAccess.file_exists(primary_scene) and (filtered_scripts.is_empty() or any_script_ok)) or
+		(primary_scene.is_empty() and not filtered_scripts.is_empty() and any_script_ok) or
+		(primary_scene.is_empty() and filtered_scripts.is_empty() and is_built_remote and arena_ok)
+	)
+
 	if items.is_empty():
 		items.append({
-			"ok": (scene_ok and any_script_ok) or (is_built_remote and scene_ok),
-			"label": "Feature scene & script generated",
+			"ok": false if unbuilt_remote_checkpoint else (is_gate_passed or disk_artifacts_ok),
+			"label": "Feature checkpoint not built in Godot yet" if unbuilt_remote_checkpoint else "Feature scene & script generated",
 			"kind": "script",
 		})
 
-	var has_built_artifacts := (
-		(not primary_scene.is_empty() and FileAccess.file_exists(primary_scene) and (filtered_scripts.is_empty() or any_script_ok)) or
-		(primary_scene.is_empty() and any_script_ok) or
-		(is_built_remote and scene_ok)
-	)
+	var has_built_artifacts := false if unbuilt_remote_checkpoint else (is_gate_passed or disk_artifacts_ok)
 
 	var ready := 0
 	for it in items:
 		if bool(it.get("ok", false)):
 			ready += 1
+	var all_items_ready := (
+		false if unbuilt_remote_checkpoint else (
+			is_gate_passed or (items.size() > 0 and ready == items.size() and (not has_remote_flag or disk_artifacts_ok))
+		)
+	)
 	var result := {
 		"total": items.size(),
 		"ready": ready,
-		"all_ready": items.size() > 0 and ready == items.size(),
+		"all_ready": all_items_ready,
 		"has_built_artifacts": has_built_artifacts,
 		"missing_count": items.size() - ready,
 		"items": items,

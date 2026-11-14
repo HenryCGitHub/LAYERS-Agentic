@@ -1521,6 +1521,75 @@ func _physics_process(delta: float) -> void:
       },
     );
 
+    testWidgets(
+      'Inline Playtest Bug Drawer supports Shift+Enter newline and plain Enter submit',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 920);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final setup = await seedDashWorkbench();
+        final provider = setup.provider;
+        final feat = setup.feat;
+        final cp = setup.cp;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(ValueKey('feature_gate_log_bug_btn_${cp.id}')),
+        );
+        await tester.pumpAndSettle();
+
+        final bugInputFinder = find.byKey(
+          ValueKey('feature_gate_bug_input_${cp.id}'),
+        );
+        expect(bugInputFinder, findsOneWidget);
+
+        await tester.tap(bugInputFinder);
+        await tester.enterText(bugInputFinder, 'First line');
+        await tester.pump();
+
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+        await tester.pump();
+
+        final fieldAfterShift = tester.widget<TextField>(bugInputFinder);
+        expect(fieldAfterShift.controller?.text, equals('First line\n'));
+        expect(bugInputFinder, findsOneWidget);
+
+        await tester.enterText(bugInputFinder, 'First line\nSecond line');
+        await tester.pump();
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+        await tester.pumpAndSettle();
+
+        expect(bugInputFinder, findsNothing);
+        final updatedCp = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(
+          updatedCp.checklist.last.text,
+          contains('First line\nSecond line'),
+        );
+      },
+    );
+
     test(
       'Native Godot 4 plugin addon V2.6 files, Cloud Functions direct_agent/build_feature/sync_scripts & web/layers_godot_plugin.zip enforce native EditorTheme GUI, Feature-First workflow, export tuners, input auto-discovery, eval caching & 2-way sync',
       () {
@@ -1547,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.0"'));
+        expect(cfgText, contains('version="2.7.1"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1590,11 +1659,14 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('EditorIcons'));
         expect(dockText, contains('EditorFonts'));
         expect(dockText, contains('RichTextLabel.new()'));
+        expect(dockText, contains('TextEdit.new()'));
         expect(dockText, isNot(contains('Tree.new()')));
         expect(dockText, isNot(contains('CodeEdit.new()')));
         expect(dockText, contains('layers_step_executor.gd'));
         expect(dockText, contains('Broken? Ask Agent to Fix'));
-        expect(dockText, contains('Fix Latest Playtest Error'));
+        expect(dockText, contains('Fix Latest Playtest Error (0)'));
+        expect(dockText, contains('_is_feature_checkpoint_built'));
+        expect(dockText, contains('OS.add_logger'));
         expect(dockText, contains('Build Feature in Godot'));
         expect(dockText, contains('Apply to Scene & Script'));
         expect(dockText, contains('Playtest in Arena'));
@@ -1643,6 +1715,7 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('ensure_scene_exists_and_open'));
         expect(executorText, contains('heal_empty_project_input_actions'));
         expect(executorText, contains('read_recent_godot_log_errors'));
+        expect(executorText, contains('read_editor_and_playtest_errors'));
 
         expect(fnText, contains('decodeThreeAreaNotesJs'));
         expect(fnText, contains('extractBareGdScriptPathJs'));

@@ -145,30 +145,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen>
     KeyEvent event,
     TextEditingController controller, {
     required VoidCallback onSubmit,
-  }) {
-    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
-      return KeyEventResult.ignored;
-    }
-    final isEnter = event.logicalKey == LogicalKeyboardKey.enter ||
-        event.logicalKey == LogicalKeyboardKey.numpadEnter;
-    if (!isEnter) return KeyEventResult.ignored;
-
-    if (HardwareKeyboard.instance.isShiftPressed) {
-      final text = controller.text;
-      final selection = controller.selection;
-      final start = selection.isValid ? selection.start : text.length;
-      final end = selection.isValid ? selection.end : text.length;
-      final newText = text.replaceRange(start, end, '\n');
-      controller.value = TextEditingValue(
-        text: newText,
-        selection: TextSelection.collapsed(offset: start + 1),
-      );
-      return KeyEventResult.handled;
-    }
-
-    onSubmit();
-    return KeyEventResult.handled;
-  }
+  }) =>
+      handleEnterSubmitShiftNewline(event, controller, onSubmit: onSubmit);
 
   String? _lastTrackedProjectId;
   final Map<int, int?> _selectedOptionBySection = {};

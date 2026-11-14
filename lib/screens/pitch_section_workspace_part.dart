@@ -185,29 +185,43 @@ extension _PitchSectionWorkspaceExt on _ProjectPitchScreenState {
                   child: Row(
                     children: [
                       Expanded(
-                        child: TextField(
-                          key: const ValueKey('full_blueprint_global_chat_input'),
-                          controller: _agentPromptController,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            color: _secT1Primary,
+                        child: Focus(
+                          onKeyEvent: (_, event) =>
+                              handleEnterSubmitShiftNewline(
+                            event,
+                            _agentPromptController,
+                            onSubmit: submitDockChat,
                           ),
-                          decoration: InputDecoration(
-                            isDense: true,
-                            hintText: focusedSec != null
-                                ? 'Ask AI to refine ${focusedSec.numLabel} ${focusedSec.shortTitle}...'
-                                : 'Ask AI to refine any section (e.g. "Add 2 more core loop beats" or "Switch to Forward+ 3D")...',
-                            hintStyle: GoogleFonts.inter(
-                              fontSize: 13.5,
-                              color: _secT4Muted,
+                          child: TextField(
+                            key: const ValueKey(
+                              'full_blueprint_global_chat_input',
                             ),
-                            border: InputBorder.none,
-                            enabledBorder: InputBorder.none,
-                            focusedBorder: InputBorder.none,
-                            contentPadding:
-                                const EdgeInsets.symmetric(vertical: 8),
+                            controller: _agentPromptController,
+                            minLines: 1,
+                            maxLines: 5,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            style: GoogleFonts.inter(
+                              fontSize: 14,
+                              color: _secT1Primary,
+                            ),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: focusedSec != null
+                                  ? 'Ask AI to refine ${focusedSec.numLabel} ${focusedSec.shortTitle}...'
+                                  : 'Ask AI to refine any section (e.g. "Add 2 more core loop beats" or "Switch to Forward+ 3D")...',
+                              hintStyle: GoogleFonts.inter(
+                                fontSize: 13.5,
+                                color: _secT4Muted,
+                              ),
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 8),
+                            ),
+                            onSubmitted: (_) => submitDockChat(),
                           ),
-                          onSubmitted: (_) => submitDockChat(),
                         ),
                       ),
                       const SizedBox(width: 8),

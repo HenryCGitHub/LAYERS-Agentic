@@ -2545,47 +2545,61 @@ extension _WorkbenchProgressivePlannerExt on _ReleaseWorkbenchScreenState {
     required String nextVer,
     required Future<void> Function(String) submitDirective,
   }) {
+    Future<void> triggerDirectiveSubmit() async {
+      final val = _progressiveDirectiveCtrl.text;
+      if (val.trim().isEmpty) return;
+      _progressiveDirectiveCtrl.clear();
+      await submitDirective(val);
+    }
+
     return
     Row(
       children: [
         Expanded(
-          child: TextField(
-            key: const ValueKey(
-              'progressive_release_prompt_input',
+          child: Focus(
+            onKeyEvent: (_, event) => handleEnterSubmitShiftNewline(
+              event,
+              _progressiveDirectiveCtrl,
+              onSubmit: triggerDirectiveSubmit,
             ),
-            controller: _progressiveDirectiveCtrl,
-            style: GoogleFonts.inter(
-              fontSize: 12.5,
-              color: textPrimary,
-            ),
-            decoration: InputDecoration(
-              hintText:
-                  'Want to adjust the $nextVer plan? Tell the Agent what to swap or add...',
-              hintStyle: GoogleFonts.inter(
-                fontSize: 12,
-                color: textMuted,
+            child: TextField(
+              key: const ValueKey(
+                'progressive_release_prompt_input',
               ),
-              filled: true,
-              fillColor: bgSurface,
-              isDense: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 11,
+              controller: _progressiveDirectiveCtrl,
+              minLines: 1,
+              maxLines: 5,
+              keyboardType: TextInputType.multiline,
+              textInputAction: TextInputAction.newline,
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: textPrimary,
               ),
-              border: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(6),
-                borderSide: BorderSide(
-                  color: borderSubtle,
+              decoration: InputDecoration(
+                hintText:
+                    'Want to adjust the $nextVer plan? Tell the Agent what to swap or add...',
+                hintStyle: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: textMuted,
+                ),
+                filled: true,
+                fillColor: bgSurface,
+                isDense: true,
+                contentPadding:
+                    const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius:
+                      BorderRadius.circular(6),
+                  borderSide: BorderSide(
+                    color: borderSubtle,
+                  ),
                 ),
               ),
+              onSubmitted: (_) => triggerDirectiveSubmit(),
             ),
-            onSubmitted: (val) async {
-              if (val.trim().isEmpty) return;
-              _progressiveDirectiveCtrl.clear();
-              await submitDirective(val);
-            },
           ),
         ),
         const SizedBox(width: 8),

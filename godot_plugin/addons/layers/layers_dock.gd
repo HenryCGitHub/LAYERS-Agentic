@@ -5,6 +5,59 @@ const SYNC_CLIENT_SCRIPT_PATH := "res://addons/layers/layers_sync_client.gd"
 const STEP_EXECUTOR_SCRIPT_PATH := "res://addons/layers/layers_step_executor.gd"
 const DEFAULT_WEB_STUDIO_URL := "https://henrycgithub.github.io/LAYERS-Agentic/"
 
+
+class _LayersEditorLogger extends Logger:
+	var _mutex := Mutex.new()
+	var _entries: Array[Dictionary] = []
+
+	func _log_error(
+		function: String,
+		file: String,
+		line: int,
+		code: String,
+		rationale: String,
+		_editor_notify: bool,
+		error_type: int,
+		_script_backtraces: Array[ScriptBacktrace]
+	) -> void:
+		if error_type == 1:
+			return
+		var raw_msg := rationale if not rationale.strip_edges().is_empty() else code
+		var combined := ("%s (%s:%d in %s)" % [raw_msg.strip_edges(), file, line, function]).strip_edges()
+		var lower := combined.to_lower()
+		if (
+			"addons/layers/" in lower or
+			"progress_dialog.cpp" in lower or
+			"editoricons" in lower or
+			"vulkan" in lower or
+			"orphan string" in lower or
+			raw_msg.strip_edges().is_empty()
+		):
+			return
+		var prefix := "SCRIPT ERROR: " if error_type == 2 else "ERROR: "
+		var formatted := (prefix + combined).left(340)
+		var now_unix := Time.get_unix_time_from_system()
+		_mutex.lock()
+		if _entries.size() >= 24:
+			_entries.pop_front()
+		_entries.append({ "ts": now_unix, "msg": formatted })
+		_mutex.unlock()
+
+	func snapshot_errors(since_unix: float = 0.0) -> Array[String]:
+		var out: Array[String] = []
+		_mutex.lock()
+		for item in _entries:
+			var ts: float = float(item.get("ts", 0.0))
+			if since_unix <= 0.0 or ts >= since_unix:
+				out.append(str(item.get("msg", "")))
+		_mutex.unlock()
+		return out
+
+	func clear() -> void:
+		_mutex.lock()
+		_entries.clear()
+		_mutex.unlock()
+
 var editor_interface: EditorInterface
 var undo_redo: EditorUndoRedoManager
 
@@ -32,6 +85,10 @@ var _post_playtest_log_timer: Timer
 var _was_playing_scene: bool = false
 var _script_sync_timer: Timer
 var _pending_script_sync_paths: Dictionary = {}
+var _editor_logger: _LayersEditorLogger
+var _ignored_error_signatures: Dictionary = {}
+var _locally_built_keys: Dictionary = {}
+var _last_detected_error_count: int = 0
 
 # Slim Top Self-Update Banner
 var _update_banner: PanelContainer
@@ -64,7 +121,7 @@ var _primary_cta_btn: Button
 var _status_label: Label
 
 # Dynamic Controls Bound Per Render
-var _fix_input: LineEdit
+var _fix_input: TextEdit
 
 
 func _ready() -> void:
@@ -105,6 +162,10 @@ func _ready() -> void:
 		_executor = exec_script.new()
 		if _executor != null:
 			_executor.call("ensure_project_file_logging")
+
+	if ClassDB.class_exists("Logger") and OS.has_method("add_logger"):
+		_editor_logger = _LayersEditorLogger.new()
+		OS.add_logger(_editor_logger)
 
 	_live_refresh_timer = Timer.new()
 	_live_refresh_timer.one_shot = true
@@ -160,6 +221,9 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	if _editor_logger != null and OS.has_method("remove_logger"):
+		OS.remove_logger(_editor_logger)
+		_editor_logger = null
 	_disconnect_live_tree_signals()
 
 
@@ -333,7 +397,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.0")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.1")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -560,7 +624,7 @@ func _refresh_view() -> void:
 		var f_ready := false
 		if _executor != null:
 			var f_eval: Dictionary = _executor.call("evaluate_feature", f, editor_interface, code_files, arena_scene)
-			f_ready = bool(f_eval.get("all_ready", false)) or bool(f_eval.get("has_built_artifacts", false))
+			f_ready = _is_feature_checkpoint_built(f, f_eval)
 		_feature_picker.add_item(f_title, i)
 		var f_icon: Texture2D = _editor_icon(
 			"StatusSuccess" if f_done else ("PlayScene" if f_ready else "PackedScene"),
@@ -625,6 +689,36 @@ func _create_native_card() -> Dictionary:
 	return { "panel": panel, "vb": vb }
 
 
+func _make_checkpoint_build_key(feat: Dictionary) -> String:
+	return "%s::%s" % [str(feat.get("id", "")), str(feat.get("checkpointId", ""))]
+
+
+func _is_feature_checkpoint_built(feat: Dictionary, eval_info: Dictionary) -> bool:
+	if bool(feat.get("isPlaytestPassed", false)):
+		return true
+	if _locally_built_keys.has(_make_checkpoint_build_key(feat)):
+		return true
+	if feat.has("isBuiltInGodot") and not bool(feat.get("isBuiltInGodot", false)):
+		return false
+	return bool(eval_info.get("all_ready", false)) or bool(eval_info.get("has_built_artifacts", false))
+
+
+func _collect_active_playtest_errors() -> Array:
+	if _executor == null:
+		return []
+	var base_ctrl: Node = editor_interface.get_base_control() if editor_interface != null else null
+	var logger_errs: Array = _editor_logger.snapshot_errors(_last_error_clear_unix) if _editor_logger != null else []
+	return _executor.call(
+		"read_editor_and_playtest_errors",
+		base_ctrl,
+		logger_errs,
+		_ignored_error_signatures,
+		_last_error_clear_unix,
+		3,
+		_editor_icon("Warning")
+	)
+
+
 func _render_active_feature_workspace(feat: Dictionary) -> void:
 	_clear_body()
 
@@ -640,10 +734,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		"total": 0, "ready": 0, "all_ready": false, "has_built_artifacts": false, "items": [], "primary_scene": str(feat.get("primaryAsset", "")), "arena_scene": arena_scene, "script_paths": feat.get("scriptPaths", [])
 	}
 	var primary_scene: String = str(eval_info.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
-	var all_ready: bool = bool(eval_info.get("all_ready", false))
-	var has_built_artifacts: bool = bool(eval_info.get("has_built_artifacts", false))
-	var is_built_remote: bool = bool(feat.get("isBuiltInGodot", false))
-	var can_pass_playtest: bool = all_ready or has_built_artifacts or is_built_remote
+	var can_pass_playtest: bool = _is_feature_checkpoint_built(feat, eval_info)
 
 	var bold_font: Font = _editor_font("bold")
 	var mono_font: Font = _editor_font("source")
@@ -839,13 +930,36 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 			w_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
 			res_vb.add_child(w_lbl)
 
-	var log_errors: Array = _executor.call("read_recent_godot_log_errors", _last_error_clear_unix, 3) if _executor != null else []
+	var log_errors: Array = _collect_active_playtest_errors()
+	_last_detected_error_count = log_errors.size()
 	if not log_errors.is_empty() and not _diagnosing_fix:
+		var err_row := HBoxContainer.new()
+		err_row.add_theme_constant_override("separation", _S(4))
+		agent_vb.add_child(err_row)
+
 		var err_lbl := Label.new()
 		err_lbl.text = str(log_errors[0])
 		err_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		err_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		err_lbl.add_theme_color_override("font_color", _editor_color("error_color", Color(0.95, 0.48, 0.48)))
-		agent_vb.add_child(err_lbl)
+		err_row.add_child(err_lbl)
+
+		var dismiss_err_btn := Button.new()
+		dismiss_err_btn.flat = true
+		dismiss_err_btn.theme_type_variation = &"FlatButton"
+		dismiss_err_btn.icon = _editor_icon("Close")
+		if dismiss_err_btn.icon == null:
+			dismiss_err_btn.text = "x"
+		dismiss_err_btn.tooltip_text = "Dismiss error notice"
+		dismiss_err_btn.pressed.connect(func() -> void:
+			for le in log_errors:
+				_ignored_error_signatures[str(le)] = true
+			_last_error_clear_unix = Time.get_unix_time_from_system()
+			if _editor_logger != null:
+				_editor_logger.clear()
+			_render_active_feature_workspace(feat)
+		)
+		err_row.add_child(dismiss_err_btn)
 
 		var fix_err_btn := Button.new()
 		fix_err_btn.text = "Fix Latest Playtest Error (%d)" % log_errors.size()
@@ -853,11 +967,17 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		fix_err_btn.pressed.connect(_on_fix_log_errors_pressed.bind(feat_id, cp_id, log_errors))
 		agent_vb.add_child(fix_err_btn)
 
-	_fix_input = LineEdit.new()
-	_fix_input.placeholder_text = "Make dash faster, add screen shake, or paste Godot error..."
+	_fix_input = TextEdit.new()
+	_fix_input.placeholder_text = "Make dash faster, add screen shake, or paste Godot error... (Shift+Enter for new line)"
+	_fix_input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
+	_fix_input.scroll_fit_content_height = true
+	_fix_input.custom_minimum_size = Vector2(0.0, float(_S(52)))
 	_fix_input.text = _fix_draft_text
-	_fix_input.text_changed.connect(func(txt: String) -> void: _fix_draft_text = txt)
-	_fix_input.text_submitted.connect(_on_fix_input_submitted.bind(feat_id, cp_id))
+	_fix_input.text_changed.connect(func() -> void:
+		if _fix_input != null:
+			_fix_draft_text = _fix_input.text
+	)
+	_fix_input.gui_input.connect(_on_fix_input_gui_input.bind(feat_id, cp_id))
 	agent_vb.add_child(_fix_input)
 
 	var apply_btn := Button.new()
@@ -866,6 +986,14 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	apply_btn.disabled = _diagnosing_fix
 	apply_btn.pressed.connect(_on_direct_agent_pressed.bind(feat_id, cp_id))
 	agent_vb.add_child(apply_btn)
+
+	if log_errors.is_empty():
+		var fix_zero_btn := Button.new()
+		fix_zero_btn.text = "Fix Latest Playtest Error (0)"
+		fix_zero_btn.icon = _editor_icon("StatusSuccess")
+		fix_zero_btn.disabled = true
+		fix_zero_btn.tooltip_text = "No playtest or GDScript errors detected right now. Activates automatically when Godot's Debugger or Output catches an error."
+		agent_vb.add_child(fix_zero_btn)
 
 	# Sticky Footer CTA
 	_footer_box.visible = true
@@ -895,6 +1023,9 @@ func _on_build_feature_pressed(feat: Dictionary) -> void:
 		var local_res: Dictionary = _executor.call("build_feature_local", feat, editor_interface, undo_redo, code_files, arena_scene)
 		if editor_interface != null and editor_interface.get_resource_filesystem() != null:
 			editor_interface.get_resource_filesystem().scan()
+		if bool(local_res.get("ok", true)):
+			_locally_built_keys[_make_checkpoint_build_key(feat)] = true
+			feat["isBuiltInGodot"] = true
 		var local_sum: String = str(local_res.get("summary", "Built local feature scaffold."))
 		_last_agent_summary = local_sum
 		_set_status(local_sum, not bool(local_res.get("ok", true)))
@@ -917,7 +1048,27 @@ func _on_build_feature_pressed(feat: Dictionary) -> void:
 	_sync.build_feature(feat_id, cp_id, scene_snap, live_scripts, arena_scene, primary_scene)
 
 
-func _on_fix_input_submitted(_text: String, feat_id: String, cp_id: String) -> void:
+func _on_fix_input_gui_input(event: InputEvent, feat_id: String, cp_id: String) -> void:
+	if not (event is InputEventKey):
+		return
+	var ev: InputEventKey = event as InputEventKey
+	if not ev.pressed or ev.alt_pressed:
+		return
+	if ev.keycode != KEY_ENTER and ev.keycode != KEY_KP_ENTER:
+		return
+	if ev.shift_pressed:
+		if _fix_input != null:
+			_fix_input.insert_text_at_caret("\n")
+			_fix_draft_text = _fix_input.text
+			if _fix_input.is_inside_tree():
+				_fix_input.accept_event()
+		return
+	if ev.echo:
+		if _fix_input != null and _fix_input.is_inside_tree():
+			_fix_input.accept_event()
+		return
+	if _fix_input != null and _fix_input.is_inside_tree():
+		_fix_input.accept_event()
 	_on_direct_agent_pressed(feat_id, cp_id)
 
 
@@ -951,6 +1102,9 @@ func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
 
 
 func _on_fix_log_errors_pressed(feat_id: String, cp_id: String, log_errors: Array) -> void:
+	if _is_editor_playing() and editor_interface != null and editor_interface.has_method("stop_playing_scene"):
+		editor_interface.call("stop_playing_scene")
+		_was_playing_scene = false
 	var joined := PackedStringArray()
 	for e in log_errors:
 		var s := str(e).strip_edges()
@@ -1024,9 +1178,17 @@ func _on_bundle_apply_timeout() -> void:
 			if not ies.is_empty():
 				warnings.append(ies)
 
+	if was_initial_build and bool(apply_res.get("ok", false)) and not active_feat.is_empty():
+		_locally_built_keys[_make_checkpoint_build_key(active_feat)] = true
+		active_feat["isBuiltInGodot"] = true
+
 	_last_agent_summary = summary
 	_last_agent_warnings = warnings
 	if bool(apply_res.get("ok", false)) and bool(integrity.get("ok", true)):
+		for active_err in _collect_active_playtest_errors():
+			_ignored_error_signatures[str(active_err)] = true
+		if _editor_logger != null:
+			_editor_logger.clear()
 		_fix_draft_text = ""
 		_last_error_clear_unix = Time.get_unix_time_from_system()
 	_set_status(summary, not bool(apply_res.get("ok", true)) or not bool(integrity.get("ok", true)))
@@ -1049,6 +1211,13 @@ func _on_playtest_watch_tick() -> void:
 		var feat := _get_active_feature()
 		if not _show_token_editor and _workspace_panel.visible and not feat.is_empty():
 			_render_active_feature_workspace(feat)
+		return
+	if not _show_token_editor and _workspace_panel != null and _workspace_panel.visible and not (_fix_input != null and _fix_input.has_focus()):
+		var live_err_count: int = _collect_active_playtest_errors().size()
+		if live_err_count != _last_detected_error_count:
+			var feat := _get_active_feature()
+			if not feat.is_empty():
+				_render_active_feature_workspace(feat)
 
 
 func _on_post_playtest_log_timeout() -> void:
@@ -1153,7 +1322,7 @@ func _on_primary_cta_pressed() -> void:
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, code_files, arena_scene) if _executor != null else { "all_ready": false, "has_built_artifacts": false }
-	var can_pass: bool = bool(eval_info.get("all_ready", false)) or bool(eval_info.get("has_built_artifacts", false)) or bool(feat.get("isBuiltInGodot", false))
+	var can_pass: bool = _is_feature_checkpoint_built(feat, eval_info)
 	if not can_pass:
 		_on_build_feature_pressed(feat)
 		return

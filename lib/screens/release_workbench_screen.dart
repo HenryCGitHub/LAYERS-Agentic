@@ -266,23 +266,35 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
                 ),
               ),
               const SizedBox(height: 10),
-              TextField(
-                key: const ValueKey('workbench_log_playtest_issue_input'),
-                controller: ctrl,
-                autofocus: true,
-                style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
-                decoration: InputDecoration(
-                  hintText: 'e.g., Dash clips through thin arena walls on diagonal input',
-                  hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
-                  filled: true,
-                  fillColor: bgRecessed,
-                  isDense: true,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                    borderSide: BorderSide(color: borderSubtle),
-                  ),
+              Focus(
+                onKeyEvent: (_, event) => handleEnterSubmitShiftNewline(
+                  event,
+                  ctrl,
+                  onSubmit: () => Navigator.of(ctx).pop(ctrl.text),
                 ),
-                onSubmitted: (v) => Navigator.of(ctx).pop(v),
+                child: TextField(
+                  key: const ValueKey('workbench_log_playtest_issue_input'),
+                  controller: ctrl,
+                  autofocus: true,
+                  minLines: 1,
+                  maxLines: 5,
+                  keyboardType: TextInputType.multiline,
+                  textInputAction: TextInputAction.newline,
+                  style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+                  decoration: InputDecoration(
+                    hintText:
+                        'e.g., Dash clips through thin arena walls on diagonal input (Shift+Enter for new line)',
+                    hintStyle: GoogleFonts.inter(fontSize: 12, color: textMuted),
+                    filled: true,
+                    fillColor: bgRecessed,
+                    isDense: true,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      borderSide: BorderSide(color: borderSubtle),
+                    ),
+                  ),
+                  onSubmitted: (v) => Navigator.of(ctx).pop(v),
+                ),
               ),
             ],
           ),
