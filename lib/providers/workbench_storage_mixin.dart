@@ -76,6 +76,20 @@ bool shouldPreferRemoteDocumentOnSync(
     return remotePlaytestPassed > localPlaytestPassed;
   }
 
+  final remoteGodotBuilt = _countOccurrences(
+    remoteStates,
+    '"godotBuilt":"true"',
+  ) +
+      _countOccurrences(remoteStates, '"godotBuilt": "true"');
+  final localGodotBuilt = _countOccurrences(
+    localStates,
+    '"godotBuilt":"true"',
+  ) +
+      _countOccurrences(localStates, '"godotBuilt": "true"');
+  if (remoteGodotBuilt != localGodotBuilt) {
+    return remoteGodotBuilt > localGodotBuilt;
+  }
+
   final remoteStatesDone = _countOccurrences(remoteStates, '"completed":true') +
       _countOccurrences(remoteStates, '"completed": true');
   final localStatesDone = _countOccurrences(localStates, '"completed":true') +

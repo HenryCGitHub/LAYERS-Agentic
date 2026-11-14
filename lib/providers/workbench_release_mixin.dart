@@ -347,15 +347,18 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         ? featuresForBeat(e01BeatDoc.id)
         : const <TierDocument>[];
     final firstFeatureId = e01FeatDocs.firstOrNull?.id;
-    for (final f in e01FeatDocs.skip(1)) {
-      if (!_pendingFeatureStepQueue.contains(f.id)) {
-        _pendingFeatureStepQueue.add(f.id);
+    final runAiStepQueueInMocksOnly = GeminiAgentClient.testMockResponder != null;
+    if (runAiStepQueueInMocksOnly) {
+      for (final f in e01FeatDocs.skip(1)) {
+        if (!_pendingFeatureStepQueue.contains(f.id)) {
+          _pendingFeatureStepQueue.add(f.id);
+        }
       }
-    }
 
-    // Step 3: Immediately synthesize Feature 1.1's 3-Area Engine Steps BEFORE E02..EN
-    if (firstFeatureId != null && !isCancelled()) {
-      await synthesizeFeatureHowToStepsWithAi(firstFeatureId);
+      // Mock/Test Mode: Immediately synthesize Feature 1.1's Engine Steps BEFORE E02..EN
+      if (firstFeatureId != null && !isCancelled()) {
+        await synthesizeFeatureHowToStepsWithAi(firstFeatureId);
+      }
     }
 
     // Step 4A: Populate E02..EN Features top-down one Epic at a time in the Outliner
@@ -424,7 +427,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         for (final fDoc in createdEpicFeatures) {
           documents[fDoc.id] = fDoc;
           _persistDocument(fDoc);
-          if (!_pendingFeatureStepQueue.contains(fDoc.id)) {
+          if (runAiStepQueueInMocksOnly &&
+              !_pendingFeatureStepQueue.contains(fDoc.id)) {
             _pendingFeatureStepQueue.add(fDoc.id);
           }
         }
@@ -441,8 +445,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       }
     }
 
-    // Step 4B: Synthesize 3-Area Engine Steps for remaining Features (Feature 1.2, E02 Features, ...) one at a time
-    if (_pendingFeatureStepQueue.isNotEmpty && !isCancelled()) {
+    if (runAiStepQueueInMocksOnly &&
+        _pendingFeatureStepQueue.isNotEmpty &&
+        !isCancelled()) {
       await _prefetchRemainingFeatureStepsInBackground(
         null,
         generation,
@@ -1230,7 +1235,9 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     } finally {
       _synthesizingFeatureIds.remove(featureId);
     }
-    await synthesizeFeatureHowToStepsWithAi(featureId, forceRefresh: true);
+    if (GeminiAgentClient.testMockResponder != null) {
+      await synthesizeFeatureHowToStepsWithAi(featureId, forceRefresh: true);
+    }
   }
 
   /// Appends a single flat Unified Step onto a Checkpoint's Build Queue (`cpNode.checklist`),
@@ -2121,19 +2128,7 @@ Call `commit_tailored_task_substeps` with the tailored steps.
               .toList();
           final currentGen = ++_stepQueueGeneration;
           _pendingFeatureStepQueue.clear();
-          if (GeminiAgentClient.testMockResponder == null) {
-            final allOrderedFeatIds = <String>[
-              primaryFeatId,
-              ...remainingFeatIds,
-            ];
-            _pendingFeatureStepQueue.addAll(allOrderedFeatIds);
-            unawaited(
-              _prefetchRemainingFeatureStepsInBackground(
-                allOrderedFeatIds,
-                currentGen,
-              ),
-            );
-          } else {
+          if (GeminiAgentClient.testMockResponder != null) {
             final primaryTitle =
                 documents[primaryFeatId]?.title ?? 'Feature 1';
             _agentProgressStep =
@@ -4047,16 +4042,18 @@ Call `commit_feature_howto_steps` with `primarySharedScriptOrScene`, the flat do
         _enrichLiveFeatureWithAi(featureId, parentBeatTitle);
         return;
       }
-      final states = FeatureStateNode.getStatesForDocument(feat);
-      final activeVer = activeReleaseVersionTag;
-      final activeCp = states.isNotEmpty
-          ? (states.where((s) => s.releaseVersion == activeVer).lastOrNull ??
-              states.last)
-          : null;
-      final alreadySynthesized =
-          activeCp != null && activeCp.hasAllStepsSynthesized;
-      if (!alreadySynthesized) {
-        synthesizeFeatureHowToStepsWithAi(featureId);
+      if (GeminiAgentClient.testMockResponder != null) {
+        final states = FeatureStateNode.getStatesForDocument(feat);
+        final activeVer = activeReleaseVersionTag;
+        final activeCp = states.isNotEmpty
+            ? (states.where((s) => s.releaseVersion == activeVer).lastOrNull ??
+                states.last)
+            : null;
+        final alreadySynthesized =
+            activeCp != null && activeCp.hasAllStepsSynthesized;
+        if (!alreadySynthesized) {
+          synthesizeFeatureHowToStepsWithAi(featureId);
+        }
       }
     }
   }

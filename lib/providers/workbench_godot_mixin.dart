@@ -66,9 +66,7 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
         }
         cp ??= states.last;
       }
-      final steps = cp.flatSteps;
-      return (steps.isEmpty || steps.every((s) => s.completed)) &&
-          cp.isPlaytestPassed;
+      return cp.isPlaytestPassed;
     }
 
     final releaseHasActiveFeats = beats.any(

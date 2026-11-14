@@ -102,13 +102,26 @@ class FeatureStateNode {
   int get completedChecklistCount =>
       checklist.fold(0, (sum, item) => sum + item.completedLeafCount);
 
-  /// Fractional progress (0.0 to 1.0) of this state's checklist
-  double get progress => totalChecklistCount == 0
-      ? 0.0
-      : completedChecklistCount / totalChecklistCount;
+  /// Fractional progress (0.0 to 1.0) of this checkpoint.
+  /// Passing playtest guarantees 1.0 (even when 0 manual steps exist).
+  /// When built in Godot without playtest sign-off, cap below 1.0.
+  double get progress {
+    if (isPlaytestPassed) return 1.0;
+    if (isBuiltInGodot) {
+      if (totalChecklistCount == 0) return 0.5;
+      final ratio = completedChecklistCount / totalChecklistCount;
+      return ratio > 0.85 ? 0.85 : (ratio < 0.5 ? 0.5 : ratio);
+    }
+    if (totalChecklistCount == 0) return 0.0;
+    return completedChecklistCount / totalChecklistCount;
+  }
 
-  bool get isCompleted =>
-      totalChecklistCount > 0 && completedChecklistCount == totalChecklistCount;
+  bool get isCompleted {
+    if (isPlaytestPassed) return true;
+    if (isBuiltInGodot) return false;
+    return totalChecklistCount > 0 &&
+        completedChecklistCount == totalChecklistCount;
+  }
 
   /// Iterates every executable build step in [checklist] uniformly across both
   /// flat Unified Steps (`entry.children.isEmpty`) and legacy nested subtasks
@@ -231,6 +244,16 @@ class FeatureStateNode {
       parameters['playtestPassed'] = 'true';
     } else {
       parameters.remove('playtestPassed');
+    }
+  }
+
+  bool get isBuiltInGodot => parameters['godotBuilt'] == 'true';
+
+  set isBuiltInGodot(bool built) {
+    if (built) {
+      parameters['godotBuilt'] = 'true';
+    } else {
+      parameters.remove('godotBuilt');
     }
   }
 

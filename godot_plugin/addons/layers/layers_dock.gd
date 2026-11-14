@@ -12,8 +12,6 @@ var _sync: Node
 var _executor: RefCounted
 var _payload: Dictionary = {}
 var _selected_feature_id: String = ""
-var _show_blueprint_details: bool = false
-var _selected_script_preview_path: String = ""
 var _building_feature: bool = false
 var _diagnosing_fix: bool = false
 var _fix_draft_text: String = ""
@@ -27,7 +25,10 @@ var _last_error_clear_unix: float = 0.0
 var _live_refresh_timer: Timer
 var _bundle_apply_timer: Timer
 var _pending_agent_bundle: Dictionary = {}
+var _pending_bundle_was_initial_build: bool = false
+var _auto_repair_attempted_for_feature_id: String = ""
 var _playtest_watch_timer: Timer
+var _post_playtest_log_timer: Timer
 var _was_playing_scene: bool = false
 var _script_sync_timer: Timer
 var _pending_script_sync_paths: Dictionary = {}
@@ -64,8 +65,6 @@ var _status_label: Label
 
 # Dynamic Controls Bound Per Render
 var _fix_input: LineEdit
-var _blueprint_tree: Tree
-var _active_tuner_controls: Array[Control] = []
 
 
 func _ready() -> void:
@@ -131,6 +130,12 @@ func _ready() -> void:
 	_playtest_watch_timer.timeout.connect(_on_playtest_watch_tick)
 	add_child(_playtest_watch_timer)
 	_playtest_watch_timer.start()
+
+	_post_playtest_log_timer = Timer.new()
+	_post_playtest_log_timer.one_shot = true
+	_post_playtest_log_timer.wait_time = 0.6
+	_post_playtest_log_timer.timeout.connect(_on_post_playtest_log_timeout)
+	add_child(_post_playtest_log_timer)
 
 	_connect_live_tree_signals()
 	_build_ui()
@@ -216,25 +221,10 @@ func _on_tree_mutated(node: Node) -> void:
 		notify_editor_state_changed()
 
 
-func _any_tuner_focused() -> bool:
-	for ctrl in _active_tuner_controls:
-		if ctrl == null or not is_instance_valid(ctrl):
-			continue
-		if ctrl.has_focus():
-			return true
-		if ctrl is SpinBox:
-			var le: LineEdit = (ctrl as SpinBox).get_line_edit()
-			if le != null and le.has_focus():
-				return true
-	return false
-
-
 func _on_live_refresh_timeout() -> void:
 	if _show_token_editor or not _workspace_panel.visible:
 		return
 	if _fix_input != null and _fix_input.has_focus():
-		return
-	if _any_tuner_focused():
 		return
 	var feat: Dictionary = _get_active_feature()
 	if feat.is_empty():
@@ -343,7 +333,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.6.1")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.0")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -570,7 +560,7 @@ func _refresh_view() -> void:
 		var f_ready := false
 		if _executor != null:
 			var f_eval: Dictionary = _executor.call("evaluate_feature", f, editor_interface, code_files, arena_scene)
-			f_ready = bool(f_eval.get("all_ready", false))
+			f_ready = bool(f_eval.get("all_ready", false)) or bool(f_eval.get("has_built_artifacts", false))
 		_feature_picker.add_item(f_title, i)
 		var f_icon: Texture2D = _editor_icon(
 			"StatusSuccess" if f_done else ("PlayScene" if f_ready else "PackedScene"),
@@ -590,7 +580,6 @@ func _refresh_view() -> void:
 	var next_feat_id: String = str(active_feat.get("id", ""))
 	if next_feat_id != _selected_feature_id:
 		_selected_feature_id = next_feat_id
-		_selected_script_preview_path = ""
 		_last_agent_summary = ""
 		_last_agent_warnings = PackedStringArray()
 
@@ -611,8 +600,6 @@ func _get_active_feature() -> Dictionary:
 
 func _clear_body() -> void:
 	_fix_input = null
-	_blueprint_tree = null
-	_active_tuner_controls.clear()
 	for child in _body_container.get_children():
 		_body_container.remove_child(child)
 		child.queue_free()
@@ -650,28 +637,26 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, code_files, arena_scene) if _executor != null else {
-		"total": 0, "ready": 0, "all_ready": false, "items": [], "primary_scene": str(feat.get("primaryAsset", "")), "arena_scene": arena_scene, "script_paths": feat.get("scriptPaths", [])
+		"total": 0, "ready": 0, "all_ready": false, "has_built_artifacts": false, "items": [], "primary_scene": str(feat.get("primaryAsset", "")), "arena_scene": arena_scene, "script_paths": feat.get("scriptPaths", [])
 	}
 	var primary_scene: String = str(eval_info.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
-	var script_paths: Array = eval_info.get("script_paths", feat.get("scriptPaths", []))
-	var total_cnt: int = int(eval_info.get("total", 0))
-	var ready_cnt: int = int(eval_info.get("ready", 0))
 	var all_ready: bool = bool(eval_info.get("all_ready", false))
 	var has_built_artifacts: bool = bool(eval_info.get("has_built_artifacts", false))
-	var can_pass_playtest: bool = all_ready or has_built_artifacts
+	var is_built_remote: bool = bool(feat.get("isBuiltInGodot", false))
+	var can_pass_playtest: bool = all_ready or has_built_artifacts or is_built_remote
 
 	var bold_font: Font = _editor_font("bold")
 	var mono_font: Font = _editor_font("source")
 
 	# -----------------------------------------------------------------------
-	# 1. Feature Goal & Clickable Asset Chips
+	# 1. Feature Brief & Playtest Card
 	# -----------------------------------------------------------------------
-	var goal_card := _create_native_card()
-	var goal_vb: VBoxContainer = goal_card["vb"]
+	var brief_card := _create_native_card()
+	var brief_vb: VBoxContainer = brief_card["vb"]
 
 	var hdr_row := HBoxContainer.new()
 	hdr_row.add_theme_constant_override("separation", _S(6))
-	goal_vb.add_child(hdr_row)
+	brief_vb.add_child(hdr_row)
 
 	var title_lbl := Label.new()
 	title_lbl.text = feat_title
@@ -685,16 +670,33 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	if gate_passed:
 		state_lbl.text = "Passed ✓"
 		state_lbl.add_theme_color_override("font_color", _editor_color("success_color", Color(0.36, 0.85, 0.56)))
-	elif all_ready:
-		state_lbl.text = "Ready to Test"
+	elif _building_feature:
+		state_lbl.text = "Building..."
 		state_lbl.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
-	elif has_built_artifacts:
-		state_lbl.text = "Built (Ready)"
+	elif can_pass_playtest:
+		state_lbl.text = "Ready to Playtest"
 		state_lbl.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
 	else:
-		state_lbl.text = "Setup Needed"
+		state_lbl.text = "Not Built"
 		state_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
 	hdr_row.add_child(state_lbl)
+
+	var raw_scope: Variant = feat.get("coveredScope", [])
+	var scope_items: Array = raw_scope if typeof(raw_scope) == TYPE_ARRAY else []
+	if not scope_items.is_empty():
+		var scope_box := VBoxContainer.new()
+		scope_box.add_theme_constant_override("separation", _S(2))
+		brief_vb.add_child(scope_box)
+		var scope_cap: int = mini(scope_items.size(), 4)
+		for idx in range(scope_cap):
+			var scope_txt: String = str(scope_items[idx]).strip_edges()
+			if scope_txt.is_empty():
+				continue
+			var s_lbl := Label.new()
+			s_lbl.text = "•  %s" % scope_txt
+			s_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			s_lbl.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.72, 0.76, 0.82)))
+			scope_box.add_child(s_lbl)
 
 	var goal_rtl := RichTextLabel.new()
 	goal_rtl.bbcode_enabled = true
@@ -702,312 +704,78 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	goal_rtl.scroll_active = false
 	goal_rtl.selection_enabled = true
 	goal_rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if bold_font != null:
+		goal_rtl.add_theme_font_override("bold_font", bold_font)
 	if mono_font != null:
 		goal_rtl.add_theme_font_override("mono_font", mono_font)
 	goal_rtl.add_theme_color_override("default_color", _editor_color("font_color", Color(0.88, 0.90, 0.94)))
-	goal_rtl.text = _markdown_to_bbcode(done_when)
-	goal_vb.add_child(goal_rtl)
+	goal_rtl.text = "[b]Done When:[/b] " + _markdown_to_bbcode(done_when)
+	brief_vb.add_child(goal_rtl)
 
-	var chips_flow := HFlowContainer.new()
-	chips_flow.add_theme_constant_override("h_separation", _S(4))
-	chips_flow.add_theme_constant_override("v_separation", _S(4))
-	var chip_paths: Array[String] = []
-	if not primary_scene.is_empty():
-		chip_paths.append(primary_scene)
-	for sp in script_paths:
-		var sps := str(sp).strip_edges()
-		if not sps.is_empty() and not (sps in chip_paths):
-			chip_paths.append(sps)
-	if not arena_scene.is_empty() and not (arena_scene in chip_paths):
-		chip_paths.append(arena_scene)
+	var scene_to_open: String = ""
+	if not primary_scene.is_empty() and FileAccess.file_exists(primary_scene):
+		scene_to_open = primary_scene
+	elif not arena_scene.is_empty() and FileAccess.file_exists(arena_scene):
+		scene_to_open = arena_scene
 
-	if not chip_paths.is_empty():
-		goal_vb.add_child(chips_flow)
-		for cp_res in chip_paths:
-			var chip_btn := Button.new()
-			chip_btn.flat = true
-			chip_btn.theme_type_variation = &"FlatButton"
-			chip_btn.text = cp_res.get_file()
-			chip_btn.icon = _editor_icon("Script" if cp_res.ends_with(".gd") else "PackedScene", "File")
-			chip_btn.tooltip_text = "Open %s in Godot" % cp_res
-			chip_btn.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.76, 0.96)))
-			chip_btn.pressed.connect(_on_open_res_path_pressed.bind(cp_res))
-			chips_flow.add_child(chip_btn)
-
-	# -----------------------------------------------------------------------
-	# 2. 1-Click Feature Builder + Collapsible Blueprint Details
-	# -----------------------------------------------------------------------
-	var build_card := _create_native_card()
-	var build_vb: VBoxContainer = build_card["vb"]
+	var action_row := HBoxContainer.new()
+	action_row.add_theme_constant_override("separation", _S(6))
+	brief_vb.add_child(action_row)
 
 	if _building_feature:
 		var busy_btn := Button.new()
 		busy_btn.text = "Building Feature with Gemini 4 Hydrogen..."
 		busy_btn.icon = _editor_icon("Tools")
+		busy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		busy_btn.disabled = true
-		build_vb.add_child(busy_btn)
-	elif not all_ready:
+		action_row.add_child(busy_btn)
+	elif not can_pass_playtest:
 		var build_btn := Button.new()
-		build_btn.text = "Repair / Sync Setup" if has_built_artifacts else "Build Feature in Godot"
-		build_btn.icon = _editor_icon("Reload" if has_built_artifacts else "Add", "Tools")
-		build_btn.tooltip_text = "Build scene nodes, properties, InputMap actions, signals, and complete GDScript in 1 click."
+		build_btn.text = "Build Feature in Godot"
+		build_btn.icon = _editor_icon("Add", "Tools")
+		build_btn.tooltip_text = "Have the AI build this feature's scenes, nodes, InputMap actions, and GDScript directly into Godot."
+		build_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		build_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
-		build_vb.add_child(build_btn)
+		action_row.add_child(build_btn)
+		if not scene_to_open.is_empty():
+			var open_unbuilt_btn := Button.new()
+			open_unbuilt_btn.flat = true
+			open_unbuilt_btn.theme_type_variation = &"FlatButton"
+			open_unbuilt_btn.text = "Open Scene"
+			open_unbuilt_btn.icon = _editor_icon("PackedScene", "File")
+			open_unbuilt_btn.tooltip_text = "Open %s in Godot viewport" % scene_to_open
+			open_unbuilt_btn.pressed.connect(_on_open_res_path_pressed.bind(scene_to_open))
+			action_row.add_child(open_unbuilt_btn)
 	else:
-		var built_row := HBoxContainer.new()
-		built_row.add_theme_constant_override("separation", _S(6))
-		build_vb.add_child(built_row)
+		var arena_btn := Button.new()
+		var is_playing := _is_editor_playing()
+		arena_btn.text = "Stop Playtest (F8)" if is_playing else "Playtest in Arena (F6)"
+		arena_btn.icon = _editor_icon("Stop" if is_playing else "PlayScene", "Play")
+		arena_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		arena_btn.pressed.connect(_on_playtest_arena_pressed.bind(arena_scene, primary_scene))
+		action_row.add_child(arena_btn)
 
-		var ok_icon := TextureRect.new()
-		ok_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		ok_icon.texture = _editor_icon("StatusSuccess")
-		built_row.add_child(ok_icon)
-
-		var built_lbl := Label.new()
-		built_lbl.text = "Feature Built (%d/%d ready)" % [ready_cnt, maxi(total_cnt, 1)]
-		built_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		built_lbl.add_theme_color_override("font_color", _editor_color("success_color", Color(0.36, 0.85, 0.56)))
-		built_row.add_child(built_lbl)
+		if not scene_to_open.is_empty():
+			var open_scene_btn := Button.new()
+			open_scene_btn.flat = true
+			open_scene_btn.theme_type_variation = &"FlatButton"
+			open_scene_btn.text = "Open Scene"
+			open_scene_btn.icon = _editor_icon("PackedScene", "File")
+			open_scene_btn.tooltip_text = "Open %s to arrange visuals or inspect nodes" % scene_to_open
+			open_scene_btn.pressed.connect(_on_open_res_path_pressed.bind(scene_to_open))
+			action_row.add_child(open_scene_btn)
 
 		var rebuild_btn := Button.new()
 		rebuild_btn.flat = true
 		rebuild_btn.theme_type_variation = &"FlatButton"
-		rebuild_btn.text = "Rebuild / Repair"
+		rebuild_btn.text = "Rebuild"
 		rebuild_btn.icon = _editor_icon("Reload", "Tools")
+		rebuild_btn.tooltip_text = "Re-run AI Feature Builder while preserving your scene transforms and meshes."
 		rebuild_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
-		built_row.add_child(rebuild_btn)
-
-	var bp_toggle := Button.new()
-	bp_toggle.flat = true
-	bp_toggle.theme_type_variation = &"FlatButton"
-	bp_toggle.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	bp_toggle.icon = _editor_icon("GuiTreeArrowDown" if _show_blueprint_details else "GuiTreeArrowRight", "Tools")
-	bp_toggle.text = "Blueprint Details (%d/%d ready)" % [ready_cnt, total_cnt]
-	bp_toggle.pressed.connect(func() -> void:
-		_show_blueprint_details = not _show_blueprint_details
-		_render_active_feature_workspace(feat)
-	)
-	build_vb.add_child(bp_toggle)
-
-	if _show_blueprint_details:
-		_blueprint_tree = Tree.new()
-		_blueprint_tree.hide_root = true
-		_blueprint_tree.custom_minimum_size = Vector2(0.0, float(_S(115)))
-		build_vb.add_child(_blueprint_tree)
-		var tree_root := _blueprint_tree.create_item()
-		for item_raw in eval_info.get("items", []):
-			if typeof(item_raw) != TYPE_DICTIONARY:
-				continue
-			var it: Dictionary = item_raw
-			var tr := _blueprint_tree.create_item(tree_root)
-			tr.set_text(0, str(it.get("label", "")))
-			var it_ok: bool = bool(it.get("ok", false))
-			tr.set_icon(0, _editor_icon("StatusSuccess" if it_ok else "StatusWarning", "Node"))
-			tr.set_custom_color(0, _editor_color("font_color" if it_ok else "warning_color", Color(0.86, 0.90, 0.94)))
-
-		if not script_paths.is_empty():
-			if _selected_script_preview_path.is_empty() or not (_selected_script_preview_path in script_paths):
-				_selected_script_preview_path = str(script_paths[0])
-
-			var scr_hdr := HBoxContainer.new()
-			scr_hdr.add_theme_constant_override("separation", _S(4))
-			build_vb.add_child(scr_hdr)
-
-			if script_paths.size() > 1:
-				var scr_picker := OptionButton.new()
-				scr_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				scr_picker.clip_text = true
-				for idx in range(script_paths.size()):
-					var sp_str := str(script_paths[idx])
-					scr_picker.add_item(sp_str.get_file(), idx)
-					if sp_str == _selected_script_preview_path:
-						scr_picker.select(idx)
-				scr_picker.item_selected.connect(func(sel_idx: int) -> void:
-					if sel_idx >= 0 and sel_idx < script_paths.size():
-						_selected_script_preview_path = str(script_paths[sel_idx])
-						_render_active_feature_workspace(feat)
-				)
-				scr_hdr.add_child(scr_picker)
-			else:
-				var scr_lbl := Label.new()
-				scr_lbl.text = _selected_script_preview_path
-				scr_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				scr_lbl.clip_text = true
-				scr_hdr.add_child(scr_lbl)
-
-			var open_scr_btn := Button.new()
-			open_scr_btn.flat = true
-			open_scr_btn.theme_type_variation = &"FlatButton"
-			open_scr_btn.text = "Open in Script Editor"
-			open_scr_btn.icon = _editor_icon("Script")
-			open_scr_btn.pressed.connect(_on_open_res_path_pressed.bind(_selected_script_preview_path))
-			scr_hdr.add_child(open_scr_btn)
-
-			var preview_code := ""
-			if FileAccess.file_exists(_selected_script_preview_path):
-				var f := FileAccess.open(_selected_script_preview_path, FileAccess.READ)
-				if f != null:
-					preview_code = f.get_as_text()
-					f.close()
-			if preview_code.is_empty():
-				preview_code = str(code_files.get(_selected_script_preview_path, "# Build Feature in Godot to generate %s" % _selected_script_preview_path.get_file()))
-
-			var code_edit := CodeEdit.new()
-			code_edit.editable = false
-			code_edit.gutters_draw_line_numbers = true
-			code_edit.custom_minimum_size = Vector2(0.0, float(_S(140)))
-			code_edit.text = preview_code
-			if mono_font != null:
-				code_edit.add_theme_font_override("font", mono_font)
-			build_vb.add_child(code_edit)
+		action_row.add_child(rebuild_btn)
 
 	# -----------------------------------------------------------------------
-	# 3. Playtest in Arena (F6) + Live @export Feel Tuning
-	# -----------------------------------------------------------------------
-	var play_card := _create_native_card()
-	var play_vb: VBoxContainer = play_card["vb"]
-
-	var play_hdr := Label.new()
-	play_hdr.text = "Playtest & Feel Tuning"
-	if bold_font != null:
-		play_hdr.add_theme_font_override("font", bold_font)
-	play_vb.add_child(play_hdr)
-
-	var play_row := HBoxContainer.new()
-	play_row.add_theme_constant_override("separation", _S(6))
-	play_vb.add_child(play_row)
-
-	var arena_btn := Button.new()
-	var is_playing := _is_editor_playing()
-	arena_btn.text = "Stop Playtest (F8)" if is_playing else "Playtest in Arena (F6)"
-	arena_btn.icon = _editor_icon("Stop" if is_playing else "PlayScene", "Play")
-	arena_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	arena_btn.pressed.connect(_on_playtest_arena_pressed.bind(arena_scene, primary_scene))
-	play_row.add_child(arena_btn)
-
-	if not primary_scene.is_empty() and primary_scene != arena_scene:
-		var feat_run_btn := Button.new()
-		feat_run_btn.text = "Run Feature"
-		feat_run_btn.icon = _editor_icon("PlayCustom", "Play")
-		feat_run_btn.tooltip_text = "Run %s isolated" % primary_scene.get_file()
-		feat_run_btn.pressed.connect(_on_run_scene_pressed.bind(primary_scene))
-		play_row.add_child(feat_run_btn)
-
-	var tuners: Array = _executor.call("extract_feature_export_tuners", script_paths, editor_interface, primary_scene) if _executor != null else []
-	if not tuners.is_empty():
-		var tune_sub := Label.new()
-		tune_sub.text = "Live Feel Tuning (@export)"
-		tune_sub.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
-		play_vb.add_child(tune_sub)
-
-		var project_scenes := PackedStringArray()
-		for t_raw in tuners:
-			if typeof(t_raw) != TYPE_DICTIONARY:
-				continue
-			var t: Dictionary = t_raw
-			var t_script: String = str(t.get("script_path", ""))
-			var t_name: String = str(t.get("name", ""))
-			var t_label: String = str(t.get("label", t_name))
-			var t_type: String = str(t.get("type", "float"))
-			var t_val: Variant = t.get("value", 0.0)
-
-			var row := HBoxContainer.new()
-			row.add_theme_constant_override("separation", _S(6))
-			play_vb.add_child(row)
-
-			var lbl := Label.new()
-			lbl.text = t_label
-			lbl.tooltip_text = "%s :: @export var %s" % [t_script.get_file(), t_name]
-			lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			lbl.clip_text = true
-			row.add_child(lbl)
-
-			if t_type == "bool":
-				var cb := CheckBox.new()
-				cb.button_pressed = bool(t_val)
-				cb.toggled.connect(func(pressed: bool) -> void:
-					_on_export_tuner_changed(t_script, t_name, pressed, primary_scene)
-				)
-				_active_tuner_controls.append(cb)
-				row.add_child(cb)
-			elif t_type == "int" or t_type == "float":
-				var sb_ctrl := SpinBox.new()
-				sb_ctrl.custom_minimum_size = Vector2(float(_S(92)), 0.0)
-				sb_ctrl.allow_greater = true
-				sb_ctrl.allow_lesser = true
-				sb_ctrl.min_value = float(t.get("min", 0.0))
-				sb_ctrl.max_value = float(t.get("max", 100.0))
-				sb_ctrl.step = 1.0 if t_type == "int" else float(t.get("step", 0.1))
-				sb_ctrl.value = float(t_val)
-				sb_ctrl.value_changed.connect(func(nv: float) -> void:
-					var typed_val: Variant = int(round(nv)) if t_type == "int" else nv
-					_on_export_tuner_changed(t_script, t_name, typed_val, primary_scene)
-				)
-				_active_tuner_controls.append(sb_ctrl)
-				row.add_child(sb_ctrl)
-			elif t_type == "packed_scene":
-				if project_scenes.is_empty() and _executor != null:
-					project_scenes = _executor.call("collect_project_scene_paths", "res://")
-				var ps_picker := OptionButton.new()
-				ps_picker.custom_minimum_size = Vector2(float(_S(115)), 0.0)
-				ps_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				ps_picker.clip_text = true
-				ps_picker.add_item("<Unset>", 0)
-				ps_picker.set_item_metadata(0, "")
-				var ps_val := str(t_val).strip_edges()
-				var sel_ps_idx := 0
-				var next_id := 1
-				for sc_raw in project_scenes:
-					var sc_path := String(sc_raw)
-					ps_picker.add_item(sc_path.get_file(), next_id)
-					ps_picker.set_item_metadata(next_id, sc_path)
-					if sc_path == ps_val:
-						sel_ps_idx = next_id
-					next_id += 1
-				if sel_ps_idx == 0 and not ps_val.is_empty():
-					ps_picker.add_item(ps_val.get_file(), next_id)
-					ps_picker.set_item_metadata(next_id, ps_val)
-					sel_ps_idx = next_id
-				ps_picker.select(sel_ps_idx)
-				ps_picker.item_selected.connect(func(sel_i: int) -> void:
-					var picked := str(ps_picker.get_item_metadata(sel_i)).strip_edges()
-					_on_export_tuner_changed(t_script, t_name, picked, primary_scene)
-				)
-				_active_tuner_controls.append(ps_picker)
-				row.add_child(ps_picker)
-
-				var ps_btn := Button.new()
-				ps_btn.flat = true
-				ps_btn.theme_type_variation = &"FlatButton"
-				ps_btn.tooltip_text = "Open %s" % t_script.get_file()
-				ps_btn.icon = _editor_icon("PackedScene")
-				ps_btn.pressed.connect(_on_open_res_path_pressed.bind(t_script))
-				row.add_child(ps_btn)
-			elif t_type == "node_path":
-				var np_edit := LineEdit.new()
-				np_edit.custom_minimum_size = Vector2(float(_S(110)), 0.0)
-				np_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				var init_np := str(t_val)
-				np_edit.text = init_np
-				np_edit.placeholder_text = "../TargetNode"
-				np_edit.text_submitted.connect(func(nt: String) -> void:
-					_on_export_tuner_changed(t_script, t_name, nt, primary_scene)
-				)
-				np_edit.focus_exited.connect(func() -> void:
-					if np_edit.text != init_np:
-						_on_export_tuner_changed(t_script, t_name, np_edit.text, primary_scene)
-				)
-				_active_tuner_controls.append(np_edit)
-				row.add_child(np_edit)
-	else:
-		var tune_hint := Label.new()
-		tune_hint.text = "Expose @export vars in your script to tune feel live here."
-		tune_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		tune_hint.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.66, 0.70, 0.76)))
-		play_vb.add_child(tune_hint)
-
-	# -----------------------------------------------------------------------
-	# 4. Unified Agent Director (Direct Tweak + Real Scene & Script Fix)
+	# 2. Agent Director · Tweak or Fix Card
 	# -----------------------------------------------------------------------
 	var agent_card := _create_native_card()
 	var agent_vb: VBoxContainer = agent_card["vb"]
@@ -1019,7 +787,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	agent_vb.add_child(agent_hdr)
 
 	var agent_sub := Label.new()
-	agent_sub.text = "Request any tweak or Broken? Ask Agent to Fix — edits .gd + .tscn directly."
+	agent_sub.text = "Describe any gameplay tweak or Broken? Ask Agent to Fix — edits .gd + .tscn directly."
 	agent_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	agent_sub.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
 	agent_vb.add_child(agent_sub)
@@ -1086,7 +854,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		agent_vb.add_child(fix_err_btn)
 
 	_fix_input = LineEdit.new()
-	_fix_input.placeholder_text = "Make lunge faster, spawn 5 crabs, or paste Godot error..."
+	_fix_input.placeholder_text = "Make dash faster, add screen shake, or paste Godot error..."
 	_fix_input.text = _fix_draft_text
 	_fix_input.text_changed.connect(func(txt: String) -> void: _fix_draft_text = txt)
 	_fix_input.text_submitted.connect(_on_fix_input_submitted.bind(feat_id, cp_id))
@@ -1117,6 +885,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 func _on_build_feature_pressed(feat: Dictionary) -> void:
 	if _executor == null or _building_feature:
 		return
+	_auto_repair_attempted_for_feature_id = ""
 	var feat_id: String = str(feat.get("id", ""))
 	var cp_id: String = str(feat.get("checkpointId", ""))
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
@@ -1197,6 +966,7 @@ func _on_agent_bundle_received(bundle: Dictionary, payload_data: Dictionary) -> 
 	if not payload_data.is_empty():
 		_payload = payload_data
 	_pending_agent_bundle = bundle
+	_pending_bundle_was_initial_build = (String(bundle.get("mode", "")).strip_edges().to_lower() == "build_feature")
 	_set_status("Applying scene & script updates...", false)
 	if is_inside_tree() and _bundle_apply_timer != null:
 		_bundle_apply_timer.start()
@@ -1207,6 +977,8 @@ func _on_agent_bundle_received(bundle: Dictionary, payload_data: Dictionary) -> 
 func _on_bundle_apply_timeout() -> void:
 	_building_feature = false
 	_diagnosing_fix = false
+	var was_initial_build := _pending_bundle_was_initial_build
+	_pending_bundle_was_initial_build = false
 	var bundle: Dictionary = _pending_agent_bundle
 	_pending_agent_bundle = {}
 	if _executor == null or bundle.is_empty():
@@ -1219,24 +991,46 @@ func _on_bundle_apply_timeout() -> void:
 	if editor_interface != null and editor_interface.get_resource_filesystem() != null:
 		editor_interface.get_resource_filesystem().scan()
 	var summary: String = str(apply_res.get("summary", bundle.get("summary", "Applied scene & script updates.")))
+	var warnings: PackedStringArray = apply_res.get("warnings", PackedStringArray())
+
+	var feat_id: String = str(active_feat.get("id", ""))
+	var cp_id: String = str(active_feat.get("checkpointId", ""))
+	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+	var integrity: Dictionary = _executor.call("verify_built_feature_integrity", editor_interface, active_feat, code_files, arena_scene)
+	if not bool(integrity.get("ok", true)):
+		var integrity_errors: PackedStringArray = integrity.get("errors", PackedStringArray())
+		if was_initial_build and not feat_id.is_empty() and _auto_repair_attempted_for_feature_id != feat_id and _sync != null and _sync.has_link_token():
+			_auto_repair_attempted_for_feature_id = feat_id
+			var paths: Dictionary = _executor.call("resolve_feature_paths", active_feat, code_files, arena_scene)
+			var primary_scene: String = str(paths.get("primary_scene", pref_scene)).strip_edges()
+			var extra_scenes := PackedStringArray()
+			if not primary_scene.is_empty():
+				extra_scenes.append(primary_scene)
+			if not arena_scene.is_empty() and not (arena_scene in extra_scenes):
+				extra_scenes.append(arena_scene)
+			var scene_snap: Dictionary = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes)
+			var live_scripts: Dictionary = _executor.call("read_live_scripts_for_feature", active_feat, code_files, arena_scene)
+			var err_joined := "\n".join(integrity_errors)
+			_diagnosing_fix = true
+			_last_agent_summary = ""
+			_last_agent_warnings = PackedStringArray()
+			_set_status("Auto-repairing scene/script wiring issue...", false)
+			_refresh_view()
+			_sync.direct_agent(feat_id, cp_id, "Fix post-build verification issues:\n" + err_joined, scene_snap, live_scripts, arena_scene, primary_scene, err_joined)
+			return
+		for ie in integrity_errors:
+			var ies := str(ie).strip_edges()
+			if not ies.is_empty():
+				warnings.append(ies)
+
 	_last_agent_summary = summary
-	_last_agent_warnings = apply_res.get("warnings", PackedStringArray())
-	if bool(apply_res.get("ok", false)):
+	_last_agent_warnings = warnings
+	if bool(apply_res.get("ok", false)) and bool(integrity.get("ok", true)):
 		_fix_draft_text = ""
 		_last_error_clear_unix = Time.get_unix_time_from_system()
-	_set_status(summary, not bool(apply_res.get("ok", true)))
+	_set_status(summary, not bool(apply_res.get("ok", true)) or not bool(integrity.get("ok", true)))
 	_refresh_view()
-
-
-func _on_export_tuner_changed(script_path: String, prop_name: String, new_val: Variant, primary_scene: String = "") -> void:
-	if _executor == null:
-		return
-	var res: Dictionary = _executor.call("apply_export_tuner_value", script_path, prop_name, new_val, editor_interface, undo_redo, primary_scene)
-	if bool(res.get("ok", false)):
-		_set_status("Updated %s = %s" % [prop_name, str(new_val)], false)
-		_queue_live_script_sync(script_path)
-	else:
-		_set_status(str(res.get("error", "Could not update @export var %s" % prop_name)), true)
 
 
 func _is_editor_playing() -> bool:
@@ -1247,11 +1041,22 @@ func _on_playtest_watch_tick() -> void:
 	var playing_now := _is_editor_playing()
 	if playing_now != _was_playing_scene:
 		_was_playing_scene = playing_now
-		if not playing_now and _executor != null:
-			_executor.call("invalidate_eval_cache")
+		if not playing_now:
+			if _executor != null:
+				_executor.call("invalidate_eval_cache")
+			if is_inside_tree() and _post_playtest_log_timer != null:
+				_post_playtest_log_timer.start()
 		var feat := _get_active_feature()
 		if not _show_token_editor and _workspace_panel.visible and not feat.is_empty():
 			_render_active_feature_workspace(feat)
+
+
+func _on_post_playtest_log_timeout() -> void:
+	if _show_token_editor or _workspace_panel == null or not _workspace_panel.visible:
+		return
+	var feat := _get_active_feature()
+	if not feat.is_empty():
+		_render_active_feature_workspace(feat)
 
 
 func _queue_live_script_sync(script_path: String = "") -> void:
@@ -1336,7 +1141,6 @@ func _on_feature_selected(idx: int) -> void:
 	if idx >= 0 and idx < features.size():
 		var f: Dictionary = features[idx]
 		_selected_feature_id = str(f.get("id", ""))
-		_selected_script_preview_path = ""
 		_last_agent_summary = ""
 		_last_agent_warnings = PackedStringArray()
 		_render_active_feature_workspace(f)
@@ -1349,7 +1153,7 @@ func _on_primary_cta_pressed() -> void:
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, code_files, arena_scene) if _executor != null else { "all_ready": false, "has_built_artifacts": false }
-	var can_pass: bool = bool(eval_info.get("all_ready", false)) or bool(eval_info.get("has_built_artifacts", false))
+	var can_pass: bool = bool(eval_info.get("all_ready", false)) or bool(eval_info.get("has_built_artifacts", false)) or bool(feat.get("isBuiltInGodot", false))
 	if not can_pass:
 		_on_build_feature_pressed(feat)
 		return

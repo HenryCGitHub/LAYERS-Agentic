@@ -3,14 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
-import '../models/godot_virtual_file.dart';
 import '../models/tier_document.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/godot_gdscript_guard.dart';
 import '../utils/section_text_utils.dart';
 import 'project_pitch_screen.dart';
-import 'widgets/godot_inspector_panel.dart';
 import 'widgets/godot_workbench_modals.dart';
 
 part 'workbench_engine_areas_card.dart';
@@ -21,11 +19,9 @@ part 'workbench_outliner_and_shell_part.dart';
 part 'workbench_checkpoint_workspace_part.dart';
 part 'workbench_full_production_blueprint_part.dart';
 
-/// Stage 2 Screen: Streamlined 2-Surface Open-Canvas Release Workbench
+/// Stage 2 Screen: Pure Agentic 2-Surface Feature Workbench
 /// - Left Outliner Rail (`#0C0E12`): Core Loop Epics (`E01`, `E02`, ...) & Singular-Focused Features
-/// - Right Open Workspace (`#12151B`):
-///   - Full-Width: Fixed-Order Step List (`STEPS (X/Y)`) on the left + Active Step (`Do -> Copy -> Verify`) on the right
-///   - Half-Width: 1-Line Floating Context Bar (`E01 · Epic › Feature ▾` + `Step X/Y ▾ | ‹ ›`) + Active Step
+/// - Right Open Workspace (`#12151B`): Unified Single-Card Feature Brief & Playtest Gate across Desktop & Half-Width
 class ReleaseWorkbenchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
 
@@ -40,59 +36,10 @@ class ReleaseWorkbenchScreen extends StatefulWidget {
 
 class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     with WorkbenchThemeMixin {
-  static final RegExp _assetTokenRegex = RegExp(
-    r'\b(?:res://[A-Za-z0-9_./-]+\.(?:tscn|gd|tres)|[A-Za-z0-9_]+\.(?:tscn|gd|tres|h|cpp)|CharacterBody[23]D|RigidBody[23]D|StaticBody[23]D|CollisionShape[23]D|Area[23]D|Camera[23]D|Marker[23]D|MeshInstance3D|Sprite2D|CanvasLayer|Control|Timer|RayCast[23]D)\b',
-  );
-  static final RegExp _tuningVarDelimiterRegex = RegExp(r'[:=]');
-  static String? _cachedSpecTokenKey;
-  static Map<String, String> _cachedBaseTokens = const {};
-  static RegExp? _cachedBaseTokenRegex;
-
   final Set<String> _awaitingPlaytestVerification = {};
   int? _manualCheckpointFocusIndex;
   String? _manualCheckpointFocusFeatureId;
-  final Map<String, int> _selectedFlatStepIndexByCheckpoint = {};
-  final Set<String> _playtestGateActiveCheckpoints = {};
-  Set<String> _hoveredDoTokens = const {};
-  String? _hoveredDoRowKey;
   double _outlinerWidth = 320.0;
-
-  int _resolveFlatStepIndex(
-    FeatureStateNode cpNode,
-    List<TaskHowToSubStep> unifiedSteps,
-  ) {
-    if (unifiedSteps.isEmpty) return 0;
-    final explicit = _selectedFlatStepIndexByCheckpoint[cpNode.id];
-    if (explicit != null && explicit >= 0 && explicit < unifiedSteps.length) {
-      return explicit;
-    }
-    final firstIncomplete =
-        unifiedSteps.indexWhere((s) => !s.subtask.completed);
-    return firstIncomplete != -1 ? firstIncomplete : 0;
-  }
-
-  bool _isPlaytestGateSelected(
-    FeatureStateNode cpNode,
-    List<TaskHowToSubStep> unifiedSteps,
-  ) {
-    if (_playtestGateActiveCheckpoints.contains(cpNode.id)) return true;
-    final allBuildDone =
-        unifiedSteps.isNotEmpty && unifiedSteps.every((s) => s.subtask.completed);
-    return allBuildDone && !_selectedFlatStepIndexByCheckpoint.containsKey(cpNode.id);
-  }
-
-  void _selectFlatStep(String checkpointId, int stepIndex) {
-    _rebuild(() {
-      _playtestGateActiveCheckpoints.remove(checkpointId);
-      _selectedFlatStepIndexByCheckpoint[checkpointId] = stepIndex;
-    });
-  }
-
-  void _openPlaytestGate(String checkpointId) {
-    _rebuild(() {
-      _playtestGateActiveCheckpoints.add(checkpointId);
-    });
-  }
   final Set<String> _collapsedBeatIds = {};
   String? _accordionInitReleaseId;
   String? _lastSyncedAccordionFeatureId;
@@ -111,8 +58,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   String? _activeStage2InlineEditKey;
   final TextEditingController _stage2InlineEditController =
       TextEditingController();
-  GodotDockStage _inlineAddStepStage = GodotDockStage.code;
-  final Map<String, String> _customComponentPropertyOverrides = {};
   final TextEditingController _inboxCaptureCtrl = TextEditingController();
   String? _inlineBugDrawerNodeId;
   final TextEditingController _inlineBugInputCtrl = TextEditingController();
@@ -161,38 +106,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final ctx = _resolveActiveWorkspaceContext();
     if (ctx == null) return false;
 
-    if (key == LogicalKeyboardKey.arrowUp) {
-      _retreatToPreviousStep(
-        ctx.states,
-        ctx.cpIndex,
-        ctx.node,
-        ctx.unifiedSteps,
-        ctx.activeStepIdx,
-        ctx.isPlaytestGate,
-      );
-      return true;
-    }
-    if (key == LogicalKeyboardKey.arrowDown) {
-      _browseToNextStep(
-        ctx.states,
-        ctx.cpIndex,
-        ctx.node,
-        ctx.unifiedSteps,
-        ctx.activeStepIdx,
-        ctx.isPlaytestGate,
-      );
-      return true;
-    }
     if (key == LogicalKeyboardKey.enter ||
         key == LogicalKeyboardKey.numpadEnter) {
-      _triggerPrimaryDoneAction(
-        feat: ctx.feat,
-        states: ctx.states,
-        node: ctx.node,
-        unifiedSteps: ctx.unifiedSteps,
-        activeStepIdx: ctx.activeStepIdx,
-        isPlaytestGate: ctx.isPlaytestGate,
-      );
+      _passCheckpointPlaytestAndAdvance(ctx.feat, ctx.states, ctx.node);
       return true;
     }
     return false;
@@ -235,9 +151,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     List<FeatureStateNode> states,
     int cpIndex,
     FeatureStateNode node,
-    List<TaskHowToSubStep> unifiedSteps,
-    int activeStepIdx,
-    bool isPlaytestGate,
   })? _resolveActiveWorkspaceContext() {
     final feat = widget.workbench.selectedFeature;
     if (feat == null) return null;
@@ -245,21 +158,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     if (states.isEmpty) return null;
     final cpIndex = _resolveActiveCheckpointIndex(feat, states);
     final node = states[cpIndex];
-    final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
-      checkpointNode: node,
-      engineHint: _engineHint,
-      phase: widget.workbench.currentPhase,
-    );
-    final activeStepIdx = _resolveFlatStepIndex(node, unifiedSteps);
-    final isPlaytestGate = _isPlaytestGateSelected(node, unifiedSteps);
     return (
       feat: feat,
       states: states,
       cpIndex: cpIndex,
       node: node,
-      unifiedSteps: unifiedSteps,
-      activeStepIdx: activeStepIdx,
-      isPlaytestGate: isPlaytestGate,
     );
   }
 
@@ -320,10 +223,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       _inlineBugDrawerNodeId = null;
       _inlineBugInputCtrl.clear();
       if (newIdx >= 0 && checkpointIndex < states.length) {
-        final cpNode = states[checkpointIndex];
+        states[checkpointIndex].isPlaytestPassed = false;
         _manualCheckpointFocusIndex = checkpointIndex;
-        _playtestGateActiveCheckpoints.remove(cpNode.id);
-        _selectedFlatStepIndexByCheckpoint[cpNode.id] = newIdx;
       }
     });
   }
@@ -419,11 +320,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
         issueDescription: saved.trim(),
       );
       if (newIdx >= 0 && checkpointIndex < states.length) {
-        final cpNode = states[checkpointIndex];
+        states[checkpointIndex].isPlaytestPassed = false;
         _rebuild(() {
           _manualCheckpointFocusIndex = checkpointIndex;
-          _playtestGateActiveCheckpoints.remove(cpNode.id);
-          _selectedFlatStepIndexByCheckpoint[cpNode.id] = newIdx;
         });
       }
     }
@@ -733,6 +632,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   }
 
   int _computeCheckpointRemainingMinutes(FeatureStateNode cpNode) {
+    if (cpNode.isCompleted) return 0;
     final hint = _engineHint;
     final phase = widget.workbench.currentPhase;
     final steps = TaskHowToBlueprint.resolveUnifiedSteps(
@@ -744,7 +644,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     for (final s in steps) {
       if (!s.subtask.completed) rem += s.estimatedMinutes;
     }
-    return rem;
+    return rem > 0 ? rem : (cpNode.isBuiltInGodot ? 10 : 30);
   }
 
   int _computeFeatureRemainingMinutes(TierDocument feat) {

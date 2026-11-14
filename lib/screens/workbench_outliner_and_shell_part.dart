@@ -137,33 +137,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     );
   }
 
-  void _commitInlineAddBuildTask(
-    TierDocument feat,
-    List<FeatureStateNode> states,
-    int cpIdx,
-    String rawTitle, {
-    GodotDockStage dockStage = GodotDockStage.code,
-  }) {
-    final trimmed = rawTitle.trim();
-    if (trimmed.isEmpty || cpIdx < 0 || cpIdx >= states.length) return;
-    final cpNode = states[cpIdx];
-    final newIdx = widget.workbench.addUnifiedStepToCheckpoint(
-      featureId: feat.id,
-      states: states,
-      checkpointIndex: cpIdx,
-      title: trimmed,
-      dockStage: dockStage,
-      tailorWithAi: true,
-    );
-    if (newIdx < 0) return;
-    _rebuild(() {
-      _manualCheckpointFocusIndex = cpIdx;
-      _manualCheckpointFocusFeatureId = feat.id;
-      _playtestGateActiveCheckpoints.remove(cpNode.id);
-      _selectedFlatStepIndexByCheckpoint[cpNode.id] = newIdx;
-    });
-  }
-
   Widget _buildLeftBeatFeatureRail(
     TierDocument? rel, {
     bool isOverlayDrawer = false,
@@ -2412,33 +2385,30 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: borderSubtle),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                Icon(
-                  Icons.check_circle_rounded,
-                  color: textPrimary,
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    '$completedTitle Verified ✓ — Next: $nextTitle',
-                    style: GoogleFonts.inter(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                      color: textPrimary,
-                    ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isCompact = constraints.maxWidth < 760;
+          final headerRow = Row(
+            children: [
+              Icon(
+                Icons.check_circle_rounded,
+                color: textPrimary,
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '$completedTitle Verified ✓ — Next: $nextTitle',
+                  style: GoogleFonts.inter(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: textPrimary,
                   ),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          ElevatedButton.icon(
+              ),
+            ],
+          );
+          final continueBtn = ElevatedButton.icon(
             key: const ValueKey('continue_to_next_feature_btn'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF10B981),
@@ -2457,8 +2427,29 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                 fontWeight: FontWeight.w700,
               ),
             ),
-          ),
-        ],
+          );
+          if (isCompact) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                headerRow,
+                const SizedBox(height: 10),
+                Wrap(
+                  alignment: WrapAlignment.end,
+                  children: [continueBtn],
+                ),
+              ],
+            );
+          }
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: headerRow),
+              const SizedBox(width: 12),
+              continueBtn,
+            ],
+          );
+        },
       ),
     );
   }
@@ -2475,32 +2466,32 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
           borderRadius: BorderRadius.circular(8),
           border: Border.all(color: borderSubtle),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Icon(Icons.verified_rounded, color: textPrimary, size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'All Features in ${rel.title} are 100% Complete ✓!',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: GoogleFonts.inter(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: textPrimary,
-                      ),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isCompact = constraints.maxWidth < 760;
+            final headerRow = Row(
+              children: [
+                Icon(Icons.verified_rounded, color: textPrimary, size: 18),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'All Features in ${rel.title} are 100% Complete ✓!',
+                    maxLines: isCompact ? 2 : 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                      color: textPrimary,
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Row(
-              mainAxisSize: MainAxisSize.min,
+                ),
+              ],
+            );
+            final actionButtons = Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 OutlinedButton.icon(
                   key: const ValueKey('release_shipped_summary_btn'),
@@ -2521,7 +2512,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
                 Container(
                   key: const ValueKey('banner_launch_next_release_btn'),
                   child: ElevatedButton.icon(
@@ -2546,8 +2536,26 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   ),
                 ),
               ],
-            ),
-          ],
+            );
+            if (isCompact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  headerRow,
+                  const SizedBox(height: 10),
+                  actionButtons,
+                ],
+              );
+            }
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: headerRow),
+                const SizedBox(width: 12),
+                actionButtons,
+              ],
+            );
+          },
         ),
       ),
     );

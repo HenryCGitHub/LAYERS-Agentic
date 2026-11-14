@@ -451,7 +451,7 @@ const VALID_SCENE_OPS = new Set([
   "add_to_group",
 ]);
 
-function normalizeAgentBundle(rawObj, mode) {
+function normalizeAgentBundle(rawObj, mode, opts = {}) {
   const obj = rawObj && typeof rawObj === "object" ? rawObj : {};
   const rawUpdates = Array.isArray(obj.scriptUpdates) ? obj.scriptUpdates : [];
   const scriptUpdates = [];
@@ -524,10 +524,21 @@ function normalizeAgentBundle(rawObj, mode) {
     if (!action) continue;
     inputOps.push({ action, keys });
   }
+  const arenaScenePath = normalizeResPathJs(
+    obj.arenaScenePath || obj.arena_scene_path || opts.arenaScenePath || ""
+  );
+  const featureScenePath = normalizeResPathJs(
+    obj.featureScenePath ||
+      obj.feature_scene_path ||
+      opts.featureScenePath ||
+      ""
+  );
   return {
     mode: String(obj.mode || mode || "direct_agent").trim(),
     summary: String(obj.summary || "").trim(),
     diagnosis: String(obj.diagnosis || "").trim(),
+    arenaScenePath,
+    featureScenePath,
     scriptUpdates,
     sceneOps,
     inputOps,
@@ -657,7 +668,7 @@ async function runGodotAgentWithGemini({
     "   - add_to_group: { op:'add_to_group', scenePath, nodePath, groups }",
     "4. ClassDB SAFETY: NEVER attach a script whose 'extends <Class>' is incompatible with the target node's Godot class (e.g. NEVER attach a CharacterBody3D script to a Node3D arena root — emit detach_script if live snapshot shows a mismatch!).",
     "5. SIGNAL & ARITY SAFETY: Connect signals ONLY to a node whose attached script defines methodName (typically targetPath: '.' for a sub-scene root, or the child instance name in the arena scene). NEVER connect a Timer signal to itself. Match signal & callback parameter counts across scripts: if a signal emits payload arguments (e.g. 'signal totem_selected(totem_id: String)') and a connected method needs 0 arguments (e.g. 'spawn_next_wave'), give the method an optional default parameter ('func spawn_next_wave(_arg: Variant = null) -> void:').",
-    "6. FEEL TUNING: Expose key gameplay tuning numbers cleanly with '@export var ...' at the top of scripts (speeds, ranges, cooldowns, counts) so the native dock renders SpinBoxes automatically.",
+    "6. FEEL TUNING: Expose key gameplay tuning numbers cleanly with '@export var ...' at the top of scripts (speeds, ranges, cooldowns, counts) with sensible defaults so immediate playtesting feels great.",
     "7. MATERIALS & SHAPES: When creating meshes or colliders, specify explicit subResourceClass + subResourceProps (e.g. radius, height, size) and properties (monitoring, wait_time, one_shot, autostart, albedo_color, emission).",
     "8. SCENE TREE & _ready() SAFETY: Never call 'get_parent().add_child(...)' synchronously inside '_ready()' (Godot throws 'Parent node is busy setting up children'). Use 'add_child.call_deferred(node)' or add spawned instances to a child container / post-ready method. Always call 'add_child(inst)' BEFORE setting 'inst.global_position' or 'inst.global_transform'.",
     "9. CLEAN ENTITY LIFECYCLE: Enemies, projectiles, and temporary wave spawns MUST clean up cleanly with 'queue_free()' on death or expiry so wave spawner 'tree_exited' / child checks advance reliably.",
@@ -681,6 +692,7 @@ async function runGodotAgentWithGemini({
       title: feature?.title || featDoc?.title || "Feature",
       primaryAsset: feature?.primaryAsset || "",
       doneWhen: feature?.doneWhen || "",
+      coveredScope: Array.isArray(feature?.coveredScope) ? feature.coveredScope : [],
       goal: String(featDoc?.sections?.goal || ""),
       scriptPaths: feature?.scriptPaths || [],
       steps: featureStepsSummary,
@@ -709,7 +721,10 @@ async function runGodotAgentWithGemini({
   if (!aiResp.ok) {
     return { ok: false, error: aiResp.error || "Gemini agent request failed." };
   }
-  const bundle = normalizeAgentBundle(aiResp.data, mode);
+  const bundle = normalizeAgentBundle(aiResp.data, mode, {
+    arenaScenePath: arenaScenePath || "",
+    featureScenePath: featureScenePath || feature?.primaryAsset || "",
+  });
   if (!bundle.summary) {
     bundle.summary =
       mode === "build_feature"
@@ -749,6 +764,27 @@ function markFeatureScaffoldStepsCompletedJs(states, checkpointId) {
     if (!st || typeof st !== "object") return st;
     if (checkpointId && String(st.id || "") !== checkpointId) return st;
     return { ...st, checklist: markItems(st.checklist || []) };
+  });
+  return { updatedStates, changed };
+}
+
+function markFeatureBuiltInGodotJs(states, checkpointId) {
+  let changed = false;
+  const list = Array.isArray(states) ? states : [];
+  const targetIdx = checkpointId
+    ? list.findIndex((st) => st && String(st.id || "") === checkpointId)
+    : list.length - 1;
+  const idx = targetIdx >= 0 ? targetIdx : list.length - 1;
+  const updatedStates = list.map((st, i) => {
+    if (!st || typeof st !== "object" || i !== idx) return st;
+    const params =
+      st.parameters && typeof st.parameters === "object"
+        ? { ...st.parameters }
+        : {};
+    if (params.godotBuilt === "true") return st;
+    changed = true;
+    params.godotBuilt = "true";
+    return { ...st, parameters: params };
   });
   return { updatedStates, changed };
 }
@@ -1089,7 +1125,7 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
     if (action === "build_feature" && featSnap.exists) {
       const fData = featSnap.data() || {};
       const parsedStates = parseFeatureStates({ sections: fData.sections });
-      const { updatedStates, changed } = markFeatureScaffoldStepsCompletedJs(
+      const { updatedStates, changed } = markFeatureBuiltInGodotJs(
         parsedStates,
         checkpointId || String(featureObj.checkpointId || "")
       );
@@ -1707,8 +1743,19 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       const steps = flattenCheckpointSteps(cp, feat, codeFiles);
       const isPlaytestPassed =
         String(cp?.parameters?.playtestPassed || "") === "true";
-      const allStepsDone =
-        steps.length === 0 || steps.every((s) => Boolean(s.completed));
+      const isBuiltInGodot =
+        String(cp?.parameters?.godotBuilt || "") === "true";
+      const coveredScope =
+        Array.isArray(cp?.coveredScope) && cp.coveredScope.length > 0
+          ? cp.coveredScope
+              .map((x) => String(x || "").trim())
+              .filter(Boolean)
+              .slice(0, 6)
+          : String(feat?.sections?.in_scope || "")
+              .split("\n")
+              .map((l) => l.replace(/^[-*•]\s*/, "").trim())
+              .filter(Boolean)
+              .slice(0, 6);
       const doneWhen = String(
         cp?.parameters?.playtestGoal ||
           cp?.feedback ||
@@ -1722,10 +1769,12 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
         title: String(feat.title || "Feature"),
         primaryAsset: extractResPath(feat?.sections?.primary_asset || ""),
         scriptPaths: collectFeatureScriptPathsJs(feat, steps, codeFiles),
+        coveredScope,
         doneWhen,
         checkpointId: String(cp?.id || ""),
+        isBuiltInGodot,
         isPlaytestPassed,
-        isCompleted: allStepsDone && isPlaytestPassed,
+        isCompleted: isPlaytestPassed,
         steps,
       };
     });

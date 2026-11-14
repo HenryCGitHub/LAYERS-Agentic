@@ -16,7 +16,6 @@ import 'package:layers_agentic/models/godot_virtual_file.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
-import 'package:layers_agentic/screens/widgets/godot_inspector_panel.dart';
 import 'package:layers_agentic/screens/widgets/godot_workbench_modals.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
 import 'package:layers_agentic/utils/godot_gdscript_guard.dart';
@@ -441,100 +440,45 @@ func _physics_process(delta: float) -> void:
     });
   });
 
-  group('Widget tests: GodotInspectorPanel inline editing & Modals', () {
-    testWidgets('inline-edits scalar, boolean, Vector3 axis, and Contract collision bitmask pills', (tester) async {
-      final changes = <(String, String)>[];
-      const contract = GodotProjectContract(
-        physicsLayers: {1: 'World', 2: 'Player', 3: 'Enemy'},
+  group('Feature-First Progress & Contract Modals', () {
+    test('FeatureStateNode & getDocumentProgress treat Built-in-Godot as <100% until Playtest Passed (even with 0 steps)', () {
+      final provider = WorkbenchProvider();
+      final feat = TierDocument(
+        id: 'feat_zero_steps',
+        title: 'Player Dash',
+        tier: TierType.feature,
+      );
+      provider.documents[feat.id] = feat;
+      final unbuiltCp = FeatureStateNode(
+        id: 'cp_0',
+        name: '[v0.1] Core Dash',
+        checklist: const [],
+      );
+      expect(unbuiltCp.isBuiltInGodot, isFalse);
+      expect(unbuiltCp.progress, equals(0.0));
+      expect(unbuiltCp.isCompleted, isFalse);
+
+      final builtCp = unbuiltCp.copyWith(
+        parameters: {'godotBuilt': 'true', 'playtestPassed': 'false'},
+      );
+      expect(builtCp.isBuiltInGodot, isTrue);
+      expect(builtCp.progress, greaterThan(0.0));
+      expect(builtCp.progress, lessThan(1.0));
+      expect(builtCp.isCompleted, isFalse);
+      FeatureStateNode.saveStatesToDocument(feat, [builtCp]);
+      expect(
+        provider.getDocumentProgress(feat.id),
+        allOf(greaterThan(0), lessThan(100)),
       );
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: GodotInspectorPanel(
-                isDark: true,
-                contract: contract,
-                onPropertyChanged: (k, v) => changes.add((k, v)),
-                tableLines: const [
-                  '| Node | Property | Value |',
-                  '| --- | --- | --- |',
-                  '| DashTimer > Timer | Wait Time | 0.2 |',
-                  '| DashTimer > Timer | One Shot | true |',
-                  '| Player > Node3D | Position | Vector3(1, 2, 3) |',
-                  '| Player > CharacterBody2D | Collision Layer | 2 |',
-                ],
-              ),
-            ),
-          ),
-        ),
+      final passedCp = builtCp.copyWith(
+        parameters: {'godotBuilt': 'true', 'playtestPassed': 'true'},
       );
-
-      // Toggle boolean (row 2: One Shot)
-      await tester.tap(find.byKey(const ValueKey('inspector_bool_2')));
-      await tester.pump();
-      expect(changes.last, ('One Shot', 'false'));
-
-      // Toggle Collision Layer bitmask L3 (bit 4) on current mask 2 -> 6 (row 4)
-      await tester.tap(find.byKey(const ValueKey('inspector_layer_4_3')));
-      await tester.pump();
-      expect(changes.last, ('Collision Layer', '6'));
-
-      // Edit scalar Wait Time (row 1)
-      await tester.tap(find.byKey(const ValueKey('inspector_scalar_1')));
-      await tester.pump();
-      await tester.enterText(
-        find.byKey(const ValueKey('inspector_scalar_input_1')),
-        '0.35',
-      );
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pump();
-      expect(changes.last, ('Wait Time', '0.35'));
-
-      // Edit Vector3 X axis (row 3)
-      await tester.tap(find.byKey(const ValueKey('inspector_axis_3_X')));
-      await tester.pump();
-      await tester.enterText(
-        find.byKey(const ValueKey('inspector_axis_input_3_X')),
-        '4.5',
-      );
-      await tester.testTextInput.receiveAction(TextInputAction.done);
-      await tester.pump();
-      expect(changes.last, ('Position', 'Vector3(4.5, 2, 3)'));
-
-      // Scalar focus-blur commit (without pressing Enter)
-      await tester.tap(find.byKey(const ValueKey('inspector_scalar_1')));
-      await tester.pump();
-      await tester.enterText(
-        find.byKey(const ValueKey('inspector_scalar_input_1')),
-        '0.42',
-      );
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
-      expect(changes.last, ('Wait Time', '0.42'));
-
-      // Vector3 axis focus-blur commit (Y axis)
-      await tester.tap(find.byKey(const ValueKey('inspector_axis_3_Y')));
-      await tester.pump();
-      await tester.enterText(
-        find.byKey(const ValueKey('inspector_axis_input_3_Y')),
-        '7.5',
-      );
-      FocusManager.instance.primaryFocus?.unfocus();
-      await tester.pumpAndSettle();
-      expect(changes.last, ('Position', 'Vector3(4.5, 7.5, 3)'));
-
-      // Escape cancels pending Vector3 axis edit without committing
-      final countBeforeEsc = changes.length;
-      await tester.tap(find.byKey(const ValueKey('inspector_axis_3_Z')));
-      await tester.pump();
-      await tester.enterText(
-        find.byKey(const ValueKey('inspector_axis_input_3_Z')),
-        '99',
-      );
-      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
-      await tester.pumpAndSettle();
-      expect(changes.length, equals(countBeforeEsc));
+      expect(passedCp.isPlaytestPassed, isTrue);
+      expect(passedCp.progress, equals(1.0));
+      expect(passedCp.isCompleted, isTrue);
+      FeatureStateNode.saveStatesToDocument(feat, [passedCp]);
+      expect(provider.getDocumentProgress(feat.id), equals(100));
     });
 
     testWidgets('Contract dialog edits and saves Godot 4 Project Contract physics layers', (tester) async {
@@ -805,24 +749,13 @@ func _physics_process(delta: float) -> void:
     }
 
     testWidgets(
-      'Desktop BUILD QUEUE, manual reorder, + Add Step, clean Property Sheet, starter .tscn & inline Plan B strip',
+      'Desktop Feature Brief & Playtest Card omits manual BUILD QUEUE/Inspector chrome and supports Guard + Pass Playtest',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 920);
         tester.view.devicePixelRatio = 1.0;
-        String? lastCopied;
-        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(SystemChannels.platform, (call) async {
-          if (call.method == 'Clipboard.setData') {
-            final args = call.arguments as Map<dynamic, dynamic>?;
-            lastCopied = args?['text']?.toString();
-          }
-          return null;
-        });
         addTearDown(() {
           tester.view.resetPhysicalSize();
           tester.view.resetDevicePixelRatio();
-          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-              .setMockMethodCallHandler(SystemChannels.platform, null);
         });
 
         final setup = await seedDashWorkbench();
@@ -834,98 +767,28 @@ func _physics_process(delta: float) -> void:
           MaterialApp(
             theme: AppTheme.darkTheme,
             home: Scaffold(
-              body: ReleaseWorkbenchScreen(workbench: provider),
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
             ),
           ),
         );
         await tester.pumpAndSettle();
 
-        // 1. Clean Build Queue Rail & Slim Header (no nested task clutter, no WHAT/EXPORT header junk)
-        expect(
-          find.byKey(ValueKey('build_queue_rail_${cp.id}')),
-          findsOneWidget,
-        );
-        expect(find.text('BUILD QUEUE'), findsOneWidget);
-        expect(find.text('WHAT:'), findsNothing);
+        // 1. Streamlined Single-Card Brief & Playtest (zero manual step queue, inspector sheet, or @export chip clutter)
+        expect(find.byKey(ValueKey('unified_header_${cp.id}')), findsOneWidget);
+        expect(find.byKey(ValueKey('feature_status_badge_${cp.id}')), findsOneWidget);
+        expect(find.text('Queued'), findsOneWidget);
+        expect(find.byKey(ValueKey('playtest_gate_card_${cp.id}')), findsOneWidget);
+        expect(find.byKey(ValueKey('task_sheet_feature_goal_${cp.id}')), findsOneWidget);
+        expect(find.byKey(ValueKey('build_queue_rail_${cp.id}')), findsNothing);
+        expect(find.text('BUILD QUEUE'), findsNothing);
+        expect(find.text('🎛 PROPERTY & LAYER SHEET'), findsNothing);
         expect(find.textContaining('@EXPORT VARS:'), findsNothing);
         expect(find.text('+ Add Node'), findsNothing);
 
-        // 2. Step 0 (SCENE) shows starter .tscn Copy button and copies valid .tscn scaffold
-        final copyTscnBtn = find.byKey(ValueKey('copy_starter_tscn_btn_${cp.id}'));
-        expect(copyTscnBtn, findsOneWidget);
-        await tester.ensureVisible(copyTscnBtn);
-        await tester.tap(copyTscnBtn);
-        await tester.pumpAndSettle();
-        expect(lastCopied, contains('[gd_scene'));
-        expect(lastCopied, contains('DashTimer'));
-
-        // 3. Reorder step 1 down to index 2 and verify manualStepOrder persistence
-        final moveDownBtn = find.byKey(ValueKey('build_queue_move_down_${cp.id}_1'));
-        expect(moveDownBtn, findsOneWidget);
-        await tester.ensureVisible(moveDownBtn);
-        await tester.tap(moveDownBtn);
-        await tester.pumpAndSettle();
-
-        final afterReorderCp = FeatureStateNode.getStatesForDocument(
-          provider.documents[feat.id]!,
-        ).first;
-        expect(afterReorderCp.parameters['manualStepOrder'], equals('true'));
-        expect(afterReorderCp.flatSteps[1].id, equals('st_code'));
-        expect(afterReorderCp.flatSteps[2].id, equals('st_insp'));
-
-        TaskHowToBlueprint.clearCache();
-        final resolvedAfterReorder = TaskHowToBlueprint.resolveUnifiedSteps(
-          checkpointNode: afterReorderCp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        expect(resolvedAfterReorder[1].shortTitle, contains('Dash Velocity'));
-        expect(resolvedAfterReorder[2].shortTitle, contains('Dash Export'));
-
-        // 4. Select CODE step (now index 1) -> shows code snippet card cleanly without removed inline sync strip
-        await tester.tap(find.byKey(ValueKey('build_queue_step_${cp.id}_1')));
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(ValueKey('inline_code_sync_strip_${cp.id}_1')),
-          findsNothing,
-        );
-        expect(
-          find.byKey(ValueKey('inline_open_code_file_btn_${cp.id}')),
-          findsNothing,
-        );
-        expect(find.textContaining('Implement _trigger_dash()'), findsOneWidget);
-
-        // 5. Select INSP step (now index 2) -> renders clean PROPERTY & LAYER SHEET (no Scene Tree chrome)
-        await tester.tap(find.byKey(ValueKey('build_queue_step_${cp.id}_2')));
-        await tester.pumpAndSettle();
-        expect(find.text('🎛 PROPERTY & LAYER SHEET'), findsOneWidget);
-        expect(find.text('+ Add Node'), findsNothing);
-
-        // 6. Inline + Add Step appends 1 flat step
-        await tester.tap(find.byKey(ValueKey('build_queue_add_step_btn_${cp.id}')));
-        await tester.pumpAndSettle();
-        await tester.enterText(
-          find.byKey(const ValueKey('add_stage3_task_title_input')),
-          'Add Dash Coyote Buffer',
-        );
-        await tester.tap(find.byKey(const ValueKey('confirm_add_stage3_task_btn')));
-        await tester.pumpAndSettle();
-        expect(
-          FeatureStateNode.getStatesForDocument(
-            provider.documents[feat.id]!,
-          ).first.flatSteps,
-          hasLength(5),
-        );
-
-        // 7. Pinned F6 Playtest Gate: check [STATE GUARD] sign-off and pass gate
-        final gateQueueBtn = find.byKey(ValueKey('build_queue_playtest_gate_${cp.id}'));
-        await tester.ensureVisible(gateQueueBtn);
-        await tester.tap(gateQueueBtn);
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(ValueKey('playtest_gate_card_${cp.id}')),
-          findsOneWidget,
-        );
-
+        // 2. Check [STATE GUARD] sign-off & Pass Playtest
         final guardCheck = find.byKey(ValueKey('playtest_guard_check_${cp.id}_0'));
         await tester.ensureVisible(guardCheck);
         await tester.tap(guardCheck);
@@ -947,11 +810,12 @@ func _physics_process(delta: float) -> void:
           ).first.isPlaytestPassed,
           isTrue,
         );
+        expect(find.text('Passed ✓'), findsWidgets);
       },
     );
 
     testWidgets(
-      'Full Web Studio renders rich Epic > Feature detail strip, omits Code File tab, and collapses Split-Screen (<700px) step dropdown',
+      'Full Web Studio renders Connect Godot Dock chip, Built-in-Godot status badge, and Half-Screen 1-click Pass CTA',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -964,26 +828,29 @@ func _physics_process(delta: float) -> void:
         final provider = setup.provider;
         final feat = setup.feat;
         final cp = setup.cp;
+        provider.updateFeatureStates(feat.id, [
+          cp.copyWith(parameters: {...cp.parameters, 'godotBuilt': 'true'}),
+        ]);
 
         await tester.pumpWidget(
           MaterialApp(
             theme: AppTheme.darkTheme,
             home: Scaffold(
-              body: ReleaseWorkbenchScreen(workbench: provider),
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
             ),
           ),
         );
         await tester.pumpAndSettle();
 
-        // 1. Desktop Web Studio shows rich Epic > Feature overview strip and Connect Godot chip, without Code File mode tab
-        expect(
-          find.byKey(ValueKey('web_epic_feature_detail_strip_${cp.id}')),
-          findsOneWidget,
-        );
+        // 1. Desktop Web Studio shows Connect Godot chip, Built in Godot status, and omits Code File tab
         expect(
           find.byKey(ValueKey('connect_godot_plugin_chip_${cp.id}')),
           findsOneWidget,
         );
+        expect(find.text('Built in Godot'), findsOneWidget);
         expect(
           find.byKey(ValueKey('workspace_mode_code_file_btn_${cp.id}')),
           findsNothing,
@@ -993,33 +860,27 @@ func _physics_process(delta: float) -> void:
           findsNothing,
         );
 
-        // 2. Resize to Split-Screen (< 700px) -> collapses queue into 1-line floating bar
+        // 2. Resize to Split-Screen (< 700px) -> 1-line floating header with Pass Playtest CTA (no step dropdown)
         tester.view.physicalSize = const Size(620, 820);
         await tester.pumpAndSettle();
 
-        expect(find.byKey(ValueKey('build_queue_rail_${cp.id}')), findsNothing);
-        expect(find.byKey(ValueKey('step_dropdown_${cp.id}')), findsOneWidget);
+        expect(find.byKey(ValueKey('step_dropdown_${cp.id}')), findsNothing);
         final doneBtn = find.byKey(ValueKey('one_click_complete_next_btn_${cp.id}'));
         expect(doneBtn, findsOneWidget);
 
         await tester.tap(doneBtn);
         await tester.pumpAndSettle();
-        expect(
-          FeatureStateNode.getStatesForDocument(
-            provider.documents[feat.id]!,
-          ).first.flatSteps[0].completed,
-          isTrue,
-        );
-        expect(
-          find.byKey(ValueKey('task_sheet_step_row_${cp.id}_1')),
-          findsOneWidget,
-        );
+        final afterPass = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(afterPass.isPlaytestPassed, isTrue);
+        expect(afterPass.isCompleted, isTrue);
         expect(tester.takeException(), isNull);
       },
     );
 
     testWidgets(
-      'Edit Step preserves/edits stepRole & verifyMode, inline +Add Step honors stage chip, direct step delete works, and semantic span colors stay distinct',
+      'Logging a Playtest Issue displays Open [FIX] issue on Brief Card, clears Pass state, and re-passing restores Passed ✓',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -1032,133 +893,67 @@ func _physics_process(delta: float) -> void:
         final provider = setup.provider;
         final feat = setup.feat;
         final cp = setup.cp;
-
-        // Seed Step 2 instruction with tuning var (dash_speed), guard rule/token, and asset path.
-        final initStates = FeatureStateNode.getStatesForDocument(
-          provider.documents[feat.id]!,
-        );
-        initStates.first.checklist[2].specNotes =
-            TaskHowToBlueprint.encodeThreeAreaNotes(
-          instruction:
-              'Apply dash_speed while Lock move while dash_timer active in res://scripts/player_dash.gd.',
-          verifyMode: 'playtest',
-          stepRole: 'script_logic',
-        );
-        FeatureStateNode.saveStatesToDocument(
-          provider.documents[feat.id]!,
-          initStates,
-        );
-        TaskHowToBlueprint.clearCache();
+        provider.updateFeatureStates(feat.id, [
+          cp.copyWith(
+            parameters: {
+              ...cp.parameters,
+              'godotBuilt': 'true',
+              'playtestPassed': 'true',
+            },
+          ),
+        ]);
 
         await tester.pumpWidget(
           MaterialApp(
             theme: AppTheme.darkTheme,
             home: Scaffold(
-              body: ReleaseWorkbenchScreen(workbench: provider),
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
             ),
           ),
         );
         await tester.pumpAndSettle();
 
-        // 1. Check semantic span colors on Step 2 DO instruction (Violet tune, Amber guard, Cyan asset)
-        await tester.tap(find.byKey(ValueKey('build_queue_step_${cp.id}_2')));
-        await tester.pumpAndSettle();
-        final richTextFinder = find.descendant(
-          of: find.byKey(ValueKey('step_do_instruction_${cp.id}_2')),
-          matching: find.byType(RichText),
-        );
-        expect(richTextFinder, findsWidgets);
-        final spanColors = <String, Color?>{};
-        void collectColors(InlineSpan span) {
-          if (span is TextSpan) {
-            final t = span.text ?? '';
-            if (t.isNotEmpty && span.style?.color != null) {
-              spanColors[t] = span.style!.color;
-            }
-            for (final c in span.children ?? const <InlineSpan>[]) {
-              collectColors(c);
-            }
-          }
-        }
+        expect(find.text('Passed ✓'), findsWidgets);
 
-        for (final rt in tester.widgetList<RichText>(richTextFinder)) {
-          collectColors(rt.text);
-        }
-        final tuneColor = spanColors.entries
-            .where((e) => e.key.contains('dash_speed'))
-            .map((e) => e.value)
-            .firstOrNull;
-        final guardColor = spanColors.entries
-            .where((e) => e.key.contains('dash_timer'))
-            .map((e) => e.value)
-            .firstOrNull;
-        final assetColor = spanColors.entries
-            .where((e) => e.key.contains('player_dash.gd'))
-            .map((e) => e.value)
-            .firstOrNull;
-        expect(tuneColor, equals(AppTheme.accentPurpleFor(true)));
-        expect(guardColor, equals(AppTheme.accentAmberFor(true)));
-        expect(assetColor, equals(AppTheme.accentCyanFor(true)));
-
-        // 2. Edit Step 2 via modal: switch role to inspector_setup + verify mode toggle -> persisted
-        await tester.tap(find.byKey(ValueKey('edit_howto_substep_${cp.id}_2')));
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(const ValueKey('edit_substep_role_inspector_setup')),
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(
-          find.byKey(const ValueKey('edit_substep_verify_mode_toggle')),
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Save Step'));
+        await tester.runAsync(() async {
+          provider.logPlaytestIssueOnCheckpoint(
+            featureId: feat.id,
+            states: FeatureStateNode.getStatesForDocument(
+              provider.documents[feat.id]!,
+            ),
+            checkpointIndex: 0,
+            issueDescription: 'Dash clips into thin wall corner at high speed.',
+          );
+          await Future<void>.delayed(const Duration(milliseconds: 40));
+        });
         await tester.pumpAndSettle();
 
-        final afterEditCp = FeatureStateNode.getStatesForDocument(
+        final statesAfterLog = FeatureStateNode.getStatesForDocument(
           provider.documents[feat.id]!,
-        ).first;
-        final decodedEdit = TaskHowToBlueprint.decodeThreeAreaNotes(
-          afterEditCp.checklist[2].specNotes,
         );
-        expect(decodedEdit.stepRole, equals('inspector_setup'));
-        expect(decodedEdit.verifyMode, equals('playtest'));
+        expect(statesAfterLog.first.isPlaytestPassed, isFalse);
+        expect(statesAfterLog.first.checklist.last.text, contains('[FIX]'));
+        expect(find.textContaining('OPEN PLAYTEST ISSUES'), findsOneWidget);
+        expect(
+          find.textContaining('Dash clips into thin wall corner at high speed.'),
+          findsWidgets,
+        );
 
-        // 3. Inline + Add Step with explicit WIRE stage chip
-        await tester.tap(
-          find.byKey(ValueKey('build_queue_add_step_btn_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const ValueKey('add_step_stage_wire')));
-        await tester.pumpAndSettle();
-        await tester.enterText(
-          find.byKey(const ValueKey('add_stage3_task_title_input')),
-          'Connect Dash Audio Signal',
-        );
-        await tester.tap(
-          find.byKey(const ValueKey('confirm_add_stage3_task_btn')),
-        );
-        await tester.pumpAndSettle();
-
-        final afterAddCp = FeatureStateNode.getStatesForDocument(
-          provider.documents[feat.id]!,
-        ).first;
-        expect(afterAddCp.flatSteps, hasLength(5));
-        final addedDecoded = TaskHowToBlueprint.decodeThreeAreaNotes(
-          afterAddCp.flatSteps.last.specNotes,
-        );
-        expect(addedDecoded.stepRole, equals('wire_and_verify'));
-
-        // 4. Direct step delete button in BUILD QUEUE
-        await tester.tap(
-          find.byKey(ValueKey('build_queue_delete_step_${cp.id}_4')),
-        );
+        // Re-passing via 1-click CTA restores Passed ✓
+        final rePassBtn = find.byKey(ValueKey('playtest_gate_pass_btn_${cp.id}'));
+        await tester.ensureVisible(rePassBtn);
+        await tester.tap(rePassBtn);
         await tester.pumpAndSettle();
         expect(
           FeatureStateNode.getStatesForDocument(
             provider.documents[feat.id]!,
-          ).first.flatSteps,
-          hasLength(4),
+          ).first.isPlaytestPassed,
+          isTrue,
         );
+        expect(find.text('Passed ✓'), findsWidgets);
       },
     );
 
@@ -1225,7 +1020,7 @@ func _physics_process(delta: float) -> void:
     );
 
     testWidgets(
-      'Half-Screen (< 1040px) keeps floating step header sticky while content scrolls and offers desktop actions in ⋯ menu',
+      'Half-Screen (< 1040px) keeps floating brief header sticky while content scrolls and offers actions in ⋯ menu',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(680, 620);
         tester.view.devicePixelRatio = 1.0;
@@ -1252,41 +1047,42 @@ func _physics_process(delta: float) -> void:
         );
         await tester.pumpAndSettle();
 
-        final stepDropdown = find.byKey(ValueKey('step_dropdown_${cp.id}'));
-        expect(stepDropdown, findsOneWidget);
-        final initialHeaderDy = tester.getTopLeft(stepDropdown).dy;
+        final outlinerTrigger =
+            find.byKey(ValueKey('halfscreen_outliner_trigger_${cp.id}'));
+        expect(outlinerTrigger, findsOneWidget);
+        final initialHeaderDy = tester.getTopLeft(outlinerTrigger).dy;
 
-        // Drag inside the step workspace pane and verify sticky floating header stays anchored
-        final area = find.byKey(ValueKey('initial_setup_area_${cp.id}'));
-        expect(area, findsOneWidget);
-        await tester.drag(area, const Offset(0, -180));
+        // Drag inside the brief workspace pane and verify sticky floating header stays anchored
+        final gateCard = find.byKey(ValueKey('playtest_gate_card_${cp.id}'));
+        expect(gateCard, findsOneWidget);
+        await tester.drag(gateCard, const Offset(0, -180));
         await tester.pumpAndSettle();
         expect(
-          tester.getTopLeft(stepDropdown).dy,
+          tester.getTopLeft(outlinerTrigger).dy,
           closeTo(initialHeaderDy, 1.0),
         );
 
-        // Open Half-Screen ⋯ menu and verify desktop Row 2 action parity + modal trigger
+        // Open Half-Screen ⋯ menu and verify clean Agentic menu actions
         final menuBtn =
             find.byKey(ValueKey('halfscreen_feature_actions_menu_btn_${feat.id}'));
         expect(menuBtn, findsOneWidget);
         await tester.tap(menuBtn);
         await tester.pumpAndSettle();
 
-        expect(find.text('✦ Tailor active step'), findsOneWidget);
+        expect(find.text('✓ Toggle Feature Passed'), findsOneWidget);
+        expect(find.text('✦ Tailor active step'), findsNothing);
         expect(find.text('⇄ Sync code to specs'), findsNothing);
-        expect(find.text('⚑ Log playtest issue'), findsOneWidget);
-        expect(find.text('📦 Godot files & sync'), findsNothing);
-        expect(find.text('⚙ Project contract'), findsOneWidget);
+        expect(find.text('⚑ Log Playtest Issue'), findsOneWidget);
+        expect(find.text('⚙ Godot Project Contract'), findsOneWidget);
 
-        await tester.tap(find.text('⚙ Project contract'));
+        await tester.tap(find.text('⚙ Godot Project Contract'));
         await tester.pumpAndSettle();
         expect(find.byType(Dialog), findsOneWidget);
       },
     );
 
     testWidgets(
-      'Step check footer toggles active step and Alt keyboard shortcuts navigate/toggle when no TextField is focused',
+      'Pass Playtest button & Alt+Enter toggle playtest gate and ignore shortcuts when a TextField is focused',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -1314,65 +1110,60 @@ func _physics_process(delta: float) -> void:
         );
         await tester.pumpAndSettle();
 
-        // 1. Toggle step 0 directly via footer Verify Check button
-        final checkBtn0 =
-            find.byKey(ValueKey('step_check_toggle_btn_${cp.id}_0'));
-        expect(checkBtn0, findsOneWidget);
-        await tester.ensureVisible(checkBtn0);
-        await tester.tap(checkBtn0);
+        // 1. Toggle playtest passed via header CTA
+        final passBtn =
+            find.byKey(ValueKey('one_click_complete_next_btn_${cp.id}'));
+        expect(passBtn, findsOneWidget);
+        await tester.ensureVisible(passBtn);
+        await tester.tap(passBtn);
         await tester.pumpAndSettle();
         expect(
           FeatureStateNode.getStatesForDocument(
             provider.documents[feat.id]!,
-          ).first.flatSteps[0].completed,
+          ).first.isPlaytestPassed,
           isTrue,
         );
 
-        // Uncheck step 0 via button so Alt+Enter behavior can be tested cleanly from step 0 -> step 1
-        await tester.tap(find.byKey(ValueKey('build_queue_step_${cp.id}_0')));
+        // Toggle back off via header CTA
+        await tester.tap(passBtn);
         await tester.pumpAndSettle();
-        await tester.ensureVisible(checkBtn0);
-        await tester.tap(checkBtn0);
-        await tester.pumpAndSettle();
-
-        // 2. Alt+ArrowDown advances to step 1; Alt+Enter marks active step done
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
-        await tester.pumpAndSettle();
-
         expect(
-          find.byKey(ValueKey('step_check_toggle_btn_${cp.id}_1')),
-          findsOneWidget,
+          FeatureStateNode.getStatesForDocument(
+            provider.documents[feat.id]!,
+          ).first.isPlaytestPassed,
+          isFalse,
         );
 
+        // 2. Alt+Enter toggles playtest gate ON when no TextField has focus
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
         await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
         await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
         await tester.pumpAndSettle();
         expect(
           FeatureStateNode.getStatesForDocument(
             provider.documents[feat.id]!,
-          ).first.flatSteps[1].completed,
+          ).first.isPlaytestPassed,
           isTrue,
         );
 
-        // 3. While focused in an editable TextField, Alt+ArrowDown must NOT fire workbench shortcut
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+        // 3. While focused in an editable TextField, Alt+Enter must NOT toggle playtest gate
         await tester.tap(find.byKey(const ValueKey('toggle_outliner_search_btn')));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('outliner_feature_search_input')));
         await tester.pumpAndSettle();
 
-        final activeBefore =
-            find.byKey(ValueKey('step_check_toggle_btn_${cp.id}_2'));
-        expect(activeBefore, findsOneWidget);
-
         await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
+        await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyUpEvent(LogicalKeyboardKey.enter);
         await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
         await tester.pumpAndSettle();
-        expect(activeBefore, findsOneWidget);
+        expect(
+          FeatureStateNode.getStatesForDocument(
+            provider.documents[feat.id]!,
+          ).first.isPlaytestPassed,
+          isTrue,
+        );
       },
     );
 
@@ -1756,7 +1547,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.6.1"'));
+        expect(cfgText, contains('version="2.7.0"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1799,8 +1590,8 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('EditorIcons'));
         expect(dockText, contains('EditorFonts'));
         expect(dockText, contains('RichTextLabel.new()'));
-        expect(dockText, contains('Tree.new()'));
-        expect(dockText, contains('CodeEdit.new()'));
+        expect(dockText, isNot(contains('Tree.new()')));
+        expect(dockText, isNot(contains('CodeEdit.new()')));
         expect(dockText, contains('layers_step_executor.gd'));
         expect(dockText, contains('Broken? Ask Agent to Fix'));
         expect(dockText, contains('Fix Latest Playtest Error'));
@@ -1808,10 +1599,13 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('Apply to Scene & Script'));
         expect(dockText, contains('Playtest in Arena'));
         expect(dockText, contains('Stop Playtest (F8)'));
+        expect(dockText, contains('Open Scene'));
         expect(dockText, contains('is_playing_scene'));
-        expect(dockText, contains('collect_project_scene_paths'));
+        expect(dockText, isNot(contains('collect_project_scene_paths')));
         expect(dockText, contains('sync_live_scripts'));
         expect(dockText, contains('_bundle_apply_timer'));
+        expect(dockText, contains('_post_playtest_log_timer'));
+        expect(dockText, contains('verify_built_feature_integrity'));
         expect(dockText, contains('OS.shell_open'));
         expect(dockText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(dockText, isNot(contains('preload(')));
@@ -1830,6 +1624,9 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('parse_signal_specs'));
         expect(executorText, contains('undo_redo'));
         expect(executorText, contains('apply_agent_bundle'));
+        expect(executorText, contains('preserve_existing_visuals'));
+        expect(executorText, contains('verify_built_feature_integrity'));
+        expect(executorText, contains('sceneFilePath'));
         expect(executorText, contains('extract_feature_export_tuners'));
         expect(executorText, contains('is_likely_gdscript_snippet'));
         expect(executorText, contains('can_attach_script_to_node'));
@@ -1849,6 +1646,9 @@ func _physics_process(delta: float) -> void:
 
         expect(fnText, contains('decodeThreeAreaNotesJs'));
         expect(fnText, contains('extractBareGdScriptPathJs'));
+        expect(fnText, contains('markFeatureBuiltInGodotJs'));
+        expect(fnText, contains('isBuiltInGodot'));
+        expect(fnText, contains('coveredScope'));
         expect(fnText, contains('last_godot_sync_ms'));
         expect(fnText, contains('"diagnose_fix"'));
         expect(fnText, contains('"build_feature"'));
@@ -1970,6 +1770,23 @@ func _physics_process(delta: float) -> void:
         );
         expect(
           shouldPreferRemoteDocumentOnSync(localPlay, remotePlay),
+          isTrue,
+        );
+
+        final localUnbuilt = TierDocument(
+          id: 'feat_built',
+          title: 'Dash',
+          tier: TierType.feature,
+          sections: {'states': '[{"id":"cp1","parameters":{"godotBuilt":"false"}}]'},
+        );
+        final remoteBuilt = TierDocument(
+          id: 'feat_built',
+          title: 'Dash',
+          tier: TierType.feature,
+          sections: {'states': '[{"id":"cp1","parameters":{"godotBuilt":"true"}}]'},
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localUnbuilt, remoteBuilt),
           isTrue,
         );
       },

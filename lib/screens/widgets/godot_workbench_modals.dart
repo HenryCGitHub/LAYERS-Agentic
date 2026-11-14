@@ -343,7 +343,7 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'GODOT DOCK v2.5 · FEATURE-FIRST CO-BUILDER',
+                      'GODOT DOCK v2.7 · AGENTIC FEATURE BUILDER',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
@@ -362,7 +362,7 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Builds & verifies 1 cohesive Feature at a time in Godot 4 with 1-click Arena Playtest, live @export tuners, Playtest Error auto-fix, and Cloud-synced .gd scripts.',
+                      'You direct & playtest; the Godot Agent builds & wires scenes and .gd scripts directly in Godot 4 with 1-click Arena Playtest, Playtest Error auto-fix, and Cloud sync.',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         height: 1.4,

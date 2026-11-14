@@ -917,15 +917,15 @@ class WorkbenchProvider extends ChangeNotifier {
       if (states.isEmpty) return doc.isCompleted ? 100 : 0;
       final activeVer = activeReleaseVersionTag;
       final hasActiveVer = states.any((s) => s.releaseVersion == activeVer);
-      int total = 0;
-      int done = 0;
+      double progressSum = 0.0;
+      int stateCount = 0;
       for (final s in states) {
         if (!hasActiveVer || s.releaseVersion == activeVer) {
-          total += s.totalChecklistCount;
-          done += s.completedChecklistCount;
+          progressSum += s.progress;
+          stateCount++;
         }
       }
-      return total == 0 ? 0 : ((done / total) * 100).round();
+      return stateCount == 0 ? 0 : ((progressSum / stateCount) * 100).round();
     }
 
     if (doc.childrenIds.isEmpty) return doc.isCompleted ? 100 : 0;
@@ -934,21 +934,21 @@ class WorkbenchProvider extends ChangeNotifier {
     if (doc.tier == TierType.release) {
       if (doc.id != _activeReleaseId) {
         final relVer = releaseVersionTagFor(doc);
-        int relTotal = 0;
-        int relDone = 0;
+        double relProgressSum = 0.0;
+        int relCount = 0;
         for (final beatId in doc.childrenIds) {
           for (final feat in featuresForBeat(beatId)) {
             final states = FeatureStateNode.getStatesForDocument(feat);
             for (final s in states) {
               if (s.releaseVersion == relVer) {
-                relTotal += s.totalChecklistCount;
-                relDone += s.completedChecklistCount;
+                relProgressSum += s.progress;
+                relCount++;
               }
             }
           }
         }
-        if (relTotal > 0) {
-          return ((relDone / relTotal) * 100).round();
+        if (relCount > 0) {
+          return ((relProgressSum / relCount) * 100).round();
         }
       }
       int activeSum = 0;

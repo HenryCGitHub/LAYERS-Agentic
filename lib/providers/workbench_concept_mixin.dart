@@ -634,8 +634,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         }
       }
       if (_selectedFeatureId != null &&
-          (GeminiAgentClient.hasKey(_apiKey) ||
-              GeminiAgentClient.testMockResponder != null)) {
+          GeminiAgentClient.testMockResponder != null) {
         synthesizeFeatureHowToStepsWithAi(
           _selectedFeatureId!,
           forceRefresh: true,

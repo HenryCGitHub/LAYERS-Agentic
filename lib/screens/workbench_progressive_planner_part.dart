@@ -88,8 +88,6 @@ extension _WorkbenchProgressivePlannerExt on _ReleaseWorkbenchScreenState {
       if (confirmed) {
         _manualCheckpointFocusIndex = null;
         _manualCheckpointFocusFeatureId = null;
-        _selectedFlatStepIndexByCheckpoint.clear();
-        _playtestGateActiveCheckpoints.clear();
       }
     }
 

@@ -1,8 +1,8 @@
 @tool
 extends RefCounted
 
-# Hierarchy-aware Scene, InputMap, Inspector, Signal, and GDScript Step Engine
-# for LAYERS Godot 4 Editor Plugin (v2.6.1+).
+# Hierarchy-aware Scene, InputMap, Signal, and GDScript Step Engine
+# for LAYERS Godot 4 Editor Plugin (v2.7.0+).
 
 var _eval_cache: Dictionary = {}
 var _eval_cache_epoch: int = 0
@@ -71,7 +71,8 @@ func _build_eval_cache_key(
 		editor_root.scene_file_path == primary_scene
 	)
 	var tree_sig := _compute_live_tree_signature(editor_root) if primary_open else "closed"
-	return "%d|%s|%s|%s|%d|%d|%d|%s|%s|%s" % [
+	var is_built_remote := 1 if bool(feat.get("isBuiltInGodot", false)) else 0
+	return "%d|%s|%s|%s|%d|%d|%d|%d|%s|%s|%s" % [
 		_eval_cache_epoch,
 		feat_id,
 		"".join(step_done_bits),
@@ -79,6 +80,7 @@ func _build_eval_cache_key(
 		scene_mtime,
 		proj_mtime,
 		code_files_count,
+		is_built_remote,
 		arena_hint,
 		";".join(sp_mtimes),
 		tree_sig,
@@ -2681,6 +2683,10 @@ func upgrade_scene_root_type_on_disk(
 		old_root.free()
 		return false
 	new_root.name = old_root.name
+	if old_root is Node3D and new_root is Node3D:
+		(new_root as Node3D).transform = (old_root as Node3D).transform
+	elif old_root is Node2D and new_root is Node2D:
+		(new_root as Node2D).transform = (old_root as Node2D).transform
 	for grp in old_root.get_groups():
 		var gs := String(grp)
 		if not gs.begins_with("_"):
@@ -3086,7 +3092,12 @@ func _coerce_prop_value(val: Variant, prop_name: String = "") -> Variant:
 	return val
 
 
-func _sync_existing_node_from_spec(node: Node, sp: Dictionary, _undo_redo: EditorUndoRedoManager = null) -> bool:
+func _sync_existing_node_from_spec(
+	node: Node,
+	sp: Dictionary,
+	_undo_redo: EditorUndoRedoManager = null,
+	preserve_existing_visuals: bool = false
+) -> bool:
 	if node == null:
 		return false
 	var changed := false
@@ -3110,28 +3121,55 @@ func _sync_existing_node_from_spec(node: Node, sp: Dictionary, _undo_redo: Edito
 						changed = true
 		elif node is MeshInstance3D:
 			var cur_mesh: Variant = node.get("mesh")
-			if cur_mesh == null or cur_mesh.get_class() != sr_cls:
-				var new_mesh: Variant = ClassDB.instantiate(sr_cls)
-				if new_mesh != null:
-					for k in sr_props.keys():
-						new_mesh.set(k, _coerce_prop_value(sr_props[k], String(k)))
-					node.set("mesh", new_mesh)
-					changed = true
-			elif not sr_props.is_empty():
-				for k in sr_props.keys():
-					var cv: Variant = _coerce_prop_value(sr_props[k], String(k))
-					if cur_mesh.get(k) != cv:
-						cur_mesh.set(k, cv)
+			if not (preserve_existing_visuals and cur_mesh != null):
+				if cur_mesh == null or cur_mesh.get_class() != sr_cls:
+					var new_mesh: Variant = ClassDB.instantiate(sr_cls)
+					if new_mesh != null:
+						for k in sr_props.keys():
+							new_mesh.set(k, _coerce_prop_value(sr_props[k], String(k)))
+						node.set("mesh", new_mesh)
 						changed = true
+				elif not sr_props.is_empty():
+					for k in sr_props.keys():
+						var cv: Variant = _coerce_prop_value(sr_props[k], String(k))
+						if cur_mesh.get(k) != cv:
+							cur_mesh.set(k, cv)
+							changed = true
 
 	var mat_props: Dictionary = sp.get("materialProps", {})
 	if not mat_props.is_empty():
-		if _apply_material_dict_to_node(node, mat_props):
+		var skip_mat := false
+		if preserve_existing_visuals:
+			if node is GeometryInstance3D and (node as GeometryInstance3D).material_override != null:
+				skip_mat = true
+			elif node is CSGShape3D and node.get("material") != null:
+				skip_mat = true
+		if not skip_mat and _apply_material_dict_to_node(node, mat_props):
 			changed = true
 
+	var visual_transform_keys: Array[String] = [
+		"position",
+		"rotation",
+		"rotation_degrees",
+		"scale",
+		"transform",
+		"global_position",
+		"global_transform",
+		"global_rotation",
+	]
 	var props: Dictionary = sp.get("props", {})
 	for pk in props.keys():
-		var pv: Variant = _coerce_prop_value(props[pk], String(pk))
+		var pk_str := String(pk)
+		if preserve_existing_visuals:
+			if pk_str in visual_transform_keys:
+				continue
+			if (node is Sprite2D or node is Sprite3D) and pk_str == "texture" and node.get("texture") != null:
+				continue
+			if pk_str == "material_override" and node is GeometryInstance3D and (node as GeometryInstance3D).material_override != null:
+				continue
+			if pk_str == "material" and node is CSGShape3D and node.get("material") != null:
+				continue
+		var pv: Variant = _coerce_prop_value(props[pk], pk_str)
 		if node.get(pk) != pv:
 			node.set(pk, pv)
 			changed = true
@@ -3700,16 +3738,18 @@ func evaluate_feature(
 
 	var scene_ok := primary_scene.is_empty() or FileAccess.file_exists(primary_scene)
 	var any_script_ok := valid_scripts.size() > 0
+	var is_built_remote := bool(feat.get("isBuiltInGodot", false))
 	if items.is_empty():
 		items.append({
-			"ok": scene_ok and any_script_ok,
+			"ok": (scene_ok and any_script_ok) or (is_built_remote and scene_ok),
 			"label": "Feature scene & script generated",
 			"kind": "script",
 		})
 
 	var has_built_artifacts := (
 		(not primary_scene.is_empty() and FileAccess.file_exists(primary_scene) and (filtered_scripts.is_empty() or any_script_ok)) or
-		(primary_scene.is_empty() and any_script_ok)
+		(primary_scene.is_empty() and any_script_ok) or
+		(is_built_remote and scene_ok)
 	)
 
 	var ready := 0
@@ -3971,6 +4011,7 @@ func apply_agent_bundle(
 				root_type_hints[spath] = nt
 
 	var arena_hint := String(bundle.get("arenaScenePath", ""))
+	var preserve_visuals := String(bundle.get("mode", "")).strip_edges().to_lower() == "build_feature"
 	for spath_key in ops_by_scene.keys():
 		var spath_str := String(spath_key)
 		var scene_ops: Array = ops_by_scene[spath_str]
@@ -3982,7 +4023,7 @@ func apply_agent_bundle(
 			warnings.append("Could not open scene %s for sceneOps." % spath_str)
 			continue
 		detach_incompatible_scripts(target_root)
-		applied_ops += apply_scene_ops_to_root(target_root, scene_ops, undo_redo, warnings)
+		applied_ops += apply_scene_ops_to_root(target_root, scene_ops, undo_redo, warnings, preserve_visuals)
 		if editor_interface != null:
 			sanitize_null_script_exports(target_root)
 			editor_interface.save_scene()
@@ -4013,7 +4054,7 @@ func apply_agent_bundle(
 					applied_ops += 1
 
 	heal_empty_project_input_actions()
-	ensure_main_scene_configured(default_scene, arena_hint)
+	ensure_main_scene_configured(arena_hint, default_scene)
 
 	# Restore primary feature scene tab (or original scene tab) after multi-scene edits.
 	var restore_scene := preferred_scene.strip_edges()
@@ -4067,10 +4108,21 @@ func apply_scene_ops_to_root(
 	scene_root: Node,
 	ops: Array,
 	_undo_redo: EditorUndoRedoManager = null,
-	warnings: PackedStringArray = PackedStringArray()
+	warnings: PackedStringArray = PackedStringArray(),
+	preserve_existing_visuals: bool = false
 ) -> int:
 	if scene_root == null:
 		return 0
+	var visual_transform_keys: Array[String] = [
+		"position",
+		"rotation",
+		"rotation_degrees",
+		"scale",
+		"transform",
+		"global_position",
+		"global_transform",
+		"global_rotation",
+	]
 	var count := 0
 	for raw_op in ops:
 		if typeof(raw_op) != TYPE_DICTIONARY:
@@ -4104,6 +4156,7 @@ func apply_scene_ops_to_root(
 			var node_type := String(op_dict.get("nodeType", "Node")).strip_edges()
 			var is_root_op := parent_p.is_empty() or np_hint == "." or (parent_p == "." and node_name == scene_root.name)
 			var node: Node = null
+			var created_new := false
 			if is_root_op:
 				node = scene_root
 			else:
@@ -4122,6 +4175,7 @@ func apply_scene_ops_to_root(
 					node.name = node_name
 					parent.add_child(node)
 					node.owner = scene_root
+					created_new = true
 					count += 1
 			var sr_cls := String(op_dict.get("subResourceClass", "")).strip_edges()
 			var sr_props: Dictionary = op_dict.get("subResourceProps", {})
@@ -4130,7 +4184,7 @@ func apply_scene_ops_to_root(
 				"subResourceProps": sr_props,
 				"props": op_dict.get("properties", {}),
 			}
-			if _sync_existing_node_from_spec(node, fake_sp):
+			if _sync_existing_node_from_spec(node, fake_sp, _undo_redo, preserve_existing_visuals and not created_new):
 				count += 1
 			var attach_sp := String(op_dict.get("scriptPath", "")).strip_edges()
 			if not attach_sp.is_empty() and FileAccess.file_exists(attach_sp) and can_attach_script_to_node(node, attach_sp):
@@ -4185,6 +4239,7 @@ func apply_scene_ops_to_root(
 				warnings.append("instance_scene missing scene: %s" % ipath)
 				continue
 			var existing := _find_instanced_scene_node(scene_root, ipath)
+			var was_existing := (existing != null)
 			var inst_node: Node = existing
 			if inst_node == null:
 				var pscene: PackedScene = ResourceLoader.load(ipath, "", ResourceLoader.CACHE_MODE_REUSE) as PackedScene
@@ -4204,7 +4259,10 @@ func apply_scene_ops_to_root(
 				count += 1
 			var props: Dictionary = op_dict.get("properties", {})
 			for pk in props.keys():
-				inst_node.set(String(pk), _coerce_prop_value(props[pk], String(pk)))
+				var pk_str := String(pk)
+				if preserve_existing_visuals and was_existing and (pk_str in visual_transform_keys):
+					continue
+				inst_node.set(pk_str, _coerce_prop_value(props[pk], pk_str))
 				count += 1
 			count += _apply_groups_to_node(inst_node, op_dict.get("groups", []))
 		elif op == "remove_node":
@@ -4571,6 +4629,15 @@ func _snapshot_node_tree(root: Node, limit_nodes: int = 80) -> Array:
 		elif cur is Timer:
 			entry["wait_time"] = cur.get("wait_time")
 			entry["one_shot"] = cur.get("one_shot")
+		var grps: Array = []
+		for grp in cur.get_groups():
+			var gs := String(grp)
+			if not gs.begins_with("_"):
+				grps.append(gs)
+		if not grps.is_empty():
+			entry["groups"] = grps
+		if cur != root and not cur.scene_file_path.is_empty():
+			entry["sceneFilePath"] = cur.scene_file_path
 		var sigs: Array = []
 		for sig_info in cur.get_signal_list():
 			var sname := String(sig_info.get("name", ""))
@@ -4586,6 +4653,91 @@ func _snapshot_node_tree(root: Node, limit_nodes: int = 80) -> Array:
 		for ch in cur.get_children():
 			queue.append(ch)
 	return out
+
+
+func verify_built_feature_integrity(
+	editor_interface: EditorInterface,
+	feat: Dictionary,
+	code_files: Dictionary = {},
+	arena_hint: String = ""
+) -> Dictionary:
+	var errors := PackedStringArray()
+	var warnings := PackedStringArray()
+	var paths := resolve_feature_paths(feat, code_files, arena_hint)
+	var primary_scene := String(paths.get("primary_scene", "")).strip_edges()
+	var checked_scripts := {}
+
+	for sp_raw in paths.get("script_paths", []):
+		var sp := String(sp_raw).strip_edges()
+		if sp.is_empty() or not FileAccess.file_exists(sp) or checked_scripts.has(sp):
+			continue
+		checked_scripts[sp] = true
+		var fa := FileAccess.open(sp, FileAccess.READ)
+		if fa != null:
+			var txt := fa.get_as_text()
+			fa.close()
+			var chk := check_gdscript_compiles(txt)
+			if not bool(chk.get("ok", false)):
+				errors.append("%s: %s" % [sp.get_file(), String(chk.get("error", "compile failed"))])
+
+	var eval_root: Node = null
+	var temp_root: Node = null
+	if not primary_scene.is_empty() and ResourceLoader.exists(primary_scene):
+		var ed_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
+		if ed_root != null and ed_root.scene_file_path == primary_scene:
+			eval_root = ed_root
+		else:
+			var ps := ResourceLoader.load(primary_scene, "", ResourceLoader.CACHE_MODE_REPLACE) as PackedScene
+			if ps != null:
+				temp_root = ps.instantiate()
+				eval_root = temp_root
+			else:
+				errors.append("Failed to load built scene %s." % primary_scene.get_file())
+
+	if eval_root != null:
+		var onready_re := RegEx.new()
+		onready_re.compile("@onready\\s+var\\s+\\w+[^=\\n]*=\\s*\\$([A-Za-z0-9_/]+)")
+		var stack: Array[Node] = [eval_root]
+		while not stack.is_empty():
+			var cur: Node = stack.pop_back()
+			var rel := "." if cur == eval_root else String(eval_root.get_path_to(cur))
+			if cur is CollisionShape3D or cur is CollisionShape2D:
+				if cur.get("shape") == null:
+					errors.append("CollisionShape '%s' in %s has no shape assigned." % [rel, primary_scene.get_file()])
+			var cur_scr: Variant = cur.get_script()
+			if cur_scr is Script:
+				var scr_res := cur_scr as Script
+				var scr_p := String(scr_res.resource_path).strip_edges()
+				var scr_txt := ""
+				if not scr_p.is_empty() and FileAccess.file_exists(scr_p):
+					var fb := FileAccess.open(scr_p, FileAccess.READ)
+					if fb != null:
+						scr_txt = fb.get_as_text()
+						fb.close()
+				if scr_txt.is_empty():
+					scr_txt = String(scr_res.source_code)
+				if not scr_p.is_empty() and not checked_scripts.has(scr_p) and not scr_txt.strip_edges().is_empty():
+					checked_scripts[scr_p] = true
+					var chk2 := check_gdscript_compiles(scr_txt)
+					if not bool(chk2.get("ok", false)):
+						errors.append("%s: %s" % [scr_p.get_file(), String(chk2.get("error", "compile failed"))])
+				if not scr_txt.is_empty():
+					for m in onready_re.search_all(scr_txt):
+						var node_ref := m.get_string(1).strip_edges()
+						if not node_ref.is_empty() and cur.get_node_or_null(node_ref) == null:
+							var label_p := scr_p.get_file() if not scr_p.is_empty() else cur.name
+							errors.append("%s references missing child $%s on '%s' in %s." % [label_p, node_ref, rel, primary_scene.get_file()])
+			for ch in cur.get_children():
+				stack.append(ch)
+
+	if temp_root != null:
+		temp_root.free()
+
+	return {
+		"ok": errors.is_empty(),
+		"errors": errors,
+		"warnings": warnings,
+	}
 
 
 func capture_rich_scene_snapshot(editor_interface: EditorInterface, extra_scene_paths: PackedStringArray = PackedStringArray()) -> Dictionary:
