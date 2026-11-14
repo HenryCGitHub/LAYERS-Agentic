@@ -173,50 +173,378 @@ function selectActiveCheckpoint(states, activeVer) {
   return firstIncomplete || states[states.length - 1];
 }
 
-function resolveStepRoleBadge(subtask) {
-  const rawNotes = String(subtask?.specNotes || "").trim();
-  if (rawNotes.startsWith("{")) {
+const STEP_ROLE_ALIASES = {
+  editor_setup: "editor_setup",
+  scene: "editor_setup",
+  scene_setup: "editor_setup",
+  node_setup: "editor_setup",
+  initial_setup: "editor_setup",
+  inspector_setup: "inspector_setup",
+  inspector: "inspector_setup",
+  input_setup: "inspector_setup",
+  properties: "inspector_setup",
+  script_logic: "script_logic",
+  code: "script_logic",
+  gdscript: "script_logic",
+  input_handling: "script_logic",
+  physics: "script_logic",
+  logic: "script_logic",
+  wire_and_verify: "wire_and_verify",
+  wire: "wire_and_verify",
+  wiring_and_feel: "wire_and_verify",
+  signal_wiring: "wire_and_verify",
+  verify: "wire_and_verify",
+  fix: "fix",
+  playtest_fix: "fix",
+  bugfix: "fix",
+  bug: "fix",
+};
+
+const ASSET_STOP_WORDS = new Set([
+  "create", "build", "implement", "implementation", "playtest", "add", "wire",
+  "hook", "up", "setup", "set", "bind", "apply", "enforce", "verify", "test",
+  "the", "and", "for", "with", "in", "on", "to", "of", "a", "an", "core",
+  "state", "player", "interaction", "mechanics", "controls", "logic", "pass",
+  "stage", "checkpoint", "checkpoints", "milestone", "phase", "step", "task",
+  "version", "system", "systems", "controller", "controllers", "mechanic",
+  "manager", "managers", "module", "handler", "service", "feature", "structure",
+]);
+
+function normalizeStepRoleJs(rawRole) {
+  const sr = String(rawRole || "").trim().toLowerCase();
+  return STEP_ROLE_ALIASES[sr] || "";
+}
+
+function stripDiffLinePrefixes(rawCode) {
+  return String(rawCode || "")
+    .split(/\r?\n/)
+    .map((line) => (line.startsWith("+ ") ? line.slice(2) : line))
+    .join("\n")
+    .trim();
+}
+
+function decodeThreeAreaNotesJs(rawSpecNotes) {
+  const empty = {
+    instruction: "",
+    area1Hierarchy: "",
+    area2Inspector: "",
+    verifyMode: "",
+    stepRole: "",
+    diagnosis: "",
+    scriptPatch: null,
+    shortTitle: "",
+  };
+  const raw = String(rawSpecNotes || "");
+  if (!raw.trim()) return empty;
+
+  if (raw.trim().startsWith("{")) {
     try {
-      const notes = JSON.parse(rawNotes);
-      const role = String(notes?.stepRole || "").trim().toLowerCase();
-      if (role === "initial_setup") return "SCENE";
-      if (role === "inspector") return "INSP";
-      if (role === "gdscript") return "CODE";
-      if (role === "wire_and_verify") return "WIRE";
-      if (role === "playtest_fix") return "FIX";
+      const notes = JSON.parse(raw);
+      if (notes && typeof notes === "object") {
+        const sr = normalizeStepRoleJs(notes.stepRole);
+        const vm = String(notes.verifyMode || "").trim().toLowerCase();
+        return {
+          instruction: String(notes.instruction || "").trim(),
+          area1Hierarchy: String(notes.area1Hierarchy || "").trim(),
+          area2Inspector: String(notes.area2Inspector || "").trim(),
+          verifyMode: vm === "editor" || vm === "playtest" ? vm : "",
+          stepRole: sr,
+          diagnosis: String(notes.diagnosis || "").trim(),
+          scriptPatch:
+            notes.scriptPatch && typeof notes.scriptPatch === "object"
+              ? notes.scriptPatch
+              : null,
+          shortTitle: String(notes.shortTitle || "").trim(),
+        };
+      }
     } catch (_) {}
   }
+
+  let working = raw;
+  let scriptPatch = null;
+  let diagnosis = "";
+  let stepRole = "";
+  let verifyMode = "";
+  let area2Inspector = "";
+  let area1Hierarchy = "";
+
+  const patchIdx = working.indexOf("\n[[SCRIPT_PATCH]]\n");
+  if (patchIdx >= 0) {
+    const patchRaw = working.slice(patchIdx + "\n[[SCRIPT_PATCH]]\n".length).trim();
+    working = working.slice(0, patchIdx);
+    if (patchRaw) {
+      try {
+        const parsedPatch = JSON.parse(patchRaw);
+        if (parsedPatch && typeof parsedPatch === "object") {
+          const replaceBlock = stripDiffLinePrefixes(parsedPatch.replaceBlock || "");
+          if (replaceBlock) {
+            scriptPatch = {
+              resPath: extractResPath(parsedPatch.resPath || "") || String(parsedPatch.resPath || "").trim(),
+              targetBlock: String(parsedPatch.targetBlock || ""),
+              replaceBlock,
+            };
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
+  const diagIdx = working.indexOf("\n[[DIAGNOSIS]]\n");
+  if (diagIdx >= 0) {
+    diagnosis = working.slice(diagIdx + "\n[[DIAGNOSIS]]\n".length).trim();
+    working = working.slice(0, diagIdx);
+  }
+
+  const srIdx = working.indexOf("\n[[STEP_ROLE]]\n");
+  if (srIdx >= 0) {
+    stepRole = normalizeStepRoleJs(
+      working.slice(srIdx + "\n[[STEP_ROLE]]\n".length)
+    );
+    working = working.slice(0, srIdx);
+  }
+
+  const vmIdx = working.indexOf("\n[[VERIFY_MODE]]\n");
+  if (vmIdx >= 0) {
+    const vm = working
+      .slice(vmIdx + "\n[[VERIFY_MODE]]\n".length)
+      .trim()
+      .toLowerCase();
+    verifyMode = vm === "editor" || vm === "playtest" ? vm : "";
+    working = working.slice(0, vmIdx);
+  }
+
+  const a2Idx = working.indexOf("\n[[AREA2]]\n");
+  if (a2Idx >= 0) {
+    area2Inspector = working.slice(a2Idx + "\n[[AREA2]]\n".length).trim();
+    working = working.slice(0, a2Idx);
+  }
+
+  const a1Idx = working.indexOf("\n[[AREA1]]\n");
+  if (a1Idx >= 0) {
+    area1Hierarchy = working.slice(a1Idx + "\n[[AREA1]]\n".length).trim();
+    working = working.slice(0, a1Idx);
+  }
+
+  return {
+    instruction: working.trim(),
+    area1Hierarchy,
+    area2Inspector,
+    verifyMode,
+    stepRole,
+    diagnosis,
+    scriptPatch,
+    shortTitle: "",
+  };
+}
+
+function encodeThreeAreaNotesJs({
+  instruction,
+  area1Hierarchy = "",
+  area2Inspector = "",
+  verifyMode = "",
+  stepRole = "",
+  diagnosis = "",
+  scriptPatch = null,
+}) {
+  let out = String(instruction || "").trim();
+  const a1 = String(area1Hierarchy || "").trim();
+  const a2 = String(area2Inspector || "").trim();
+  const vm = String(verifyMode || "").trim().toLowerCase();
+  const sr = normalizeStepRoleJs(stepRole);
+  const diag = String(diagnosis || "").trim();
+
+  if (a1) out += `\n[[AREA1]]\n${a1}`;
+  if (a2) out += `\n[[AREA2]]\n${a2}`;
+  if (vm === "editor" || vm === "playtest") {
+    out += `\n[[VERIFY_MODE]]\n${vm}`;
+  }
+  if (sr) out += `\n[[STEP_ROLE]]\n${sr}`;
+  if (diag) out += `\n[[DIAGNOSIS]]\n${diag}`;
+  if (scriptPatch && typeof scriptPatch === "object" && scriptPatch.replaceBlock) {
+    out += `\n[[SCRIPT_PATCH]]\n${JSON.stringify({
+      resPath: String(scriptPatch.resPath || "").trim(),
+      targetBlock: String(scriptPatch.targetBlock || ""),
+      replaceBlock: stripDiffLinePrefixes(scriptPatch.replaceBlock),
+    })}`;
+  }
+  return out;
+}
+
+function resolveStepShortTitle(subtask, decoded) {
+  const noteObj = decoded || decodeThreeAreaNotesJs(subtask?.specNotes);
+  let raw = noteObj.shortTitle || String(subtask?.text || "Step");
+  raw = raw.replace(/^\s*STEP\s+\d+(?:\.\d+)?\s*(?:[·:\-—]\s*)?/i, "");
+  raw = raw.replace(/\s*\([\d.]+\s*[hm]\)\s*$/i, "").trim();
+  return raw || "Step";
+}
+
+function resolveStepRoleBadge(subtask, decoded, cleanTitle) {
+  const noteObj = decoded || decodeThreeAreaNotesJs(subtask?.specNotes);
+  const titleStr = String(cleanTitle || subtask?.text || "");
+  const upperTitle = titleStr.toUpperCase();
+  const sr = noteObj.stepRole || "";
+
+  if (upperTitle.includes("[FIX]") || sr === "fix") {
+    return "FIX";
+  }
+  if (sr === "inspector_setup") {
+    return "INSP";
+  }
+  if (sr === "script_logic") {
+    return "CODE";
+  }
+
+  const hasHierarchy = Boolean(noteObj.area1Hierarchy);
+  const code = String(subtask?.codeSnippet || "").trim();
+  const hasInspector =
+    Boolean(noteObj.area2Inspector) ||
+    (code.includes("|") && code.includes("---"));
+  const lowerPath = String(subtask?.codeLanguage || "").toLowerCase();
+  const lowerInstr = String(noteObj.instruction || "").toLowerCase();
+  const lowerTitle = titleStr.toLowerCase();
+
+  if (sr === "editor_setup") {
+    if (
+      !hasHierarchy &&
+      (hasInspector ||
+        lowerPath.includes("inspector") ||
+        lowerPath.includes("input map") ||
+        lowerTitle.includes("input map") ||
+        lowerTitle.includes("collision layer") ||
+        lowerTitle.includes("export"))
+    ) {
+      return "INSP";
+    }
+    return "SCENE";
+  }
+
+  const looksLikeCode = /\bfunc\s|\bextends\s|@export\b|@onready\b|\bvar\s/.test(code);
+  const looksLikeSignalOrRun =
+    lowerPath.includes("node dock") ||
+    lowerPath.includes("signal") ||
+    (lowerInstr.includes("connect") && lowerInstr.includes("signal")) ||
+    /timeout\(\)|pressed\(\)|body_entered|-->|──►|─►/.test(code) ||
+    /\bf6\b|\bf5\b|run scene/.test(lowerInstr);
+
+  if (sr === "wire_and_verify") {
+    return !looksLikeCode || looksLikeSignalOrRun ? "WIRE" : "CODE";
+  }
+
   const target = String(subtask?.codeTargetFile || "").trim().toLowerCase();
   if (target === "scene_setup") return "SCENE";
   if (target === "inspector_setup") return "INSP";
   if (target === "signal_wire") return "WIRE";
+
+  if (
+    /^wire\b|\bsignal\b|\bconnect\b.*\b(trigger|signal)\b/i.test(titleStr) ||
+    (looksLikeSignalOrRun && !looksLikeCode)
+  ) {
+    return "WIRE";
+  }
+  if (
+    (hasHierarchy ||
+      lowerPath.includes("scene dock") ||
+      /\.tscn\b|\bchild node\b|\bcreate\b.*\bscene\b|^add\b.*\b(node|nodes|area|collider|colliders|marker|markers|spawner|timer|camera|mesh|light)\b/i.test(
+        titleStr
+      )) &&
+    !/\bscript\b/i.test(titleStr) &&
+    !looksLikeCode
+  ) {
+    return "SCENE";
+  }
+  if (
+    ((hasInspector && !hasHierarchy) ||
+      /\binput\s*map\b|\bcollision\b|\blayer\b|\bbounds\b|\binspector\b/i.test(
+        titleStr
+      )) &&
+    !/\bscript\b/i.test(titleStr) &&
+    !looksLikeCode
+  ) {
+    return "INSP";
+  }
   return "CODE";
 }
 
-function resolveStepShortTitle(subtask) {
-  const rawNotes = String(subtask?.specNotes || "").trim();
-  if (rawNotes.startsWith("{")) {
-    try {
-      const notes = JSON.parse(rawNotes);
-      const st = String(notes?.shortTitle || "").trim();
-      if (st) return st;
-    } catch (_) {}
+function toSnakeCaseAssetJs(rawTitle) {
+  const words = String(rawTitle || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_]+/g, " ")
+    .split(/\s+/)
+    .filter((w) => w && !ASSET_STOP_WORDS.has(w));
+  if (words.length > 0) {
+    return words.slice(0, 3).join("_");
   }
-  return String(subtask?.text || "Step").trim() || "Step";
+  const rawWords = String(rawTitle || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+  return rawWords.length > 0 ? rawWords.slice(0, 3).join("_") : "gameplay_feature";
 }
 
 function flattenCheckpointSteps(cp, featDoc) {
   if (!cp) return [];
   const leaves = collectLeafChecklistItems(cp.checklist || []);
-  const fallbackAsset = extractResPath(featDoc?.sections?.primary_asset || "");
+  const snake = toSnakeCaseAssetJs(featDoc?.title || cp?.name || "gameplay_feature");
+  const primaryRes = extractResPath(
+    featDoc?.sections?.primary_asset ||
+      cp?.parameters?.primarySharedScriptOrScene ||
+      ""
+  );
+  let fallbackScene = primaryRes.endsWith(".tscn") || primaryRes.endsWith(".scn") ? primaryRes : "";
+  let fallbackScript = primaryRes.endsWith(".gd") ? primaryRes : "";
+
+  for (const st of leaves) {
+    const cand =
+      extractResPath(st.codeLanguage || "") ||
+      extractResPath(st.specNotes || "");
+    if (!fallbackScene && (cand.endsWith(".tscn") || cand.endsWith(".scn"))) {
+      fallbackScene = cand;
+    }
+    if (!fallbackScript && cand.endsWith(".gd")) {
+      fallbackScript = cand;
+    }
+  }
+  if (!fallbackScene) fallbackScene = `res://scenes/${snake}.tscn`;
+  if (!fallbackScript) fallbackScript = `res://scripts/${snake}.gd`;
+
+  const cpVerifyFallback = String(
+    cp?.parameters?.playtestGoal ||
+      cp?.feedback ||
+      "Verify in Godot with 0 console errors."
+  ).trim();
+
   return leaves.map((st, idx) => {
-    const stepPath = extractResPath(st.codeLanguage || "") || fallbackAsset;
+    const decoded = decodeThreeAreaNotesJs(st.specNotes);
+    const title = resolveStepShortTitle(st, decoded);
+    const role = resolveStepRoleBadge(st, decoded, title);
+    const explicitPath =
+      extractResPath(st.codeLanguage || "") ||
+      extractResPath(decoded.instruction || "");
+    const stepPath =
+      explicitPath ||
+      (role === "SCENE" || role === "INSP" || role === "WIRE"
+        ? fallbackScene
+        : fallbackScript);
+
     return {
       id: String(st.id || `step_${idx}`),
       index: idx + 1,
-      role: resolveStepRoleBadge(st),
-      title: resolveStepShortTitle(st),
+      role,
+      title,
+      locationLabel: String(st.codeLanguage || "").trim(),
       stepPath,
+      instruction:
+        decoded.instruction || `Complete "${title}" in ${stepPath}.`,
+      area1Hierarchy: decoded.area1Hierarchy || "",
+      area2Inspector: decoded.area2Inspector || "",
+      codeSnippet: String(st.codeSnippet || "").trim(),
+      verifyResult: String(st.verification || "").trim() || cpVerifyFallback,
+      verifyMode:
+        decoded.verifyMode ||
+        (role === "SCENE" || role === "INSP" ? "editor" : "playtest"),
+      diagnosis: decoded.diagnosis || "",
+      scriptPatch: decoded.scriptPatch || null,
       completed: Boolean(st.completed),
     };
   });
@@ -420,10 +748,19 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
         String(cp?.parameters?.playtestPassed || "") === "true";
       const allStepsDone =
         steps.length > 0 && steps.every((s) => Boolean(s.completed));
+      const doneWhen = String(
+        cp?.parameters?.playtestGoal ||
+          cp?.feedback ||
+          feat?.sections?.done_when ||
+          feat?.sections?.doneWhen ||
+          feat?.sections?.playtest_criteria ||
+          `Press F6 and verify ${feat.title || "this feature"} works with 0 console errors.`
+      ).trim();
       return {
         id: String(feat.id),
         title: String(feat.title || "Feature"),
         primaryAsset: extractResPath(feat?.sections?.primary_asset || ""),
+        doneWhen,
         checkpointId: String(cp?.id || ""),
         isPlaytestPassed,
         isCompleted: allStepsDone && isPlaytestPassed,
@@ -478,6 +815,184 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     webStudioUrl,
     activeEpic: activeIdx >= 0 ? candidateEpics[activeIdx] : null,
   };
+}
+
+function extractJsonObjectFromGeminiBody(parsedBody) {
+  try {
+    const parts = parsedBody?.candidates?.[0]?.content?.parts;
+    if (!Array.isArray(parts)) return null;
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      if (!p || p.thought === true || typeof p.text !== "string") continue;
+      let text = p.text.trim();
+      if (!text) continue;
+      text = text
+        .replace(/^```(?:json)?\s*/i, "")
+        .replace(/\s*```$/i, "")
+        .trim();
+      const firstBrace = text.indexOf("{");
+      const lastBrace = text.lastIndexOf("}");
+      if (firstBrace >= 0 && lastBrace > firstBrace) {
+        return JSON.parse(text.slice(firstBrace, lastBrace + 1));
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function diagnoseGodotIssueWithGemini({
+  secretKey,
+  featTitle,
+  doneWhen,
+  stepsSummary,
+  defaultScriptPath,
+  issue,
+  sceneSnapshot,
+  scriptsSnapshot,
+}) {
+  const safePath = extractResPath(defaultScriptPath) || "res://scripts/fix_target.gd";
+  const deterministicFallback = {
+    fixTitle: issue.length > 52 ? `${issue.slice(0, 49)}...` : issue,
+    diagnosis: `AI diagnosis unavailable offline; inspect ${safePath} and the active Scene Tree nodes around "${issue}".`,
+    stepPath: safePath,
+    instruction: `Open ${safePath}, add a safe null/state guard for "${issue}", and re-run F6.`,
+    area2Inspector: "",
+    codeSnippet: `# Root-cause guard for: ${issue}\npush_warning("[LAYERS FIX] Add guard for: ${issue.replace(/"/g, "'")}")`,
+    scriptPatch: null,
+    verifyResult: `Press F6 -> "${issue}" no longer occurs and Output shows 0 console errors.`,
+  };
+
+  if (!secretKey) return deterministicFallback;
+
+  const prompt = [
+    "You are the Godot 4 Root-Cause Debugger for LAYERS-Agentic.",
+    "Diagnose the user's reported runtime/editor issue using their LIVE Godot 4 Scene Tree and actual .gd script files on disk, and return ONE surgical [FIX] step as strict JSON.",
+    "",
+    `Feature: ${featTitle}`,
+    `Expected Outcome (Done When): ${doneWhen}`,
+    stepsSummary ? `Existing Steps: ${stepsSummary}` : "",
+    `Primary Script Hint: ${safePath}`,
+    `Reported Issue: "${issue}"`,
+    "",
+    "LIVE GODOT SCENE TREE SNAPSHOT:",
+    sceneSnapshot ? sceneSnapshot : "(No open scene root in Godot editor.)",
+    "",
+    "LIVE .GD SCRIPTS ON DISK:",
+    scriptsSnapshot ? scriptsSnapshot : "(No .gd files attached/captured yet.)",
+    "",
+    "Return strictly one JSON object with these exact keys:",
+    "{",
+    '  "fixTitle": "3-6 word plain title without [FIX] prefix",',
+    '  "diagnosis": "1-2 clear sentences naming the exact bug in the live scene tree or .gd script",',
+    '  "stepPath": "res://scripts/...gd (or res://scenes/...tscn)",',
+    '  "instruction": "1-2 direct imperative sentences describing the fix",',
+    '  "area2Inspector": "Optional Inspector/InputMap bindings (or empty string)",',
+    '  "codeSnippet": "Clean valid Godot 4 GDScript code for the fix (use tab indentation, NO + diff markers)",',
+    '  "scriptPatch": {',
+    '    "resPath": "res://scripts/...gd",',
+    '    "targetBlock": "exact verbatim substring from LIVE .GD SCRIPTS ON DISK to replace, or empty string if creating a new script",',
+    '    "replaceBlock": "exact replacement GDScript code (tab-indented, valid Godot 4 syntax, NO + diff markers)"',
+    "  },",
+    '  "verifyResult": "Player action -> observable fixed result with 0 errors in F6"',
+    "}",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const modelsToTry = [
+    {
+      model: "gemini-4-hydrogen",
+      generationConfig: {
+        responseMimeType: "application/json",
+        thinkingConfig: { thinkingLevel: "LOW" },
+      },
+    },
+    {
+      model: "gemini-flash-latest",
+      generationConfig: {
+        responseMimeType: "application/json",
+      },
+    },
+  ];
+
+  for (const cfg of modelsToTry) {
+    try {
+      const upstreamRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": secretKey,
+          },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: cfg.generationConfig,
+          }),
+        }
+      );
+      if (!upstreamRes.ok) continue;
+      const bodyJson = await upstreamRes.json();
+      const parsed = extractJsonObjectFromGeminiBody(bodyJson);
+      if (!parsed || typeof parsed !== "object") continue;
+
+      const fixTitle =
+        String(parsed.fixTitle || "")
+          .replace(/^\[FIX\]\s*/i, "")
+          .trim() || deterministicFallback.fixTitle;
+      const diagnosis =
+        String(parsed.diagnosis || "").trim() ||
+        deterministicFallback.diagnosis;
+      const resolvedPath =
+        extractResPath(parsed.stepPath || "") ||
+        extractResPath(parsed?.scriptPatch?.resPath || "") ||
+        safePath;
+      const instruction =
+        String(parsed.instruction || "").trim() ||
+        deterministicFallback.instruction;
+      const area2Inspector = String(parsed.area2Inspector || "").trim();
+      const rawSnippet = stripDiffLinePrefixes(parsed.codeSnippet || "");
+      let scriptPatch = null;
+      if (parsed.scriptPatch && typeof parsed.scriptPatch === "object") {
+        const patchPath =
+          extractResPath(parsed.scriptPatch.resPath || "") ||
+          (resolvedPath.endsWith(".gd") ? resolvedPath : safePath);
+        const targetBlock = String(parsed.scriptPatch.targetBlock || "");
+        const replaceBlock = stripDiffLinePrefixes(
+          parsed.scriptPatch.replaceBlock || ""
+        );
+        if (patchPath.endsWith(".gd") && replaceBlock) {
+          scriptPatch = {
+            resPath: patchPath,
+            targetBlock,
+            replaceBlock,
+          };
+        }
+      }
+      const codeSnippet =
+        rawSnippet ||
+        (scriptPatch ? scriptPatch.replaceBlock : "") ||
+        deterministicFallback.codeSnippet;
+      const verifyResult =
+        String(parsed.verifyResult || "").trim() ||
+        deterministicFallback.verifyResult;
+
+      return {
+        fixTitle,
+        diagnosis,
+        stepPath: resolvedPath,
+        instruction,
+        area2Inspector,
+        codeSnippet,
+        scriptPatch,
+        verifyResult,
+      };
+    } catch (_) {
+      // Fall over to next flash model cleanly
+    }
+  }
+
+  return deterministicFallback;
 }
 
 function parseAdminEmails() {
@@ -1021,7 +1536,7 @@ exports.geminiProxy = onRequest(
     }
 
     // -------------------------------------------------------------------------
-    // Route 3D: POST /godotLink/update (Godot 4 Dock: live toggle_step / pass_gate)
+    // Route 3D: POST /godotLink/update (Godot 4 Dock: toggle_step / pass_gate / set_playtest / diagnose_fix)
     // -------------------------------------------------------------------------
     if (cleanPath === "/godotLink/update") {
       if (req.method !== "POST") {
@@ -1042,11 +1557,18 @@ exports.geminiProxy = onRequest(
       const action = String(body.action || "").trim();
       const stepId = String(body.stepId || "").trim();
 
-      if (!featureId || (action !== "toggle_step" && action !== "pass_gate" && action !== "set_playtest")) {
+      if (
+        !featureId ||
+        (action !== "toggle_step" &&
+          action !== "pass_gate" &&
+          action !== "set_playtest" &&
+          action !== "diagnose_fix")
+      ) {
         res.status(400).json({
           error: {
             code: 400,
-            message: "Expected featureId and action ('toggle_step', 'pass_gate', or 'set_playtest').",
+            message:
+              "Expected featureId and action ('toggle_step', 'pass_gate', 'set_playtest', or 'diagnose_fix').",
           },
         });
         return;
@@ -1064,6 +1586,68 @@ exports.geminiProxy = onRequest(
         .doc(linkAuth.uid)
         .collection("documents")
         .doc(featureId);
+
+      let aiDiagResult = null;
+      let createdFixStepId = "";
+      let fixIssueText = "";
+
+      if (action === "diagnose_fix") {
+        fixIssueText = String(body.issue || "").trim().slice(0, 1200);
+        if (!fixIssueText) {
+          res.status(400).json({
+            error: { code: 400, message: "Missing issue description for diagnose_fix." },
+          });
+          return;
+        }
+        const preSnap = await featRef.get();
+        if (!preSnap.exists) {
+          res.status(404).json({
+            error: { code: 404, message: "Feature document not found." },
+          });
+          return;
+        }
+        const preData = preSnap.data() || {};
+        const preStates = parseFeatureStates(preData);
+        if (preStates.length === 0) {
+          res.status(400).json({
+            error: { code: 400, message: "Feature has no checkpoints." },
+          });
+          return;
+        }
+        const preCp =
+          (checkpointId
+            ? preStates.find((s) => String(s?.id || "") === checkpointId)
+            : null) || preStates[preStates.length - 1];
+        const preSteps = flattenCheckpointSteps(preCp, preData);
+        const featTitle = String(preData.title || preCp?.name || "Feature");
+        const gdStep = preSteps.find((s) => String(s.stepPath || "").endsWith(".gd"));
+        const primaryRes = extractResPath(preData?.sections?.primary_asset || "");
+        const defaultScriptPath =
+          gdStep?.stepPath ||
+          (primaryRes.endsWith(".gd") ? primaryRes : `res://scripts/${toSnakeCaseAssetJs(featTitle)}.gd`);
+        const doneWhen = String(
+          preCp?.parameters?.playtestGoal ||
+            preCp?.feedback ||
+            preData?.sections?.done_when ||
+            ""
+        ).trim();
+        const stepsSummary = preSteps
+          .slice(0, 10)
+          .map((s) => `${s.index}.${s.role}:${s.title}(${s.stepPath})`)
+          .join(" | ");
+
+        aiDiagResult = await diagnoseGodotIssueWithGemini({
+          secretKey: String(GEMINI_API_KEY.value() || "").trim(),
+          featTitle,
+          doneWhen,
+          stepsSummary,
+          defaultScriptPath,
+          issue: fixIssueText,
+          sceneSnapshot: String(body.sceneSnapshot || "").slice(0, 24000),
+          scriptsSnapshot: String(body.scriptsSnapshot || "").slice(0, 32000),
+        });
+        createdFixStepId = `fix_step_${Date.now()}`;
+      }
 
       try {
         await db.runTransaction(async (tx) => {
@@ -1109,6 +1693,35 @@ exports.geminiProxy = onRequest(
             if (!nextCompleted) {
               cp.parameters.playtestPassed = "false";
             }
+          } else if (action === "diagnose_fix" && aiDiagResult) {
+            if (!Array.isArray(cp.checklist)) cp.checklist = [];
+            const encodedSpecNotes = encodeThreeAreaNotesJs({
+              instruction: aiDiagResult.instruction,
+              area2Inspector: aiDiagResult.area2Inspector,
+              verifyMode: "playtest",
+              stepRole: "fix",
+              diagnosis: aiDiagResult.diagnosis,
+              scriptPatch: aiDiagResult.scriptPatch,
+            });
+            cp.checklist.push({
+              id: createdFixStepId,
+              text: `[FIX] ${aiDiagResult.fixTitle}`,
+              completed: false,
+              children: [],
+              isExpanded: true,
+              verification: aiDiagResult.verifyResult,
+              verificationCompleted: false,
+              codeLanguage: aiDiagResult.stepPath,
+              codeTargetFile: "custom_snippet",
+              codeSnippet: aiDiagResult.codeSnippet,
+              specNotes: encodedSpecNotes,
+            });
+            if (!Array.isArray(cp.edgeCases)) cp.edgeCases = [];
+            const guardText = `[PLAYTEST GUARD] ${fixIssueText}`;
+            if (!cp.edgeCases.includes(guardText)) {
+              cp.edgeCases.push(guardText);
+            }
+            cp.parameters.playtestPassed = "false";
           } else {
             const nextPassed = action === "pass_gate" ? true : Boolean(body.passed);
             cp.parameters.playtestPassed = nextPassed ? "true" : "false";
@@ -1149,7 +1762,9 @@ exports.geminiProxy = onRequest(
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
       });
-      res.status(200).json(payload);
+      res.status(200).json(
+        createdFixStepId ? { ...payload, createdFixStepId } : payload
+      );
       return;
     }
 

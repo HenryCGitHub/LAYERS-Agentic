@@ -20,7 +20,7 @@ var _active_request_kind: String = ""
 
 func _ready() -> void:
 	_http = HTTPRequest.new()
-	_http.timeout = 20.0
+	_http.timeout = 45.0
 	add_child(_http)
 	_http.request_completed.connect(_on_request_completed)
 	load_config()
@@ -119,6 +119,30 @@ func set_playtest_passed(feature_id: String, checkpoint_id: String, passed: bool
 			"checkpointId": checkpoint_id,
 			"action": "set_playtest",
 			"passed": passed,
+		}),
+	})
+
+
+func diagnose_fix(
+	feature_id: String,
+	checkpoint_id: String,
+	issue: String,
+	scene_snapshot: String,
+	scripts_snapshot: String
+) -> void:
+	if not has_link_token():
+		return
+	_dispatch_or_queue({
+		"kind": "update",
+		"method": HTTPClient.METHOD_POST,
+		"path": "/godotLink/update",
+		"body": JSON.stringify({
+			"featureId": feature_id,
+			"checkpointId": checkpoint_id,
+			"action": "diagnose_fix",
+			"issue": issue,
+			"sceneSnapshot": scene_snapshot,
+			"scriptsSnapshot": scripts_snapshot,
 		}),
 	})
 

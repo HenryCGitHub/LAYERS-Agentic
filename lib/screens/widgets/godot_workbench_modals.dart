@@ -343,7 +343,7 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'GODOT DOCK FOCUS (1 EPIC · STEPS ONLY)',
+                      'GODOT DOCK FOCUS (1 EPIC · 1 STEP AT A TIME)',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
@@ -362,7 +362,7 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Godot shows only this active Epic and its checkable steps. Full Epics > Features specs, snippets, and bug triage stay in Web Studio.',
+                      'Shows 1 active step at a time with live Godot Scene/Script checks, undoable setup actions, and ✦ Ask Agent to Fix.',
                       style: GoogleFonts.inter(
                         fontSize: 11,
                         height: 1.4,

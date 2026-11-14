@@ -1730,31 +1730,63 @@ func _physics_process(delta: float) -> void:
     );
 
     test(
-      'Native Godot 4 plugin addon files & web/layers_godot_plugin.zip exist and enforce single-Epic steps-only dock',
+      'Native Godot 4 plugin addon V2.1 files, Cloud Functions diagnose_fix & web/layers_godot_plugin.zip enforce single-step dock with live checks & undoable actions',
       () {
         final cfg = File('godot_plugin/addons/layers/plugin.cfg');
         final pluginGd = File('godot_plugin/addons/layers/layers_plugin.gd');
         final syncGd = File('godot_plugin/addons/layers/layers_sync_client.gd');
         final dockGd = File('godot_plugin/addons/layers/layers_dock.gd');
+        final functionsJs = File('functions/index.js');
         final zipFile = File('web/layers_godot_plugin.zip');
 
         expect(cfg.existsSync(), isTrue);
         expect(pluginGd.existsSync(), isTrue);
         expect(syncGd.existsSync(), isTrue);
         expect(dockGd.existsSync(), isTrue);
+        expect(functionsJs.existsSync(), isTrue);
         expect(zipFile.existsSync(), isTrue);
 
         final cfgText = cfg.readAsStringSync();
+        final pluginText = pluginGd.readAsStringSync();
         final syncText = syncGd.readAsStringSync();
         final dockText = dockGd.readAsStringSync();
+        final fnText = functionsJs.readAsStringSync();
 
         expect(cfgText, contains('script="layers_plugin.gd"'));
+        expect(pluginText, contains('get_undo_redo()'));
+        expect(pluginText, contains('get_editor_interface()'));
+
         expect(syncText, contains('.gdignore'));
         expect(syncText, contains('.gitignore'));
         expect(syncText, contains('/godotLink/epic'));
         expect(syncText, contains('/godotLink/update'));
+        expect(syncText, contains('"diagnose_fix"'));
+
+        expect(dockText, contains('get_edited_scene_root()'));
+        expect(dockText, contains('inspect_object'));
         expect(dockText, contains('play_current_scene()'));
+        expect(dockText, contains('undo_redo'));
+        expect(dockText, contains('Broken? Ask Agent to Fix'));
         expect(dockText, contains('OS.shell_open'));
+
+        expect(fnText, contains('decodeThreeAreaNotesJs'));
+        expect(fnText, contains('"diagnose_fix"'));
+        expect(fnText, contains('gemini-4-hydrogen'));
+        expect(fnText, contains('gemini-flash-latest'));
+
+        // TaskHowToBlueprint cleanly strips V2.1 [[DIAGNOSIS]] & [[SCRIPT_PATCH]] markers
+        const rawNotesWithPatch =
+            'Apply respawn guard cleanly.\n[[AREA2]]\nOceanZone.respawn_marker: Marker3D\n[[VERIFY_MODE]]\nplaytest\n[[STEP_ROLE]]\nfix\n[[DIAGNOSIS]]\n_on_body_entered only calls pass.\n[[SCRIPT_PATCH]]\n{"resPath":"res://scripts/boundary_guard.gd"}';
+        final decoded = TaskHowToBlueprint.decodeThreeAreaNotes(
+          rawNotesWithPatch,
+        );
+        expect(decoded.cleanInstruction, equals('Apply respawn guard cleanly.'));
+        expect(
+          decoded.area2Inspector,
+          equals('OceanZone.respawn_marker: Marker3D'),
+        );
+        expect(decoded.verifyMode, equals('playtest'));
+        expect(decoded.stepRole, equals('fix'));
 
         final zipBytes = zipFile.readAsBytesSync();
         expect(zipBytes.length, greaterThan(1000));

@@ -676,6 +676,8 @@ class TaskHowToBlueprint {
   static const String _area2Marker = '\n[[AREA2]]\n';
   static const String _verifyModeMarker = '\n[[VERIFY_MODE]]\n';
   static const String _stepRoleMarker = '\n[[STEP_ROLE]]\n';
+  static const String _diagnosisMarker = '\n[[DIAGNOSIS]]\n';
+  static const String _scriptPatchMarker = '\n[[SCRIPT_PATCH]]\n';
 
   static const Set<String> _kValidStepRoles = <String>{
     'editor_setup',
@@ -766,6 +768,14 @@ class TaskHowToBlueprint {
       );
     }
     String working = rawSpecNotes;
+    final idxPatch = working.indexOf(_scriptPatchMarker);
+    if (idxPatch >= 0) {
+      working = working.substring(0, idxPatch);
+    }
+    final idxDiag = working.indexOf(_diagnosisMarker);
+    if (idxDiag >= 0) {
+      working = working.substring(0, idxDiag);
+    }
     String? sr;
     final idxSr = working.indexOf(_stepRoleMarker);
     if (idxSr >= 0) {

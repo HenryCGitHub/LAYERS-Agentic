@@ -10,6 +10,7 @@ var _last_focus_sync_msec: int = 0
 func _enter_tree() -> void:
 	_dock = LayersDockScript.new()
 	_dock.editor_interface = get_editor_interface()
+	_dock.undo_redo = get_undo_redo()
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _dock)
 
 
