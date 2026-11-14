@@ -17,17 +17,19 @@
      - **Progressive AI Releases (`v0.1` → `v0.2` → `v0.3+`)**: Clicking **`+ New Release (v0.2) ✦`** inside the Workbench opens the **Progressive AI Release Co-Pilot** (`gemini-flash-latest`) with 1-click AI direction presets, `UPGRADE` / `NEW` checkboxes, and non-destructive live-tree merging (`NEW`, `UPGRADING`, `STABLE ✓`, `SUPERSEDED`).
      - **Act 2 · Full Production Blueprint (`lib/agents/full_production_blueprint_agent.dart` & `lib/screens/workbench_full_production_blueprint_part.dart`)**: After `03 · Vertical Slice`, **Next Release** opens the 6-section Full Production Blueprint (`01 v1.0 Goal`, `02 Content & World Scale`, `03 Full-Game Loop`, `04 Promoted Systems`, `05 Permanent Cuts`, `06 v1.0 Done When`). Approving builds the `v0.N` **Full-Game Skeleton** (new Full Production Epics tagged `act: fullProduction`, core Epics `STABLE ✓`), followed by **Production Passes** (1–2 Full Production Epics per release), the **`v1.0` Launch Release** (Release Build Export + `0` open `[FIX]`), then `v1.1+` Post-Launch.
 
-## 1. Mandatory Planning & Confirmation Gate
-- **NEVER** edit, create, or modify any project code files (using `replace_file_content`, `write_to_file`, or modifying commands) without first presenting an `implementation_plan.md` artifact and waiting for explicit user confirmation.
-- **Strict Workflow for all requests involving changes**:
-  1. **Research Phase**: Use read-only tools (`view_file`, `grep_search`, `find_by_name`, `list_dir`) to thoroughly investigate the codebase.
-  2. **Plan Phase**: Create or update `implementation_plan.md` detailing the problem, proposed changes, affected files, and verification plan.
-  3. **STOP & Wait**: Do not call any modification tools. End turn and request explicit user confirmation on the plan.
-  4. **Execution Phase**: Only after the user confirms/approves the plan, proceed to edit files, run tests (`flutter test`, `dart analyze`), and commit/push changes.
+## 1. Goal Contract & Loop Engineering Workflow
+- **Architecture, UI & New Features (Plan-First)**:
+  1. Investigate read-only, then present a concise `implementation_plan.md` defining **Goal**, **In Scope**, **Affected Files**, and objective **Done When** checks (use `/grill-me` upfront when design choices are ambiguous).
+  2. Stop and wait for explicit user approval before editing project code files.
+- **Bug Fixes & `/goal` Agentic Loops (Test-First Autonomous Loop)**:
+  - Once a concrete Goal Contract or failing reproduction is established (unit test in `test/` or headless Godot probe per `.agents/skills/godot-headless-loop/SKILL.md`), iterate autonomously through **`Edit → ./scripts/verify_loop.sh → Self-Repair`** without pausing between incremental edits until all checks exit `0`.
+  - Hand back / re-plan only if a design assumption breaks or a verification gate contradicts the spec.
+- **External User Godot Projects (`/Users/henry/Godot/Projects/*`)**:
+  - User game files (`project.godot`, `scenes/*`, `scripts/*`) are strictly **read-only** reference fixtures (enforced by `.agents/hooks.json`). Always fix LAYERS's plugin/agent instead, syncing only `addons/layers/*` when explicitly verifying in Godot.
 
-## 2. Testing & Quality Assurance
-- Always run `dart analyze` and `flutter test` before committing any code changes.
-- Ensure 0 static analysis errors and 100% passing tests on every commit.
+## 2. Multi-Stack Verification & Loop Gate
+- Run `./scripts/verify_loop.sh` (pass `--fix-zip` if `godot_plugin/` changed) before committing.
+- Passing requires `0` errors across: `node --check functions/index.js`, `web/layers_godot_plugin.zip` byte parity, headless Godot `4.7.2` plugin smoke probes (`scripts/godot_plugin_smoke.gd`), `dart analyze`, and `100%` passing `flutter test` (enforced automatically on turn completion by `.agents/hooks.json`).
 
 ## 3. Communication Style
 - Keep responses concise and focused.

@@ -1,0 +1,25 @@
+{
+  "external-project-write-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "edit_file|write_file|replace_file_content|write_to_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./hooks/pre_tool_guard.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "goal-verify-stop-gate": {
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/stop_verify_gate.py",
+        "timeout": 120
+      }
+    ]
+  }
+}
