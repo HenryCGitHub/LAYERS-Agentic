@@ -250,7 +250,8 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 		_write_cache(parsed)
 		if parsed.has("agentBundle") and typeof(parsed.get("agentBundle")) == TYPE_DICTIONARY:
 			agent_bundle_received.emit(parsed.get("agentBundle"), parsed)
-		epic_updated.emit(parsed)
+		else:
+			epic_updated.emit(parsed)
 	else:
 		sync_failed.emit("Unexpected sync response.")
 
@@ -686,6 +687,7 @@ func _on_agent_http_completed(
 		_write_cache(parsed)
 		if parsed.has("agentBundle") and typeof(parsed.get("agentBundle")) == TYPE_DICTIONARY:
 			agent_bundle_received.emit(parsed.get("agentBundle"), parsed)
-		epic_updated.emit(parsed)
+		else:
+			epic_updated.emit(parsed)
 	else:
 		sync_failed.emit("Unexpected Agent response from LAYERS Cloud.")

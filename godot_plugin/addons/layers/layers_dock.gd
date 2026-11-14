@@ -25,6 +25,8 @@ var _updating_plugin: bool = false
 var _checking_plugin_update: bool = false
 var _last_error_clear_unix: float = 0.0
 var _live_refresh_timer: Timer
+var _bundle_apply_timer: Timer
+var _pending_agent_bundle: Dictionary = {}
 var _playtest_watch_timer: Timer
 var _was_playing_scene: bool = false
 var _script_sync_timer: Timer
@@ -110,6 +112,12 @@ func _ready() -> void:
 	_live_refresh_timer.wait_time = 0.28
 	_live_refresh_timer.timeout.connect(_on_live_refresh_timeout)
 	add_child(_live_refresh_timer)
+
+	_bundle_apply_timer = Timer.new()
+	_bundle_apply_timer.one_shot = true
+	_bundle_apply_timer.wait_time = 0.02
+	_bundle_apply_timer.timeout.connect(_on_bundle_apply_timeout)
+	add_child(_bundle_apply_timer)
 
 	_script_sync_timer = Timer.new()
 	_script_sync_timer.one_shot = true
@@ -335,7 +343,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.6.0")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.6.1")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -1114,12 +1122,11 @@ func _on_build_feature_pressed(feat: Dictionary) -> void:
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 
-	var local_res: Dictionary = _executor.call("build_feature_local", feat, editor_interface, undo_redo, code_files, arena_scene)
-	if editor_interface != null and editor_interface.get_resource_filesystem() != null:
-		editor_interface.get_resource_filesystem().scan()
-
 	if _sync == null or not _sync.has_link_token():
-		var local_sum := str(local_res.get("summary", "Built local feature scaffold."))
+		var local_res: Dictionary = _executor.call("build_feature_local", feat, editor_interface, undo_redo, code_files, arena_scene)
+		if editor_interface != null and editor_interface.get_resource_filesystem() != null:
+			editor_interface.get_resource_filesystem().scan()
+		var local_sum: String = str(local_res.get("summary", "Built local feature scaffold."))
 		_last_agent_summary = local_sum
 		_set_status(local_sum, not bool(local_res.get("ok", true)))
 		_render_active_feature_workspace(feat)
@@ -1187,19 +1194,31 @@ func _on_fix_log_errors_pressed(feat_id: String, cp_id: String, log_errors: Arra
 
 
 func _on_agent_bundle_received(bundle: Dictionary, payload_data: Dictionary) -> void:
-	_building_feature = false
-	_diagnosing_fix = false
 	if not payload_data.is_empty():
 		_payload = payload_data
-	if _executor == null:
+	_pending_agent_bundle = bundle
+	_set_status("Applying scene & script updates...", false)
+	if is_inside_tree() and _bundle_apply_timer != null:
+		_bundle_apply_timer.start()
+	else:
+		_on_bundle_apply_timeout()
+
+
+func _on_bundle_apply_timeout() -> void:
+	_building_feature = false
+	_diagnosing_fix = false
+	var bundle: Dictionary = _pending_agent_bundle
+	_pending_agent_bundle = {}
+	if _executor == null or bundle.is_empty():
+		_refresh_view()
 		return
-	var active_feat := _get_active_feature()
-	var pref_scene := str(active_feat.get("primaryAsset", "")).strip_edges()
+	var active_feat: Dictionary = _get_active_feature()
+	var pref_scene: String = str(active_feat.get("primaryAsset", "")).strip_edges()
 	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle, pref_scene)
 	_executor.call("invalidate_eval_cache")
 	if editor_interface != null and editor_interface.get_resource_filesystem() != null:
 		editor_interface.get_resource_filesystem().scan()
-	var summary := str(apply_res.get("summary", bundle.get("summary", "Applied scene & script updates.")))
+	var summary: String = str(apply_res.get("summary", bundle.get("summary", "Applied scene & script updates.")))
 	_last_agent_summary = summary
 	_last_agent_warnings = apply_res.get("warnings", PackedStringArray())
 	if bool(apply_res.get("ok", false)):
@@ -1631,13 +1650,17 @@ func run_reload() -> void:
 	if ei == null or get_tree() == null:
 		queue_free()
 		return
+	await get_tree().create_timer(0.03).timeout
+	if ei == null or get_tree() == null:
+		queue_free()
+		return
 	ei.set_plugin_enabled(plugin_key, false)
-	await get_tree().process_frame
+	await get_tree().create_timer(0.02).timeout
 	for p in gd_paths:
 		ResourceLoader.load(p, "Script", ResourceLoader.CACHE_MODE_REPLACE)
 	if ei.get_resource_filesystem() != null:
 		ei.get_resource_filesystem().scan()
-	await get_tree().process_frame
+	await get_tree().create_timer(0.02).timeout
 	ei.set_plugin_enabled(plugin_key, true)
 	queue_free()
 """

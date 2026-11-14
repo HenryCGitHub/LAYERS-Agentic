@@ -2,7 +2,7 @@
 extends RefCounted
 
 # Hierarchy-aware Scene, InputMap, Inspector, Signal, and GDScript Step Engine
-# for LAYERS Godot 4 Editor Plugin (v2.6.0+).
+# for LAYERS Godot 4 Editor Plugin (v2.6.1+).
 
 var _eval_cache: Dictionary = {}
 var _eval_cache_epoch: int = 0
@@ -145,14 +145,55 @@ func _find_node_by_script_filename(root: Node, fname: String) -> Node:
 # GDScript Diff Stripping & Surgical Hunk Merging
 # ---------------------------------------------------------------------------
 
+func _is_non_gdscript_diagram_line(line: String) -> bool:
+	var t: String = line.strip_edges()
+	if t.is_empty():
+		return false
+	if "──►" in t or "─►" in t:
+		return true
+	if t.begins_with("|") and t.ends_with("|") and t.count("|") >= 2:
+		return true
+	var diag_re := RegEx.new()
+	diag_re.compile("^\\[[^\\]]+\\]\\s*(?:-->|->)\\s*\\[")
+	return diag_re.search(t) != null
+
+
+func is_likely_gdscript_snippet(raw_text: String) -> bool:
+	var clean: String = strip_diff_prefixes(raw_text).strip_edges()
+	if clean.is_empty():
+		return false
+	for raw_line in clean.split("\n"):
+		var t: String = raw_line.strip_edges()
+		if t.is_empty() or t.begins_with("#") or _is_non_gdscript_diagram_line(raw_line):
+			continue
+		if (
+			t.begins_with("extends ") or t.begins_with("class_name ") or
+			t.begins_with("@tool") or t.begins_with("@icon") or
+			t.begins_with("@export") or t.begins_with("@onready") or
+			t.begins_with("signal ") or t.begins_with("enum ") or
+			t.begins_with("const ") or t.begins_with("static func ") or
+			t.begins_with("func ") or t.begins_with("var ") or
+			t.begins_with("if ") or t.begins_with("elif ") or
+			t.begins_with("else:") or t.begins_with("for ") or
+			t.begins_with("while ") or t.begins_with("match ") or
+			t == "pass" or t.begins_with("return") or t.begins_with("await ")
+		):
+			return true
+		if ":= " in t or " = " in t or "+=" in t or "-=" in t or ".connect(" in t or ".emit(" in t or "$" in t:
+			return true
+	return false
+
+
 func resolve_step_code_text(step: Dictionary) -> String:
 	var patch_raw: Variant = step.get("scriptPatch", null)
 	if typeof(patch_raw) == TYPE_DICTIONARY:
 		var patch_dict: Dictionary = patch_raw
-		var rep: String = str(patch_dict.get("replaceBlock", "")).strip_edges()
-		if not rep.is_empty():
-			return strip_diff_prefixes(rep)
+		var rep_raw: String = str(patch_dict.get("replaceBlock", "")).strip_edges()
+		if not rep_raw.is_empty() and is_likely_gdscript_snippet(rep_raw):
+			return strip_diff_prefixes(rep_raw)
 	var snip: String = str(step.get("codeSnippet", "")).strip_edges()
+	if snip.is_empty() or not is_likely_gdscript_snippet(snip):
+		return ""
 	return strip_diff_prefixes(snip)
 
 
@@ -246,34 +287,119 @@ func _normalize_ws(text: String) -> String:
 	return "\n".join(lines)
 
 
+func _extract_top_level_decl_key(line: String) -> String:
+	if line.begins_with("\t") or line.begins_with(" "):
+		return ""
+	var t: String = line.strip_edges()
+	if t.is_empty() or t.begins_with("#"):
+		return ""
+	var var_re := RegEx.new()
+	var_re.compile("^(?:@export(?:_[a-z_]+)?(?:\\([^)]*\\))?\\s+|@onready\\s+)*(?:static\\s+)?var\\s+([A-Za-z_][A-Za-z0-9_]*)\\b")
+	var vm: RegExMatch = var_re.search(t)
+	if vm != null:
+		return "var:" + vm.get_string(1)
+	var const_re := RegEx.new()
+	const_re.compile("^(?:const|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b")
+	var cm: RegExMatch = const_re.search(t)
+	if cm != null:
+		return "var:" + cm.get_string(1)
+	var sig_re := RegEx.new()
+	sig_re.compile("^signal\\s+([A-Za-z_][A-Za-z0-9_]*)\\b")
+	var sm: RegExMatch = sig_re.search(t)
+	if sm != null:
+		return "signal:" + sm.get_string(1)
+	var fn_re := RegEx.new()
+	fn_re.compile("^(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
+	var fm: RegExMatch = fn_re.search(t)
+	if fm != null:
+		return "func:" + fm.get_string(1)
+	return ""
+
+
+func _collect_top_level_decls(script_text: String) -> Dictionary:
+	var decls: Dictionary = {}
+	for line in script_text.replace("\r\n", "\n").split("\n"):
+		var k: String = _extract_top_level_decl_key(line)
+		if not k.is_empty():
+			decls[k] = true
+	return decls
+
+
+func _line_bracket_delta(line: String) -> int:
+	var delta: int = 0
+	for ch_idx in range(line.length()):
+		var c: String = line[ch_idx]
+		if c == "#":
+			break
+		if c == "[" or c == "(" or c == "{":
+			delta += 1
+		elif c == "]" or c == ")" or c == "}":
+			delta -= 1
+	return delta
+
+
+func _filter_duplicate_hunk_decls(existing_text: String, candidate_lines: PackedStringArray) -> PackedStringArray:
+	var existing_decls: Dictionary = _collect_top_level_decls(existing_text)
+	var out := PackedStringArray()
+	var idx: int = 0
+	while idx < candidate_lines.size():
+		var line: String = candidate_lines[idx]
+		if _is_non_gdscript_diagram_line(line):
+			idx += 1
+			continue
+		var dkey: String = _extract_top_level_decl_key(line)
+		if not dkey.is_empty() and existing_decls.has(dkey):
+			idx += 1
+			if dkey.begins_with("func:"):
+				while idx < candidate_lines.size():
+					var next_l: String = candidate_lines[idx]
+					var next_t: String = next_l.strip_edges()
+					if next_t.is_empty() or next_t.begins_with("#") or next_l.begins_with("\t") or next_l.begins_with(" "):
+						idx += 1
+					else:
+						break
+			else:
+				var depth: int = _line_bracket_delta(line)
+				var cont: bool = line.strip_edges().ends_with("\\")
+				while idx < candidate_lines.size() and (depth > 0 or cont):
+					var cont_l: String = candidate_lines[idx]
+					depth += _line_bracket_delta(cont_l)
+					cont = cont_l.strip_edges().ends_with("\\")
+					idx += 1
+			continue
+		if not dkey.is_empty():
+			existing_decls[dkey] = true
+		out.append(line)
+		idx += 1
+	return out
+
+
 func merge_step_code_into_existing(existing_text: String, raw_snippet: String, fallback_extends: String = "Node") -> String:
 	var current: String = existing_text.replace("\r\n", "\n")
 	if current.strip_edges().is_empty():
-		var clean_new: String = strip_diff_prefixes(raw_snippet)
+		var clean_new_lines := _filter_duplicate_hunk_decls("", strip_diff_prefixes(raw_snippet).split("\n"))
+		var clean_new: String = "\n".join(clean_new_lines).strip_edges()
+		if clean_new.is_empty():
+			return ""
 		if not ("extends " in clean_new) and not ("class_name " in clean_new):
 			clean_new = "extends %s\n\n%s" % [fallback_extends, clean_new]
 		return clean_new.strip_edges() + "\n"
 
 	if not _has_diff_markers(raw_snippet):
 		var clean_plain: String = strip_diff_prefixes(raw_snippet)
-		if clean_plain.is_empty():
+		if clean_plain.is_empty() or not is_likely_gdscript_snippet(clean_plain):
 			return current
-		if clean_plain.begins_with("extends ") or clean_plain.begins_with("class_name "):
-			if is_step_code_present(current, {"codeSnippet": raw_snippet}):
-				return current
-			# Extract declarations / functions not yet in existing
-			var split_lines: PackedStringArray = clean_plain.split("\n")
-			var body_without_header: PackedStringArray = []
-			for l in split_lines:
-				if l.begins_with("extends ") or l.begins_with("class_name "):
-					continue
-				body_without_header.append(l)
-			var additions: String = "\n".join(body_without_header).strip_edges()
-			if not additions.is_empty() and not (additions in current):
-				return current.strip_edges() + "\n\n" + additions + "\n"
+		var body_without_header := PackedStringArray()
+		for l in clean_plain.split("\n"):
+			if l.begins_with("extends ") or l.begins_with("class_name "):
+				continue
+			body_without_header.append(l)
+		var filtered_plain := _filter_duplicate_hunk_decls(current, body_without_header)
+		var additions: String = "\n".join(filtered_plain).strip_edges()
+		if additions.is_empty():
 			return current
-		if not (clean_plain in current):
-			return current.strip_edges() + "\n\n" + clean_plain + "\n"
+		if not (additions in current):
+			return current.strip_edges() + "\n\n" + additions + "\n"
 		return current
 
 	# Parse interleaved context + added hunks from `+ ` diff
@@ -317,9 +443,11 @@ func merge_step_code_into_existing(existing_text: String, raw_snippet: String, f
 
 	for h_raw in hunks:
 		var h: Dictionary = h_raw
-		var added_lines: PackedStringArray = h.get("added", PackedStringArray())
+		var added_lines: PackedStringArray = _filter_duplicate_hunk_decls(current, h.get("added", PackedStringArray()))
 		var added_block: String = "\n".join(added_lines).strip_edges(false, true)
 		if added_block.strip_edges().is_empty():
+			continue
+		if not is_likely_gdscript_snippet(added_block):
 			continue
 		if _is_block_present(current, added_lines):
 			continue
@@ -1164,7 +1292,7 @@ func parse_signal_specs(step: Dictionary, scene_root: Node = null) -> Array:
 	var combined: String = "%s\n%s" % [code, instr]
 
 	var sig_re := RegEx.new()
-	sig_re.compile("\\[?([A-Za-z][A-Za-z0-9_]*)\\.([a-z][a-z0-9_]*)\\]?(?:\\(\\))?\\s*(?:-->|──►|─►|->)\\s*\\[?(?:([A-Za-z][A-Za-z0-9_]*)\\.)?([a-zA-Z_][A-Za-z0-9_]*)\\]?(?:\\(\\))?")
+	sig_re.compile("\\[?([A-Za-z][A-Za-z0-9_]*)\\.([a-z][a-z0-9_]*)\\]?(?:\\([^)]*\\))?\\s*(?:-->|──►|─►|->)\\s*\\[?(?:([A-Za-z][A-Za-z0-9_]*)\\.)?([a-zA-Z_][A-Za-z0-9_]*)(?:\\(([^)]*)\\))?\\]?")
 	var matches: Array[RegExMatch] = sig_re.search_all(combined)
 
 	var default_target: String = _infer_signal_target_name(step, scene_root)
@@ -1174,6 +1302,9 @@ func parse_signal_specs(step: Dictionary, scene_root: Node = null) -> Array:
 		var sig: String = m.get_string(2).strip_edges()
 		var dst: String = m.get_string(3).strip_edges()
 		var method: String = m.get_string(4).strip_edges()
+		var bound_args: String = m.get_string(5).strip_edges()
+		if not bound_args.is_empty():
+			continue
 		if sig in PackedStringArray(["tscn", "gd", "scn", "tres", "cfg", "json"]):
 			continue
 		if dst.is_empty():
@@ -1811,6 +1942,8 @@ func apply_or_create_script(
 
 	if not FileAccess.file_exists(step_path):
 		var content: String = strip_diff_prefixes(raw_snip)
+		if not content.is_empty() and not is_likely_gdscript_snippet(raw_snip):
+			content = ""
 		if content.is_empty():
 			content = "extends %s\n" % fallback_extends
 		elif not ("extends " in content) and not ("class_name " in content):
@@ -1827,9 +1960,11 @@ func apply_or_create_script(
 		var existing: String = rf.get_as_text() if rf != null else ""
 		if rf != null:
 			rf.close()
-		if not is_step_code_present(existing, step) and not raw_snip.is_empty():
+		if not raw_snip.is_empty() and is_likely_gdscript_snippet(raw_snip) and not is_step_code_present(existing, step):
 			var merged: String = merge_step_code_into_existing(existing, raw_snip, fallback_extends)
-			if merged != existing:
+			var existing_compiles: bool = not existing.strip_edges().is_empty() and bool(check_gdscript_compiles(existing).get("ok", false))
+			var merged_compiles: bool = not merged.strip_edges().is_empty() and bool(check_gdscript_compiles(merged).get("ok", false))
+			if merged != existing and (merged_compiles or not existing_compiles):
 				var wf2 := FileAccess.open(step_path, FileAccess.WRITE)
 				if wf2 == null:
 					return {"ok": false, "message": "Could not update %s" % step_path}
@@ -1947,23 +2082,27 @@ func apply_fix_patch(
 				rf.close()
 
 		var applied: bool = false
+		var existing_ok: bool = file_exists and not existing_text.strip_edges().is_empty() and bool(check_gdscript_compiles(existing_text).get("ok", false))
 		if not file_exists or replace_block.begins_with("extends ") or replace_block.begins_with("class_name "):
-			_ensure_dir_for_res_path(target_path)
-			var wf := FileAccess.open(target_path, FileAccess.WRITE)
-			if wf != null:
-				wf.store_string(replace_block.strip_edges() + "\n")
-				wf.close()
-				applied = true
+			var candidate_full: String = replace_block.strip_edges() + "\n"
+			if not existing_ok or bool(check_gdscript_compiles(candidate_full).get("ok", false)):
+				_ensure_dir_for_res_path(target_path)
+				var wf := FileAccess.open(target_path, FileAccess.WRITE)
+				if wf != null:
+					wf.store_string(candidate_full)
+					wf.close()
+					applied = true
 		elif not target_block.is_empty() and target_block in existing_text:
 			var updated_text: String = existing_text.replace(target_block, replace_block)
-			var wf2 := FileAccess.open(target_path, FileAccess.WRITE)
-			if wf2 != null:
-				wf2.store_string(updated_text)
-				wf2.close()
-				applied = true
-		elif _has_diff_markers(_raw_step_snippet(step)):
+			if not existing_ok or bool(check_gdscript_compiles(updated_text).get("ok", false)):
+				var wf2 := FileAccess.open(target_path, FileAccess.WRITE)
+				if wf2 != null:
+					wf2.store_string(updated_text)
+					wf2.close()
+					applied = true
+		elif _has_diff_markers(_raw_step_snippet(step)) and is_likely_gdscript_snippet(_raw_step_snippet(step)):
 			var merged: String = merge_step_code_into_existing(existing_text, _raw_step_snippet(step), "Node")
-			if merged != existing_text:
+			if merged != existing_text and (not existing_ok or bool(check_gdscript_compiles(merged).get("ok", false))):
 				var wf3 := FileAccess.open(target_path, FileAccess.WRITE)
 				if wf3 != null:
 					wf3.store_string(merged)
@@ -2424,7 +2563,8 @@ func sanitize_null_script_exports(scene_root: Node) -> int:
 				var ptype := int(p_info.get("type", TYPE_NIL))
 				if not (
 					ptype == TYPE_BOOL or ptype == TYPE_INT or ptype == TYPE_FLOAT or
-					ptype == TYPE_STRING or ptype == TYPE_VECTOR2 or ptype == TYPE_VECTOR2I or
+					ptype == TYPE_STRING or ptype == TYPE_NODE_PATH or
+					ptype == TYPE_VECTOR2 or ptype == TYPE_VECTOR2I or
 					ptype == TYPE_VECTOR3 or ptype == TYPE_VECTOR3I or ptype == TYPE_COLOR
 				):
 					continue
@@ -2440,6 +2580,8 @@ func sanitize_null_script_exports(scene_root: Node) -> int:
 								restored = 0.0
 							TYPE_STRING:
 								restored = ""
+							TYPE_NODE_PATH:
+								restored = NodePath("")
 							TYPE_VECTOR2:
 								restored = Vector2.ZERO
 							TYPE_VECTOR2I:
@@ -3095,26 +3237,138 @@ func _script_defines_method(node: Node, method_name: String) -> bool:
 	return false
 
 
+func _split_top_level_csv(raw: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	var buf: String = ""
+	var depth: int = 0
+	for ch_idx in range(raw.length()):
+		var c: String = raw[ch_idx]
+		if c == "(" or c == "[" or c == "{":
+			depth += 1
+		elif c == ")" or c == "]" or c == "}":
+			depth = maxi(0, depth - 1)
+		if c == "," and depth == 0:
+			var part: String = buf.strip_edges()
+			if not part.is_empty():
+				out.append(part)
+			buf = ""
+		else:
+			buf += c
+	var tail: String = buf.strip_edges()
+	if not tail.is_empty():
+		out.append(tail)
+	return out
+
+
+func _read_node_script_source(node: Node) -> String:
+	if node == null:
+		return ""
+	var scr: Variant = node.get_script()
+	if not (scr is Script):
+		return ""
+	var src: String = String((scr as Script).source_code)
+	var rpath: String = String((scr as Script).resource_path)
+	if src.is_empty() and not rpath.is_empty() and FileAccess.file_exists(rpath):
+		var fa := FileAccess.open(rpath, FileAccess.READ)
+		if fa != null:
+			src = fa.get_as_text()
+			fa.close()
+	return src
+
+
+func _extract_balanced_paren_inner(src: String, start_after_open_paren: int) -> String:
+	var depth: int = 1
+	var end_pos: int = start_after_open_paren
+	while end_pos < src.length() and depth > 0:
+		var c: String = src[end_pos]
+		if c == "(":
+			depth += 1
+		elif c == ")":
+			depth -= 1
+			if depth == 0:
+				return src.substr(start_after_open_paren, end_pos - start_after_open_paren)
+		end_pos += 1
+	return ""
+
+
+func _get_signal_arity(src_node: Node, sig_name: String) -> int:
+	if src_node == null or sig_name.is_empty():
+		return -1
+	var src: String = _read_node_script_source(src_node)
+	if not src.is_empty():
+		var sig_re := RegEx.new()
+		sig_re.compile("(?m)^\\s*signal\\s+%s\\s*(\\()?" % sig_name)
+		var m: RegExMatch = sig_re.search(src)
+		if m != null:
+			if m.get_string(1) == "(":
+				var inner: String = _extract_balanced_paren_inner(src, m.get_end()).strip_edges()
+				return 0 if inner.is_empty() else _split_top_level_csv(inner).size()
+			return 0
+	for s_raw in src_node.get_signal_list():
+		var s_dict: Dictionary = s_raw
+		if String(s_dict.get("name", "")) == sig_name:
+			var args_raw: Variant = s_dict.get("args", [])
+			if typeof(args_raw) == TYPE_ARRAY:
+				return (args_raw as Array).size()
+	return -1
+
+
+func _get_method_arity_range(tgt_node: Node, method_name: String) -> Vector2i:
+	if tgt_node == null or method_name.is_empty():
+		return Vector2i(-1, -1)
+	var src: String = _read_node_script_source(tgt_node)
+	if not src.is_empty():
+		var fn_re := RegEx.new()
+		fn_re.compile("(?m)^\\s*(?:static\\s+)?func\\s+%s\\s*\\(" % method_name)
+		var m: RegExMatch = fn_re.search(src)
+		if m != null:
+			var inner: String = _extract_balanced_paren_inner(src, m.get_end()).strip_edges()
+			if inner.is_empty():
+				return Vector2i(0, 0)
+			var params: PackedStringArray = _split_top_level_csv(inner)
+			var min_args: int = 0
+			for p in params:
+				if not ("=" in p):
+					min_args += 1
+			return Vector2i(min_args, params.size())
+	for m_raw in tgt_node.get_method_list():
+		var m_dict: Dictionary = m_raw
+		if String(m_dict.get("name", "")) == method_name:
+			var args_raw: Variant = m_dict.get("args", [])
+			var def_raw: Variant = m_dict.get("default_args", [])
+			var max_a: int = (args_raw as Array).size() if typeof(args_raw) == TYPE_ARRAY else 0
+			var def_a: int = (def_raw as Array).size() if typeof(def_raw) == TYPE_ARRAY else 0
+			return Vector2i(maxi(0, max_a - def_a), max_a)
+	return Vector2i(-1, -1)
+
+
 func _resolve_signal_receiver_node(scene_root: Node, src_node: Node, target_hint: String, method_name: String) -> Node:
-	if scene_root == null:
+	if scene_root == null or method_name.is_empty():
 		return null
-	if not target_hint.is_empty() and target_hint != ".":
-		var hinted := _find_node_recursive(scene_root, target_hint)
-		if hinted != null and (hinted != src_node or _script_defines_method(hinted, method_name)):
+	var clean_hint: String = target_hint.strip_edges()
+	if not clean_hint.is_empty() and clean_hint != ".":
+		var hinted: Node = _resolve_node_by_rel_path(scene_root, clean_hint)
+		if hinted == null:
+			hinted = _find_node_recursive(scene_root, clean_hint)
+		if hinted == null and clean_hint == scene_root.name:
+			hinted = scene_root
+		if hinted == null:
+			return null
+		if hinted == src_node and not _script_defines_method(hinted, method_name):
+			return null
+		if _script_defines_method(hinted, method_name) or ClassDB.class_has_method(hinted.get_class(), method_name):
 			return hinted
-	# Prefer scene root when its script defines the method (or when hint was ".").
+		return null
 	if _script_defines_method(scene_root, method_name):
 		return scene_root
-	# Search all descendants that have a script defining method_name.
 	var stack: Array[Node] = [scene_root]
 	while not stack.is_empty():
 		var cur: Node = stack.pop_back()
-		if _script_defines_method(cur, method_name):
+		if cur != src_node and _script_defines_method(cur, method_name):
 			return cur
 		for ch in cur.get_children():
 			stack.append(ch)
-	# Never default a Timer/emitter self-connection onto itself.
-	return scene_root
+	return null
 
 
 func _disconnect_invalid_self_signal(src_node: Node, sig_name: String, method_name: String) -> bool:
@@ -3154,10 +3408,28 @@ func _connect_single_signal_safe(
 	var tgt_node := _resolve_signal_receiver_node(scene_root, src_node, target_hint, method_name)
 	if tgt_node == null:
 		return { "ok": false, "reason": "Signal receiver not found for %s." % method_name }
+	if not _script_defines_method(tgt_node, method_name) and not ClassDB.class_has_method(tgt_node.get_class(), method_name):
+		return { "ok": false, "reason": "%s does not define method %s." % [tgt_node.name, method_name] }
 
-	var cb := Callable(tgt_node, method_name)
+	var sig_arity: int = _get_signal_arity(src_node, sig_name)
+	var arity_range: Vector2i = _get_method_arity_range(tgt_node, method_name)
+	var unbind_count: int = 0
+	if sig_arity >= 0 and arity_range.x >= 0:
+		if sig_arity < arity_range.x:
+			return { "ok": false, "reason": "Signal %s.%s passes %d arg(s) but %s.%s requires %d." % [src_node.name, sig_name, sig_arity, tgt_node.name, method_name, arity_range.x] }
+		if sig_arity > arity_range.y:
+			unbind_count = sig_arity - arity_range.y
+
+	var base_cb := Callable(tgt_node, method_name)
+	var cb: Callable = base_cb.unbind(unbind_count) if unbind_count > 0 else base_cb
 	if src_node.is_connected(sig_name, cb):
 		return { "ok": true, "changed": false, "detail": "%s.%s -> %s.%s" % [src_node.name, sig_name, tgt_node.name, method_name] }
+	for conn_raw in src_node.get_signal_connection_list(sig_name):
+		var conn: Dictionary = conn_raw
+		var old_cb: Callable = conn.get("callable", Callable())
+		var old_method: String = String(old_cb.get_method())
+		if old_cb.get_object() == tgt_node and (old_method == method_name or (("::" + method_name) in str(old_cb))):
+			src_node.disconnect(sig_name, old_cb)
 	var err := src_node.connect(sig_name, cb, Object.CONNECT_PERSIST)
 	if err != OK:
 		return { "ok": false, "reason": "Connect %s.%s failed (%d)." % [src_node.name, sig_name, err] }
@@ -3229,6 +3501,32 @@ func _collect_attached_script_paths(root_node: Node) -> Dictionary:
 	return attached
 
 
+func _is_signal_connected_in_tree(eval_tree: Node, sig: Dictionary) -> bool:
+	if eval_tree == null:
+		return false
+	var src_hint: String = String(sig.get("source", ""))
+	var sig_n: String = String(sig.get("signalName", sig.get("signal", "")))
+	var want_method: String = String(sig.get("method", ""))
+	if sig_n.is_empty() or want_method.is_empty():
+		return false
+	var src_n: Node = _resolve_node_by_rel_path(eval_tree, src_hint)
+	if src_n == null:
+		src_n = _find_node_recursive(eval_tree, src_hint)
+	if src_n == null and (src_hint.is_empty() or src_hint == "." or src_hint == eval_tree.name):
+		src_n = eval_tree
+	if src_n == null or not src_n.has_signal(sig_n):
+		return false
+	for conn_raw in src_n.get_signal_connection_list(sig_n):
+		var conn: Dictionary = conn_raw
+		var cb: Callable = conn.get("callable", Callable())
+		if not cb.is_valid() or cb.get_object() == src_n:
+			continue
+		var cb_method: String = String(cb.get_method())
+		if cb_method == want_method or (("::" + want_method) in str(cb)):
+			return true
+	return false
+
+
 func evaluate_feature(
 	feat: Dictionary,
 	editor_interface: EditorInterface,
@@ -3237,6 +3535,7 @@ func evaluate_feature(
 ) -> Dictionary:
 	var paths := resolve_feature_paths(feat, code_files, arena_hint)
 	var primary_scene := String(paths.get("primary_scene", ""))
+	var arena_scene := String(paths.get("arena_scene", ""))
 	var script_paths: Array = paths.get("script_paths", [])
 	var editor_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
 	var cache_key := _build_eval_cache_key(feat, primary_scene, script_paths, arena_hint, code_files.size(), editor_root)
@@ -3256,6 +3555,8 @@ func evaluate_feature(
 	)
 	var eval_root: Node = editor_root
 	var temp_eval_root: Node = null
+	var temp_arena_root: Node = null
+	var checked_arena_load: bool = false
 	if not primary_open and not primary_scene.is_empty() and ResourceLoader.exists(primary_scene):
 		var ps := ResourceLoader.load(primary_scene, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
 		if ps != null:
@@ -3319,15 +3620,21 @@ func evaluate_feature(
 			if seen_signals.has(key):
 				continue
 			seen_signals[key] = true
-			var ok_sig := false
-			if eval_root != null:
-				var src_n := _find_node_recursive(eval_root, String(sig.get("source", "")))
-				if src_n != null and src_n.has_signal(sig_n):
-					for conn in src_n.get_signal_connection_list(sig_n):
-						var cb: Callable = conn.get("callable", Callable())
-						if cb.is_valid() and String(cb.get_method()) == String(sig.get("method", "")) and cb.get_object() != src_n:
-							ok_sig = true
-							break
+			var ok_sig := _is_signal_connected_in_tree(eval_root, sig)
+			if not ok_sig and not arena_scene.is_empty() and arena_scene != primary_scene:
+				var arena_eval_root: Node = null
+				if editor_root != null and editor_root.scene_file_path == arena_scene:
+					arena_eval_root = editor_root
+				else:
+					if not checked_arena_load:
+						checked_arena_load = true
+						if ResourceLoader.exists(arena_scene):
+							var aps := ResourceLoader.load(arena_scene, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+							if aps != null:
+								temp_arena_root = aps.instantiate()
+					arena_eval_root = temp_arena_root
+				if arena_eval_root != null:
+					ok_sig = _is_signal_connected_in_tree(arena_eval_root, sig)
 			items.append({
 				"ok": ok_sig,
 				"label": "Signal: %s.%s" % [String(sig.get("source", "")), sig_n],
@@ -3388,6 +3695,8 @@ func evaluate_feature(
 
 	if temp_eval_root != null:
 		temp_eval_root.free()
+	if temp_arena_root != null:
+		temp_arena_root.free()
 
 	var scene_ok := primary_scene.is_empty() or FileAccess.file_exists(primary_scene)
 	var any_script_ok := valid_scripts.size() > 0
@@ -3468,12 +3777,19 @@ func build_feature_local(
 					break
 
 	# Write synced/merged GDScript files & attach safely with ClassDB guard.
+	var synced_full_scripts: Dictionary = {}
 	for spath in paths.get("script_paths", []):
 		var sp_str := String(spath)
+		var disk_ok: bool = false
+		if FileAccess.file_exists(sp_str):
+			var fa_chk := FileAccess.open(sp_str, FileAccess.READ)
+			if fa_chk != null:
+				var disk_src: String = fa_chk.get_as_text()
+				fa_chk.close()
+				disk_ok = not disk_src.strip_edges().is_empty() and bool(check_gdscript_compiles(disk_src).get("ok", false))
 		var synced_code := String(code_files.get(sp_str, "")).strip_edges()
-		if not synced_code.is_empty():
-			var chk := check_gdscript_compiles(synced_code)
-			if bool(chk.get("ok", false)):
+		if not synced_code.is_empty() and bool(check_gdscript_compiles(synced_code).get("ok", false)):
+			if not disk_ok:
 				_ensure_dir_for_res_path(sp_str)
 				var f := FileAccess.open(sp_str, FileAccess.WRITE)
 				if f != null:
@@ -3481,6 +3797,9 @@ func build_feature_local(
 					f.close()
 					reload_script_safely(sp_str, synced_code + "\n")
 					actions.append("Synced %s" % sp_str.get_file())
+			synced_full_scripts[sp_str] = true
+		elif disk_ok:
+			synced_full_scripts[sp_str] = true
 
 	for st in steps:
 		var st_role := String(st.get("role", st.get("stepRole", ""))).strip_edges().to_upper()
@@ -3490,6 +3809,15 @@ func build_feature_local(
 		if not code_text.is_empty():
 			var eff_path := resolve_effective_step_path(st, feat, root)
 			if eff_path.ends_with(".gd"):
+				if synced_full_scripts.has(eff_path):
+					if root != null and FileAccess.file_exists(eff_path):
+						var target_name_s: String = _infer_script_target_node_name(st, eff_path, root)
+						var target_node_s: Node = root if (target_name_s.is_empty() or target_name_s == root.name) else _find_node_recursive(root, target_name_s)
+						if target_node_s != null and target_node_s.get_script() == null and can_attach_script_to_node(target_node_s, eff_path):
+							var scr_s: Script = reload_script_safely(eff_path)
+							if scr_s != null:
+								target_node_s.set_script(scr_s)
+					continue
 				var st_eval: Dictionary = evaluate_step(feat, st, editor_interface)
 				if root != null:
 					var target_name := _infer_script_target_node_name(st, eff_path, root)

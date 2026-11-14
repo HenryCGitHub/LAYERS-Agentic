@@ -1756,7 +1756,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.6.0"'));
+        expect(cfgText, contains('version="2.6.1"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1811,6 +1811,7 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('is_playing_scene'));
         expect(dockText, contains('collect_project_scene_paths'));
         expect(dockText, contains('sync_live_scripts'));
+        expect(dockText, contains('_bundle_apply_timer'));
         expect(dockText, contains('OS.shell_open'));
         expect(dockText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(dockText, isNot(contains('preload(')));
@@ -1830,6 +1831,7 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('undo_redo'));
         expect(executorText, contains('apply_agent_bundle'));
         expect(executorText, contains('extract_feature_export_tuners'));
+        expect(executorText, contains('is_likely_gdscript_snippet'));
         expect(executorText, contains('can_attach_script_to_node'));
         expect(executorText, contains('evaluate_feature'));
         expect(executorText, contains('invalidate_eval_cache'));
