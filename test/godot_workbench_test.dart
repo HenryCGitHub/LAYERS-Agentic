@@ -1731,7 +1731,7 @@ func _physics_process(delta: float) -> void:
     );
 
     test(
-      'Native Godot 4 plugin addon V2.5 files, Cloud Functions direct_agent/build_feature & web/layers_godot_plugin.zip enforce native EditorTheme GUI, Feature-First workflow, export tuners, input healing & 1-click self-update',
+      'Native Godot 4 plugin addon V2.6 files, Cloud Functions direct_agent/build_feature/sync_scripts & web/layers_godot_plugin.zip enforce native EditorTheme GUI, Feature-First workflow, export tuners, input auto-discovery, eval caching & 2-way sync',
       () {
         final cfg = File('godot_plugin/addons/layers/plugin.cfg');
         final pluginGd = File('godot_plugin/addons/layers/layers_plugin.gd');
@@ -1756,7 +1756,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.5.0"'));
+        expect(cfgText, contains('version="2.6.0"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1766,6 +1766,7 @@ func _physics_process(delta: float) -> void:
         expect(pluginText, contains('get_undo_redo()'));
         expect(pluginText, contains('get_editor_interface()'));
         expect(pluginText, contains('scene_changed'));
+        expect(pluginText, contains('on_editor_resource_saved'));
         expect(pluginText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(pluginText, isNot(contains('preload(')));
         expect(executorText, isNot(contains('preload(')));
@@ -1775,6 +1776,9 @@ func _physics_process(delta: float) -> void:
         expect(syncText, contains('/godotLink/epic'));
         expect(syncText, contains('/godotLink/update'));
         expect(syncText, contains('"diagnose_fix"'));
+        expect(syncText, contains('"sync_scripts"'));
+        expect(syncText, contains('sync_live_scripts'));
+        expect(syncText, contains('scripts_synced'));
         expect(syncText, contains('build_feature'));
         expect(syncText, contains('direct_agent'));
         expect(syncText, contains('agent_bundle_received'));
@@ -1803,6 +1807,10 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('Build Feature in Godot'));
         expect(dockText, contains('Apply to Scene & Script'));
         expect(dockText, contains('Playtest in Arena'));
+        expect(dockText, contains('Stop Playtest (F8)'));
+        expect(dockText, contains('is_playing_scene'));
+        expect(dockText, contains('collect_project_scene_paths'));
+        expect(dockText, contains('sync_live_scripts'));
         expect(dockText, contains('OS.shell_open'));
         expect(dockText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(dockText, isNot(contains('preload(')));
@@ -1824,6 +1832,13 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('extract_feature_export_tuners'));
         expect(executorText, contains('can_attach_script_to_node'));
         expect(executorText, contains('evaluate_feature'));
+        expect(executorText, contains('invalidate_eval_cache'));
+        expect(executorText, contains('infer_scene_root_type'));
+        expect(executorText, contains('upgrade_scene_root_type_on_disk'));
+        expect(executorText, contains('apply_input_ops'));
+        expect(executorText, contains('register_missing_script_input_actions'));
+        expect(executorText, contains('add_to_group'));
+        expect(executorText, contains('ResourceLoader.CACHE_MODE_REUSE'));
         expect(executorText, contains('reload_script_safely'));
         expect(executorText, contains('sanitize_null_script_exports'));
         expect(executorText, contains('ensure_scene_exists_and_open'));
@@ -1836,6 +1851,9 @@ func _physics_process(delta: float) -> void:
         expect(fnText, contains('"diagnose_fix"'));
         expect(fnText, contains('"build_feature"'));
         expect(fnText, contains('"direct_agent"'));
+        expect(fnText, contains('"sync_scripts"'));
+        expect(fnText, contains('"add_to_group"'));
+        expect(fnText, contains('inputOps'));
         expect(fnText, contains('sceneOps'));
         expect(fnText, contains('scriptUpdates'));
         expect(fnText, contains('codeFiles'));

@@ -448,6 +448,7 @@ const VALID_SCENE_OPS = new Set([
   "connect_signal",
   "instance_scene",
   "remove_node",
+  "add_to_group",
 ]);
 
 function normalizeAgentBundle(rawObj, mode) {
@@ -491,6 +492,9 @@ function normalizeAgentBundle(rawObj, mode) {
         opObj.properties && typeof opObj.properties === "object"
           ? opObj.properties
           : {},
+      groups: Array.isArray(opObj.groups)
+        ? opObj.groups.map((g) => String(g || "").trim()).filter(Boolean)
+        : [],
       scriptPath: normalizeResPathJs(opObj.scriptPath || opObj.script_path || ""),
       sourcePath: String(opObj.sourcePath || opObj.source_path || "").trim(),
       signalName: String(opObj.signalName || opObj.signal_name || "").trim(),
@@ -502,12 +506,31 @@ function normalizeAgentBundle(rawObj, mode) {
     };
     sceneOps.push(normalized);
   }
+  const rawInputs = Array.isArray(obj.inputOps)
+    ? obj.inputOps
+    : Array.isArray(obj.input_ops)
+    ? obj.input_ops
+    : [];
+  const inputOps = [];
+  for (const inp of rawInputs) {
+    if (!inp || typeof inp !== "object") continue;
+    const action = String(inp.action || inp.name || "").trim();
+    const rawKeys = Array.isArray(inp.keys)
+      ? inp.keys
+      : inp.key
+      ? [inp.key]
+      : [];
+    const keys = rawKeys.map((k) => String(k || "").trim()).filter(Boolean);
+    if (!action) continue;
+    inputOps.push({ action, keys });
+  }
   return {
     mode: String(obj.mode || mode || "direct_agent").trim(),
     summary: String(obj.summary || "").trim(),
     diagnosis: String(obj.diagnosis || "").trim(),
     scriptUpdates,
     sceneOps,
+    inputOps,
   };
 }
 
@@ -619,18 +642,19 @@ async function runGodotAgentWithGemini({
 
   const systemInstruction = [
     "You are LAYERS Godot Agent Co-Builder targeting Godot 4.7.2.stable.",
-    "Return strictly valid JSON with keys: mode, summary, diagnosis, scriptUpdates, sceneOps.",
+    "Return strictly valid JSON with keys: mode, summary, diagnosis, scriptUpdates, sceneOps, inputOps.",
     "STRICT ENGINE & OUTPUT RULES:",
     "1. NEVER emit push_warning(...) placeholders or stub comments. Emit real runnable GDScript and real sceneOps.",
     "2. scriptUpdates: array of { resPath, attachTo, scenePath, language: 'gdscript', content }. Always output COMPLETE, cohesive, compile-clean Godot 4 .gd files (no '+ ' diff prefixes, no 'const X := [...]' untyped const arrays, no speculative preload() on missing files; prefer '@export var foo_scene: PackedScene' + set_property sceneOp).",
     "3. sceneOps: array of structured scene mutations. Supported op values:",
-    "   - ensure_node: { op:'ensure_node', scenePath, parentPath, nodeName, nodeType, subResourceClass, subResourceProps, properties }",
+    "   - ensure_node: { op:'ensure_node', scenePath, parentPath, nodeName, nodeType, subResourceClass, subResourceProps, properties, groups }",
     "   - set_property: { op:'set_property', scenePath, nodePath, properties }",
     "   - attach_script: { op:'attach_script', scenePath, nodePath, scriptPath }",
     "   - detach_script: { op:'detach_script', scenePath, nodePath }",
     "   - connect_signal: { op:'connect_signal', scenePath, sourcePath, signalName, targetPath, methodName }",
-    "   - instance_scene: { op:'instance_scene', scenePath, parentPath, nodeName, instancePath, properties }",
+    "   - instance_scene: { op:'instance_scene', scenePath, parentPath, nodeName, instancePath, properties, groups }",
     "   - remove_node: { op:'remove_node', scenePath, nodePath }",
+    "   - add_to_group: { op:'add_to_group', scenePath, nodePath, groups }",
     "4. ClassDB SAFETY: NEVER attach a script whose 'extends <Class>' is incompatible with the target node's Godot class (e.g. NEVER attach a CharacterBody3D script to a Node3D arena root — emit detach_script if live snapshot shows a mismatch!).",
     "5. SIGNAL SAFETY: Connect signals ONLY to a node whose attached script defines methodName (typically targetPath: '.' for the scene root). NEVER connect a Timer signal to itself.",
     "6. FEEL TUNING: Expose key gameplay tuning numbers cleanly with '@export var ...' at the top of scripts (speeds, ranges, cooldowns, counts) so the native dock renders SpinBoxes automatically.",
@@ -639,6 +663,8 @@ async function runGodotAgentWithGemini({
     "9. CLEAN ENTITY LIFECYCLE: Enemies, projectiles, and temporary wave spawns MUST clean up cleanly with 'queue_free()' on death or expiry so wave spawner 'tree_exited' / child checks advance reliably.",
     "10. CAMERA & CURSOR ACCESSIBILITY: Whenever capturing the mouse ('Input.mouse_mode = Input.MOUSE_MODE_CAPTURED'), ALWAYS wire an 'ESC' ('ui_cancel') release/capture toggle in '_unhandled_input'.",
     "11. GROUNDED SPAWNS & INPUT BINDINGS: Spawn characters cleanly on the playable floor (never floating meters above Y=0 unless flying) and ensure every input action in 'inputOps' has a real Key or Mouse Button binding (never empty events).",
+    "12. INPUT OPS: Whenever GDScript uses custom Input actions (Input.is_action_*, Input.get_vector, Input.get_axis, event.is_action_*), declare them in inputOps: [{ action: 'action_name', keys: ['SHIFT'] }] using standard tokens ('W','A','S','D','SPACE','SHIFT','CTRL','E','Q','F','R','TAB','LMB','RMB','MMB').",
+    "13. UI OVERLAYS, PAUSE & BOUND SIGNALS: UI panels/HUDs/menus/draft overlays in 3D games MUST use a 'CanvasLayer' or 'Control' scene root (NEVER parent Control/Container nodes directly under a 'Node3D', because Node3D.visible=false does NOT hide CanvasItem children). When pausing gameplay ('get_tree().paused = true') for clickable UI, ALWAYS set 'process_mode = Node.PROCESS_MODE_ALWAYS' AND 'Input.mouse_mode = Input.MOUSE_MODE_VISIBLE' on open (restoring 'MOUSE_MODE_CAPTURED' on close if 3D mouselook is active). NEVER emit 0-arg 'connect_signal' sceneOps for callbacks requiring bound arguments (connect '.bind(...)' in '_ready()' instead).",
   ].join("\n");
 
   const projSections = projectDoc?.sections || {};
@@ -725,6 +751,183 @@ function markFeatureScaffoldStepsCompletedJs(states, checkpointId) {
     return { ...st, checklist: markItems(st.checklist || []) };
   });
   return { updatedStates, changed };
+}
+
+function preparePendingCodeWritesJs({
+  docsById,
+  docsCol,
+  projectId,
+  scriptUpdates,
+}) {
+  const dedupedUpdates = new Map();
+  for (const u of scriptUpdates || []) {
+    if (u && u.resPath) dedupedUpdates.set(u.resPath, u);
+  }
+  const pendingCodeWrites = [];
+  for (const u of dedupedUpdates.values()) {
+    const existing = findCodeFileDocByResPathJs(docsById, u.resPath);
+    const docId = existing
+      ? existing.id
+      : stableCodeFileDocIdJs(projectId, u.resPath);
+    pendingCodeWrites.push({
+      docId,
+      ref: docsCol.doc(docId),
+      update: u,
+    });
+  }
+  return pendingCodeWrites;
+}
+
+function applyCodeFileWritesInTxJs({
+  tx,
+  projRef,
+  projSnap,
+  docsById,
+  projectId,
+  pendingCodeWrites,
+  codeSnaps,
+  activeVer = "",
+  featureId = "",
+  nowMs = Date.now(),
+}) {
+  const addedCodeIds = [];
+  for (let i = 0; i < pendingCodeWrites.length; i++) {
+    const w = pendingCodeWrites[i];
+    const existingSnap = codeSnaps[i];
+    const existingData = existingSnap.exists ? existingSnap.data() || {} : {};
+    let featureIds = [];
+    try {
+      const parsedIds = JSON.parse(existingData?.sections?.feature_ids || "[]");
+      if (Array.isArray(parsedIds)) featureIds = parsedIds.map(String);
+    } catch (_) {}
+    if (featureId && !featureIds.includes(featureId)) featureIds.push(featureId);
+
+    const fileName = w.update.resPath.split("/").pop() || "script.gd";
+    const resolvedVer =
+      activeVer || String(existingData?.sections?.release_version || "");
+    const codeDoc = {
+      id: w.docId,
+      title: fileName,
+      tier: "CODEFILE",
+      parentId: projectId,
+      childrenIds: [],
+      sections: {
+        ...(existingData.sections || {}),
+        res_path: w.update.resPath,
+        content: w.update.content,
+        language: w.update.language || "gdscript",
+        release_version: resolvedVer,
+        feature_ids: JSON.stringify(featureIds),
+        updated_at_ms: String(nowMs),
+      },
+      subtasks: Array.isArray(existingData.subtasks) ? existingData.subtasks : [],
+      phase: String(existingData.phase || ""),
+      isInbox: false,
+      isIcebox: false,
+      isCompleted: false,
+    };
+    tx.set(w.ref, codeDoc, { merge: true });
+    docsById.set(w.docId, codeDoc);
+    if (!existingSnap.exists) {
+      addedCodeIds.push(w.docId);
+    }
+  }
+
+  if (projSnap.exists) {
+    const projData = projSnap.data() || {};
+    const childrenIds = Array.isArray(projData.childrenIds)
+      ? [...projData.childrenIds]
+      : [];
+    let projChanged = false;
+    for (const cid of addedCodeIds) {
+      if (!childrenIds.includes(cid)) {
+        childrenIds.push(cid);
+        projChanged = true;
+      }
+    }
+    const nextProjSections = {
+      ...(projData.sections || {}),
+      last_godot_sync_ms: String(Date.now()),
+    };
+    const projUpdate = { sections: nextProjSections };
+    if (projChanged) projUpdate.childrenIds = childrenIds;
+    tx.update(projRef, projUpdate);
+    docsById.set(projectId, {
+      id: projectId,
+      ...projData,
+      sections: nextProjSections,
+      ...(projChanged ? { childrenIds } : {}),
+    });
+  }
+}
+
+async function handleSyncLiveScriptsRoute({ linkAuth, body, res }) {
+  const rawScripts = body?.scripts ?? body?.liveScripts;
+  if (!rawScripts || typeof rawScripts !== "object" || Array.isArray(rawScripts)) {
+    res.status(400).json({ error: { code: 400, message: "Missing scripts map." } });
+    return;
+  }
+
+  const normalizedUpdates = [];
+  for (const [rawPath, rawContent] of Object.entries(rawScripts)) {
+    if (normalizedUpdates.length >= 40) break;
+    const resPath = normalizeResPathJs(String(rawPath || ""));
+    if (!resPath.startsWith("res://") || !resPath.endsWith(".gd")) continue;
+    const content = typeof rawContent === "string" ? rawContent : "";
+    if (!content.trim()) continue;
+    normalizedUpdates.push({
+      resPath,
+      content: content.slice(0, 65536),
+      language: "gdscript",
+    });
+  }
+
+  const db = getFirestore();
+  const docsCol = db
+    .collection("users")
+    .doc(linkAuth.uid)
+    .collection("documents");
+  const docsSnap = await docsCol.get();
+  const docsById = new Map();
+  for (const d of docsSnap.docs) {
+    docsById.set(d.id, { id: d.id, ...d.data() });
+  }
+
+  const projDoc = docsById.get(linkAuth.projectId);
+  const activeVer = String(projDoc?.sections?.active_release_version || "");
+  const pendingCodeWrites = preparePendingCodeWritesJs({
+    docsById,
+    docsCol,
+    projectId: linkAuth.projectId,
+    scriptUpdates: normalizedUpdates,
+  });
+
+  const projRef = docsCol.doc(linkAuth.projectId);
+  const nowMs = Date.now();
+  await db.runTransaction(async (tx) => {
+    const [projSnap, ...codeSnaps] = await Promise.all([
+      tx.get(projRef),
+      ...pendingCodeWrites.map((w) => tx.get(w.ref)),
+    ]);
+    applyCodeFileWritesInTxJs({
+      tx,
+      projRef,
+      projSnap,
+      docsById,
+      projectId: linkAuth.projectId,
+      pendingCodeWrites,
+      codeSnaps,
+      activeVer,
+      nowMs,
+    });
+  });
+
+  linkAuth.linkRef.set({ lastSyncAt: nowMs }, { merge: true }).catch(() => {});
+  res.status(200).json({
+    ok: true,
+    syncedCount: pendingCodeWrites.length,
+    syncedAtMs: nowMs,
+  });
 }
 
 async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
@@ -851,23 +1054,12 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
 
   const bundle = agentResp.bundle;
   const nowMs = Date.now();
-  const dedupedUpdates = new Map();
-  for (const u of bundle.scriptUpdates || []) {
-    dedupedUpdates.set(u.resPath, u);
-  }
-
-  const pendingCodeWrites = [];
-  for (const u of dedupedUpdates.values()) {
-    const existing = findCodeFileDocByResPathJs(docsById, u.resPath);
-    const docId = existing
-      ? existing.id
-      : stableCodeFileDocIdJs(linkAuth.projectId, u.resPath);
-    pendingCodeWrites.push({
-      docId,
-      ref: docsCol.doc(docId),
-      update: u,
-    });
-  }
+  const pendingCodeWrites = preparePendingCodeWritesJs({
+    docsById,
+    docsCol,
+    projectId: linkAuth.projectId,
+    scriptUpdates: bundle.scriptUpdates,
+  });
 
   const projRef = docsCol.doc(linkAuth.projectId);
   const featRef = docsCol.doc(featureId);
@@ -880,73 +1072,19 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
       ...pendingCodeWrites.map((w) => tx.get(w.ref)),
     ]);
 
-    const addedCodeIds = [];
-    for (let i = 0; i < pendingCodeWrites.length; i++) {
-      const w = pendingCodeWrites[i];
-      const existingSnap = codeSnaps[i];
-      const existingData = existingSnap.exists ? existingSnap.data() || {} : {};
-      let featureIds = [];
-      try {
-        const parsedIds = JSON.parse(existingData?.sections?.feature_ids || "[]");
-        if (Array.isArray(parsedIds)) featureIds = parsedIds.map(String);
-      } catch (_) {}
-      if (!featureIds.includes(featureId)) featureIds.push(featureId);
+    applyCodeFileWritesInTxJs({
+      tx,
+      projRef,
+      projSnap,
+      docsById,
+      projectId: linkAuth.projectId,
+      pendingCodeWrites,
+      codeSnaps,
+      activeVer,
+      featureId,
+      nowMs,
+    });
 
-      const fileName = w.update.resPath.split("/").pop() || "script.gd";
-      const codeDoc = {
-        id: w.docId,
-        title: fileName,
-        tier: "CODEFILE",
-        parentId: linkAuth.projectId,
-        childrenIds: [],
-        sections: {
-          ...(existingData.sections || {}),
-          res_path: w.update.resPath,
-          content: w.update.content,
-          language: w.update.language || "gdscript",
-          release_version: activeVer,
-          feature_ids: JSON.stringify(featureIds),
-          updated_at_ms: String(nowMs),
-        },
-        subtasks: Array.isArray(existingData.subtasks) ? existingData.subtasks : [],
-        phase: String(existingData.phase || ""),
-        isInbox: false,
-        isIcebox: false,
-        isCompleted: false,
-      };
-      tx.set(w.ref, codeDoc, { merge: true });
-      docsById.set(w.docId, codeDoc);
-      if (!existingSnap.exists) {
-        addedCodeIds.push(w.docId);
-      }
-    }
-
-    if (projSnap.exists) {
-      const projData = projSnap.data() || {};
-      const childrenIds = Array.isArray(projData.childrenIds)
-        ? [...projData.childrenIds]
-        : [];
-      let projChanged = false;
-      for (const cid of addedCodeIds) {
-        if (!childrenIds.includes(cid)) {
-          childrenIds.push(cid);
-          projChanged = true;
-        }
-      }
-      const nextProjSections = {
-        ...(projData.sections || {}),
-        last_godot_sync_ms: String(Date.now()),
-      };
-      const projUpdate = { sections: nextProjSections };
-      if (projChanged) projUpdate.childrenIds = childrenIds;
-      tx.update(projRef, projUpdate);
-      docsById.set(linkAuth.projectId, {
-        id: linkAuth.projectId,
-        ...projData,
-        sections: nextProjSections,
-        ...(projChanged ? { childrenIds } : {}),
-      });
-    }
 
     if (action === "build_feature" && featSnap.exists) {
       const fData = featSnap.data() || {};
@@ -2354,7 +2492,8 @@ exports.geminiProxy = onRequest(
         return;
       }
 
-      const docsSnap = await getFirestore()
+      const db = getFirestore();
+      const docsSnap = await db
         .collection("users")
         .doc(linkAuth.uid)
         .collection("documents")
@@ -2415,18 +2554,22 @@ exports.geminiProxy = onRequest(
         return;
       }
 
+      if (action === "sync_scripts") {
+        await handleSyncLiveScriptsRoute({ linkAuth, body, res });
+        return;
+      }
+
       if (
         !featureId ||
         (action !== "toggle_step" &&
           action !== "pass_gate" &&
-          action !== "set_playtest" &&
-          action !== "diagnose_fix")
+          action !== "set_playtest")
       ) {
         res.status(400).json({
           error: {
             code: 400,
             message:
-              "Expected featureId and action ('toggle_step', 'pass_gate', 'set_playtest', or 'diagnose_fix').",
+              "Expected featureId and action ('toggle_step', 'pass_gate', or 'set_playtest').",
           },
         });
         return;
@@ -2444,68 +2587,6 @@ exports.geminiProxy = onRequest(
         .doc(linkAuth.uid)
         .collection("documents")
         .doc(featureId);
-
-      let aiDiagResult = null;
-      let createdFixStepId = "";
-      let fixIssueText = "";
-
-      if (action === "diagnose_fix") {
-        fixIssueText = String(body.issue || "").trim().slice(0, 1200);
-        if (!fixIssueText) {
-          res.status(400).json({
-            error: { code: 400, message: "Missing issue description for diagnose_fix." },
-          });
-          return;
-        }
-        const preSnap = await featRef.get();
-        if (!preSnap.exists) {
-          res.status(404).json({
-            error: { code: 404, message: "Feature document not found." },
-          });
-          return;
-        }
-        const preData = preSnap.data() || {};
-        const preStates = parseFeatureStates(preData);
-        if (preStates.length === 0) {
-          res.status(400).json({
-            error: { code: 400, message: "Feature has no checkpoints." },
-          });
-          return;
-        }
-        const preCp =
-          (checkpointId
-            ? preStates.find((s) => String(s?.id || "") === checkpointId)
-            : null) || preStates[preStates.length - 1];
-        const preSteps = flattenCheckpointSteps(preCp, preData);
-        const featTitle = String(preData.title || preCp?.name || "Feature");
-        const gdStep = preSteps.find((s) => String(s.stepPath || "").endsWith(".gd"));
-        const primaryRes = extractResPath(preData?.sections?.primary_asset || "");
-        const defaultScriptPath =
-          gdStep?.stepPath ||
-          (primaryRes.endsWith(".gd") ? primaryRes : `res://scripts/${toSnakeCaseAssetJs(featTitle)}.gd`);
-        const doneWhen = String(
-          preCp?.parameters?.playtestGoal ||
-            preCp?.feedback ||
-            preData?.sections?.done_when ||
-            ""
-        ).trim();
-        const stepsSummary = preSteps
-          .slice(0, 10)
-          .map((s) => `${s.index}.${s.role}:${s.title}(${s.stepPath})`)
-          .join(" | ");
-
-        aiDiagResult = await diagnoseGodotIssueWithGemini({
-          secretKey: String(GEMINI_API_KEY.value() || "").trim(),
-          featTitle,
-          doneWhen,
-          stepsSummary,
-          defaultScriptPath,
-          issue: fixIssueText,
-          sceneSnapshot: String(body.sceneSnapshot || "").slice(0, 24000),
-          scriptsSnapshot: String(body.scriptsSnapshot || "").slice(0, 32000),
-        });
-        createdFixStepId = `fix_step_${Date.now()}`;
-      }
 
       try {
         await db.runTransaction(async (tx) => {
@@ -2551,35 +2632,6 @@ exports.geminiProxy = onRequest(
             if (!nextCompleted) {
               cp.parameters.playtestPassed = "false";
             }
-          } else if (action === "diagnose_fix" && aiDiagResult) {
-            if (!Array.isArray(cp.checklist)) cp.checklist = [];
-            const encodedSpecNotes = encodeThreeAreaNotesJs({
-              instruction: aiDiagResult.instruction,
-              area2Inspector: aiDiagResult.area2Inspector,
-              verifyMode: "playtest",
-              stepRole: "fix",
-              diagnosis: aiDiagResult.diagnosis,
-              scriptPatch: aiDiagResult.scriptPatch,
-            });
-            cp.checklist.push({
-              id: createdFixStepId,
-              text: `[FIX] ${aiDiagResult.fixTitle}`,
-              completed: false,
-              children: [],
-              isExpanded: true,
-              verification: aiDiagResult.verifyResult,
-              verificationCompleted: false,
-              codeLanguage: aiDiagResult.stepPath,
-              codeTargetFile: "custom_snippet",
-              codeSnippet: aiDiagResult.codeSnippet,
-              specNotes: encodedSpecNotes,
-            });
-            if (!Array.isArray(cp.edgeCases)) cp.edgeCases = [];
-            const guardText = `[PLAYTEST GUARD] ${fixIssueText}`;
-            if (!cp.edgeCases.includes(guardText)) {
-              cp.edgeCases.push(guardText);
-            }
-            cp.parameters.playtestPassed = "false";
           } else {
             const nextPassed = action === "pass_gate" ? true : Boolean(body.passed);
             cp.parameters.playtestPassed = nextPassed ? "true" : "false";
@@ -2629,9 +2681,7 @@ exports.geminiProxy = onRequest(
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
       });
-      res.status(200).json(
-        createdFixStepId ? { ...payload, createdFixStepId } : payload
-      );
+      res.status(200).json(payload);
       return;
     }
 

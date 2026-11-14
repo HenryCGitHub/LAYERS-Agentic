@@ -25,6 +25,10 @@ var _updating_plugin: bool = false
 var _checking_plugin_update: bool = false
 var _last_error_clear_unix: float = 0.0
 var _live_refresh_timer: Timer
+var _playtest_watch_timer: Timer
+var _was_playing_scene: bool = false
+var _script_sync_timer: Timer
+var _pending_script_sync_paths: Dictionary = {}
 
 # Slim Top Self-Update Banner
 var _update_banner: PanelContainer
@@ -81,6 +85,7 @@ func _ready() -> void:
 		add_child(_sync)
 		_sync.epic_updated.connect(_on_epic_updated)
 		_sync.agent_bundle_received.connect(_on_agent_bundle_received)
+		_sync.scripts_synced.connect(_on_scripts_synced)
 		_sync.sync_failed.connect(_on_sync_failed)
 		_sync.busy_changed.connect(_on_busy_changed)
 		_sync.update_available.connect(_on_plugin_update_available)
@@ -105,6 +110,19 @@ func _ready() -> void:
 	_live_refresh_timer.wait_time = 0.28
 	_live_refresh_timer.timeout.connect(_on_live_refresh_timeout)
 	add_child(_live_refresh_timer)
+
+	_script_sync_timer = Timer.new()
+	_script_sync_timer.one_shot = true
+	_script_sync_timer.wait_time = 1.2
+	_script_sync_timer.timeout.connect(_on_script_sync_timeout)
+	add_child(_script_sync_timer)
+
+	_playtest_watch_timer = Timer.new()
+	_playtest_watch_timer.one_shot = false
+	_playtest_watch_timer.wait_time = 0.5
+	_playtest_watch_timer.timeout.connect(_on_playtest_watch_tick)
+	add_child(_playtest_watch_timer)
+	_playtest_watch_timer.start()
 
 	_connect_live_tree_signals()
 	_build_ui()
@@ -135,6 +153,16 @@ func _exit_tree() -> void:
 func refresh_from_focus() -> void:
 	if _sync != null and _sync.has_link_token() and not _show_token_editor:
 		_sync.fetch_active_epic()
+	notify_editor_state_changed()
+
+
+func on_editor_resource_saved(resource: Resource) -> void:
+	if _executor != null:
+		_executor.call("invalidate_eval_cache")
+	if resource is Script:
+		var rp := String((resource as Script).resource_path).strip_edges()
+		if rp.begins_with("res://") and rp.ends_with(".gd") and not ("/addons/" in rp):
+			_queue_live_script_sync(rp)
 	notify_editor_state_changed()
 
 
@@ -307,7 +335,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.5.0")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.6.0")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -842,8 +870,9 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	play_vb.add_child(play_row)
 
 	var arena_btn := Button.new()
-	arena_btn.text = "Playtest in Arena (F6)"
-	arena_btn.icon = _editor_icon("PlayScene", "Play")
+	var is_playing := _is_editor_playing()
+	arena_btn.text = "Stop Playtest (F8)" if is_playing else "Playtest in Arena (F6)"
+	arena_btn.icon = _editor_icon("Stop" if is_playing else "PlayScene", "Play")
 	arena_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	arena_btn.pressed.connect(_on_playtest_arena_pressed.bind(arena_scene, primary_scene))
 	play_row.add_child(arena_btn)
@@ -856,13 +885,14 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		feat_run_btn.pressed.connect(_on_run_scene_pressed.bind(primary_scene))
 		play_row.add_child(feat_run_btn)
 
-	var tuners: Array = _executor.call("extract_feature_export_tuners", script_paths) if _executor != null else []
+	var tuners: Array = _executor.call("extract_feature_export_tuners", script_paths, editor_interface, primary_scene) if _executor != null else []
 	if not tuners.is_empty():
 		var tune_sub := Label.new()
 		tune_sub.text = "Live Feel Tuning (@export)"
 		tune_sub.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
 		play_vb.add_child(tune_sub)
 
+		var project_scenes := PackedStringArray()
 		for t_raw in tuners:
 			if typeof(t_raw) != TYPE_DICTIONARY:
 				continue
@@ -888,7 +918,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 				var cb := CheckBox.new()
 				cb.button_pressed = bool(t_val)
 				cb.toggled.connect(func(pressed: bool) -> void:
-					_on_export_tuner_changed(t_script, t_name, pressed)
+					_on_export_tuner_changed(t_script, t_name, pressed, primary_scene)
 				)
 				_active_tuner_controls.append(cb)
 				row.add_child(cb)
@@ -903,19 +933,64 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 				sb_ctrl.value = float(t_val)
 				sb_ctrl.value_changed.connect(func(nv: float) -> void:
 					var typed_val: Variant = int(round(nv)) if t_type == "int" else nv
-					_on_export_tuner_changed(t_script, t_name, typed_val)
+					_on_export_tuner_changed(t_script, t_name, typed_val, primary_scene)
 				)
 				_active_tuner_controls.append(sb_ctrl)
 				row.add_child(sb_ctrl)
 			elif t_type == "packed_scene":
+				if project_scenes.is_empty() and _executor != null:
+					project_scenes = _executor.call("collect_project_scene_paths", "res://")
+				var ps_picker := OptionButton.new()
+				ps_picker.custom_minimum_size = Vector2(float(_S(115)), 0.0)
+				ps_picker.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				ps_picker.clip_text = true
+				ps_picker.add_item("<Unset>", 0)
+				ps_picker.set_item_metadata(0, "")
+				var ps_val := str(t_val).strip_edges()
+				var sel_ps_idx := 0
+				var next_id := 1
+				for sc_raw in project_scenes:
+					var sc_path := String(sc_raw)
+					ps_picker.add_item(sc_path.get_file(), next_id)
+					ps_picker.set_item_metadata(next_id, sc_path)
+					if sc_path == ps_val:
+						sel_ps_idx = next_id
+					next_id += 1
+				if sel_ps_idx == 0 and not ps_val.is_empty():
+					ps_picker.add_item(ps_val.get_file(), next_id)
+					ps_picker.set_item_metadata(next_id, ps_val)
+					sel_ps_idx = next_id
+				ps_picker.select(sel_ps_idx)
+				ps_picker.item_selected.connect(func(sel_i: int) -> void:
+					var picked := str(ps_picker.get_item_metadata(sel_i)).strip_edges()
+					_on_export_tuner_changed(t_script, t_name, picked, primary_scene)
+				)
+				_active_tuner_controls.append(ps_picker)
+				row.add_child(ps_picker)
+
 				var ps_btn := Button.new()
 				ps_btn.flat = true
 				ps_btn.theme_type_variation = &"FlatButton"
-				var ps_val := str(t_val)
-				ps_btn.text = ps_val.get_file() if not ps_val.is_empty() else "Set Scene"
+				ps_btn.tooltip_text = "Open %s" % t_script.get_file()
 				ps_btn.icon = _editor_icon("PackedScene")
 				ps_btn.pressed.connect(_on_open_res_path_pressed.bind(t_script))
 				row.add_child(ps_btn)
+			elif t_type == "node_path":
+				var np_edit := LineEdit.new()
+				np_edit.custom_minimum_size = Vector2(float(_S(110)), 0.0)
+				np_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+				var init_np := str(t_val)
+				np_edit.text = init_np
+				np_edit.placeholder_text = "../TargetNode"
+				np_edit.text_submitted.connect(func(nt: String) -> void:
+					_on_export_tuner_changed(t_script, t_name, nt, primary_scene)
+				)
+				np_edit.focus_exited.connect(func() -> void:
+					if np_edit.text != init_np:
+						_on_export_tuner_changed(t_script, t_name, np_edit.text, primary_scene)
+				)
+				_active_tuner_controls.append(np_edit)
+				row.add_child(np_edit)
 	else:
 		var tune_hint := Label.new()
 		tune_hint.text = "Expose @export vars in your script to tune feel live here."
@@ -1118,7 +1193,10 @@ func _on_agent_bundle_received(bundle: Dictionary, payload_data: Dictionary) -> 
 		_payload = payload_data
 	if _executor == null:
 		return
-	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle)
+	var active_feat := _get_active_feature()
+	var pref_scene := str(active_feat.get("primaryAsset", "")).strip_edges()
+	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle, pref_scene)
+	_executor.call("invalidate_eval_cache")
 	if editor_interface != null and editor_interface.get_resource_filesystem() != null:
 		editor_interface.get_resource_filesystem().scan()
 	var summary := str(apply_res.get("summary", bundle.get("summary", "Applied scene & script updates.")))
@@ -1131,18 +1209,73 @@ func _on_agent_bundle_received(bundle: Dictionary, payload_data: Dictionary) -> 
 	_refresh_view()
 
 
-func _on_export_tuner_changed(script_path: String, prop_name: String, new_val: Variant) -> void:
+func _on_export_tuner_changed(script_path: String, prop_name: String, new_val: Variant, primary_scene: String = "") -> void:
 	if _executor == null:
 		return
-	var res: Dictionary = _executor.call("apply_export_tuner_value", script_path, prop_name, new_val, editor_interface, undo_redo)
+	var res: Dictionary = _executor.call("apply_export_tuner_value", script_path, prop_name, new_val, editor_interface, undo_redo, primary_scene)
 	if bool(res.get("ok", false)):
 		_set_status("Updated %s = %s" % [prop_name, str(new_val)], false)
+		_queue_live_script_sync(script_path)
 	else:
 		_set_status(str(res.get("error", "Could not update @export var %s" % prop_name)), true)
 
 
+func _is_editor_playing() -> bool:
+	return editor_interface != null and editor_interface.has_method("is_playing_scene") and bool(editor_interface.call("is_playing_scene"))
+
+
+func _on_playtest_watch_tick() -> void:
+	var playing_now := _is_editor_playing()
+	if playing_now != _was_playing_scene:
+		_was_playing_scene = playing_now
+		if not playing_now and _executor != null:
+			_executor.call("invalidate_eval_cache")
+		var feat := _get_active_feature()
+		if not _show_token_editor and _workspace_panel.visible and not feat.is_empty():
+			_render_active_feature_workspace(feat)
+
+
+func _queue_live_script_sync(script_path: String = "") -> void:
+	if not script_path.is_empty():
+		_pending_script_sync_paths[script_path] = true
+	else:
+		_pending_script_sync_paths["__ALL__"] = true
+	if is_inside_tree() and _script_sync_timer != null:
+		_script_sync_timer.start()
+
+
+func _on_script_sync_timeout() -> void:
+	if _sync == null or not _sync.has_link_token() or _executor == null:
+		_pending_script_sync_paths.clear()
+		return
+	var scripts_to_push := {}
+	if _pending_script_sync_paths.has("__ALL__"):
+		scripts_to_push = _executor.call("read_all_live_project_scripts", "res://")
+	else:
+		for raw_k in _pending_script_sync_paths.keys():
+			var rp := String(raw_k).strip_edges()
+			if rp.ends_with(".gd") and FileAccess.file_exists(rp):
+				var f := FileAccess.open(rp, FileAccess.READ)
+				if f != null:
+					var txt := f.get_as_text()
+					f.close()
+					if not txt.strip_edges().is_empty():
+						scripts_to_push[rp] = txt.left(65536)
+	_pending_script_sync_paths.clear()
+	if not scripts_to_push.is_empty():
+		_sync.sync_live_scripts(scripts_to_push)
+
+
+func _on_scripts_synced(synced_count: int) -> void:
+	if synced_count > 0 and not _diagnosing_fix and not _building_feature:
+		_set_status("Synced %d script(s) to LAYERS Cloud" % synced_count, false)
+
+
 func _on_playtest_arena_pressed(arena_scene: String, primary_scene: String) -> void:
 	if editor_interface == null:
+		return
+	if _is_editor_playing() and editor_interface.has_method("stop_playing_scene"):
+		editor_interface.call("stop_playing_scene")
 		return
 	if not arena_scene.is_empty() and arena_scene.ends_with(".tscn") and FileAccess.file_exists(arena_scene):
 		editor_interface.play_custom_scene(arena_scene)
@@ -1388,7 +1521,13 @@ func _on_disconnect_pressed() -> void:
 
 
 func _on_sync_pressed() -> void:
+	if _executor != null:
+		_executor.call("invalidate_eval_cache")
 	if _sync != null:
+		if _executor != null and _sync.has_link_token():
+			var all_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://")
+			if not all_scripts.is_empty():
+				_sync.sync_live_scripts(all_scripts)
 		_sync.fetch_active_epic()
 
 

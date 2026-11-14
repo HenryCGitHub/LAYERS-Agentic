@@ -5,6 +5,7 @@ signal epic_updated(payload: Dictionary)
 signal sync_failed(message: String)
 signal busy_changed(is_busy: bool)
 signal agent_bundle_received(agent_bundle: Dictionary, payload: Dictionary)
+signal scripts_synced(synced_count: int)
 signal update_available(local_ver: String, remote_ver: String)
 signal update_check_finished(up_to_date: bool, local_ver: String, remote_ver: String)
 signal update_ready_to_reload(new_ver: String, updated_gd_paths: PackedStringArray)
@@ -25,6 +26,7 @@ const REMOTE_ZIP_FALLBACK_URL := "https://henrycgithub.github.io/LAYERS-Agentic/
 
 var _http: HTTPRequest
 var _update_http: HTTPRequest
+var _script_sync_http: HTTPRequest
 var _link_token: String = ""
 var _sync_base_url: String = DEFAULT_SYNC_BASE_URL
 var _is_busy: bool = false
@@ -35,6 +37,9 @@ var _update_mode: String = ""
 var _update_silent: bool = true
 var _update_zip_attempt_idx: int = 0
 var _latest_known_remote_ver: String = ""
+var _script_sync_busy: bool = false
+var _pending_live_scripts: Dictionary = {}
+var _script_sync_in_flight: Dictionary = {}
 
 
 func _ready() -> void:
@@ -47,6 +52,11 @@ func _ready() -> void:
 	_update_http.timeout = 30.0
 	add_child(_update_http)
 	_update_http.request_completed.connect(_on_update_http_completed)
+
+	_script_sync_http = HTTPRequest.new()
+	_script_sync_http.timeout = 20.0
+	add_child(_script_sync_http)
+	_script_sync_http.request_completed.connect(_on_script_sync_http_completed)
 
 	load_config()
 
@@ -529,6 +539,100 @@ func complete_feature_steps(feature_id: String, checkpoint_id: String) -> void:
 		"featureId": feature_id,
 		"checkpointId": checkpoint_id,
 	})
+
+
+func sync_live_scripts(live_scripts: Dictionary) -> void:
+	if not has_link_token() or live_scripts.is_empty():
+		return
+	for raw_path in live_scripts.keys():
+		var p := str(raw_path).strip_edges()
+		if p.begins_with("res://") and p.ends_with(".gd"):
+			var code := str(live_scripts[raw_path])
+			if not code.strip_edges().is_empty():
+				_pending_live_scripts[p] = code
+	if _pending_live_scripts.is_empty():
+		return
+	if _script_sync_busy:
+		return
+	_flush_pending_script_sync()
+
+
+func _flush_pending_script_sync() -> void:
+	if _script_sync_busy or _pending_live_scripts.is_empty() or not has_link_token():
+		return
+	if _script_sync_http == null:
+		return
+	_script_sync_in_flight = _pending_live_scripts.duplicate()
+	_pending_live_scripts.clear()
+	_script_sync_busy = true
+
+	var url := "%s/godotLink/update" % _sync_base_url.trim_suffix("/")
+	var headers := PackedStringArray([
+		"Content-Type: application/json",
+		"Authorization: Bearer %s" % _link_token,
+	])
+	var body_str := JSON.stringify({
+		"action": "sync_scripts",
+		"scripts": _script_sync_in_flight,
+	})
+	var err := _script_sync_http.request(url, headers, HTTPClient.METHOD_POST, body_str)
+	if err != OK:
+		_script_sync_busy = false
+		_script_sync_in_flight.clear()
+
+
+func _on_script_sync_http_completed(
+	result: int,
+	response_code: int,
+	_headers: PackedStringArray,
+	body: PackedByteArray
+) -> void:
+	_script_sync_busy = false
+	var synced_snapshot: Dictionary = _script_sync_in_flight.duplicate()
+	_script_sync_in_flight.clear()
+
+	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
+		var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
+		if typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
+			_update_cached_code_files(synced_snapshot)
+			scripts_synced.emit(int(parsed.get("syncedCount", synced_snapshot.size())))
+
+	if not _pending_live_scripts.is_empty():
+		_flush_pending_script_sync()
+
+
+func _update_cached_code_files(live_scripts: Dictionary) -> void:
+	if live_scripts.is_empty():
+		return
+	var cached := load_cached_epic()
+	if cached.is_empty():
+		return
+	var code_files_raw: Variant = cached.get("codeFiles", [])
+	var code_files: Array = code_files_raw if typeof(code_files_raw) == TYPE_ARRAY else []
+	var by_path := {}
+	for i in range(code_files.size()):
+		var cf: Variant = code_files[i]
+		if typeof(cf) == TYPE_DICTIONARY:
+			var rp := str(cf.get("resPath", cf.get("path", ""))).strip_edges()
+			if not rp.is_empty():
+				by_path[rp] = i
+	for rp_raw in live_scripts.keys():
+		var rp := str(rp_raw).strip_edges()
+		var content := str(live_scripts[rp_raw])
+		if by_path.has(rp):
+			var idx: int = int(by_path[rp])
+			var existing: Dictionary = code_files[idx]
+			existing["content"] = content
+			code_files[idx] = existing
+		else:
+			code_files.append({
+				"resPath": rp,
+				"title": rp.get_file(),
+				"language": "gdscript",
+				"content": content,
+			})
+	cached["codeFiles"] = code_files
+	_write_cache(cached)
 
 
 func _post_agent_update(payload_body: Dictionary) -> void:

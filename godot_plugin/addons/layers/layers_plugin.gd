@@ -54,8 +54,12 @@ func _on_editor_scene_saved(_filepath: String) -> void:
 		_dock.call("notify_editor_state_changed")
 
 
-func _on_editor_resource_saved(_resource: Resource) -> void:
-	if _dock != null and _dock.has_method("notify_editor_state_changed"):
+func _on_editor_resource_saved(resource: Resource) -> void:
+	if _dock == null:
+		return
+	if _dock.has_method("on_editor_resource_saved"):
+		_dock.call("on_editor_resource_saved", resource)
+	elif _dock.has_method("notify_editor_state_changed"):
 		_dock.call("notify_editor_state_changed")
 
 
