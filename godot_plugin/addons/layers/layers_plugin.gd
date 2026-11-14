@@ -23,12 +23,40 @@ func _enter_tree() -> void:
 	_dock.undo_redo = get_undo_redo()
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _dock)
 
+	if not scene_changed.is_connected(_on_editor_scene_changed):
+		scene_changed.connect(_on_editor_scene_changed)
+	if not scene_saved.is_connected(_on_editor_scene_saved):
+		scene_saved.connect(_on_editor_scene_saved)
+	if not resource_saved.is_connected(_on_editor_resource_saved):
+		resource_saved.connect(_on_editor_resource_saved)
+
 
 func _exit_tree() -> void:
+	if scene_changed.is_connected(_on_editor_scene_changed):
+		scene_changed.disconnect(_on_editor_scene_changed)
+	if scene_saved.is_connected(_on_editor_scene_saved):
+		scene_saved.disconnect(_on_editor_scene_saved)
+	if resource_saved.is_connected(_on_editor_resource_saved):
+		resource_saved.disconnect(_on_editor_resource_saved)
 	if _dock != null:
 		remove_control_from_docks(_dock)
 		_dock.queue_free()
 		_dock = null
+
+
+func _on_editor_scene_changed(_scene_root: Node) -> void:
+	if _dock != null and _dock.has_method("notify_editor_state_changed"):
+		_dock.call("notify_editor_state_changed")
+
+
+func _on_editor_scene_saved(_filepath: String) -> void:
+	if _dock != null and _dock.has_method("notify_editor_state_changed"):
+		_dock.call("notify_editor_state_changed")
+
+
+func _on_editor_resource_saved(_resource: Resource) -> void:
+	if _dock != null and _dock.has_method("notify_editor_state_changed"):
+		_dock.call("notify_editor_state_changed")
 
 
 func _notification(what: int) -> void:

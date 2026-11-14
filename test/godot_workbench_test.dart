@@ -1730,11 +1730,12 @@ func _physics_process(delta: float) -> void:
     );
 
     test(
-      'Native Godot 4 plugin addon V2.2 files, Cloud Functions diagnose_fix & web/layers_godot_plugin.zip enforce single-step dock, live checks, undoable actions & 1-click self-update',
+      'Native Godot 4 plugin addon V2.3 files, Cloud Functions diagnose_fix & web/layers_godot_plugin.zip enforce native EditorTheme GUI, hierarchy-aware executor, undoable actions & 1-click self-update',
       () {
         final cfg = File('godot_plugin/addons/layers/plugin.cfg');
         final pluginGd = File('godot_plugin/addons/layers/layers_plugin.gd');
         final syncGd = File('godot_plugin/addons/layers/layers_sync_client.gd');
+        final executorGd = File('godot_plugin/addons/layers/layers_step_executor.gd');
         final dockGd = File('godot_plugin/addons/layers/layers_dock.gd');
         final functionsJs = File('functions/index.js');
         final zipFile = File('web/layers_godot_plugin.zip');
@@ -1742,6 +1743,7 @@ func _physics_process(delta: float) -> void:
         expect(cfg.existsSync(), isTrue);
         expect(pluginGd.existsSync(), isTrue);
         expect(syncGd.existsSync(), isTrue);
+        expect(executorGd.existsSync(), isTrue);
         expect(dockGd.existsSync(), isTrue);
         expect(functionsJs.existsSync(), isTrue);
         expect(zipFile.existsSync(), isTrue);
@@ -1749,19 +1751,23 @@ func _physics_process(delta: float) -> void:
         final cfgText = cfg.readAsStringSync();
         final pluginText = pluginGd.readAsStringSync();
         final syncText = syncGd.readAsStringSync();
+        final executorText = executorGd.readAsStringSync();
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.2.1"'));
+        expect(cfgText, contains('version="2.3.0"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
         expect(untypedConstArrayPattern.hasMatch(syncText), isFalse);
+        expect(untypedConstArrayPattern.hasMatch(executorText), isFalse);
         expect(untypedConstArrayPattern.hasMatch(dockText), isFalse);
         expect(pluginText, contains('get_undo_redo()'));
         expect(pluginText, contains('get_editor_interface()'));
+        expect(pluginText, contains('scene_changed'));
         expect(pluginText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(pluginText, isNot(contains('preload(')));
+        expect(executorText, isNot(contains('preload(')));
 
         expect(syncText, contains('.gdignore'));
         expect(syncText, contains('.gitignore'));
@@ -1770,6 +1776,7 @@ func _physics_process(delta: float) -> void:
         expect(syncText, contains('"diagnose_fix"'));
         expect(syncText, contains('check_for_plugin_update'));
         expect(syncText, contains('download_and_apply_plugin_update'));
+        expect(syncText, contains('layers_step_executor.gd'));
         expect(syncText, contains('ZIPReader'));
         expect(
           syncText,
@@ -1780,16 +1787,31 @@ func _physics_process(delta: float) -> void:
         expect(syncText, contains('layers_godot_plugin.zip'));
 
         expect(dockText, contains('get_edited_scene_root()'));
-        expect(dockText, contains('inspect_object'));
-        expect(dockText, contains('play_current_scene()'));
-        expect(dockText, contains('undo_redo'));
+        expect(dockText, contains('get_editor_scale()'));
+        expect(dockText, contains('EditorIcons'));
+        expect(dockText, contains('EditorFonts'));
+        expect(dockText, contains('RichTextLabel.new()'));
+        expect(dockText, contains('Tree.new()'));
+        expect(dockText, contains('CodeEdit.new()'));
+        expect(dockText, contains('layers_step_executor.gd'));
         expect(dockText, contains('Broken? Ask Agent to Fix'));
         expect(dockText, contains('OS.shell_open'));
         expect(dockText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(dockText, isNot(contains('preload(')));
+        expect(
+          RegExp(r'add_theme_font_size_override\s*\(\s*"font_size"\s*,\s*\d+').hasMatch(dockText),
+          isFalse,
+        );
         expect(dockText, contains('Check for Plugin Update'));
         expect(dockText, contains('Update Now'));
         expect(dockText, contains('set_plugin_enabled'));
+
+        expect(executorText, contains('ClassDB.class_exists'));
+        expect(executorText, contains('inspect_object'));
+        expect(executorText, contains('save_scene()'));
+        expect(executorText, contains('merge_step_code_into_existing'));
+        expect(executorText, contains('parse_signal_specs'));
+        expect(executorText, contains('undo_redo'));
 
         expect(fnText, contains('decodeThreeAreaNotesJs'));
         expect(fnText, contains('"diagnose_fix"'));

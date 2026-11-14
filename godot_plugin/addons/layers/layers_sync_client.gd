@@ -416,6 +416,7 @@ func _apply_downloaded_zip_bytes(zip_bytes: PackedByteArray) -> void:
 		"addons/layers/layers_plugin.gd",
 		"addons/layers/layers_dock.gd",
 		"addons/layers/layers_sync_client.gd",
+		"addons/layers/layers_step_executor.gd",
 	])
 	for req in required_entries:
 		if not files.has(req) or reader.read_file(req).size() <= 0:
