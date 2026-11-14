@@ -428,6 +428,49 @@ class WorkbenchShell extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (draft != null) ...[
+                        Builder(
+                          builder: (ctx) {
+                            final isNarrowTopBar =
+                                MediaQuery.sizeOf(ctx).width < 1040;
+                            return Tooltip(
+                              message:
+                                  'Connect Godot 4 LAYERS Dock (Download Plugin & Link Token)',
+                              child: InkWell(
+                                key: const ValueKey(
+                                  'top_bar_connect_godot_btn',
+                                ),
+                                borderRadius: BorderRadius.circular(5),
+                                onTap: () => showConnectGodotPluginDialog(
+                                  context,
+                                  workbench,
+                                ),
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: isNarrowTopBar ? 6 : 8,
+                                    vertical: 3.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: bgSurface,
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                      color: const Color(0xFF38BDF8)
+                                          .withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    isNarrowTopBar ? '🔌' : '🔌 Godot',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: const Color(0xFF7DD3FC),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(width: 4),
                         PopupMenuButton<String>(
                           key: const ValueKey('global_export_spec_btn'),
                           tooltip:
@@ -438,7 +481,9 @@ class WorkbenchShell extends StatelessWidget {
                             side: BorderSide(color: borderColor),
                           ),
                           onSelected: (val) {
-                            if (val == 'spec') {
+                            if (val == 'connect_godot') {
+                              showConnectGodotPluginDialog(context, workbench);
+                            } else if (val == 'spec') {
                               _exportFullProjectSpec(context);
                             } else if (val == 'agents_md') {
                               _exportActiveReleaseAgentsMd(context);
@@ -451,6 +496,28 @@ class WorkbenchShell extends StatelessWidget {
                             }
                           },
                           itemBuilder: (ctx) => [
+                            PopupMenuItem<String>(
+                              value: 'connect_godot',
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.extension_rounded,
+                                    size: 13,
+                                    color: Color(0xFF38BDF8),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Connect Godot 4 Plugin',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             PopupMenuItem<String>(
                               value: 'godot_contract',
                               child: Row(

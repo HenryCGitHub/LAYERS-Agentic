@@ -8,7 +8,6 @@ import '../models/tier_document.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 import '../utils/godot_gdscript_guard.dart';
-import '../utils/markdown_exporter.dart';
 import '../utils/section_text_utils.dart';
 import 'project_pitch_screen.dart';
 import 'widgets/godot_inspector_panel.dart';
@@ -54,10 +53,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   String? _manualCheckpointFocusFeatureId;
   final Map<String, int> _selectedFlatStepIndexByCheckpoint = {};
   final Set<String> _playtestGateActiveCheckpoints = {};
-  bool _isCodeFileWorkspaceMode = false;
-  String? _selectedCodeFileResPath;
-  bool _isShowingStarterTscnInCodeMode = false;
-  bool _showAllProjectFilesInCodeMode = false;
   Set<String> _hoveredDoTokens = const {};
   String? _hoveredDoRowKey;
   double _outlinerWidth = 320.0;
@@ -126,8 +121,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   bool _filterOutlinerTodoOnly = false;
   final TextEditingController _outlinerSearchController =
       TextEditingController();
-  String? _editingCodeFileResPath;
-  final TextEditingController _codeFileEditorCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -144,7 +137,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     _inboxCaptureCtrl.dispose();
     _inlineBugInputCtrl.dispose();
     _outlinerSearchController.dispose();
-    _codeFileEditorCtrl.dispose();
     super.dispose();
   }
 
@@ -169,12 +161,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     final ctx = _resolveActiveWorkspaceContext();
     if (ctx == null) return false;
 
-    if (key == LogicalKeyboardKey.backslash) {
-      _rebuild(() {
-        _isCodeFileWorkspaceMode = !_isCodeFileWorkspaceMode;
-      });
-      return true;
-    }
     if (key == LogicalKeyboardKey.arrowUp) {
       _retreatToPreviousStep(
         ctx.states,

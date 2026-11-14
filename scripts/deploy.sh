@@ -24,7 +24,10 @@ CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 CURRENT_COMMIT=$(git rev-parse --short HEAD)
 echo "Deploying from: $CURRENT_BRANCH ($CURRENT_COMMIT)"
 
-echo "=== [2/4] Compiling Flutter Web locally ==="
+echo "=== [2/4] Packaging Godot 4 plugin & compiling Flutter Web locally ==="
+if [ -d "godot_plugin/addons/layers" ] && command -v zip &> /dev/null; then
+    (cd godot_plugin && rm -f ../web/layers_godot_plugin.zip && zip -rq ../web/layers_godot_plugin.zip addons/layers)
+fi
 BUILD_ARGS=(
     "web"
     "--release"

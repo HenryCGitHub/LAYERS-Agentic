@@ -32,3 +32,19 @@ bool triggerMarkdownFileDownload({
     return false;
   }
 }
+
+/// Triggers a direct browser download for a static web asset (e.g. `layers_godot_plugin.zip`).
+bool triggerRelativeAssetDownload({
+  required String relativeHref,
+  required String downloadFilename,
+}) {
+  try {
+    final anchor = _document.createElement('a');
+    anchor.href = relativeHref;
+    anchor.download = downloadFilename;
+    anchor.click();
+    return true;
+  } catch (_) {
+    return false;
+  }
+}

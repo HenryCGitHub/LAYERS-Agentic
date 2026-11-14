@@ -222,6 +222,15 @@ class WorkbenchProvider extends ChangeNotifier {
   bool _focusMode = true;
   bool get focusMode => _focusMode;
 
+  final Map<String, String> _cachedGodotLinkTokensByProjectId = {};
+  String? get cachedGodotLinkTokenForActiveProject => _activeProjectId != null
+      ? _cachedGodotLinkTokensByProjectId[_activeProjectId!]
+      : null;
+
+  void clearCachedGodotLinkTokens() {
+    _cachedGodotLinkTokensByProjectId.clear();
+  }
+
   Timer? _autoSyncDebounceTimer;
 
   /// Triggers a debounced background sync to Cloud Firestore (2.5s after last modification).

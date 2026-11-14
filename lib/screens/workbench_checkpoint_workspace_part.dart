@@ -901,66 +901,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     }
   }
 
-  Widget _buildWorkspaceModeToggle(FeatureStateNode node) {
-    Widget tabBtn({
-      required ValueKey<String> key,
-      required String label,
-      required bool active,
-      required VoidCallback onTap,
-    }) {
-      return InkWell(
-        key: key,
-        borderRadius: BorderRadius.circular(5),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-          decoration: BoxDecoration(
-            color: active ? const Color(0xFF1E293B) : Colors.transparent,
-            borderRadius: BorderRadius.circular(5),
-          ),
-          child: Text(
-            label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10,
-              fontWeight: active ? weightBold : weightSemi,
-              color: active ? const Color(0xFFF8FAFC) : textMuted,
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(2),
-      decoration: BoxDecoration(
-        color: const Color(0xFF07090E),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFF1E293B)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          tabBtn(
-            key: ValueKey('workspace_mode_runbook_btn_${node.id}'),
-            label: 'Runbook',
-            active: !_isCodeFileWorkspaceMode,
-            onTap: () => _rebuild(() {
-              _isCodeFileWorkspaceMode = false;
-            }),
-          ),
-          tabBtn(
-            key: ValueKey('workspace_mode_code_file_btn_${node.id}'),
-            label: 'Code File',
-            active: _isCodeFileWorkspaceMode,
-            onTap: () => _rebuild(() {
-              _isCodeFileWorkspaceMode = true;
-            }),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _triggerPrimaryDoneAction({
     required TierDocument feat,
     required List<FeatureStateNode> states,
@@ -1097,6 +1037,8 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                 _inlineBugDrawerNodeId == node.id ? null : node.id;
             _inlineBugInputCtrl.clear();
           });
+        } else if (action == 'connect_godot') {
+          showConnectGodotPluginDialog(context, widget.workbench);
         } else if (action == 'godot_contract') {
           showGodotContractDialog(context, widget.workbench);
         } else if (action == 'rename_feature') {
@@ -1170,6 +1112,17 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
               style: GoogleFonts.inter(
                 fontSize: 12.5,
                 color: const Color(0xFFFBBF24),
+              ),
+            ),
+          ),
+          PopupMenuItem<String>(
+            value: 'connect_godot',
+            height: 34,
+            child: Text(
+              '🔌 Connect Godot 4 plugin',
+              style: GoogleFonts.inter(
+                fontSize: 12.5,
+                color: const Color(0xFF7DD3FC),
               ),
             ),
           ),
@@ -1697,25 +1650,17 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
               ),
             ),
           const SizedBox(height: 6),
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  key: ValueKey('task_sheet_feature_goal_${node.id}'),
-                  child: Text(
-                    featureGoalText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: GoogleFonts.inter(
-                      fontSize: 11.5,
-                      color: textMuted,
-                    ),
-                  ),
-                ),
+          Container(
+            key: ValueKey('task_sheet_feature_goal_${node.id}'),
+            child: Text(
+              featureGoalText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                color: textMuted,
               ),
-              const SizedBox(width: 8),
-              _buildWorkspaceModeToggle(node),
-            ],
+            ),
           ),
         ],
       ),
@@ -1960,19 +1905,26 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     ),
                   ),
                   Tooltip(
-                    message:
-                        'Open generated GDScript & Starter .tscn in Code File view',
+                    message: 'Copy primary Godot res:// asset path',
                     child: InkWell(
                       key: ValueKey('desktop_shared_asset_badge_${node.id}'),
                       borderRadius: BorderRadius.circular(5),
-                      onTap: () => _rebuild(() {
-                        _isCodeFileWorkspaceMode = true;
-                        _isShowingStarterTscnInCodeMode = false;
-                        _selectedCodeFileResPath = widget.workbench
-                            .extractPrimaryScriptResPath(
-                          feat.sections['primary_asset'],
-                        );
-                      }),
+                      onTap: () {
+                        final primaryAsset =
+                            (feat.sections['primary_asset'] ?? '').trim();
+                        final copyVal = primaryAsset.isNotEmpty
+                            ? primaryAsset
+                            : '${assetSpec.folderPath}${assetSpec.assetName}';
+                        Clipboard.setData(ClipboardData(text: copyVal));
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Copied $copyVal ✓'),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 7,
@@ -2035,6 +1987,33 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                       ),
                     ),
                   ),
+                  InkWell(
+                    key: ValueKey('connect_godot_plugin_chip_${node.id}'),
+                    borderRadius: BorderRadius.circular(5),
+                    onTap: () =>
+                        showConnectGodotPluginDialog(context, widget.workbench),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF07090E),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                          color: const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Text(
+                        '🔌 Godot',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF7DD3FC),
+                        ),
+                      ),
+                    ),
+                  ),
                   if (isFixStepActive && isSynthesizingFeatureNow)
                     Container(
                       key: ValueKey('diagnosing_fix_badge_${node.id}'),
@@ -2083,7 +2062,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                     ),
                 ],
               ),
-              _buildWorkspaceModeToggle(node),
             ],
           ),
           const SizedBox(height: 8),
@@ -2639,558 +2617,183 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     );
   }
 
-  /// Inline `Code File` Workspace View: shows cumulative Cloud `.gd` scripts + starter `.tscn`,
-  /// live Plan B disk diff status, `Copy Full`, `Review Diff -> Write`, and disk `Undo`.
-  Widget _buildCodeFileWorkspaceView({
+  /// Rich Web-Studio-only `Epic › Feature` Overview Strip displaying Parent Epic Goal,
+  /// Feature `DONE WHEN`, and clickable `@export` Tuning / `[STATE GUARD]` chips.
+  Widget _buildWebEpicFeatureDetailStrip({
     required TierDocument feat,
+    required List<FeatureStateNode> states,
     required FeatureStateNode node,
-    required List<TaskHowToSubStep> unifiedSteps,
-    required ({String icon, String componentKey, String displayLabel})
-        activeTargetComp,
-    required ({
-      String archetype,
-      bool is2D,
-      String sec1Title,
-      String sec2Title,
-      String sec3Title,
-      String assetIcon,
-      String assetName,
-      String parentClassLabel,
-      String folderPath,
-      bool isNewAssetOnTask,
-      List<({String label, String detail})> setupSteps,
-      String levelHookupTitle,
-      List<String> levelHookupSteps,
-    }) assetSpec,
+    required String epicShortCode,
     required List<String> tuningItems,
     required List<String> edgeItems,
   }) {
-    final files = widget.workbench.activeProjectGodotFiles;
-    final defaultRes = _resolveEffectiveResPathForStep(
-      feat: feat,
-      node: node,
-      subStep: unifiedSteps.isNotEmpty
-          ? unifiedSteps.first
-          : TaskHowToSubStep(
-              subtask: Subtask(id: 'tmp', text: feat.title),
-              stepNumberLabel: '01',
-              instruction: '',
-              codeFormula: '',
-            ),
-    );
-
-    final featureResPaths = <String>{
-      if (defaultRes.endsWith('.gd') || defaultRes.endsWith('.tres'))
-        GodotVirtualFile.normalizeResPath(defaultRes),
-    };
-    final primaryScript = widget.workbench.extractPrimaryScriptResPath(
-      feat.sections['primary_asset'] ??
-          node.parameters['primarySharedScriptOrScene'],
-    );
-    if (primaryScript != null && primaryScript.isNotEmpty) {
-      featureResPaths.add(GodotVirtualFile.normalizeResPath(primaryScript));
-    }
-    for (final st in unifiedSteps) {
-      final extracted =
-          widget.workbench.extractPrimaryScriptResPath(st.stepPath);
-      if (extracted != null && extracted.isNotEmpty) {
-        featureResPaths.add(GodotVirtualFile.normalizeResPath(extracted));
-      }
-    }
-    final slugTokens = feat.title
-        .toLowerCase()
-        .split(RegExp(r'[^a-z0-9]+'))
-        .where((t) => t.length >= 3)
-        .toList();
-    final featureFiles = <GodotVirtualFile>[];
-    final otherFiles = <GodotVirtualFile>[];
-    for (final vf in files) {
-      final norm = GodotVirtualFile.normalizeResPath(vf.resPath);
-      final matchesFeature = featureResPaths.contains(norm) ||
-          slugTokens.any(norm.toLowerCase().contains);
-      if (matchesFeature) {
-        featureFiles.add(vf);
-      } else {
-        otherFiles.add(vf);
-      }
-    }
-
-    GodotVirtualFile? selectedFile;
-    if (files.isNotEmpty) {
-      if (_selectedCodeFileResPath != null) {
-        final match = files.where((f) => f.resPath == _selectedCodeFileResPath);
-        if (match.isNotEmpty) selectedFile = match.first;
-      }
-      if (selectedFile == null && featureFiles.isNotEmpty) {
-        selectedFile = featureFiles.firstWhere(
-          (f) => f.resPath == defaultRes,
-          orElse: () => featureFiles.first,
-        );
-      }
-      selectedFile ??= files.firstWhere(
-        (f) => f.resPath == defaultRes,
-        orElse: () => files.first,
-      );
-    }
-
-    final displayedFiles = (_showAllProjectFilesInCodeMode ||
-            featureFiles.isEmpty ||
-            (selectedFile != null && !featureFiles.contains(selectedFile)))
-        ? <GodotVirtualFile>[...featureFiles, ...otherFiles]
-        : featureFiles;
-
-    final cleanRoot = assetSpec.assetName.replaceAll(RegExp(r'\.(tscn|gd)$'), '');
-    final sceneSteps = unifiedSteps
-        .where((s) => s.resolvedDockStage == GodotDockStage.scene)
-        .toList();
-    final sceneLines = sceneSteps.isNotEmpty
-        ? _synthesizeSceneTreeLines(
-            sceneSteps.first,
-            activeTargetComp: activeTargetComp,
-            assetName: assetSpec.assetName,
-          )
-        : const <String>[];
-    final scriptForTscn = selectedFile?.resPath ??
-        (defaultRes.endsWith('.gd') ? defaultRes : null);
-    final starterTscnText = _buildFeatureStarterTscnText(
-      assetName: assetSpec.assetName,
-      parentClassLabel: assetSpec.parentClassLabel,
-      is2D: assetSpec.is2D,
-      sceneTreeLines: sceneLines,
-      scriptResPath: scriptForTscn,
-    );
-
-    final bool showingTscn =
-        _isShowingStarterTscnInCodeMode || selectedFile == null;
-    final bool isUnsavedScaffoldFallback = selectedFile == null;
-    final String activePath = showingTscn
-        ? '${assetSpec.folderPath}${assetSpec.assetName.endsWith('.tscn') ? assetSpec.assetName : '$cleanRoot.tscn'}'
-        : selectedFile.resPath;
-    final String activeContent =
-        showingTscn ? starterTscnText : selectedFile.content;
-    final bool isEditingActiveFile =
-        !showingTscn && _editingCodeFileResPath == selectedFile.resPath;
-    final lines = activeContent.split('\n');
-
-    Widget toolbarBtn({
-      required ValueKey<String> key,
-      required String label,
-      required VoidCallback onTap,
-      Color fgColor = const Color(0xFFCBD5E1),
-      Color bgColor = const Color(0xFF181E2C),
-      Color borderColor = const Color(0xFF283854),
-      bool bold = false,
-    }) {
-      return InkWell(
-        key: key,
-        borderRadius: BorderRadius.circular(5),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
-          decoration: BoxDecoration(
-            color: bgColor,
-            borderRadius: BorderRadius.circular(5),
-            border: Border.all(color: borderColor),
-          ),
-          child: Text(
-            label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 9.5,
-              fontWeight: bold ? weightBold : weightSemi,
-              color: fgColor,
-            ),
-          ),
-        ),
-      );
-    }
-
-    void saveInlineCodeEdits() {
-      final fileToSave = selectedFile;
-      if (fileToSave == null) return;
-      final savedResPath = fileToSave.resPath;
-      final editedText = _codeFileEditorCtrl.text.replaceAll('\r\n', '\n');
-      widget.workbench.upsertGodotVirtualFile(
-        resPath: savedResPath,
-        content: editedText,
-        featureIds: [feat.id],
-      );
-      _rebuild(() {
-        _editingCodeFileResPath = null;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Saved $savedResPath ✓'),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    }
+    final parentBeat =
+        feat.parentId != null ? widget.workbench.documents[feat.parentId] : null;
+    final cleanEpicTitle = parentBeat != null
+        ? _formatOutlineBeatDisplayTitle(parentBeat.title)
+        : 'Epic';
+    final epicGoal = parentBeat != null
+        ? SectionTextUtils.resolveGoal(parentBeat.sections)
+        : '';
+    final doneWhen = node.playtestCondition.trim();
+    final godotSnap = widget.workbench.computeActiveGodotEpicSnapshot();
+    final isGodotActiveEpic = parentBeat != null &&
+        !godotSnap.allEpicsCompleted &&
+        godotSnap.activeEpicId == parentBeat.id;
 
     return Container(
-      key: ValueKey('code_file_workspace_${node.id}'),
-      margin: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF06090F),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFF1F2B3E)),
+      key: ValueKey('web_epic_feature_detail_strip_${node.id}'),
+      padding: const EdgeInsets.fromLTRB(14, 7, 14, 8),
+      decoration: const BoxDecoration(
+        color: Color(0xFF0A0F18),
+        border: Border(bottom: BorderSide(color: Color(0xFF1A2334))),
       ),
-      clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: const BoxDecoration(
-              color: Color(0xFF0D1422),
-              border: Border(bottom: BorderSide(color: Color(0xFF1F2B3E))),
-            ),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    for (final vf in displayedFiles)
-                      InkWell(
-                        key: ValueKey('code_mode_file_tab_${vf.resPath}'),
-                        borderRadius: BorderRadius.circular(5),
-                        onTap: () => _rebuild(() {
-                          _isShowingStarterTscnInCodeMode = false;
-                          _selectedCodeFileResPath = vf.resPath;
-                          _editingCodeFileResPath = null;
-                        }),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (!showingTscn &&
-                                    selectedFile.resPath == vf.resPath)
-                                ? const Color(0xFF1B2740)
-                                : const Color(0xFF090E18),
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(
-                              color: (!showingTscn &&
-                                      selectedFile.resPath == vf.resPath)
-                                  ? const Color(0xFF38BDF8)
-                                      .withValues(alpha: 0.6)
-                                  : const Color(0xFF1E293B),
-                            ),
-                          ),
-                          child: Text(
-                            '📜 ${vf.resPath}',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: (!showingTscn &&
-                                      selectedFile.resPath == vf.resPath)
-                                  ? const Color(0xFF7DD3FC)
-                                  : const Color(0xFF94A3B8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    if (otherFiles.isNotEmpty && featureFiles.isNotEmpty)
-                      InkWell(
-                        key: ValueKey('code_mode_toggle_all_files_${node.id}'),
-                        borderRadius: BorderRadius.circular(5),
-                        onTap: () => _rebuild(() {
-                          _showAllProjectFilesInCodeMode =
-                              !_showAllProjectFilesInCodeMode;
-                        }),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF090E18),
-                            borderRadius: BorderRadius.circular(5),
-                            border: Border.all(color: const Color(0xFF26334D)),
-                          ),
-                          child: Text(
-                            _showAllProjectFilesInCodeMode
-                                ? 'Feature Only'
-                                : '+ ${otherFiles.length} Project Files',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF94A3B8),
-                            ),
-                          ),
-                        ),
-                      ),
-                    InkWell(
-                      key: ValueKey('code_mode_starter_tscn_tab_${node.id}'),
-                      borderRadius: BorderRadius.circular(5),
-                      onTap: () => _rebuild(() {
-                        _isShowingStarterTscnInCodeMode = true;
-                        _editingCodeFileResPath = null;
-                      }),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: showingTscn
-                              ? const Color(0xFF0A241C)
-                              : const Color(0xFF090E18),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                            color: showingTscn
-                                ? const Color(0xFF34D399).withValues(alpha: 0.6)
-                                : const Color(0xFF1E293B),
-                          ),
-                        ),
-                        child: Text(
-                          isUnsavedScaffoldFallback
-                              ? '🌲 Starter .tscn (Unsaved)'
-                              : '🌲 Starter .tscn',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: showingTscn
-                                ? const Color(0xFF6EE7B7)
-                                : const Color(0xFF94A3B8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    if (isUnsavedScaffoldFallback) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 7,
-                          vertical: 3.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E1A0E),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Text(
-                          'Unsaved Scaffold · No .gd saved yet',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 9.5,
-                            fontWeight: weightSemi,
-                            color: const Color(0xFFFCD34D),
-                          ),
-                        ),
-                      ),
-                      toolbarBtn(
-                        key: ValueKey(
-                          'code_mode_create_starter_gd_btn_${node.id}',
-                        ),
-                        label: '+ Create Starter .gd',
-                        fgColor: const Color(0xFF6EE7B7),
-                        bgColor: const Color(0xFF0A241C),
-                        borderColor:
-                            const Color(0xFF34D399).withValues(alpha: 0.5),
-                        bold: true,
-                        onTap: () {
-                          final snake = TaskHowToBlueprint
-                              .deriveConcreteAssetName(feat.title)
-                              .snakeName;
-                          final targetPath = primaryScript ??
-                              (defaultRes.endsWith('.gd')
-                                  ? defaultRes
-                                  : 'res://scripts/${snake.isNotEmpty ? snake : 'feature'}.gd');
-                          final scaffold =
-                              GodotVirtualFile.buildGdStarterScaffold(
-                            baseClass: assetSpec.parentClassLabel,
-                            scriptTitle: feat.title,
-                            tuningParams: tuningItems,
-                            stepTitles:
-                                unifiedSteps.map((s) => s.shortTitle).toList(),
-                          );
-                          widget.workbench.upsertGodotVirtualFile(
-                            resPath: targetPath,
-                            content: scaffold,
-                            featureIds: [feat.id],
-                          );
-                          _rebuild(() {
-                            _isShowingStarterTscnInCodeMode = false;
-                            _selectedCodeFileResPath = targetPath;
-                            _editingCodeFileResPath = null;
-                          });
-                        },
-                      ),
-                    ],
-                    if (isEditingActiveFile) ...[
-                      toolbarBtn(
-                        key: ValueKey('code_mode_save_btn_${node.id}'),
-                        label: '✓ Save',
-                        fgColor: const Color(0xFF6EE7B7),
-                        bgColor: const Color(0xFF0A241C),
-                        borderColor:
-                            const Color(0xFF34D399).withValues(alpha: 0.55),
-                        bold: true,
-                        onTap: saveInlineCodeEdits,
-                      ),
-                      toolbarBtn(
-                        key: ValueKey('code_mode_cancel_edit_btn_${node.id}'),
-                        label: 'Cancel',
-                        fgColor: const Color(0xFF94A3B8),
-                        onTap: () => _rebuild(() {
-                          _editingCodeFileResPath = null;
-                        }),
-                      ),
-                    ] else ...[
-                      if (!showingTscn)
-                        toolbarBtn(
-                          key: ValueKey('code_mode_edit_btn_${node.id}'),
-                          label: '✎ Edit',
-                          fgColor: const Color(0xFFFDE68A),
-                          bgColor: const Color(0xFF1D160B),
-                          borderColor:
-                              const Color(0xFFF59E0B).withValues(alpha: 0.45),
-                          bold: true,
-                          onTap: () {
-                            final fileToEdit = selectedFile;
-                            if (fileToEdit == null) return;
-                            _codeFileEditorCtrl.text = fileToEdit.content;
-                            _rebuild(() {
-                              _editingCodeFileResPath = fileToEdit.resPath;
-                            });
-                          },
-                        ),
-                      toolbarBtn(
-                        key: ValueKey('code_mode_copy_btn_${node.id}'),
-                        label: showingTscn ? '⧉ Copy .tscn' : '⧉ Copy Full .gd',
-                        onTap: () {
-                          Clipboard.setData(ClipboardData(text: activeContent));
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Copied $activePath to clipboard ✓'),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                      toolbarBtn(
-                        key: ValueKey('code_mode_download_btn_${node.id}'),
-                        label: showingTscn ? '⬇ Download .tscn' : '⬇ Download .gd',
-                        fgColor: const Color(0xFF7DD3FC),
-                        bgColor: const Color(0xFF0E293D),
-                        borderColor:
-                            const Color(0xFF38BDF8).withValues(alpha: 0.45),
-                        bold: true,
-                        onTap: () {
-                          final fileName = activePath.split('/').last;
-                          final downloaded = triggerMarkdownFileDownload(
-                            filename: fileName,
-                            content: activeContent,
-                          );
-                          if (!downloaded) {
-                            Clipboard.setData(ClipboardData(text: activeContent));
-                          }
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  downloaded
-                                      ? 'Downloaded $fileName ✓'
-                                      : 'Copied $activePath to clipboard ✓',
-                                ),
-                                duration: const Duration(seconds: 2),
-                              ),
-                            );
-                          }
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (isEditingActiveFile)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: TextField(
-                key: ValueKey('code_mode_editor_input_${node.id}'),
-                controller: _codeFileEditorCtrl,
-                autofocus: true,
-                maxLines: null,
-                minLines: 12,
-                keyboardType: TextInputType.multiline,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: fontBody,
-                  color: textPrimary,
-                  height: 1.6,
-                ),
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: const Color(0xFF090E18),
-                  contentPadding: const EdgeInsets.all(12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: Color(0xFF283854)),
+          Wrap(
+            spacing: 8,
+            runSpacing: 5,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: isGodotActiveEpic
+                        ? const Color(0xFF38BDF8).withValues(alpha: 0.45)
+                        : const Color(0xFF1E293B),
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: Color(0xFF38BDF8)),
+                ),
+                child: Text(
+                  isGodotActiveEpic
+                      ? '$epicShortCode · $cleanEpicTitle · GODOT ACTIVE'
+                      : '$epicShortCode · $cleanEpicTitle',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 9.5,
+                    fontWeight: weightBold,
+                    color: isGodotActiveEpic
+                        ? const Color(0xFF7DD3FC)
+                        : const Color(0xFF94A3B8),
                   ),
                 ),
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  for (int i = 0; i < lines.length; i++)
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 34,
-                          child: Text(
-                            (i + 1).toString().padLeft(2, '0'),
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: fontMicro,
-                              color: const Color(0xFF475569),
-                              height: 1.65,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Text.rich(
-                            _buildSemanticStepSpan(
-                              text: lines[i],
-                              baseStyle: GoogleFonts.jetBrainsMono(
-                                fontSize: fontBody,
-                                fontWeight: weightRegular,
-                                color: textPrimary,
-                                height: 1.65,
-                              ),
-                              tuningItems: tuningItems,
-                              edgeItems: edgeItems,
-                              isCodeBlock: true,
-                            ),
-                            softWrap: true,
-                          ),
-                        ),
-                      ],
+              if (tuningItems.isNotEmpty)
+                InkWell(
+                  key: ValueKey('web_detail_tuning_chip_${node.id}'),
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: () => _showEditCheckpointTuningAndGuardsDialog(
+                    feat,
+                    states,
+                    node,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
                     ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF111827),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: const Color(0xFF26334D)),
+                    ),
+                    child: Text(
+                      '🎛 ${tuningItems.length} @export',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: weightSemi,
+                        color: const Color(0xFFCBD5E1),
+                      ),
+                    ),
+                  ),
+                ),
+              if (edgeItems.isNotEmpty)
+                InkWell(
+                  key: ValueKey('web_detail_guards_chip_${node.id}'),
+                  borderRadius: BorderRadius.circular(4),
+                  onTap: () => _showEditCheckpointTuningAndGuardsDialog(
+                    feat,
+                    states,
+                    node,
+                  ),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1D160B),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                        color: const Color(0xFFF59E0B).withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Text(
+                      '🛡 ${edgeItems.length} Guards',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 9,
+                        fontWeight: weightSemi,
+                        color: const Color(0xFFFCD34D),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (epicGoal.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: 'EPIC WHY  ',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: weightBold,
+                      color: const Color(0xFF7DD3FC),
+                    ),
+                  ),
+                  TextSpan(
+                    text: epicGoal,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: const Color(0xFF94A3B8),
+                    ),
+                  ),
                 ],
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
+          ],
+          if (doneWhen.isNotEmpty) ...[
+            const SizedBox(height: 3),
+            Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '✓ DONE WHEN  ',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9,
+                      fontWeight: weightBold,
+                      color: const Color(0xFF34D399),
+                    ),
+                  ),
+                  TextSpan(
+                    text: doneWhen,
+                    style: GoogleFonts.inter(
+                      fontSize: 11,
+                      color: const Color(0xFFCBD5E1),
+                    ),
+                  ),
+                ],
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       ),
     );
@@ -3635,6 +3238,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                   featureActionsMenu: featureActionsMenu,
                 ),
 
+              if (!isHalfScreenOverlayMode && !isFeatureBeingBuiltInLiveMode)
+                _buildWebEpicFeatureDetailStrip(
+                  feat: feat,
+                  states: states,
+                  node: node,
+                  epicShortCode: epicShortCode,
+                  tuningItems: tuningItems,
+                  edgeItems: edgeItems,
+                ),
+
               if (upgradeDeltaChips.isNotEmpty)
                 Container(
                   key: ValueKey('desktop_upgrade_delta_strip_${node.id}'),
@@ -3851,30 +3464,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           isHalfScreenOverlayMode: isHalfScreenOverlayMode,
                           isSynthesizingFeatureNow: isSynthesizingFeatureNow,
                         ),
-                      )
-              else if (_isCodeFileWorkspaceMode)
-                fillViewportHeight
-                    ? Expanded(
-                        child: SingleChildScrollView(
-                          child: _buildCodeFileWorkspaceView(
-                            feat: feat,
-                            node: node,
-                            unifiedSteps: unifiedSteps,
-                            activeTargetComp: activeTargetComp,
-                            assetSpec: assetSpec,
-                            tuningItems: tuningItems,
-                            edgeItems: edgeItems,
-                          ),
-                        ),
-                      )
-                    : _buildCodeFileWorkspaceView(
-                        feat: feat,
-                        node: node,
-                        unifiedSteps: unifiedSteps,
-                        activeTargetComp: activeTargetComp,
-                        assetSpec: assetSpec,
-                        tuningItems: tuningItems,
-                        edgeItems: edgeItems,
                       )
               else if (isHalfScreenOverlayMode)
                 fillViewportHeight

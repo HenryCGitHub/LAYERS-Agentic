@@ -47,6 +47,9 @@ jobs:
 
       - name: Build Flutter Web (Release)
         run: |
+          if [ -d "godot_plugin/addons/layers" ]; then
+            (cd godot_plugin && rm -f ../web/layers_godot_plugin.zip && zip -rq ../web/layers_godot_plugin.zip addons/layers)
+          fi
           echo "Building clean public web bundle (users enter API key locally in AI Settings)."
           flutter build web --release --base-href "/LAYERS-Agentic/"
           touch build/web/.nojekyll

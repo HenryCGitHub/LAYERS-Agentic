@@ -895,15 +895,29 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   ],
                 ),
               ),
-            for (int bIdx = 0; bIdx < beats.length; bIdx++)
-              _buildOutlinerEpicSection(
-                beats: beats,
-                beatIndex: bIdx,
-                activeVer: activeVer,
-                releaseHasActiveFeats: releaseHasActiveFeats,
-                showAllLiveFeatures: showAllLiveFeatures,
-                isOverlayDrawer: isOverlayDrawer,
-              ),
+            Builder(
+              builder: (_) {
+                final godotEpicSnap =
+                    widget.workbench.computeActiveGodotEpicSnapshot();
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (int bIdx = 0; bIdx < beats.length; bIdx++)
+                      _buildOutlinerEpicSection(
+                        beats: beats,
+                        beatIndex: bIdx,
+                        activeVer: activeVer,
+                        releaseHasActiveFeats: releaseHasActiveFeats,
+                        showAllLiveFeatures: showAllLiveFeatures,
+                        isOverlayDrawer: isOverlayDrawer,
+                        isGodotActiveEpic: !godotEpicSnap.allEpicsCompleted &&
+                            godotEpicSnap.activeEpicId == beats[bIdx].id,
+                      ),
+                  ],
+                );
+              },
+            ),
             if (beats.isNotEmpty &&
                 hasActiveFilter &&
                 visibleFeatureCount == 0 &&
@@ -1410,6 +1424,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     required bool releaseHasActiveFeats,
     required bool showAllLiveFeatures,
     required bool isOverlayDrawer,
+    required bool isGodotActiveEpic,
   }) {
     final beat = beats[beatIndex];
     final allBeatFeats = widget.workbench.featuresForBeat(beat.id);
@@ -1554,6 +1569,39 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                       ),
                     ),
                   ),
+                  if (isGodotActiveEpic) ...[
+                    const SizedBox(width: 5),
+                    Tooltip(
+                      message: 'Active single Epic synced to Godot 4 LAYERS Dock',
+                      child: Container(
+                        key: ValueKey(
+                          'outliner_godot_active_epic_badge_${beat.id}',
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF38BDF8)
+                              .withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: const Color(0xFF38BDF8)
+                                .withValues(alpha: 0.45),
+                          ),
+                        ),
+                        child: Text(
+                          'GODOT',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.4,
+                            color: const Color(0xFF7DD3FC),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   if (isSynthesizingBeat) ...[
                     const SizedBox(width: 6),
                     Text(
@@ -2002,7 +2050,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                   _manualCheckpointFocusIndex = null;
                   _inlineBugDrawerNodeId = null;
                   _isHalfScreenOutlinerOpen = false;
-                  _editingCodeFileResPath = null;
                 });
                 widget.workbench.selectFeature(feat.id);
               },

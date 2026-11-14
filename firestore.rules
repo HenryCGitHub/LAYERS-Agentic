@@ -38,5 +38,10 @@ service cloud.firestore {
       allow get: if isSignedIn() && callerEmail() == email.lower();
       allow write: if false;
     }
+
+    // Server-only Godot 4 EditorPlugin project link tokens (Admin SDK only)
+    match /godot_links/{linkId} {
+      allow read, write: if false;
+    }
   }
 }

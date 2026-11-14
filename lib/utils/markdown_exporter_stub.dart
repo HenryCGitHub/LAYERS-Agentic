@@ -8,3 +8,11 @@ bool triggerMarkdownFileDownload({
 }) {
   return false;
 }
+
+/// Non-web stub for downloading static bundled assets from `web/`.
+bool triggerRelativeAssetDownload({
+  required String relativeHref,
+  required String downloadFilename,
+}) {
+  return false;
+}

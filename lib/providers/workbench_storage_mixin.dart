@@ -18,6 +18,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       _isCloudSynced = false;
       _myAiAccessStatus = null;
       _aiAccessRecords = const [];
+      clearCachedGodotLinkTokens();
       _firestoreService.stopRealtimeSync();
       notifyListeners();
       return;
@@ -368,6 +369,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   }
 
   Future<void> signOutFromCloud() async {
+    clearCachedGodotLinkTokens();
     await _authService.signOut();
     notifyListeners();
   }

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -879,25 +880,18 @@ func _physics_process(delta: float) -> void:
         expect(resolvedAfterReorder[1].shortTitle, contains('Dash Velocity'));
         expect(resolvedAfterReorder[2].shortTitle, contains('Dash Export'));
 
-        // 4. Select CODE step (now index 1) -> shows inline Script Reference strip
+        // 4. Select CODE step (now index 1) -> shows code snippet card cleanly without removed inline sync strip
         await tester.tap(find.byKey(ValueKey('build_queue_step_${cp.id}_1')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(ValueKey('inline_code_sync_strip_${cp.id}_1')),
-          findsOneWidget,
-        );
-        expect(
-          find.textContaining('Script Reference · res://scripts/player_dash.gd'),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.byKey(ValueKey('inline_open_code_file_btn_${cp.id}')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(ValueKey('inline_review_diff_btn_${cp.id}')),
           findsNothing,
         );
+        expect(find.textContaining('Implement _trigger_dash()'), findsOneWidget);
 
         // 5. Select INSP step (now index 2) -> renders clean PROPERTY & LAYER SHEET (no Scene Tree chrome)
         await tester.tap(find.byKey(ValueKey('build_queue_step_${cp.id}_2')));
@@ -956,7 +950,7 @@ func _physics_process(delta: float) -> void:
     );
 
     testWidgets(
-      'Inline Code File workspace mode (Plan B tabs + starter .tscn) and Split-Screen (<700px) flat step dropdown',
+      'Full Web Studio renders rich Epic > Feature detail strip, omits Code File tab, and collapses Split-Screen (<700px) step dropdown',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -980,43 +974,25 @@ func _physics_process(delta: float) -> void:
         );
         await tester.pumpAndSettle();
 
-        // 1. Switch workspace to Code File mode -> shows .gd tab + starter .tscn tab + Copy/Download buttons (no Review Diff)
-        await tester.tap(
+        // 1. Desktop Web Studio shows rich Epic > Feature overview strip and Connect Godot chip, without Code File mode tab
+        expect(
+          find.byKey(ValueKey('web_epic_feature_detail_strip_${cp.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('connect_godot_plugin_chip_${cp.id}')),
+          findsOneWidget,
+        );
+        expect(
           find.byKey(ValueKey('workspace_mode_code_file_btn_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(ValueKey('code_file_workspace_${cp.id}')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(const ValueKey('code_mode_file_tab_res://scripts/player_dash.gd')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(ValueKey('code_mode_copy_btn_${cp.id}')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(ValueKey('code_mode_download_btn_${cp.id}')),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(ValueKey('code_mode_review_diff_btn_${cp.id}')),
           findsNothing,
         );
-        await tester.tap(
-          find.byKey(ValueKey('code_mode_starter_tscn_tab_${cp.id}')),
+        expect(
+          find.byKey(ValueKey('code_file_workspace_${cp.id}')),
+          findsNothing,
         );
-        await tester.pumpAndSettle();
-        expect(find.textContaining('[gd_scene'), findsWidgets);
 
-        // 2. Return to Runbook and resize to Split-Screen (< 700px) -> collapses queue into 1-line floating bar
-        await tester.tap(
-          find.byKey(ValueKey('workspace_mode_runbook_btn_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-
+        // 2. Resize to Split-Screen (< 700px) -> collapses queue into 1-line floating bar
         tester.view.physicalSize = const Size(620, 820);
         await tester.pumpAndSettle();
 
@@ -1186,88 +1162,6 @@ func _physics_process(delta: float) -> void:
     );
 
     testWidgets(
-      'Code File mode scopes to active Feature files, toggles project files, and excludes removed sync controls',
-      (WidgetTester tester) async {
-        tester.view.physicalSize = const Size(1440, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        final setup = await seedDashWorkbench();
-        final provider = setup.provider;
-        final cp = setup.cp;
-
-        // Add unrelated script on another feature
-        provider.upsertGodotVirtualFile(
-          resPath: 'res://scripts/enemy_patrol.gd',
-          content: 'extends Node2D\n@export var patrol_speed: float = 120.0\n',
-        );
-
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: AppTheme.darkTheme,
-            home: Scaffold(
-              body: ListenableBuilder(
-                listenable: provider,
-                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // 1. Switch to Code File mode: shows player_dash.gd and hides unrelated enemy_patrol.gd until toggled
-        await tester.tap(
-          find.byKey(ValueKey('workspace_mode_code_file_btn_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(
-            const ValueKey('code_mode_file_tab_res://scripts/player_dash.gd'),
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.byKey(
-            const ValueKey('code_mode_file_tab_res://scripts/enemy_patrol.gd'),
-          ),
-          findsNothing,
-        );
-        expect(
-          find.byKey(ValueKey('code_mode_refresh_disk_btn_${cp.id}')),
-          findsNothing,
-        );
-        expect(
-          find.byKey(ValueKey('code_mode_sync_to_specs_btn_${cp.id}')),
-          findsNothing,
-        );
-
-        await tester.tap(
-          find.byKey(ValueKey('code_mode_toggle_all_files_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(
-            const ValueKey('code_mode_file_tab_res://scripts/enemy_patrol.gd'),
-          ),
-          findsOneWidget,
-        );
-
-        // 2. Switch back to Runbook and confirm sync code button is removed
-        await tester.tap(
-          find.byKey(ValueKey('workspace_mode_runbook_btn_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(ValueKey('sync_feature_from_code_btn_${cp.id}')),
-          findsNothing,
-        );
-      },
-    );
-
-    testWidgets(
       'Focus Mode OFF stacks multiple checkpoints vertically and Focus Mode ON spotlights one checkpoint',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
@@ -1391,72 +1285,6 @@ func _physics_process(delta: float) -> void:
     );
 
     testWidgets(
-      'Code File mode generates starter .gd scaffold and supports inline Edit -> Save',
-      (WidgetTester tester) async {
-        tester.view.physicalSize = const Size(1440, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        final setup = await seedDashWorkbench();
-        final provider = setup.provider;
-        final cp = setup.cp;
-        provider.documents.removeWhere((_, d) => d.tier == TierType.codeFile);
-
-        await tester.pumpWidget(
-          MaterialApp(
-            theme: AppTheme.darkTheme,
-            home: Scaffold(
-              body: ListenableBuilder(
-                listenable: provider,
-                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
-              ),
-            ),
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        // 1. Switch to Code File mode with empty project files -> + Create Starter .gd
-        await tester.tap(
-          find.byKey(ValueKey('workspace_mode_code_file_btn_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-        final createBtn =
-            find.byKey(ValueKey('code_mode_create_starter_gd_btn_${cp.id}'));
-        expect(createBtn, findsOneWidget);
-        await tester.tap(createBtn);
-        await tester.pumpAndSettle();
-
-        final createdVf =
-            provider.godotFileForResPath('res://scripts/player_dash.gd');
-        expect(createdVf, isNotNull);
-        expect(createdVf!.content, contains('extends CharacterBody2D'));
-        expect(createdVf.content, contains('@export var dash_speed'));
-
-        // 2. Click Edit, change content to add dash_cooldown @export, Save
-        await tester.tap(find.byKey(ValueKey('code_mode_edit_btn_${cp.id}')));
-        await tester.pumpAndSettle();
-        final editorInput =
-            find.byKey(ValueKey('code_mode_editor_input_${cp.id}'));
-        expect(editorInput, findsOneWidget);
-        await tester.enterText(
-          editorInput,
-          'extends CharacterBody2D\n@export var dash_speed: float = 820.0\n@export var dash_cooldown: float = 0.75\n',
-        );
-        await tester.tap(
-          find.byKey(ValueKey('code_mode_save_btn_${cp.id}')),
-        );
-        await tester.pumpAndSettle();
-
-        final editedVf =
-            provider.godotFileForResPath('res://scripts/player_dash.gd');
-        expect(editedVf?.content, contains('dash_cooldown: float = 0.75'));
-      },
-    );
-
-    testWidgets(
       'Step check footer toggles active step and Alt keyboard shortcuts navigate/toggle when no TextField is focused',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
@@ -1506,7 +1334,7 @@ func _physics_process(delta: float) -> void:
         await tester.tap(checkBtn0);
         await tester.pumpAndSettle();
 
-        // 2. Alt+ArrowDown advances to step 1; Alt+\ toggles Code File mode; Alt+Enter marks active step done
+        // 2. Alt+ArrowDown advances to step 1; Alt+Enter marks active step done
         await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
         await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowDown);
         await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowDown);
@@ -1515,22 +1343,6 @@ func _physics_process(delta: float) -> void:
         expect(
           find.byKey(ValueKey('step_check_toggle_btn_${cp.id}_1')),
           findsOneWidget,
-        );
-
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.backslash);
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.backslash);
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(ValueKey('code_file_workspace_${cp.id}')),
-          findsOneWidget,
-        );
-
-        await tester.sendKeyDownEvent(LogicalKeyboardKey.backslash);
-        await tester.sendKeyUpEvent(LogicalKeyboardKey.backslash);
-        await tester.pumpAndSettle();
-        expect(
-          find.byKey(ValueKey('code_file_workspace_${cp.id}')),
-          findsNothing,
         );
 
         await tester.sendKeyDownEvent(LogicalKeyboardKey.enter);
@@ -1620,6 +1432,335 @@ func _physics_process(delta: float) -> void:
         );
         await tester.pumpAndSettle();
         expect(find.byKey(ValueKey('rail_feat_${feat.id}')), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Single-Epic Godot progression (E01 -> E02 -> Complete) & Web Outliner GODOT active badge across 3 visible Epics',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        provider.setStage(WorkbenchStage.releaseWorkbench);
+
+        FeatureStateNode makeSimpleCp(String id, String stepId, String text) {
+          return FeatureStateNode(
+            id: id,
+            name: '01 · BUILD',
+            trigger: 'Verify $text in Godot scene.',
+            parameters: {'releaseVersion': 'v0.1'},
+            checklist: [
+              Subtask(
+                id: stepId,
+                text: text,
+                codeTargetFile: 'custom_snippet',
+                codeLanguage: 'res://scripts/game.gd',
+                verification: '$text works.',
+              ),
+            ],
+          );
+        }
+
+        final f1 = TierDocument(
+          id: 'feat_e1',
+          title: 'Player Jump',
+          tier: TierType.feature,
+          parentId: 'epic_1',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(
+          f1,
+          [makeSimpleCp('cp_e1', 'st_e1', 'Add Jump Velocity')],
+        );
+        final f2 = TierDocument(
+          id: 'feat_e2',
+          title: 'Enemy Patrol',
+          tier: TierType.feature,
+          parentId: 'epic_2',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(
+          f2,
+          [makeSimpleCp('cp_e2', 'st_e2', 'Add Patrol Raycast')],
+        );
+        final f3 = TierDocument(
+          id: 'feat_e3',
+          title: 'HUD Score',
+          tier: TierType.feature,
+          parentId: 'epic_3',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(
+          f3,
+          [makeSimpleCp('cp_e3', 'st_e3', 'Update Score Label')],
+        );
+
+        final e1 = TierDocument(
+          id: 'epic_1',
+          title: 'Core Movement',
+          tier: TierType.epic,
+          parentId: 'rel_3epics',
+          childrenIds: [f1.id],
+          sections: {'goal': 'Responsive player feel.'},
+        );
+        final e2 = TierDocument(
+          id: 'epic_2',
+          title: 'Enemy Encounter',
+          tier: TierType.epic,
+          parentId: 'rel_3epics',
+          childrenIds: [f2.id],
+          sections: {'goal': 'Fair threat pacing.'},
+        );
+        final e3 = TierDocument(
+          id: 'epic_3',
+          title: 'HUD Feedback',
+          tier: TierType.epic,
+          parentId: 'rel_3epics',
+          childrenIds: [f3.id],
+          sections: {'goal': 'Readable run state.'},
+        );
+        final rel = TierDocument(
+          id: 'rel_3epics',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_3epics',
+          childrenIds: [e1.id, e2.id, e3.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj = TierDocument(
+          id: 'proj_3epics',
+          title: 'Three Epic Demo',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {'engine': 'Godot 4 (GDScript)'},
+        );
+
+        for (final d in [proj, rel, e1, e2, e3, f1, f2, f3]) {
+          provider.documents[d.id] = d;
+        }
+        provider.switchProject(proj.id);
+        provider.selectFeature(f1.id, triggerAiSynthesis: false);
+
+        expect(provider.computeActiveGodotEpicSnapshot().activeEpicId, e1.id);
+        expect(provider.computeActiveGodotEpicSnapshot().epicPosition, 1);
+        expect(provider.computeActiveGodotEpicSnapshot().totalEpics, 3);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // All 3 Epics stay visible in Web Outliner; ONLY E01 carries the GODOT active badge
+        expect(find.byKey(ValueKey('rail_beat_${e1.id}')), findsOneWidget);
+        expect(find.byKey(ValueKey('rail_beat_${e2.id}')), findsOneWidget);
+        expect(find.byKey(ValueKey('rail_beat_${e3.id}')), findsOneWidget);
+        expect(
+          find.byKey(ValueKey('outliner_godot_active_epic_badge_${e1.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('outliner_godot_active_epic_badge_${e2.id}')),
+          findsNothing,
+        );
+
+        // Complete E01's feature -> Godot active Epic automatically advances to E02
+        final cp1Done = FeatureStateNode.getStatesForDocument(f1).first;
+        cp1Done.checklist.first.completed = true;
+        cp1Done.isPlaytestPassed = true;
+        provider.updateFeatureStates(f1.id, [cp1Done]);
+        await tester.pumpAndSettle();
+
+        expect(provider.computeActiveGodotEpicSnapshot().activeEpicId, e2.id);
+        expect(provider.computeActiveGodotEpicSnapshot().epicPosition, 2);
+        expect(
+          find.byKey(ValueKey('outliner_godot_active_epic_badge_${e1.id}')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(ValueKey('outliner_godot_active_epic_badge_${e2.id}')),
+          findsOneWidget,
+        );
+
+        // Complete E02 + E03 -> allEpicsCompleted = true, active badge clears
+        for (final feat in [f2, f3]) {
+          final cpDone = FeatureStateNode.getStatesForDocument(feat).first;
+          cpDone.checklist.first.completed = true;
+          cpDone.isPlaytestPassed = true;
+          provider.updateFeatureStates(feat.id, [cpDone]);
+        }
+        await tester.pumpAndSettle();
+
+        final finalSnap = provider.computeActiveGodotEpicSnapshot();
+        expect(finalSnap.allEpicsCompleted, isTrue);
+        expect(finalSnap.activeEpicId, isNull);
+        expect(
+          find.byKey(ValueKey('outliner_godot_active_epic_badge_${e3.id}')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'Connect Godot 4 Plugin dialog fetches, caches, copies, and rotates lyr_... Link Token',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+
+        final prevBaseUrl = GeminiAgentClient.proxyBaseUrlOverride;
+        final prevAuthCheck = GeminiAgentClient.isProxyAuthenticated;
+        final prevTokenProvider = GeminiAgentClient.authTokenProvider;
+        final prevHttpPost = GeminiAgentClient.testHttpPost;
+
+        String? lastCopied;
+        final postedPayloads = <Map<String, dynamic>>[];
+        int issueCount = 0;
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          if (call.method == 'Clipboard.setData') {
+            final args = call.arguments as Map<dynamic, dynamic>?;
+            lastCopied = args?['text']?.toString();
+          }
+          return null;
+        });
+
+        GeminiAgentClient.proxyBaseUrlOverride = 'https://proxy.example.test';
+        GeminiAgentClient.isProxyAuthenticated = () => true;
+        GeminiAgentClient.authTokenProvider = ({bool forceRefresh = false}) async =>
+            'firebase_id_tok';
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          final decoded = jsonDecode(body.toString()) as Map<String, dynamic>;
+          postedPayloads.add(decoded);
+          issueCount++;
+          final token =
+              'lyr_test_token_${issueCount.toString().padLeft(4, '0')}_abcdef123456';
+          return http.Response(
+            jsonEncode({'ok': true, 'linkToken': token}),
+            200,
+          );
+        };
+
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+              .setMockMethodCallHandler(SystemChannels.platform, null);
+          GeminiAgentClient.proxyBaseUrlOverride = prevBaseUrl;
+          GeminiAgentClient.isProxyAuthenticated = prevAuthCheck;
+          GeminiAgentClient.authTokenProvider = prevTokenProvider;
+          GeminiAgentClient.testHttpPost = prevHttpPost;
+        });
+
+        final setup = await seedDashWorkbench();
+        final provider = setup.provider;
+        final cp = setup.cp;
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ReleaseWorkbenchScreen(workbench: provider),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final chip = find.byKey(ValueKey('connect_godot_plugin_chip_${cp.id}'));
+        expect(chip, findsOneWidget);
+        await tester.tap(chip);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('connect_godot_plugin_dialog')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('connect_godot_active_epic_preview')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('download_godot_plugin_zip_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('godot_link_token_display')),
+          findsOneWidget,
+        );
+        expect(postedPayloads, hasLength(1));
+        expect(postedPayloads.first['rotate'], isFalse);
+
+        // Cache hit on second fetch without rotate
+        final cachedRes = await provider.fetchOrCreateGodotLinkToken();
+        expect(
+          cachedRes.token,
+          equals('lyr_test_token_0001_abcdef123456'),
+        );
+        expect(postedPayloads, hasLength(1));
+
+        // Copy button writes full token to clipboard
+        await tester.tap(find.byKey(const ValueKey('copy_godot_link_token_btn')));
+        await tester.pumpAndSettle();
+        expect(lastCopied, equals('lyr_test_token_0001_abcdef123456'));
+
+        // Rotate button issues new token with rotate: true
+        await tester.tap(
+          find.byKey(const ValueKey('rotate_godot_link_token_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(postedPayloads, hasLength(2));
+        expect(postedPayloads.last['rotate'], isTrue);
+        expect(
+          provider.cachedGodotLinkTokenForActiveProject,
+          equals('lyr_test_token_0002_abcdef123456'),
+        );
+      },
+    );
+
+    test(
+      'Native Godot 4 plugin addon files & web/layers_godot_plugin.zip exist and enforce single-Epic steps-only dock',
+      () {
+        final cfg = File('godot_plugin/addons/layers/plugin.cfg');
+        final pluginGd = File('godot_plugin/addons/layers/layers_plugin.gd');
+        final syncGd = File('godot_plugin/addons/layers/layers_sync_client.gd');
+        final dockGd = File('godot_plugin/addons/layers/layers_dock.gd');
+        final zipFile = File('web/layers_godot_plugin.zip');
+
+        expect(cfg.existsSync(), isTrue);
+        expect(pluginGd.existsSync(), isTrue);
+        expect(syncGd.existsSync(), isTrue);
+        expect(dockGd.existsSync(), isTrue);
+        expect(zipFile.existsSync(), isTrue);
+
+        final cfgText = cfg.readAsStringSync();
+        final syncText = syncGd.readAsStringSync();
+        final dockText = dockGd.readAsStringSync();
+
+        expect(cfgText, contains('script="layers_plugin.gd"'));
+        expect(syncText, contains('.gdignore'));
+        expect(syncText, contains('.gitignore'));
+        expect(syncText, contains('/godotLink/epic'));
+        expect(syncText, contains('/godotLink/update'));
+        expect(dockText, contains('play_current_scene()'));
+        expect(dockText, contains('OS.shell_open'));
+
+        final zipBytes = zipFile.readAsBytesSync();
+        expect(zipBytes.length, greaterThan(1000));
+        // Valid PK zip magic header ('P', 'K')
+        expect(zipBytes[0], equals(0x50));
+        expect(zipBytes[1], equals(0x4B));
       },
     );
   });

@@ -234,32 +234,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     ];
   }
 
-  String _resolveEffectiveResPathForStep({
-    required TierDocument feat,
-    required FeatureStateNode node,
-    required TaskHowToSubStep subStep,
-  }) {
-    final fromStep = widget.workbench.extractPrimaryScriptResPath(subStep.stepPath) ??
-        widget.workbench.extractPrimarySceneResPath(subStep.stepPath);
-    if (fromStep != null && fromStep.trim().isNotEmpty) {
-      return GodotVirtualFile.normalizeResPath(fromStep);
-    }
-    final fromPrimary = widget.workbench.extractPrimaryScriptResPath(
-          node.parameters['primarySharedScriptOrScene'] ??
-              feat.sections['primary_asset'],
-        ) ??
-        widget.workbench.extractPrimarySceneResPath(
-          node.parameters['primarySharedScriptOrScene'] ??
-              feat.sections['primary_asset'],
-        );
-    if (fromPrimary != null && fromPrimary.trim().isNotEmpty) {
-      return GodotVirtualFile.normalizeResPath(fromPrimary);
-    }
-    final derived = TaskHowToBlueprint.deriveConcreteAssetName(feat.title);
-    final snake = derived.snakeName.isNotEmpty ? derived.snakeName : 'feature';
-    return 'res://scripts/$snake.gd';
-  }
-
   Widget _buildInitialSetupCard({
     required TierDocument feat,
     required FeatureStateNode node,
@@ -328,14 +302,22 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               InkWell(
                 key: ValueKey('compact_shared_asset_badge_${node.id}'),
                 borderRadius: BorderRadius.circular(4),
-                onTap: () => _rebuild(() {
-                  _isCodeFileWorkspaceMode = true;
-                  _isShowingStarterTscnInCodeMode = false;
-                  _selectedCodeFileResPath =
-                      widget.workbench.extractPrimaryScriptResPath(
-                    feat.sections['primary_asset'],
-                  );
-                }),
+                onTap: () {
+                  final primaryAsset =
+                      (feat.sections['primary_asset'] ?? '').trim();
+                  final copyVal = primaryAsset.isNotEmpty
+                      ? primaryAsset
+                      : '${assetSpec.folderPath}${assetSpec.assetName}';
+                  Clipboard.setData(ClipboardData(text: copyVal));
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Copied $copyVal ✓'),
+                        duration: const Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
                 child: Text(
                   '${assetSpec.assetIcon} ${assetSpec.assetName}',
                   maxLines: 1,
@@ -509,97 +491,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     ),
                   ),
               ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInlineCodeSyncStrip({
-    required TierDocument feat,
-    required FeatureStateNode node,
-    required int stepIdx,
-    required String resPath,
-  }) {
-    final normPath = GodotVirtualFile.normalizeResPath(resPath);
-    final vf = widget.workbench.godotFileForResPath(normPath);
-    final hasSavedScript = vf != null && vf.content.trim().isNotEmpty;
-    final statusLabel = hasSavedScript
-        ? 'Script Reference · $normPath'
-        : 'Starter Script · $normPath';
-
-    return Container(
-      key: ValueKey('inline_code_sync_strip_${node.id}_$stepIdx'),
-      margin: const EdgeInsets.only(top: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0A111D),
-        borderRadius: BorderRadius.circular(7),
-        border: Border.all(color: const Color(0xFF1F2B3E)),
-      ),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 6,
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: hasSavedScript
-                      ? const Color(0xFF34D399)
-                      : const Color(0xFF64748B),
-                ),
-              ),
-              const SizedBox(width: 7),
-              Flexible(
-                child: Text(
-                  statusLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF94A3B8),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          InkWell(
-            key: ValueKey('inline_open_code_file_btn_${node.id}'),
-            borderRadius: BorderRadius.circular(5),
-            onTap: () {
-              _rebuild(() {
-                _isCodeFileWorkspaceMode = true;
-                _selectedCodeFileResPath = normPath;
-                _isShowingStarterTscnInCodeMode = false;
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 3.5,
-              ),
-              decoration: BoxDecoration(
-                color: const Color(0xFF131B2A),
-                borderRadius: BorderRadius.circular(5),
-                border: Border.all(color: const Color(0xFF26334D)),
-              ),
-              child: Text(
-                'Show Full .gd',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFFCBD5E1),
-                ),
-              ),
             ),
           ),
         ],
@@ -996,18 +887,10 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                 defaultTarget: activeTargetComp.displayLabel,
               ));
 
-    final effectiveResPath = _resolveEffectiveResPathForStep(
-      feat: feat,
-      node: node,
-      subStep: activeSubStep,
-    );
     final scriptResPath = widget.workbench.extractPrimaryScriptResPath(
       node.parameters['primarySharedScriptOrScene'] ??
           feat.sections['primary_asset'],
     );
-    final bool showInlineCloudSyncStrip =
-        (dockStage == GodotDockStage.code || dockStage == GodotDockStage.fix) &&
-            effectiveResPath.endsWith('.gd');
 
     final Widget initialSetupWidget = _buildInitialSetupCard(
       feat: feat,
@@ -1395,8 +1278,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                     parentClassLabel: assetSpec.parentClassLabel,
                     is2D: assetSpec.is2D,
                     scriptResPath: scriptResPath,
-                    effectiveResPath: effectiveResPath,
-                    showInlineCloudSyncStrip: showInlineCloudSyncStrip,
                     tuningItems: tuningItems,
                     edgeItems: edgeItems,
                     fontMicro: fontMicro,
@@ -1627,8 +1508,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required String parentClassLabel,
     required bool is2D,
     required String? scriptResPath,
-    required String effectiveResPath,
-    required bool showInlineCloudSyncStrip,
     required List<String> tuningItems,
     required List<String> edgeItems,
     required double fontMicro,
@@ -1718,8 +1597,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             parentClassLabel: parentClassLabel,
             is2D: is2D,
             scriptResPath: scriptResPath,
-            effectiveResPath: effectiveResPath,
-            showInlineCloudSyncStrip: showInlineCloudSyncStrip,
             tuningItems: tuningItems,
             edgeItems: edgeItems,
             fontMicro: fontMicro,
@@ -2094,8 +1971,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required String parentClassLabel,
     required bool is2D,
     required String? scriptResPath,
-    required String effectiveResPath,
-    required bool showInlineCloudSyncStrip,
     required List<String> tuningItems,
     required List<String> edgeItems,
     required double fontMicro,
@@ -2154,7 +2029,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
       );
     }
     if (stepCodeLines.isNotEmpty) {
-      final codeCard = _buildStepCodeLinesPane(
+      return _buildStepCodeLinesPane(
         stepCodeLines: stepCodeLines,
         stepPathBadgeText: stepPathBadgeText,
         windowCtx: windowCtx,
@@ -2164,19 +2039,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         fontBody: fontBody,
         weightRegular: weightRegular,
         textPrimary: textPrimary,
-      );
-      if (!showInlineCloudSyncStrip) return codeCard;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          codeCard,
-          _buildInlineCodeSyncStrip(
-            feat: feat,
-            node: node,
-            stepIdx: stepIdx,
-            resPath: effectiveResPath,
-          ),
-        ],
       );
     }
     return null;
