@@ -1,14 +1,24 @@
 @tool
 extends EditorPlugin
 
-const LayersDockScript = preload("res://addons/layers/layers_dock.gd")
+const DOCK_SCRIPT_PATH := "res://addons/layers/layers_dock.gd"
 
 var _dock: Control
 var _last_focus_sync_msec: int = 0
 
 
 func _enter_tree() -> void:
-	_dock = LayersDockScript.new()
+	var dock_script: Script = ResourceLoader.load(
+		DOCK_SCRIPT_PATH,
+		"Script",
+		ResourceLoader.CACHE_MODE_REPLACE
+	) as Script
+	if dock_script == null:
+		dock_script = load(DOCK_SCRIPT_PATH) as Script
+	if dock_script == null:
+		push_error("LAYERS: Failed to load %s" % DOCK_SCRIPT_PATH)
+		return
+	_dock = dock_script.new()
 	_dock.editor_interface = get_editor_interface()
 	_dock.undo_redo = get_undo_redo()
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _dock)

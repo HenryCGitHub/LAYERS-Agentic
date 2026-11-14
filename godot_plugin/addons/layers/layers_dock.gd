@@ -1,7 +1,7 @@
 @tool
 extends VBoxContainer
 
-const LayersSyncClientScript = preload("res://addons/layers/layers_sync_client.gd")
+const SYNC_CLIENT_SCRIPT_PATH := "res://addons/layers/layers_sync_client.gd"
 const DEFAULT_WEB_STUDIO_URL := "https://henrycgithub.github.io/LAYERS-Agentic/"
 
 var editor_interface: EditorInterface
@@ -16,6 +16,14 @@ var _fix_drawer_open: bool = false
 var _diagnosing_fix: bool = false
 var _fix_draft_text: String = ""
 var _show_token_editor: bool = false
+var _available_remote_version: String = ""
+var _updating_plugin: bool = false
+var _checking_plugin_update: bool = false
+
+# Slim Top Self-Update Banner
+var _update_banner: PanelContainer
+var _update_banner_lbl: Label
+var _update_now_btn: Button
 
 # Unlinked / Connect view nodes
 var _connect_panel: VBoxContainer
@@ -23,6 +31,8 @@ var _token_input: LineEdit
 var _connect_btn: Button
 var _cancel_token_btn: Button
 var _disconnect_btn: Button
+var _version_label: Label
+var _check_update_btn: Button
 
 # Connected single-Epic single-step workspace nodes
 var _workspace_panel: VBoxContainer
@@ -51,11 +61,22 @@ func _ready() -> void:
 	size_flags_vertical = Control.SIZE_EXPAND_FILL
 	add_theme_constant_override("separation", 6)
 
-	_sync = LayersSyncClientScript.new()
+	var sync_script: Script = ResourceLoader.load(
+		SYNC_CLIENT_SCRIPT_PATH,
+		"Script",
+		ResourceLoader.CACHE_MODE_REPLACE
+	) as Script
+	if sync_script == null:
+		sync_script = load(SYNC_CLIENT_SCRIPT_PATH) as Script
+	_sync = sync_script.new()
 	add_child(_sync)
 	_sync.epic_updated.connect(_on_epic_updated)
 	_sync.sync_failed.connect(_on_sync_failed)
 	_sync.busy_changed.connect(_on_busy_changed)
+	_sync.update_available.connect(_on_plugin_update_available)
+	_sync.update_check_finished.connect(_on_plugin_update_check_finished)
+	_sync.update_ready_to_reload.connect(_on_plugin_update_ready_to_reload)
+	_sync.update_failed.connect(_on_plugin_update_failed)
 
 	_build_ui()
 
@@ -69,6 +90,8 @@ func _ready() -> void:
 		_show_token_editor = true
 		_refresh_view()
 
+	_sync.check_for_plugin_update(true)
+
 
 func refresh_from_focus() -> void:
 	if _sync != null and _sync.has_link_token() and not _show_token_editor:
@@ -76,6 +99,30 @@ func refresh_from_focus() -> void:
 
 
 func _build_ui() -> void:
+	# --- Slim Top Self-Update Banner (hidden when up to date) ---
+	_update_banner = PanelContainer.new()
+	_update_banner.visible = false
+	_update_banner.add_theme_stylebox_override("panel", _make_box_style(Color(0.08, 0.19, 0.24, 0.96), Color(0.28, 0.78, 0.96, 0.80), 6, 8))
+	add_child(_update_banner)
+
+	var banner_hb := HBoxContainer.new()
+	banner_hb.add_theme_constant_override("separation", 6)
+	_update_banner.add_child(banner_hb)
+
+	_update_banner_lbl = Label.new()
+	_update_banner_lbl.text = "⬆ Plugin update available"
+	_update_banner_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_update_banner_lbl.clip_text = true
+	_update_banner_lbl.add_theme_font_size_override("font_size", 11)
+	_update_banner_lbl.modulate = Color(0.56, 0.92, 1.0)
+	banner_hb.add_child(_update_banner_lbl)
+
+	_update_now_btn = Button.new()
+	_update_now_btn.text = "Update Now"
+	_update_now_btn.modulate = Color(0.45, 0.95, 0.72)
+	_update_now_btn.pressed.connect(_on_update_now_pressed)
+	banner_hb.add_child(_update_now_btn)
+
 	# --- Connect / Link Token Panel ---
 	_connect_panel = VBoxContainer.new()
 	_connect_panel.add_theme_constant_override("separation", 8)
@@ -126,6 +173,25 @@ func _build_ui() -> void:
 	open_web_unlinked.pressed.connect(_on_open_web_pressed)
 	_connect_panel.add_child(open_web_unlinked)
 
+	_connect_panel.add_child(HSeparator.new())
+
+	var ver_row := HBoxContainer.new()
+	ver_row.add_theme_constant_override("separation", 6)
+	_connect_panel.add_child(ver_row)
+
+	_version_label = Label.new()
+	_version_label.text = "Plugin v%s" % _sync.get_local_plugin_version()
+	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_version_label.clip_text = true
+	_version_label.add_theme_font_size_override("font_size", 11)
+	_version_label.modulate = Color(0.68, 0.75, 0.85)
+	ver_row.add_child(_version_label)
+
+	_check_update_btn = Button.new()
+	_check_update_btn.text = "↻ Check for Plugin Update"
+	_check_update_btn.pressed.connect(_on_check_plugin_update_pressed)
+	ver_row.add_child(_check_update_btn)
+
 	# --- Connected V2.1 Single-Epic Single-Step Workspace ---
 	_workspace_panel = VBoxContainer.new()
 	_workspace_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -159,7 +225,7 @@ func _build_ui() -> void:
 
 	var settings_btn := Button.new()
 	settings_btn.text = "⚙"
-	settings_btn.tooltip_text = "Change or Disconnect Project Link Token"
+	settings_btn.tooltip_text = "Plugin Settings, Link Token & Check for Updates"
 	settings_btn.flat = true
 	settings_btn.pressed.connect(_on_settings_pressed)
 	top_bar.add_child(settings_btn)
@@ -249,12 +315,30 @@ func _build_ui() -> void:
 	add_child(_status_label)
 
 
+func _refresh_update_banner() -> void:
+	if _update_banner == null:
+		return
+	var has_update: bool = not _available_remote_version.is_empty()
+	_update_banner.visible = has_update or _updating_plugin
+	if _update_banner_lbl != null:
+		if _updating_plugin:
+			_update_banner_lbl.text = "⏳ Downloading & installing v%s..." % _available_remote_version
+		elif has_update:
+			_update_banner_lbl.text = "⬆ Plugin v%s available" % _available_remote_version
+	if _update_now_btn != null:
+		_update_now_btn.disabled = _updating_plugin
+		_update_now_btn.text = "⏳ Updating..." if _updating_plugin else "Update Now"
+
+
 func _refresh_view() -> void:
 	var linked: bool = _sync != null and _sync.has_link_token()
 	_connect_panel.visible = (not linked) or _show_token_editor
 	_workspace_panel.visible = linked and (not _show_token_editor)
 	_cancel_token_btn.visible = linked
 	_disconnect_btn.visible = linked
+	if _version_label != null and _sync != null:
+		_version_label.text = "Plugin v%s" % _sync.get_local_plugin_version()
+	_refresh_update_banner()
 
 	if _connect_panel.visible:
 		_token_input.text = _sync.get_link_token() if linked else ""
@@ -1868,3 +1952,114 @@ func _on_open_web_pressed() -> void:
 func _on_settings_pressed() -> void:
 	_show_token_editor = true
 	_refresh_view()
+
+
+func _on_check_plugin_update_pressed() -> void:
+	if _sync == null or _checking_plugin_update or _updating_plugin:
+		return
+	_checking_plugin_update = true
+	if _check_update_btn != null:
+		_check_update_btn.disabled = true
+		_check_update_btn.text = "Checking..."
+	_set_status("Checking GitHub for plugin updates...", false)
+	_sync.check_for_plugin_update(false)
+
+
+func _on_update_now_pressed() -> void:
+	if _sync == null or _updating_plugin:
+		return
+	_updating_plugin = true
+	_refresh_update_banner()
+	_set_status("Downloading LAYERS plugin v%s..." % _available_remote_version, false)
+	_sync.download_and_apply_plugin_update()
+
+
+func _on_plugin_update_available(_local_ver: String, remote_ver: String) -> void:
+	_available_remote_version = remote_ver
+	_refresh_update_banner()
+
+
+func _on_plugin_update_check_finished(up_to_date: bool, local_ver: String, remote_ver: String) -> void:
+	var was_manual: bool = _checking_plugin_update
+	_checking_plugin_update = false
+	if _check_update_btn != null:
+		_check_update_btn.disabled = false
+		_check_update_btn.text = "↻ Check for Plugin Update"
+	if _version_label != null:
+		_version_label.text = "Plugin v%s" % local_ver
+	if up_to_date:
+		_available_remote_version = ""
+		_refresh_update_banner()
+		if was_manual:
+			_set_status("Plugin v%s is up to date ✓" % local_ver, false)
+	else:
+		_available_remote_version = remote_ver
+		_refresh_update_banner()
+		if was_manual:
+			_set_status("⬆ Plugin v%s available — click Update Now above." % remote_ver, false)
+
+
+func _on_plugin_update_failed(message: String) -> void:
+	_checking_plugin_update = false
+	_updating_plugin = false
+	if _check_update_btn != null:
+		_check_update_btn.disabled = false
+		_check_update_btn.text = "↻ Check for Plugin Update"
+	_refresh_update_banner()
+	_set_status(message, true)
+
+
+func _on_plugin_update_ready_to_reload(new_ver: String, updated_gd_paths: PackedStringArray) -> void:
+	_updating_plugin = false
+	_available_remote_version = ""
+	if _version_label != null:
+		_version_label.text = "Plugin v%s" % new_ver
+	_refresh_update_banner()
+	_set_status("Updated to v%s — reloading LAYERS dock..." % new_ver, false)
+	_trigger_plugin_hot_reload(new_ver, updated_gd_paths)
+
+
+func _trigger_plugin_hot_reload(new_ver: String, updated_gd_paths: PackedStringArray) -> void:
+	if editor_interface == null or editor_interface.get_base_control() == null:
+		_set_status("Updated to v%s ✓ — toggle LAYERS plugin off/on to reload." % new_ver, false)
+		return
+
+	var base_ctrl: Control = editor_interface.get_base_control()
+	var plugin_key: String = "layers"
+	if not editor_interface.is_plugin_enabled("layers") and editor_interface.is_plugin_enabled("res://addons/layers/plugin.cfg"):
+		plugin_key = "res://addons/layers/plugin.cfg"
+
+	var reloader_script := GDScript.new()
+	reloader_script.source_code = """@tool
+extends Node
+
+var ei: EditorInterface
+var plugin_key: String = "layers"
+var gd_paths: PackedStringArray = PackedStringArray()
+
+
+func run_reload() -> void:
+	if ei == null or get_tree() == null:
+		queue_free()
+		return
+	ei.set_plugin_enabled(plugin_key, false)
+	await get_tree().process_frame
+	for p in gd_paths:
+		ResourceLoader.load(p, "Script", ResourceLoader.CACHE_MODE_REPLACE)
+	if ei.get_resource_filesystem() != null:
+		ei.get_resource_filesystem().scan()
+	await get_tree().process_frame
+	ei.set_plugin_enabled(plugin_key, true)
+	queue_free()
+"""
+	if reloader_script.reload() != OK:
+		_set_status("Updated to v%s ✓ — toggle LAYERS plugin off/on to reload." % new_ver, false)
+		return
+
+	var reloader := Node.new()
+	reloader.set_script(reloader_script)
+	reloader.set("ei", editor_interface)
+	reloader.set("plugin_key", plugin_key)
+	reloader.set("gd_paths", updated_gd_paths)
+	base_ctrl.add_child(reloader)
+	reloader.call_deferred("run_reload")

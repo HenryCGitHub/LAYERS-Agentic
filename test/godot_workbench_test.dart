@@ -1730,7 +1730,7 @@ func _physics_process(delta: float) -> void:
     );
 
     test(
-      'Native Godot 4 plugin addon V2.1 files, Cloud Functions diagnose_fix & web/layers_godot_plugin.zip enforce single-step dock with live checks & undoable actions',
+      'Native Godot 4 plugin addon V2.2 files, Cloud Functions diagnose_fix & web/layers_godot_plugin.zip enforce single-step dock, live checks, undoable actions & 1-click self-update',
       () {
         final cfg = File('godot_plugin/addons/layers/plugin.cfg');
         final pluginGd = File('godot_plugin/addons/layers/layers_plugin.gd');
@@ -1752,15 +1752,28 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
+        expect(cfgText, contains('version="2.2.0"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         expect(pluginText, contains('get_undo_redo()'));
         expect(pluginText, contains('get_editor_interface()'));
+        expect(pluginText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
+        expect(pluginText, isNot(contains('preload(')));
 
         expect(syncText, contains('.gdignore'));
         expect(syncText, contains('.gitignore'));
         expect(syncText, contains('/godotLink/epic'));
         expect(syncText, contains('/godotLink/update'));
         expect(syncText, contains('"diagnose_fix"'));
+        expect(syncText, contains('check_for_plugin_update'));
+        expect(syncText, contains('download_and_apply_plugin_update'));
+        expect(syncText, contains('ZIPReader'));
+        expect(
+          syncText,
+          contains(
+            'raw.githubusercontent.com/HenryCGitHub/LAYERS-Agentic/main/godot_plugin/addons/layers/plugin.cfg',
+          ),
+        );
+        expect(syncText, contains('layers_godot_plugin.zip'));
 
         expect(dockText, contains('get_edited_scene_root()'));
         expect(dockText, contains('inspect_object'));
@@ -1768,6 +1781,11 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('undo_redo'));
         expect(dockText, contains('Broken? Ask Agent to Fix'));
         expect(dockText, contains('OS.shell_open'));
+        expect(dockText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
+        expect(dockText, isNot(contains('preload(')));
+        expect(dockText, contains('Check for Plugin Update'));
+        expect(dockText, contains('Update Now'));
+        expect(dockText, contains('set_plugin_enabled'));
 
         expect(fnText, contains('decodeThreeAreaNotesJs'));
         expect(fnText, contains('"diagnose_fix"'));

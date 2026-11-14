@@ -4,18 +4,35 @@ extends Node
 signal epic_updated(payload: Dictionary)
 signal sync_failed(message: String)
 signal busy_changed(is_busy: bool)
+signal update_available(local_ver: String, remote_ver: String)
+signal update_check_finished(up_to_date: bool, local_ver: String, remote_ver: String)
+signal update_ready_to_reload(new_ver: String, updated_gd_paths: PackedStringArray)
+signal update_failed(message: String)
 
 const DEFAULT_SYNC_BASE_URL := "https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy"
 const CONFIG_DIR := "res://.layers"
 const LINK_CFG_PATH := "res://.layers/link.cfg"
 const CACHE_JSON_PATH := "res://.layers/epic_cache.json"
+const PLUGIN_CFG_PATH := "res://addons/layers/plugin.cfg"
+const UPDATE_TMP_ZIP_PATH := "res://.layers/plugin_update.zip"
+const REMOTE_PLUGIN_CFG_URL := "https://raw.githubusercontent.com/HenryCGitHub/LAYERS-Agentic/main/godot_plugin/addons/layers/plugin.cfg"
+const REMOTE_ZIP_URLS := [
+	"https://raw.githubusercontent.com/HenryCGitHub/LAYERS-Agentic/main/web/layers_godot_plugin.zip",
+	"https://henrycgithub.github.io/LAYERS-Agentic/layers_godot_plugin.zip",
+]
 
 var _http: HTTPRequest
+var _update_http: HTTPRequest
 var _link_token: String = ""
 var _sync_base_url: String = DEFAULT_SYNC_BASE_URL
 var _is_busy: bool = false
 var _pending_request: Dictionary = {}
 var _active_request_kind: String = ""
+var _update_busy: bool = false
+var _update_mode: String = ""
+var _update_silent: bool = true
+var _update_zip_attempt_idx: int = 0
+var _latest_known_remote_ver: String = ""
 
 
 func _ready() -> void:
@@ -23,6 +40,12 @@ func _ready() -> void:
 	_http.timeout = 45.0
 	add_child(_http)
 	_http.request_completed.connect(_on_request_completed)
+
+	_update_http = HTTPRequest.new()
+	_update_http.timeout = 30.0
+	add_child(_update_http)
+	_update_http.request_completed.connect(_on_update_http_completed)
+
 	load_config()
 
 
@@ -228,3 +251,204 @@ func _write_cache(payload: Dictionary) -> void:
 	var file := FileAccess.open(CACHE_JSON_PATH, FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify(payload))
+
+
+func get_local_plugin_version() -> String:
+	var cfg := ConfigFile.new()
+	if cfg.load(PLUGIN_CFG_PATH) == OK:
+		var ver := str(cfg.get_value("plugin", "version", "0.0.0")).strip_edges()
+		if not ver.is_empty():
+			return ver
+	return "0.0.0"
+
+
+func _parse_semver_parts(raw_ver: String) -> PackedInt32Array:
+	var clean := raw_ver.strip_edges().trim_prefix("v").trim_prefix("V")
+	var core := clean.split("-", false, 1)[0].split("+", false, 1)[0]
+	var segs := core.split(".", false)
+	var out := PackedInt32Array()
+	for s in segs:
+		var t := s.strip_edges()
+		out.append(t.to_int() if t.is_valid_int() else 0)
+	return out
+
+
+func _is_newer_version(local_ver: String, remote_ver: String) -> bool:
+	var loc := _parse_semver_parts(local_ver)
+	var rem := _parse_semver_parts(remote_ver)
+	if rem.is_empty():
+		return false
+	var max_len := maxi(loc.size(), rem.size())
+	for i in range(max_len):
+		var l_val := loc[i] if i < loc.size() else 0
+		var r_val := rem[i] if i < rem.size() else 0
+		if r_val > l_val:
+			return true
+		if r_val < l_val:
+			return false
+	return false
+
+
+func check_for_plugin_update(silent: bool = true) -> void:
+	if _update_http == null or _update_busy:
+		return
+	_update_busy = true
+	_update_mode = "check"
+	_update_silent = silent
+	var url := "%s?t=%d" % [REMOTE_PLUGIN_CFG_URL, int(Time.get_unix_time_from_system() * 1000.0)]
+	var headers := PackedStringArray([
+		"Cache-Control: no-cache",
+		"Pragma: no-cache",
+	])
+	var err := _update_http.request(url, headers, HTTPClient.METHOD_GET)
+	if err != OK:
+		_update_busy = false
+		_update_mode = ""
+		if not _update_silent:
+			update_failed.emit("Could not check GitHub for plugin updates (%s)." % error_string(err))
+
+
+func download_and_apply_plugin_update() -> void:
+	if _update_http == null or _update_busy:
+		return
+	_update_busy = true
+	_update_mode = "download"
+	_update_silent = false
+	_update_zip_attempt_idx = 0
+	_start_zip_download_attempt(0)
+
+
+func _start_zip_download_attempt(idx: int) -> void:
+	if idx < 0 or idx >= REMOTE_ZIP_URLS.size():
+		_update_busy = false
+		_update_mode = ""
+		update_failed.emit("Failed to download plugin update archive.")
+		return
+	var base_url := REMOTE_ZIP_URLS[idx]
+	var url := "%s?t=%d" % [base_url, int(Time.get_unix_time_from_system() * 1000.0)]
+	var headers := PackedStringArray([
+		"Cache-Control: no-cache",
+		"Pragma: no-cache",
+	])
+	var err := _update_http.request(url, headers, HTTPClient.METHOD_GET)
+	if err != OK:
+		if idx + 1 < REMOTE_ZIP_URLS.size():
+			_update_zip_attempt_idx = idx + 1
+			_start_zip_download_attempt(_update_zip_attempt_idx)
+		else:
+			_update_busy = false
+			_update_mode = ""
+			update_failed.emit("Failed to download plugin update archive (%s)." % error_string(err))
+
+
+func _on_update_http_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var mode := _update_mode
+	if mode == "check":
+		_update_busy = false
+		_update_mode = ""
+		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300:
+			if not _update_silent:
+				update_failed.emit("Could not check GitHub for plugin updates.")
+			return
+		var cfg := ConfigFile.new()
+		var text := body.get_string_from_utf8()
+		if cfg.parse(text) != OK:
+			if not _update_silent:
+				update_failed.emit("Could not check GitHub for plugin updates.")
+			return
+		var remote_ver := str(cfg.get_value("plugin", "version", "")).strip_edges()
+		var local_ver := get_local_plugin_version()
+		if remote_ver.is_empty():
+			if not _update_silent:
+				update_failed.emit("Could not check GitHub for plugin updates.")
+			return
+		_latest_known_remote_ver = remote_ver
+		if _is_newer_version(local_ver, remote_ver):
+			update_available.emit(local_ver, remote_ver)
+			update_check_finished.emit(false, local_ver, remote_ver)
+		else:
+			update_check_finished.emit(true, local_ver, remote_ver)
+		return
+
+	if mode == "download":
+		if result != HTTPRequest.RESULT_SUCCESS or response_code < 200 or response_code >= 300 or body.size() < 200:
+			if _update_zip_attempt_idx + 1 < REMOTE_ZIP_URLS.size():
+				_update_zip_attempt_idx += 1
+				_start_zip_download_attempt(_update_zip_attempt_idx)
+			else:
+				_update_busy = false
+				_update_mode = ""
+				update_failed.emit("Failed to download plugin update archive.")
+			return
+		_apply_downloaded_zip_bytes(body)
+
+
+func _apply_downloaded_zip_bytes(zip_bytes: PackedByteArray) -> void:
+	_ensure_layers_dir()
+	var tmp_file := FileAccess.open(UPDATE_TMP_ZIP_PATH, FileAccess.WRITE)
+	if tmp_file == null:
+		_update_busy = false
+		_update_mode = ""
+		update_failed.emit("Could not write temporary plugin update archive.")
+		return
+	tmp_file.store_buffer(zip_bytes)
+	tmp_file.close()
+
+	var tmp_abs := ProjectSettings.globalize_path(UPDATE_TMP_ZIP_PATH)
+	var reader := ZIPReader.new()
+	if reader.open(tmp_abs) != OK:
+		DirAccess.remove_absolute(tmp_abs)
+		_update_busy = false
+		_update_mode = ""
+		update_failed.emit("Downloaded plugin archive is invalid.")
+		return
+
+	var files: PackedStringArray = reader.get_files()
+	var required_entries := PackedStringArray([
+		"addons/layers/plugin.cfg",
+		"addons/layers/layers_plugin.gd",
+		"addons/layers/layers_dock.gd",
+		"addons/layers/layers_sync_client.gd",
+	])
+	for req in required_entries:
+		if not files.has(req) or reader.read_file(req).size() <= 0:
+			reader.close()
+			DirAccess.remove_absolute(tmp_abs)
+			_update_busy = false
+			_update_mode = ""
+			update_failed.emit("Plugin archive missing required file: %s" % req)
+			return
+
+	var updated_gd_paths := PackedStringArray()
+	for entry in files:
+		if not entry.begins_with("addons/layers/"):
+			continue
+		if entry.ends_with("/"):
+			continue
+		if ".." in entry:
+			continue
+		var data := reader.read_file(entry)
+		var dest_res := "res://" + entry
+		var dest_dir_abs := ProjectSettings.globalize_path(dest_res.get_base_dir())
+		if not DirAccess.dir_exists_absolute(dest_dir_abs):
+			DirAccess.make_dir_recursive_absolute(dest_dir_abs)
+		var out_f := FileAccess.open(dest_res, FileAccess.WRITE)
+		if out_f == null:
+			reader.close()
+			DirAccess.remove_absolute(tmp_abs)
+			_update_busy = false
+			_update_mode = ""
+			update_failed.emit("Failed to write %s during update." % dest_res)
+			return
+		out_f.store_buffer(data)
+		out_f.close()
+		if dest_res.ends_with(".gd"):
+			updated_gd_paths.append(dest_res)
+
+	reader.close()
+	DirAccess.remove_absolute(tmp_abs)
+
+	_update_busy = false
+	_update_mode = ""
+	var new_ver := get_local_plugin_version()
+	update_ready_to_reload.emit(new_ver, updated_gd_paths)
