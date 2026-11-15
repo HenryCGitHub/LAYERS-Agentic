@@ -13,7 +13,7 @@ class _SyncSpy extends Node:
 		return "lyr_spy_1234567890123456"
 
 	func get_local_plugin_version() -> String:
-		return "3.0.8"
+		return "3.0.9"
 
 	func fetch_active_epic() -> void:
 		fetched_count += 1
@@ -468,12 +468,30 @@ func _run_smoke_suite() -> bool:
 		_fail("Expected Tuning Variables rendered inline in Godot Dock: %s" % all_labels_joined)
 		return false
 
-	# Resolve button exists for open [FIX] issue
+	# Resolve button exists for open [FIX] issue & 1:1 section order / collapsible composer on feat_probe
 	var resolve_btns: Array[Button] = []
 	_collect_buttons_by_text(body_container, "Resolve", resolve_btns)
 	if resolve_btns.is_empty():
 		dock.free()
 		_fail("Expected 'Resolve' button for open [FIX] issue.")
+		return false
+
+	var idx_goal_hdr: int = all_labels_joined.find("Goal")
+	var idx_scope_hdr: int = all_labels_joined.find("In Scope")
+	var idx_tuning_hdr: int = all_labels_joined.find("Tuning Variables")
+	var idx_guards_hdr: int = all_labels_joined.find("Playtest Guards (1/2)")
+	var idx_issues_hdr: int = all_labels_joined.find("Open Playtest Issues (1)")
+	if idx_goal_hdr == -1 or idx_scope_hdr == -1 or idx_tuning_hdr == -1 or idx_guards_hdr == -1 or idx_issues_hdr == -1:
+		dock.free()
+		_fail("Missing expected 1:1 card headers in Godot Dock: %s" % all_labels_joined)
+		return false
+	if not (idx_goal_hdr < idx_scope_hdr and idx_scope_hdr < idx_tuning_hdr and idx_tuning_hdr < idx_guards_hdr and idx_guards_hdr < idx_issues_hdr):
+		dock.free()
+		_fail("Unexpected section order in Godot Dock: %s" % all_labels_joined)
+		return false
+	if dock.get("_fix_input") != null:
+		dock.free()
+		_fail("Expected _fix_input composer to stay collapsed even when openIssues is non-empty.")
 		return false
 
 	# Optimistic local guard toggle, issue log, issue resolve, 1-click pass & reopen gate
@@ -510,6 +528,12 @@ func _run_smoke_suite() -> bool:
 		sync_probe.free()
 		dock.free()
 		_fail("_on_primary_cta_pressed did not mark isPlaytestPassed=true.")
+		return false
+	dock.call("_render_active_feature_workspace", feat_probe)
+	if not bool((footer_box as Control).visible) or not cta_btn.disabled or cta_btn.text != "✓ Playtest Passed":
+		sync_probe.free()
+		dock.free()
+		_fail("Expected visible disabled '✓ Playtest Passed' footer button on passed feature, got visible=%s disabled=%s text=%s" % [str((footer_box as Control).visible), str(cta_btn.disabled), cta_btn.text])
 		return false
 	var issues_after_pass: Array = feat_probe.get("openIssues", [])
 	if not issues_after_pass.is_empty():
@@ -665,12 +689,20 @@ func _run_smoke_suite() -> bool:
 			"id": "ep_shell",
 			"code": "E03",
 			"title": "Claw & Shell Parry",
+			"goal": "Master shell parry timing",
 			"features": [v03_feat],
 		},
 	}
 	dock.set("_selected_feature_id", "")
 	dock.set("_payload", v03_payload)
 	dock.call("_refresh_view")
+	var epic_lbl: Label = dock.get("_epic_label") as Label
+	if epic_lbl == null or epic_lbl.tooltip_text.find("Goal: Master shell parry timing") == -1 or epic_lbl.mouse_filter != Control.MOUSE_FILTER_PASS:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected _epic_label tooltip with Epic Goal and MOUSE_FILTER_PASS, got tip='%s' filter=%s" % [epic_lbl.tooltip_text if epic_lbl != null else "<null>", str(epic_lbl.mouse_filter if epic_lbl != null else -1)])
+		return false
 	var meta_lbl: Label = dock.get("_meta_label") as Label
 	var actual_meta: String = meta_lbl.text if meta_lbl != null else "<null>"
 	if actual_meta != "v0.3 · E03 (1/2 active) · 0/1 Passed":
@@ -707,9 +739,14 @@ func _run_smoke_suite() -> bool:
 		{},
 		{},
 		[],
-		{"releaseVersion": "v0.3"}
+		{
+			"releaseVersion": "v0.3",
+			"epicCode": "E03",
+			"epicTitle": "Claw & Shell Parry",
+			"epicGoal": "Master shell parry timing",
+		}
 	)
-	if v03_md.find("- Status: Queued") == -1 or v03_md.find("- In Scope (v0.3):") == -1 or v03_md.find("Knockback slide impulse") != -1:
+	if v03_md.find("- Status: Queued") == -1 or v03_md.find("- In Scope (v0.3):") == -1 or v03_md.find("- Epic Goal: Master shell parry timing") == -1 or v03_md.find("Knockback slide impulse") != -1:
 		sync_v03.free()
 		dock.set("_sync", null)
 		dock.free()
@@ -740,6 +777,7 @@ func _run_smoke_suite() -> bool:
 		dock.free()
 		_fail("Expected _fix_input when _issue_composer_expanded is true.")
 		return false
+	dock.set("_issue_composer_expanded", false)
 
 	# Verify clicking Sync triggers both fetch_active_epic and silent plugin update check
 	var spy: _SyncSpy = _SyncSpy.new()

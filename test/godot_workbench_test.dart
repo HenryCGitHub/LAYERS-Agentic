@@ -1084,7 +1084,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.8"'));
+        expect(cfgText, contains('version="3.0.9"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1151,11 +1151,13 @@ void main() {
         expect(dockText, contains('Playtest Guards (%d/%d)'));
         expect(dockText, contains('Playtest Scene (F6)'));
         expect(dockText, contains('Stop Playtest (F8)'));
-        expect(dockText, contains('Playtest Console & Issues'));
+        expect(dockText, contains('Open Playtest Issues (%d)'));
+        expect(dockText, contains('Log Playtest Issue'));
         expect(dockText, contains('+ Log Playtest Issue'));
         expect(dockText, contains('Resolve ✓'));
         expect(dockText, contains('Playtest Passed — Next Feature'));
-        expect(dockText, contains('_footer_box.visible = not gate_passed'));
+        expect(dockText, contains('✓ Playtest Passed'));
+        expect(dockText, contains('_footer_box.visible = true'));
         expect(dockText, contains('Open Scene'));
         expect(dockText, contains('Open Scene (%d)'));
         expect(dockText, contains('Open Script'));
@@ -2633,6 +2635,50 @@ const parsedWithExclusions = parseStructuredScopeFieldsJs(
 assert.deepStrictEqual(parsedWithExclusions.inScope, ["Shield spark VFX"]);
 assert.strictEqual(parsedWithExclusions.doneWhen, "Press Space → shield sparks");
 
+// Round 33: sections.versionTag priority & active-release feature scoping parity
+const scopedDocs = new Map([
+  ["p_scope", { id: "p_scope", tier: "PROJECT", title: "Scoped Game", childrenIds: ["r_01", "r_02"], sections: { active_release_id: "r_01" } }],
+  ["r_01", { id: "r_01", tier: "RELEASE", parentId: "p_scope", title: "Launch Kickoff", childrenIds: ["e_01"], sections: { versionTag: "v0.1" } }],
+  ["r_02", { id: "r_02", tier: "RELEASE", parentId: "p_scope", title: "Polish Pass", childrenIds: ["e_01"], sections: { versionTag: "v0.2" } }],
+  ["e_01", {
+    id: "e_01",
+    tier: "EPIC",
+    parentId: "r_01",
+    title: "Parry Loop",
+    childrenIds: ["f_v01", "f_v02"],
+    sections: { scope: "Goal: Master parry timing\n\nIn Scope:\n• Parry sparks" }
+  }],
+  ["f_v01", {
+    id: "f_v01",
+    tier: "FEATURE",
+    parentId: "e_01",
+    title: "Base Parry",
+    sections: {
+      goal: "Deflect incoming hits",
+      states: JSON.stringify([{ id: "cp_1", parameters: { releaseVersion: "v0.1", playtestPassed: "false" } }])
+    }
+  }],
+  ["f_v02", {
+    id: "f_v02",
+    tier: "FEATURE",
+    parentId: "e_01",
+    title: "Riposte Finisher",
+    sections: {
+      goal: "Counterattack staggered foes",
+      states: JSON.stringify([{ id: "cp_2", parameters: { releaseVersion: "v0.2", playtestPassed: "false" } }])
+    }
+  }]
+]);
+const v01ScopedPayload = computeActiveEpicPayload({ docsById: scopedDocs, projectId: "p_scope", webStudioUrl: "https://example.com" });
+assert.strictEqual(v01ScopedPayload.releaseVersion, "v0.1");
+assert.strictEqual(v01ScopedPayload.activeEpic.goal, "Master parry timing");
+assert.deepStrictEqual(v01ScopedPayload.activeEpic.features.map((f) => f.id), ["f_v01"]);
+
+scopedDocs.get("p_scope").sections.active_release_id = "r_02";
+const v02ScopedPayload = computeActiveEpicPayload({ docsById: scopedDocs, projectId: "p_scope", webStudioUrl: "https://example.com" });
+assert.strictEqual(v02ScopedPayload.releaseVersion, "v0.2");
+assert.deepStrictEqual(v02ScopedPayload.activeEpic.features.map((f) => f.id), ["f_v02"]);
+
 process.stdout.write("JS_SCOPE_PARSE_OK\n");
 ''';
         final result = Process.runSync('node', ['-e', script]);
@@ -3633,6 +3679,157 @@ process.stdout.write("JS_SCOPE_PARSE_OK\n");
         expect(siblingIdx, lessThan(guardsIdx));
         expect(guardsIdx, lessThan(issuesIdx));
         expect(issuesIdx, lessThan(gateIdx));
+      },
+    );
+
+    testWidgets(
+      'Round 33 v3.0.9: releaseVersionTag parity, Epic Goal in Copy Spec & Connect Godot Modal',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 960);
+        tester.view.devicePixelRatio = 1.0;
+
+        final prevBaseUrl = GeminiAgentClient.proxyBaseUrlOverride;
+        final prevAuthCheck = GeminiAgentClient.isProxyAuthenticated;
+        final prevTokenProvider = GeminiAgentClient.authTokenProvider;
+        final prevHttpPost = GeminiAgentClient.testHttpPost;
+
+        GeminiAgentClient.proxyBaseUrlOverride = 'https://proxy.example.test';
+        GeminiAgentClient.isProxyAuthenticated = () => true;
+        GeminiAgentClient.authTokenProvider =
+            ({bool forceRefresh = false}) async => 'firebase_id_tok';
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          return http.Response(
+            jsonEncode({
+              'ok': true,
+              'linkToken': 'lyr_round33_token_0001_abcdef123456',
+            }),
+            200,
+          );
+        };
+
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+          GeminiAgentClient.proxyBaseUrlOverride = prevBaseUrl;
+          GeminiAgentClient.isProxyAuthenticated = prevAuthCheck;
+          GeminiAgentClient.authTokenProvider = prevTokenProvider;
+          GeminiAgentClient.testHttpPost = prevHttpPost;
+        });
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final cp = FeatureStateNode(
+          id: 'cp_r33_parry',
+          name: '03 · VERTICAL SLICE',
+          trigger: 'Playtest: Press F -> shield sparks',
+          coveredScope: ['Parry timing window'],
+          parameters: {'releaseVersion': 'v0.3'},
+        );
+        final feat = TierDocument(
+          id: 'feat_r33_parry',
+          title: 'Shield Parry',
+          tier: TierType.feature,
+          parentId: 'epic_r33',
+          phase: 'v0.3',
+          sections: {'goal': 'Deflect strikes cleanly'},
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+
+        final rel01 = TierDocument(
+          id: 'proj_r33_rel_v0_1',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_r33',
+          phase: 'v0.1',
+          childrenIds: ['epic_r33_01'],
+          sections: {'versionTag': 'v0.1'},
+        );
+        final epic01 = TierDocument(
+          id: 'epic_r33_01',
+          title: 'Base Loop',
+          tier: TierType.epic,
+          parentId: rel01.id,
+          phase: 'v0.1',
+        );
+        final rel02 = TierDocument(
+          id: 'proj_r33_rel_v0_2',
+          title: 'v0.2 Core',
+          tier: TierType.release,
+          parentId: 'proj_r33',
+          phase: 'v0.2',
+          childrenIds: ['epic_r33_02'],
+          sections: {'versionTag': 'v0.2'},
+        );
+        final epic02 = TierDocument(
+          id: 'epic_r33_02',
+          title: 'Defense Pass',
+          tier: TierType.epic,
+          parentId: rel02.id,
+          phase: 'v0.2',
+        );
+        final epic = TierDocument(
+          id: 'epic_r33',
+          title: 'Parry Core',
+          tier: TierType.epic,
+          parentId: 'proj_r33_rel_v0_3',
+          phase: 'v0.3',
+          childrenIds: [feat.id],
+          sections: {
+            'goal': 'Goal: Master parry timing\n\nIn Scope:\n• Sparks',
+          },
+        );
+        final rel = TierDocument(
+          id: 'proj_r33_rel_v0_3',
+          title: 'Custom Slice',
+          tier: TierType.release,
+          parentId: 'proj_r33',
+          phase: 'v0.3',
+          childrenIds: [epic.id],
+          sections: {'versionTag': '0.3'},
+        );
+        final proj = TierDocument(
+          id: 'proj_r33',
+          title: 'Parry Arena',
+          tier: TierType.project,
+          childrenIds: [rel01.id, rel02.id, rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+        for (final d in [proj, rel01, epic01, rel02, epic02, rel, epic, feat]) {
+          provider.documents[d.id] = d;
+        }
+        expect(rel.releaseVersion, equals('v0.3'));
+        expect(provider.releaseVersionTagFor(rel), equals('v0.3'));
+        provider.switchProject(proj.id);
+        provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+        expect(provider.activeReleaseVersionTag, equals('v0.3'));
+
+        final prompt = provider.buildActiveFeatureCodingAgentPrompt(feat.id);
+        expect(prompt, contains('- **Epic Goal**: Master parry timing'));
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ReleaseWorkbenchScreen(workbench: provider),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final chip = find.byKey(ValueKey('connect_godot_plugin_chip_${cp.id}'));
+        expect(chip, findsOneWidget);
+        await tester.tap(chip);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('GODOT DOCK v3.0.9 · SPEC, PLAYTEST & 2-WAY SYNC'),
+          findsOneWidget,
+        );
+        expect(find.text('WHY: Master parry timing'), findsOneWidget);
       },
     );
   });

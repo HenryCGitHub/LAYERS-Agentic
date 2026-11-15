@@ -392,9 +392,11 @@ class TierDocument {
 
   /// Semantic version for Release documents (e.g. "v1.2.0" or "v0.1").
   String get releaseVersion {
-    final v = sections['version']?.trim();
+    final tag = sections['versionTag']?.trim();
+    final ver = sections['version']?.trim();
+    final v = (tag != null && tag.isNotEmpty) ? tag : ver;
     if (v != null && v.isNotEmpty) {
-      return v.startsWith('v') ? v : 'v$v';
+      return v.toLowerCase().startsWith('v') ? 'v${v.substring(1)}' : 'v$v';
     }
     final match = _semverRegex.firstMatch(title);
     if (match != null) {

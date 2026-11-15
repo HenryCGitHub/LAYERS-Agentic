@@ -1236,9 +1236,10 @@ func format_feature_context_markdown(
 	var rel_ver: String = str(project_ctx.get("releaseVersion", feat.get("releaseVersion", ""))).strip_edges()
 	var epic_code: String = str(project_ctx.get("epicCode", "")).strip_edges()
 	var epic_title: String = str(project_ctx.get("epicTitle", "")).strip_edges()
+	var epic_goal: String = str(project_ctx.get("epicGoal", "")).strip_edges()
 	var pillars: PackedStringArray = dedupe_scope_items(project_ctx.get("designPillars", []), 6)
 	var tradeoffs: PackedStringArray = dedupe_scope_items(project_ctx.get("tradeOffs", []), 6)
-	if not proj_title.is_empty() or not epic_title.is_empty() or not pillars.is_empty() or not tradeoffs.is_empty():
+	if not proj_title.is_empty() or not epic_title.is_empty() or not epic_goal.is_empty() or not pillars.is_empty() or not tradeoffs.is_empty():
 		out.append("")
 		out.append("### Project & Epic Context")
 		if not proj_title.is_empty():
@@ -1246,6 +1247,8 @@ func format_feature_context_markdown(
 		if not epic_title.is_empty():
 			var epic_prefix := ("%s · " % epic_code) if not epic_code.is_empty() else ""
 			out.append("- Active Epic: %s%s" % [epic_prefix, epic_title])
+		if not epic_goal.is_empty():
+			out.append("- Epic Goal: %s" % epic_goal)
 		if not pillars.is_empty():
 			out.append("- Design Pillars: %s" % " · ".join(pillars))
 		if not tradeoffs.is_empty():

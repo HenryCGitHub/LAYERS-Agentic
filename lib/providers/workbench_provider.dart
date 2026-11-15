@@ -638,8 +638,14 @@ class WorkbenchProvider extends ChangeNotifier {
 
   /// Extracts or resolves the canonical version tag (`v0.1`, `v0.2`, `v1.0`) for a Release document.
   String releaseVersionTagFor(TierDocument relDoc) {
-    final explicitTag = relDoc.sections['versionTag']?.trim();
-    if (explicitTag != null && explicitTag.isNotEmpty) return explicitTag;
+    final tag = relDoc.sections['versionTag']?.trim();
+    final ver = relDoc.sections['version']?.trim();
+    final explicitTag = (tag != null && tag.isNotEmpty) ? tag : ver;
+    if (explicitTag != null && explicitTag.isNotEmpty) {
+      return explicitTag.toLowerCase().startsWith('v')
+          ? 'v${explicitTag.substring(1)}'
+          : 'v$explicitTag';
+    }
     return ReleasePlannerAgent.extractReleaseVersionTag(relDoc.title);
   }
 

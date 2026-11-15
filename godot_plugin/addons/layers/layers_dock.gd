@@ -396,7 +396,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.8")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.9")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -432,6 +432,7 @@ func _build_ui() -> void:
 	_epic_label = Label.new()
 	_epic_label.text = "Connecting..."
 	_epic_label.clip_text = true
+	_epic_label.mouse_filter = Control.MOUSE_FILTER_PASS
 	if bold_font != null:
 		_epic_label.add_theme_font_override("font", bold_font)
 	header_vb.add_child(_epic_label)
@@ -574,6 +575,7 @@ func _refresh_view() -> void:
 	if _payload.is_empty():
 		_meta_label.text = "LAYERS"
 		_epic_label.text = "Loading active Epic..."
+		_epic_label.tooltip_text = ""
 		_feature_picker.visible = false
 		_complete_card.visible = false
 		_footer_box.visible = false
@@ -594,6 +596,7 @@ func _refresh_view() -> void:
 
 	if all_done:
 		_epic_label.text = str(_payload.get("releaseTitle", ver))
+		_epic_label.tooltip_text = ""
 		_feature_picker.visible = false
 		_complete_card.visible = true
 		_footer_box.visible = false
@@ -603,13 +606,17 @@ func _refresh_view() -> void:
 	_complete_card.visible = false
 	if typeof(epic_raw) != TYPE_DICTIONARY or (epic_raw as Dictionary).is_empty():
 		_epic_label.text = "No active Epic yet — plan in Web Studio."
+		_epic_label.tooltip_text = ""
 		_feature_picker.visible = false
 		_footer_box.visible = false
 		_clear_body()
 		return
 
 	var epic: Dictionary = epic_raw as Dictionary
-	_epic_label.text = str(epic.get("title", "Epic"))
+	var epic_title_txt: String = str(epic.get("title", "Epic"))
+	var epic_goal_txt: String = str(epic.get("goal", "")).strip_edges()
+	_epic_label.text = epic_title_txt
+	_epic_label.tooltip_text = ("%s\nGoal: %s" % [epic_title_txt, epic_goal_txt]) if not epic_goal_txt.is_empty() else epic_title_txt
 
 	var features: Array = epic.get("features", [])
 	_feature_picker.clear()
@@ -777,11 +784,33 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	}
 	var primary_scene: String = str(eval_info.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
 
+	var scenes_to_open := PackedStringArray()
+	if not primary_scene.is_empty() and primary_scene.ends_with(".tscn") and FileAccess.file_exists(primary_scene):
+		scenes_to_open.append(primary_scene)
+	if not arena_scene.is_empty() and arena_scene.ends_with(".tscn") and FileAccess.file_exists(arena_scene) and not (arena_scene in scenes_to_open):
+		scenes_to_open.append(arena_scene)
+
+	var scripts_to_open := PackedStringArray()
+	var raw_script_paths: Variant = eval_info.get("script_paths", feat.get("scriptPaths", []))
+	if typeof(raw_script_paths) == TYPE_ARRAY or typeof(raw_script_paths) == TYPE_PACKED_STRING_ARRAY:
+		for sp_raw in raw_script_paths:
+			var sp_cand := str(sp_raw).strip_edges()
+			if sp_cand.begins_with("res://") and sp_cand.ends_with(".gd") and FileAccess.file_exists(sp_cand) and not (sp_cand in scripts_to_open):
+				scripts_to_open.append(sp_cand)
+
+	var known_jump_paths := PackedStringArray()
+	for ks in scenes_to_open:
+		if not (ks in known_jump_paths):
+			known_jump_paths.append(ks)
+	for kg in scripts_to_open:
+		if not (kg in known_jump_paths):
+			known_jump_paths.append(kg)
+
 	var bold_font: Font = _editor_font("bold")
 	var mono_font: Font = _editor_font("source")
 
 	# -----------------------------------------------------------------------
-	# 1. Feature Spec & Playtest Card
+	# 1. Feature Spec & Playtest Card (1:1 order with Web Studio & Copy Context)
 	# -----------------------------------------------------------------------
 	var brief_card := _create_native_card()
 	var brief_vb: VBoxContainer = brief_card["vb"]
@@ -829,6 +858,13 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		hdr_row.add_child(reopen_btn)
 
 	if not feat_goal.is_empty() and feat_goal != feat_title:
+		var goal_hdr := Label.new()
+		goal_hdr.text = "Goal"
+		goal_hdr.add_theme_color_override("font_color", _editor_color("font_color", Color(0.86, 0.89, 0.94)))
+		if bold_font != null:
+			goal_hdr.add_theme_font_override("font", bold_font)
+		brief_vb.add_child(goal_hdr)
+
 		var goal_lbl := Label.new()
 		goal_lbl.text = feat_goal
 		goal_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -920,6 +956,50 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 			cb.toggled.connect(_on_guard_toggled.bind(feat, g_idx, raw_guard_txt))
 			guards_box.add_child(cb)
 
+	if not open_issues.is_empty():
+		var issues_hdr := Label.new()
+		issues_hdr.text = "Open Playtest Issues (%d)" % open_issues.size()
+		issues_hdr.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
+		if bold_font != null:
+			issues_hdr.add_theme_font_override("font", bold_font)
+		brief_vb.add_child(issues_hdr)
+
+		var issues_box := VBoxContainer.new()
+		issues_box.add_theme_constant_override("separation", _S(4))
+		brief_vb.add_child(issues_box)
+		for iss_raw in open_issues:
+			var iss_id: String = ""
+			var iss_txt: String = ""
+			if typeof(iss_raw) == TYPE_DICTIONARY:
+				var iss_d: Dictionary = iss_raw as Dictionary
+				iss_id = str(iss_d.get("id", "")).strip_edges()
+				iss_txt = str(iss_d.get("text", "")).strip_edges()
+			else:
+				iss_txt = str(iss_raw).strip_edges()
+			if iss_txt.is_empty():
+				continue
+			var iss_row := HBoxContainer.new()
+			iss_row.add_theme_constant_override("separation", _S(4))
+			issues_box.add_child(iss_row)
+
+			var iss_lbl := Label.new()
+			iss_lbl.text = "[FIX] %s" % iss_txt
+			iss_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			iss_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			iss_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
+			iss_row.add_child(iss_lbl)
+
+			_maybe_add_issue_jump_button(iss_row, [iss_txt], known_jump_paths)
+
+			var res_btn := Button.new()
+			res_btn.flat = true
+			res_btn.theme_type_variation = &"FlatButton"
+			res_btn.text = "Resolve ✓"
+			res_btn.icon = _editor_icon("StatusSuccess")
+			res_btn.tooltip_text = "Mark this playtest issue resolved"
+			res_btn.pressed.connect(_on_resolve_issue_pressed.bind(feat, iss_id))
+			iss_row.add_child(res_btn)
+
 	var done_rtl := RichTextLabel.new()
 	done_rtl.bbcode_enabled = true
 	done_rtl.fit_content = true
@@ -933,28 +1013,6 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	done_rtl.add_theme_color_override("default_color", _editor_color("font_color", Color(0.88, 0.90, 0.94)))
 	done_rtl.text = "[b]Done When:[/b] " + _markdown_to_bbcode(done_when)
 	brief_vb.add_child(done_rtl)
-
-	var scenes_to_open := PackedStringArray()
-	if not primary_scene.is_empty() and primary_scene.ends_with(".tscn") and FileAccess.file_exists(primary_scene):
-		scenes_to_open.append(primary_scene)
-	if not arena_scene.is_empty() and arena_scene.ends_with(".tscn") and FileAccess.file_exists(arena_scene) and not (arena_scene in scenes_to_open):
-		scenes_to_open.append(arena_scene)
-
-	var scripts_to_open := PackedStringArray()
-	var raw_script_paths: Variant = eval_info.get("script_paths", feat.get("scriptPaths", []))
-	if typeof(raw_script_paths) == TYPE_ARRAY or typeof(raw_script_paths) == TYPE_PACKED_STRING_ARRAY:
-		for sp_raw in raw_script_paths:
-			var sp_cand := str(sp_raw).strip_edges()
-			if sp_cand.begins_with("res://") and sp_cand.ends_with(".gd") and FileAccess.file_exists(sp_cand) and not (sp_cand in scripts_to_open):
-				scripts_to_open.append(sp_cand)
-
-	var known_jump_paths := PackedStringArray()
-	for ks in scenes_to_open:
-		if not (ks in known_jump_paths):
-			known_jump_paths.append(ks)
-	for kg in scripts_to_open:
-		if not (kg in known_jump_paths):
-			known_jump_paths.append(kg)
 
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", _S(6))
@@ -972,18 +1030,77 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	_maybe_add_open_script_button(action_row, scripts_to_open)
 
 	# -----------------------------------------------------------------------
-	# 2. Playtest Console & Issues Card (auto-collapsed when clean)
+	# 2. Console Errors Banner (only when runtime/script errors detected)
 	# -----------------------------------------------------------------------
 	var log_errors: Array = _collect_active_playtest_errors()
 	_last_detected_error_count = log_errors.size()
-	var has_console_or_issues: bool = (
-		(not log_errors.is_empty()) or
-		(not open_issues.is_empty()) or
-		(not _fix_draft_text.strip_edges().is_empty()) or
-		_issue_composer_expanded
-	)
+	if not log_errors.is_empty():
+		var err_card := _create_native_card()
+		var err_vb: VBoxContainer = err_card["vb"]
 
-	if not has_console_or_issues:
+		var err_hdr_row := HBoxContainer.new()
+		err_hdr_row.add_theme_constant_override("separation", _S(4))
+		err_vb.add_child(err_hdr_row)
+
+		var err_hdr := Label.new()
+		err_hdr.text = "Console Errors (%d)" % log_errors.size()
+		err_hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		err_hdr.add_theme_color_override("font_color", _editor_color("error_color", Color(0.95, 0.48, 0.48)))
+		if bold_font != null:
+			err_hdr.add_theme_font_override("font", bold_font)
+		err_hdr_row.add_child(err_hdr)
+
+		var log_err_btn := Button.new()
+		log_err_btn.flat = true
+		log_err_btn.theme_type_variation = &"FlatButton"
+		log_err_btn.text = "Log Issue"
+		log_err_btn.icon = _editor_icon("StatusWarning", "Add")
+		log_err_btn.tooltip_text = "Log detected console errors as a playtest issue on this feature"
+		log_err_btn.pressed.connect(_on_log_console_errors_pressed.bind(feat, log_errors))
+		err_hdr_row.add_child(log_err_btn)
+
+		var dismiss_err_btn := Button.new()
+		dismiss_err_btn.flat = true
+		dismiss_err_btn.theme_type_variation = &"FlatButton"
+		dismiss_err_btn.icon = _editor_icon("Close")
+		if dismiss_err_btn.icon == null:
+			dismiss_err_btn.text = "x"
+		dismiss_err_btn.tooltip_text = "Dismiss error notice"
+		dismiss_err_btn.pressed.connect(func() -> void:
+			for le in log_errors:
+				_ignored_error_signatures[str(le)] = true
+			_last_error_clear_unix = Time.get_unix_time_from_system()
+			if _editor_logger != null:
+				_editor_logger.clear()
+			_render_active_feature_workspace(feat)
+		)
+		err_hdr_row.add_child(dismiss_err_btn)
+
+		var err_row := HBoxContainer.new()
+		err_row.add_theme_constant_override("separation", _S(4))
+		err_vb.add_child(err_row)
+
+		var err_fmt: Dictionary = _format_capped_issue_list(
+			log_errors,
+			3,
+			"Console errors (%d)" % log_errors.size() if log_errors.size() > 1 else ""
+		)
+		var err_lbl := Label.new()
+		err_lbl.text = String(err_fmt.get("inline_text", ""))
+		err_lbl.tooltip_text = String(err_fmt.get("tooltip_text", ""))
+		err_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
+		err_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		err_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		err_lbl.add_theme_color_override("font_color", _editor_color("error_color", Color(0.95, 0.48, 0.48)))
+		err_row.add_child(err_lbl)
+
+		_maybe_add_issue_jump_button(err_row, log_errors, known_jump_paths)
+
+	# -----------------------------------------------------------------------
+	# 3. Collapsible Playtest Issue Composer (+ Log Playtest Issue)
+	# -----------------------------------------------------------------------
+	var show_issue_composer: bool = _issue_composer_expanded or (not _fix_draft_text.strip_edges().is_empty())
+	if not show_issue_composer:
 		var expand_issue_btn := Button.new()
 		expand_issue_btn.flat = true
 		expand_issue_btn.theme_type_variation = &"FlatButton"
@@ -1007,110 +1124,25 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		issue_vb.add_child(issue_hdr_row)
 
 		var issue_hdr := Label.new()
-		issue_hdr.text = "Playtest Console & Issues"
+		issue_hdr.text = "Log Playtest Issue"
 		issue_hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if bold_font != null:
 			issue_hdr.add_theme_font_override("font", bold_font)
 		issue_hdr_row.add_child(issue_hdr)
 
-		if log_errors.is_empty() and open_issues.is_empty():
-			var close_composer_btn := Button.new()
-			close_composer_btn.flat = true
-			close_composer_btn.theme_type_variation = &"FlatButton"
-			close_composer_btn.icon = _editor_icon("Close")
-			if close_composer_btn.icon == null:
-				close_composer_btn.text = "x"
-			close_composer_btn.tooltip_text = "Hide playtest issue composer"
-			close_composer_btn.pressed.connect(func() -> void:
-				_fix_draft_text = ""
-				_issue_composer_expanded = false
-				_render_active_feature_workspace(feat)
-			)
-			issue_hdr_row.add_child(close_composer_btn)
-
-		if not log_errors.is_empty():
-			var err_row := HBoxContainer.new()
-			err_row.add_theme_constant_override("separation", _S(4))
-			issue_vb.add_child(err_row)
-
-			var err_fmt: Dictionary = _format_capped_issue_list(
-				log_errors,
-				3,
-				"Console errors (%d)" % log_errors.size() if log_errors.size() > 1 else ""
-			)
-			var err_lbl := Label.new()
-			err_lbl.text = String(err_fmt.get("inline_text", ""))
-			err_lbl.tooltip_text = String(err_fmt.get("tooltip_text", ""))
-			err_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
-			err_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-			err_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			err_lbl.add_theme_color_override("font_color", _editor_color("error_color", Color(0.95, 0.48, 0.48)))
-			err_row.add_child(err_lbl)
-
-			_maybe_add_issue_jump_button(err_row, log_errors, known_jump_paths)
-
-			var log_err_btn := Button.new()
-			log_err_btn.flat = true
-			log_err_btn.theme_type_variation = &"FlatButton"
-			log_err_btn.text = "Log Issue"
-			log_err_btn.icon = _editor_icon("StatusWarning", "Add")
-			log_err_btn.tooltip_text = "Log detected console errors as a playtest issue on this feature"
-			log_err_btn.pressed.connect(_on_log_console_errors_pressed.bind(feat, log_errors))
-			err_row.add_child(log_err_btn)
-
-			var dismiss_err_btn := Button.new()
-			dismiss_err_btn.flat = true
-			dismiss_err_btn.theme_type_variation = &"FlatButton"
-			dismiss_err_btn.icon = _editor_icon("Close")
-			if dismiss_err_btn.icon == null:
-				dismiss_err_btn.text = "x"
-			dismiss_err_btn.tooltip_text = "Dismiss error notice"
-			dismiss_err_btn.pressed.connect(func() -> void:
-				for le in log_errors:
-					_ignored_error_signatures[str(le)] = true
-				_last_error_clear_unix = Time.get_unix_time_from_system()
-				if _editor_logger != null:
-					_editor_logger.clear()
-				_render_active_feature_workspace(feat)
-			)
-			err_row.add_child(dismiss_err_btn)
-
-		if not open_issues.is_empty():
-			var issues_box := VBoxContainer.new()
-			issues_box.add_theme_constant_override("separation", _S(4))
-			issue_vb.add_child(issues_box)
-			for iss_raw in open_issues:
-				var iss_id: String = ""
-				var iss_txt: String = ""
-				if typeof(iss_raw) == TYPE_DICTIONARY:
-					var iss_d: Dictionary = iss_raw as Dictionary
-					iss_id = str(iss_d.get("id", "")).strip_edges()
-					iss_txt = str(iss_d.get("text", "")).strip_edges()
-				else:
-					iss_txt = str(iss_raw).strip_edges()
-				if iss_txt.is_empty():
-					continue
-				var iss_row := HBoxContainer.new()
-				iss_row.add_theme_constant_override("separation", _S(4))
-				issues_box.add_child(iss_row)
-
-				var iss_lbl := Label.new()
-				iss_lbl.text = "[FIX] %s" % iss_txt
-				iss_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-				iss_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-				iss_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
-				iss_row.add_child(iss_lbl)
-
-				_maybe_add_issue_jump_button(iss_row, [iss_txt], known_jump_paths)
-
-				var res_btn := Button.new()
-				res_btn.flat = true
-				res_btn.theme_type_variation = &"FlatButton"
-				res_btn.text = "Resolve ✓"
-				res_btn.icon = _editor_icon("StatusSuccess")
-				res_btn.tooltip_text = "Mark this playtest issue resolved"
-				res_btn.pressed.connect(_on_resolve_issue_pressed.bind(feat, iss_id))
-				iss_row.add_child(res_btn)
+		var close_composer_btn := Button.new()
+		close_composer_btn.flat = true
+		close_composer_btn.theme_type_variation = &"FlatButton"
+		close_composer_btn.icon = _editor_icon("Close")
+		if close_composer_btn.icon == null:
+			close_composer_btn.text = "x"
+		close_composer_btn.tooltip_text = "Hide playtest issue composer"
+		close_composer_btn.pressed.connect(func() -> void:
+			_fix_draft_text = ""
+			_issue_composer_expanded = false
+			_render_active_feature_workspace(feat)
+		)
+		issue_hdr_row.add_child(close_composer_btn)
 
 		_fix_input = TextEdit.new()
 		_fix_input.placeholder_text = "Describe playtest bug or feel note... (Enter to log, Shift+Enter for newline)"
@@ -1132,11 +1164,16 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		issue_vb.add_child(log_btn)
 
 	if _footer_box != null:
-		_footer_box.visible = not gate_passed
-		if not gate_passed and _primary_cta_btn != null:
-			_primary_cta_btn.disabled = false
-			_primary_cta_btn.text = "Playtest Passed — Next Feature"
-			_primary_cta_btn.icon = _editor_icon("Forward")
+		_footer_box.visible = true
+		if _primary_cta_btn != null:
+			if gate_passed:
+				_primary_cta_btn.disabled = true
+				_primary_cta_btn.text = "✓ Playtest Passed"
+				_primary_cta_btn.icon = _editor_icon("StatusSuccess")
+			else:
+				_primary_cta_btn.disabled = false
+				_primary_cta_btn.text = "Playtest Passed — Next Feature"
+				_primary_cta_btn.icon = _editor_icon("Forward")
 
 
 # ---------------------------------------------------------------------------
@@ -1546,6 +1583,8 @@ func _on_primary_cta_pressed() -> void:
 	var feat: Dictionary = _get_active_feature()
 	if feat.is_empty() or _sync == null:
 		return
+	if bool(feat.get("isPlaytestPassed", false)) or bool(feat.get("isCompleted", false)):
+		return
 	var feat_id: String = str(feat.get("id", ""))
 	var cp_id: String = str(feat.get("checkpointId", ""))
 	feat["isPlaytestPassed"] = true
@@ -1645,6 +1684,7 @@ func _on_copy_context_pressed(feat: Dictionary) -> void:
 		"tradeOffs": _payload.get("tradeOffs", []),
 		"epicCode": str(epic_dict.get("code", "")).strip_edges(),
 		"epicTitle": str(epic_dict.get("title", "")).strip_edges(),
+		"epicGoal": str(epic_dict.get("goal", "")).strip_edges(),
 		"siblingTuning": sibling_tuning,
 	}
 	var md: String = _executor.call(

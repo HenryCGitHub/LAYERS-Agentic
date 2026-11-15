@@ -1934,6 +1934,12 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     sb.writeln('- **Project**: $projectTitle (`$activeVer`)');
     sb.writeln('- **Target Engine**: $effectiveEngineTarget');
     sb.writeln('- **Epic**: $epicLabel');
+    final epicGoal = parentBeat != null
+        ? SectionTextUtils.resolveGoal(parentBeat.sections).trim()
+        : '';
+    if (epicGoal.isNotEmpty) {
+      sb.writeln('- **Epic Goal**: $epicGoal');
+    }
     sb.writeln('- **Feature**: ${feat.title}');
     sb.writeln('- **Status**: ${cpNode?.unifiedStatusLabel ?? 'Queued'}');
     final pillarsText = (draft != null && draft.designPillars.isNotEmpty)

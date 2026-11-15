@@ -134,7 +134,7 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'GODOT DOCK v3.0.8 · SPEC, PLAYTEST & 2-WAY SYNC',
+                      'GODOT DOCK v3.0.9 · SPEC, PLAYTEST & 2-WAY SYNC',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
@@ -165,6 +165,19 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                         color: textPrimary,
                       ),
                     ),
+                    if (!snap.allEpicsCompleted &&
+                        snap.activeEpicGoal.trim().isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'WHY: ${snap.activeEpicGoal.trim()}',
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.inter(
+                          fontSize: 11.5,
+                          color: textSecondary,
+                        ),
+                      ),
+                    ],
                     if (snap.activeFeatureId != null &&
                         snap.activeFeatureTitle.isNotEmpty) ...[
                       const SizedBox(height: 5),

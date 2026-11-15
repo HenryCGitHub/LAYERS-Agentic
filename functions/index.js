@@ -106,8 +106,10 @@ function extractResPath(raw) {
 }
 
 function resolveVersionTag(relDoc) {
-  const v = String(relDoc?.sections?.version || "").trim();
-  if (v) return v.startsWith("v") ? v : `v${v}`;
+  const v = String(
+    relDoc?.sections?.versionTag || relDoc?.sections?.version || ""
+  ).trim();
+  if (v) return /^v/i.test(v) ? `v${v.slice(1)}` : `v${v}`;
   const m = String(relDoc?.title || "").match(/v?(\d+\.\d+(?:\.\d+)?)/i);
   return m ? `v${m[1]}` : "v0.1";
 }
@@ -477,14 +479,11 @@ function isFeatureActiveInReleaseJs(featDoc, activeVer, totalReleasesCount) {
     return false;
   }
   const states = parseFeatureStates(featDoc);
-  if (
-    states.length > 0 &&
-    states.some(
+  if (states.length > 0) {
+    return states.some(
       (s) =>
         String(s?.parameters?.releaseVersion || "v0.1").trim() === activeVer
-    )
-  ) {
-    return true;
+    );
   }
   return lc !== "stable";
 }
@@ -763,7 +762,9 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
           isFeatureActiveInReleaseJs(f, activeVer, releases.length)
         )
       : feats;
-    if (scopedFeats.length === 0) continue;
+    if (releaseHasActiveFeats && feats.length > 0 && scopedFeats.length === 0) {
+      continue;
+    }
 
     const mappedFeatures = scopedFeats.map((feat) => {
       const states = parseFeatureStates(feat);
@@ -861,8 +862,16 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       };
     });
 
-    const goal = String(
+    const parsedEpicScope = parseStructuredScopeFieldsJs(
       epic?.sections?.goal ||
+        epic?.sections?.scope ||
+        epic?.sections?.objective ||
+        epic?.sections?.summary ||
+        ""
+    );
+    const goal = String(
+      parsedEpicScope.goal ||
+        epic?.sections?.goal ||
         epic?.sections?.objective ||
         epic?.sections?.summary ||
         ""
