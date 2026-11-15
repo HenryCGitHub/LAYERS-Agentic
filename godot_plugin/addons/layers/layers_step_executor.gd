@@ -6,11 +6,16 @@ extends RefCounted
 
 var _eval_cache: Dictionary = {}
 var _eval_cache_epoch: int = 0
+var _cached_base_ctrl_id: int = 0
+var _cached_debugger_roots: Array[Node] = []
+var _cached_editor_log_roots: Array[Node] = []
+var _last_healed_proj_mtime: int = -1
 
 
 func invalidate_eval_cache() -> void:
 	_eval_cache.clear()
 	_eval_cache_epoch += 1
+	_last_healed_proj_mtime = -1
 
 
 func _compute_live_tree_signature(root: Node) -> String:
@@ -82,21 +87,18 @@ func _build_eval_cache_key(
 	]
 
 
-func resolve_effective_step_path(step: Dictionary, feat: Dictionary, scene_root: Node = null) -> String:
+func resolve_effective_step_path(step: Dictionary, feat: Dictionary) -> String:
 	var p: String = str(step.get("stepPath", "")).strip_edges()
 	if p.begins_with("res://"):
 		if p.ends_with(".gd") and not FileAccess.file_exists(p):
-			var hinted_gd: String = _find_mentioned_existing_gd(step, scene_root)
+			var hinted_gd: String = _find_mentioned_existing_gd(step)
 			if not hinted_gd.is_empty():
 				return hinted_gd
 		return p
-	var primary: String = str(feat.get("primaryAsset", "")).strip_edges()
-	if primary.begins_with("res://"):
-		return primary
-	return "res://scenes/main.tscn"
+	return str(feat.get("primaryAsset", "")).strip_edges()
 
 
-func _find_mentioned_existing_gd(step: Dictionary, scene_root: Node) -> String:
+func _find_mentioned_existing_gd(step: Dictionary) -> String:
 	var combined: String = "%s\n%s\n%s" % [
 		str(step.get("locationLabel", "")),
 		str(step.get("instruction", "")),
@@ -113,29 +115,10 @@ func _find_mentioned_existing_gd(step: Dictionary, scene_root: Node) -> String:
 			"res://scripts/%s" % fname,
 			"res://%s" % fname,
 		])
-		if scene_root != null:
-			var scr_node: Node = _find_node_by_script_filename(scene_root, fname)
-			if scr_node != null:
-				var scr: Variant = scr_node.get_script()
-				if scr is Script:
-					return (scr as Script).resource_path
 		for cand in candidates:
 			if FileAccess.file_exists(cand):
 				return cand
 	return ""
-
-
-func _find_node_by_script_filename(root: Node, fname: String) -> Node:
-	if root == null:
-		return null
-	var scr: Variant = root.get_script()
-	if scr is Script and (scr as Script).resource_path.get_file() == fname:
-		return root
-	for child in root.get_children():
-		var found: Node = _find_node_by_script_filename(child, fname)
-		if found != null:
-			return found
-	return null
 
 
 # ---------------------------------------------------------------------------
@@ -628,6 +611,10 @@ func heal_empty_project_input_actions(feat: Dictionary = {}) -> int:
 			if not act.is_empty() and not kl.is_empty():
 				key_hints[act] = kl
 
+	var proj_mtime: int = int(FileAccess.get_modified_time("res://project.godot")) if FileAccess.file_exists("res://project.godot") else 0
+	if key_hints.is_empty() and proj_mtime == _last_healed_proj_mtime:
+		return 0
+
 	var healed := 0
 	for p_raw in ProjectSettings.get_property_list():
 		var p_info: Dictionary = p_raw
@@ -648,6 +635,7 @@ func heal_empty_project_input_actions(feat: Dictionary = {}) -> int:
 	if healed > 0:
 		ProjectSettings.save()
 		InputMap.load_from_project_settings()
+	_last_healed_proj_mtime = int(FileAccess.get_modified_time("res://project.godot")) if FileAccess.file_exists("res://project.godot") else proj_mtime
 	return healed
 
 
@@ -983,6 +971,45 @@ func read_recent_godot_log_errors(since_unix_sec: float = 0.0, max_errors: int =
 	return out
 
 
+func _get_editor_error_ui_roots(base_control: Node) -> Dictionary:
+	if base_control == null or not is_instance_valid(base_control):
+		_cached_base_ctrl_id = 0
+		_cached_debugger_roots.clear()
+		_cached_editor_log_roots.clear()
+		return { "debugger_roots": _cached_debugger_roots, "editor_log_roots": _cached_editor_log_roots }
+	var ctrl_id: int = base_control.get_instance_id()
+	var cache_valid: bool = (ctrl_id == _cached_base_ctrl_id) and not (_cached_debugger_roots.is_empty() and _cached_editor_log_roots.is_empty())
+	if cache_valid:
+		for dn in _cached_debugger_roots:
+			if not is_instance_valid(dn):
+				cache_valid = false
+				break
+	if cache_valid:
+		for ln in _cached_editor_log_roots:
+			if not is_instance_valid(ln):
+				cache_valid = false
+				break
+	if not cache_valid:
+		_cached_base_ctrl_id = ctrl_id
+		_cached_debugger_roots.clear()
+		_cached_editor_log_roots.clear()
+		var stack: Array[Node] = [base_control]
+		while not stack.is_empty():
+			var cur: Node = stack.pop_back()
+			var cls := cur.get_class()
+			var nm := String(cur.name)
+			if cls == "ScriptEditorDebugger" or "ScriptEditorDebugger" in nm:
+				_cached_debugger_roots.append(cur)
+			elif cls == "EditorLog" or "EditorLog" in nm:
+				_cached_editor_log_roots.append(cur)
+			for ch in cur.get_children():
+				stack.append(ch)
+	return {
+		"debugger_roots": _cached_debugger_roots,
+		"editor_log_roots": _cached_editor_log_roots,
+	}
+
+
 func read_editor_and_playtest_errors(
 	base_control: Node,
 	extra_logger_errors: Array = [],
@@ -1003,21 +1030,14 @@ func read_editor_and_playtest_errors(
 
 	# 1. Live Godot Editor Debugger -> Errors Tree (ScriptEditorDebugger)
 	if base_control != null:
-		var stack: Array[Node] = [base_control]
-		var debugger_roots: Array[Node] = []
-		var editor_log_roots: Array[Node] = []
-		while not stack.is_empty():
-			var cur: Node = stack.pop_back()
-			var cls := cur.get_class()
-			var nm := String(cur.name)
-			if cls == "ScriptEditorDebugger" or "ScriptEditorDebugger" in nm:
-				debugger_roots.append(cur)
-			elif cls == "EditorLog" or "EditorLog" in nm:
-				editor_log_roots.append(cur)
-			for ch in cur.get_children():
-				stack.append(ch)
+		var ui_roots: Dictionary = _get_editor_error_ui_roots(base_control)
+		var debugger_roots: Array = ui_roots.get("debugger_roots", [])
+		var editor_log_roots: Array = ui_roots.get("editor_log_roots", [])
 
-		for dbg in debugger_roots:
+		for dbg_raw in debugger_roots:
+			var dbg: Node = dbg_raw as Node
+			if dbg == null:
+				continue
 			var t_stack: Array[Node] = [dbg]
 			while not t_stack.is_empty():
 				var tn: Node = t_stack.pop_back()
@@ -1058,7 +1078,10 @@ func read_editor_and_playtest_errors(
 			append_err.call(String(raw_le))
 
 		# 3. EditorLog RichTextLabel tail (compile-time Parse Errors printed to Output)
-		for elog in editor_log_roots:
+		for elog_raw in editor_log_roots:
+			var elog: Node = elog_raw as Node
+			if elog == null:
+				continue
 			var l_stack: Array[Node] = [elog]
 			while not l_stack.is_empty():
 				var ln_node: Node = l_stack.pop_back()
@@ -1610,7 +1633,7 @@ func resolve_feature_paths(feat: Dictionary, code_files: Dictionary = {}, arena_
 			seen_scripts[rp] = true
 			script_paths.append(rp)
 		var snippet := resolve_step_code_text(st)
-		var eff := resolve_effective_step_path(st, feat, null)
+		var eff := resolve_effective_step_path(st, feat)
 		if eff.ends_with(".gd") and not seen_scripts.has(eff):
 			seen_scripts[eff] = true
 			script_paths.append(eff)
@@ -1777,6 +1800,8 @@ func capture_bundle_snapshot(
 		initial_open_scene = String(editor_interface.get_edited_scene_root().scene_file_path).strip_edges()
 		if initial_open_scene.begins_with("res://"):
 			candidate_paths[initial_open_scene] = true
+			if FileAccess.file_exists(initial_open_scene) and editor_interface.has_method("save_scene"):
+				editor_interface.call("save_scene")
 	for p_raw in [preferred_scene, bundle.get("arenaScenePath", ""), bundle.get("featureScenePath", "")]:
 		var ps_str := String(p_raw).strip_edges()
 		if ps_str.begins_with("res://"):
@@ -1795,7 +1820,7 @@ func capture_bundle_snapshot(
 		for op_raw in (raw_ops as Array):
 			if typeof(op_raw) == TYPE_DICTIONARY:
 				var opd: Dictionary = op_raw
-				for k in ["scenePath", "scriptPath"]:
+				for k in ["scenePath", "scriptPath", "instancePath"]:
 					var vp := String(opd.get(k, "")).strip_edges()
 					if vp.begins_with("res://"):
 						candidate_paths[vp] = true
@@ -1816,10 +1841,21 @@ func capture_bundle_snapshot(
 		if not act_name.begins_with("ui_"):
 			input_actions[act_name] = InputMap.action_get_events(act_sn).duplicate()
 
+	var project_inputs := {}
+	for p_raw in ProjectSettings.get_property_list():
+		if typeof(p_raw) != TYPE_DICTIONARY:
+			continue
+		var pname := String((p_raw as Dictionary).get("name", ""))
+		if not pname.begins_with("input/") or pname.begins_with("input/ui_"):
+			continue
+		var pval: Variant = ProjectSettings.get_setting(pname)
+		project_inputs[pname] = pval.duplicate(true) if typeof(pval) == TYPE_DICTIONARY else pval
+
 	var prev_main_scene := String(ProjectSettings.get_setting("application/run/main_scene", ""))
 	return {
 		"files": files,
 		"input_actions": input_actions,
+		"project_inputs": project_inputs,
 		"initial_open_scene": initial_open_scene,
 		"prev_main_scene": prev_main_scene,
 	}
@@ -1851,11 +1887,10 @@ func restore_bundle_snapshot(
 		ordered_paths.append(rp)
 	for rp in other_tail:
 		ordered_paths.append(rp)
-	if has_project_cfg:
-		ordered_paths.append("res://project.godot")
 
 	var restored_count := 0
 	var restored_scenes := PackedStringArray()
+	var removed_scenes := PackedStringArray()
 	var restored_scripts := PackedStringArray()
 	for rp in ordered_paths:
 		var raw_entry: Variant = files.get(rp, null)
@@ -1879,8 +1914,28 @@ func restore_bundle_snapshot(
 			if FileAccess.file_exists(rp):
 				DirAccess.remove_absolute(ProjectSettings.globalize_path(rp))
 				restored_count += 1
+				if rp.ends_with(".tscn"):
+					removed_scenes.append(rp)
 
 	var saved_inputs: Dictionary = snapshot.get("input_actions", {}) if typeof(snapshot.get("input_actions", null)) == TYPE_DICTIONARY else {}
+	var saved_proj_inputs: Dictionary = snapshot.get("project_inputs", {}) if typeof(snapshot.get("project_inputs", null)) == TYPE_DICTIONARY else {}
+	var proj_inputs_to_clear := PackedStringArray()
+	for p_raw in ProjectSettings.get_property_list():
+		if typeof(p_raw) != TYPE_DICTIONARY:
+			continue
+		var pname := String((p_raw as Dictionary).get("name", ""))
+		if not pname.begins_with("input/") or pname.begins_with("input/ui_"):
+			continue
+		var act_suffix := pname.substr("input/".length())
+		if not saved_proj_inputs.has(pname) and not saved_inputs.has(act_suffix):
+			proj_inputs_to_clear.append(pname)
+	for pname in proj_inputs_to_clear:
+		ProjectSettings.set_setting(pname, null)
+	for pk_raw in saved_proj_inputs.keys():
+		var pk := String(pk_raw)
+		var pv: Variant = saved_proj_inputs[pk_raw]
+		ProjectSettings.set_setting(pk, pv.duplicate(true) if typeof(pv) == TYPE_DICTIONARY else pv)
+
 	var to_erase := PackedStringArray()
 	for act_sn in InputMap.get_actions():
 		var act_name := String(act_sn)
@@ -1900,7 +1955,19 @@ func restore_bundle_snapshot(
 				if ev is InputEvent:
 					InputMap.action_add_event(act_sn, ev)
 
-	ProjectSettings.set_setting("application/run/main_scene", String(snapshot.get("prev_main_scene", "")))
+	var prev_main_scene := String(snapshot.get("prev_main_scene", "")).strip_edges()
+	ProjectSettings.set_setting("application/run/main_scene", prev_main_scene)
+	ProjectSettings.save()
+	InputMap.load_from_project_settings()
+
+	if has_project_cfg:
+		var proj_entry_raw: Variant = files.get("res://project.godot", null)
+		if typeof(proj_entry_raw) == TYPE_DICTIONARY and bool((proj_entry_raw as Dictionary).get("existed", false)):
+			var proj_fw := FileAccess.open("res://project.godot", FileAccess.WRITE)
+			if proj_fw != null:
+				proj_fw.store_string(String((proj_entry_raw as Dictionary).get("content", "")))
+				proj_fw.close()
+				restored_count += 1
 
 	if editor_interface != null:
 		if editor_interface.get_resource_filesystem() != null:
@@ -1911,6 +1978,10 @@ func restore_bundle_snapshot(
 		var init_sc := String(snapshot.get("initial_open_scene", "")).strip_edges()
 		if not init_sc.is_empty() and FileAccess.file_exists(init_sc):
 			editor_interface.open_scene_from_path(init_sc)
+		else:
+			var cur_ed := editor_interface.get_edited_scene_root()
+			if cur_ed != null and (cur_ed.scene_file_path in removed_scenes) and not prev_main_scene.is_empty() and FileAccess.file_exists(prev_main_scene):
+				editor_interface.open_scene_from_path(prev_main_scene)
 
 	invalidate_eval_cache()
 	return {"ok": true, "restored_count": restored_count, "restored_scripts": restored_scripts}
@@ -2674,9 +2745,6 @@ func diagnose_project_combat_and_wiring(
 			var sp := String(raw_sp).strip_edges()
 			if not sp.is_empty() and sp.ends_with(".tscn") and not (sp in scenes_to_check):
 				scenes_to_check.append(sp)
-		for proj_sp in collect_project_scene_paths("res://", 16):
-			if not (proj_sp in scenes_to_check):
-				scenes_to_check.append(proj_sp)
 
 	var scripts_map: Dictionary = live_scripts.duplicate() if not live_scripts.is_empty() else read_all_live_project_scripts("res://")
 
@@ -3030,8 +3098,16 @@ func verify_built_feature_integrity(
 	if temp_root != null:
 		temp_root.free()
 
+	var diag_scenes: Array = []
+	for sc_cand in [primary_scene, arena_hint]:
+		var cs := String(sc_cand).strip_edges()
+		if not cs.is_empty() and cs.ends_with(".tscn") and not (cs in diag_scenes):
+			diag_scenes.append(cs)
+	for proj_sc in collect_project_scene_paths("res://", 120):
+		if not (proj_sc in diag_scenes):
+			diag_scenes.append(proj_sc)
 	var feat_diags := diagnose_project_combat_and_wiring(
-		[primary_scene, arena_hint] if not primary_scene.is_empty() else [],
+		diag_scenes,
 		read_all_live_project_scripts("res://"),
 		editor_interface
 	)
@@ -3062,6 +3138,7 @@ func verify_built_feature_integrity(
 		"ok": errors.is_empty(),
 		"errors": errors,
 		"warnings": warnings,
+		"project_diagnostics": feat_diags,
 	}
 
 
@@ -3143,9 +3220,18 @@ func format_feature_context_markdown(
 				if typeof(n_raw) == TYPE_DICTIONARY:
 					var nd: Dictionary = n_raw
 					var npath: String = str(nd.get("path", nd.get("name", "")))
-					var ntype: String = str(nd.get("type", ""))
+					var ntype: String = str(nd.get("class", nd.get("type", "")))
 					var nscr: String = str(nd.get("script", ""))
 					var extra: String = " (`%s`)" % nscr if not nscr.is_empty() else ""
+					var ngrps_raw: Variant = nd.get("groups", [])
+					if typeof(ngrps_raw) == TYPE_ARRAY and not (ngrps_raw as Array).is_empty():
+						var g_packed := PackedStringArray()
+						for gr in (ngrps_raw as Array):
+							var gs := str(gr).strip_edges()
+							if not gs.is_empty():
+								g_packed.append(gs)
+						if not g_packed.is_empty():
+							extra += " [groups: %s]" % ", ".join(g_packed)
 					out.append("  - `%s` : %s%s" % [npath, ntype, extra])
 				else:
 					out.append("  - %s" % str(n_raw))

@@ -58,6 +58,12 @@ class _LayersEditorLogger extends Logger:
 		_entries.clear()
 		_mutex.unlock()
 
+	func entry_count() -> int:
+		_mutex.lock()
+		var n: int = _entries.size()
+		_mutex.unlock()
+		return n
+
 var editor_interface: EditorInterface
 var undo_redo: EditorUndoRedoManager
 
@@ -92,6 +98,7 @@ var _editor_logger: _LayersEditorLogger
 var _ignored_error_signatures: Dictionary = {}
 var _locally_built_keys: Dictionary = {}
 var _last_detected_error_count: int = 0
+var _last_seen_logger_count: int = 0
 var _cached_diagnostics: PackedStringArray = PackedStringArray()
 var _diagnostics_dirty: bool = true
 var _ignored_diagnostic_signatures: Dictionary = {}
@@ -405,7 +412,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.6")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.7")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -723,6 +730,7 @@ func _is_feature_checkpoint_built(feat: Dictionary, eval_info: Dictionary) -> bo
 
 
 func _collect_active_playtest_errors() -> Array:
+	_last_seen_logger_count = _editor_logger.entry_count() if _editor_logger != null else 0
 	if _executor == null:
 		return []
 	var base_ctrl: Node = editor_interface.get_base_control() if editor_interface != null else null
@@ -838,14 +846,13 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	elif not arena_scene.is_empty() and FileAccess.file_exists(arena_scene):
 		scene_to_open = arena_scene
 
-	var script_to_open: String = ""
+	var scripts_to_open := PackedStringArray()
 	var raw_script_paths: Variant = eval_info.get("script_paths", feat.get("scriptPaths", []))
 	if typeof(raw_script_paths) == TYPE_ARRAY or typeof(raw_script_paths) == TYPE_PACKED_STRING_ARRAY:
 		for sp_raw in raw_script_paths:
 			var sp_cand := str(sp_raw).strip_edges()
-			if sp_cand.begins_with("res://") and sp_cand.ends_with(".gd") and FileAccess.file_exists(sp_cand):
-				script_to_open = sp_cand
-				break
+			if sp_cand.begins_with("res://") and sp_cand.ends_with(".gd") and FileAccess.file_exists(sp_cand) and not (sp_cand in scripts_to_open):
+				scripts_to_open.append(sp_cand)
 
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", _S(6))
@@ -875,7 +882,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		build_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
 		action_row.add_child(build_btn)
 		_maybe_add_open_scene_button(action_row, scene_to_open, "Open %s in Godot viewport" % scene_to_open)
-		_maybe_add_open_script_button(action_row, script_to_open)
+		_maybe_add_open_script_button(action_row, scripts_to_open)
 	else:
 		var arena_btn := Button.new()
 		var is_playing := _is_editor_playing()
@@ -886,7 +893,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		action_row.add_child(arena_btn)
 
 		_maybe_add_open_scene_button(action_row, scene_to_open, "Open %s to arrange visuals or inspect nodes" % scene_to_open)
-		_maybe_add_open_script_button(action_row, script_to_open)
+		_maybe_add_open_script_button(action_row, scripts_to_open)
 
 		var rebuild_btn := Button.new()
 		rebuild_btn.flat = true
@@ -925,7 +932,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		copy_ctx_btn.pressed.connect(_on_copy_context_pressed.bind(feat))
 		agent_hdr_row.add_child(copy_ctx_btn)
 
-	if not _last_ai_snapshot.is_empty() and not ai_busy:
+	if not _last_ai_snapshot.is_empty() and not ai_busy and str(_last_ai_snapshot.get("feature_id", "")) == feat_id:
 		var undo_ai_btn := Button.new()
 		undo_ai_btn.flat = true
 		undo_ai_btn.theme_type_variation = &"FlatButton"
@@ -1168,17 +1175,35 @@ func _maybe_add_open_scene_button(action_row: HBoxContainer, scene_to_open: Stri
 	action_row.add_child(open_scene_btn)
 
 
-func _maybe_add_open_script_button(action_row: HBoxContainer, script_to_open: String) -> void:
-	if script_to_open.is_empty():
+func _maybe_add_open_script_button(action_row: HBoxContainer, script_paths: PackedStringArray) -> void:
+	if script_paths.is_empty():
 		return
-	var open_script_btn := Button.new()
-	open_script_btn.flat = true
-	open_script_btn.theme_type_variation = &"FlatButton"
-	open_script_btn.text = "Open Script"
-	open_script_btn.icon = _editor_icon("Script", "File")
-	open_script_btn.tooltip_text = "Open %s in Godot Script Editor" % script_to_open
-	open_script_btn.pressed.connect(_on_open_res_path_pressed.bind(script_to_open))
-	action_row.add_child(open_script_btn)
+	if script_paths.size() == 1:
+		var script_path: String = script_paths[0]
+		var open_script_btn := Button.new()
+		open_script_btn.flat = true
+		open_script_btn.theme_type_variation = &"FlatButton"
+		open_script_btn.text = "Open Script"
+		open_script_btn.icon = _editor_icon("Script", "File")
+		open_script_btn.tooltip_text = "Open %s in Godot Script Editor" % script_path
+		open_script_btn.pressed.connect(_on_open_res_path_pressed.bind(script_path))
+		action_row.add_child(open_script_btn)
+		return
+	var open_menu_btn := MenuButton.new()
+	open_menu_btn.flat = true
+	open_menu_btn.theme_type_variation = &"FlatButton"
+	open_menu_btn.text = "Open Script (%d)" % script_paths.size()
+	open_menu_btn.icon = _editor_icon("Script", "File")
+	open_menu_btn.tooltip_text = "Choose one of %d feature scripts to open in Godot Script Editor" % script_paths.size()
+	var popup: PopupMenu = open_menu_btn.get_popup()
+	for idx in range(script_paths.size()):
+		popup.add_item(script_paths[idx].get_file(), idx)
+		popup.set_item_tooltip(idx, script_paths[idx])
+	popup.id_pressed.connect(func(id: int) -> void:
+		if id >= 0 and id < script_paths.size():
+			_on_open_res_path_pressed(script_paths[id])
+	)
+	action_row.add_child(open_menu_btn)
 
 
 func _on_build_feature_pressed(feat: Dictionary) -> void:
@@ -1321,6 +1346,7 @@ func _on_bundle_apply_timeout() -> void:
 	var pref_scene: String = str(active_feat.get("primaryAsset", "")).strip_edges()
 	var pre_snap: Dictionary = _executor.call("capture_bundle_snapshot", editor_interface, bundle, pref_scene)
 	pre_snap["was_initial_build"] = was_initial_build
+	pre_snap["feature_id"] = str(active_feat.get("id", ""))
 	pre_snap["checkpoint_key"] = _make_checkpoint_build_key(active_feat) if not active_feat.is_empty() else ""
 	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle, pref_scene)
 	var apply_ok: bool = bool(apply_res.get("ok", false))
@@ -1334,6 +1360,8 @@ func _on_bundle_apply_timeout() -> void:
 				if not orig_files.has(rpk):
 					orig_files[rpk] = repair_files[rpk]
 			_last_ai_snapshot["files"] = orig_files
+			if str(_last_ai_snapshot.get("feature_id", "")).is_empty():
+				_last_ai_snapshot["feature_id"] = str(active_feat.get("id", ""))
 		else:
 			_last_ai_snapshot = pre_snap
 	if apply_ok:
@@ -1357,6 +1385,9 @@ func _on_bundle_apply_timeout() -> void:
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 	var integrity: Dictionary = _executor.call("verify_built_feature_integrity", editor_interface, active_feat, code_files, arena_scene)
+	if integrity.has("project_diagnostics"):
+		_cached_diagnostics = integrity.get("project_diagnostics", PackedStringArray())
+		_diagnostics_dirty = false
 	var integrity_ok: bool = bool(integrity.get("ok", true))
 	var integrity_errors: PackedStringArray = integrity.get("errors", PackedStringArray())
 	var all_repair_errors := PackedStringArray()
@@ -1434,11 +1465,13 @@ func _on_playtest_watch_tick() -> void:
 			_render_active_feature_workspace(feat)
 		return
 	if not _show_token_editor and _workspace_panel != null and _workspace_panel.visible and not (_fix_input != null and _fix_input.has_focus()):
-		var live_err_count: int = _collect_active_playtest_errors().size()
-		if live_err_count != _last_detected_error_count:
-			var feat := _get_active_feature()
-			if not feat.is_empty():
-				_render_active_feature_workspace(feat)
+		var cur_logger_cnt: int = _editor_logger.entry_count() if _editor_logger != null else 0
+		if playing_now or cur_logger_cnt != _last_seen_logger_count:
+			var live_err_count: int = _collect_active_playtest_errors().size()
+			if live_err_count != _last_detected_error_count:
+				var feat := _get_active_feature()
+				if not feat.is_empty():
+					_render_active_feature_workspace(feat)
 
 
 func _on_post_playtest_log_timeout() -> void:
@@ -1522,13 +1555,23 @@ func _on_undo_last_ai_pressed() -> void:
 	var snap := _last_ai_snapshot
 	_last_ai_snapshot = {}
 	var res: Dictionary = _executor.call("restore_bundle_snapshot", editor_interface, snap)
-	var active_feat: Dictionary = _get_active_feature()
+	var snap_feat_id: String = str(snap.get("feature_id", "")).strip_edges()
+	var target_feat: Dictionary = {}
+	if not snap_feat_id.is_empty():
+		var epic_raw: Variant = _payload.get("activeEpic", null)
+		if typeof(epic_raw) == TYPE_DICTIONARY:
+			for f_raw in (epic_raw as Dictionary).get("features", []):
+				if typeof(f_raw) == TYPE_DICTIONARY and str((f_raw as Dictionary).get("id", "")) == snap_feat_id:
+					target_feat = f_raw
+					break
+	if target_feat.is_empty():
+		target_feat = _get_active_feature()
 	if bool(snap.get("was_initial_build", false)):
 		var cp_key := str(snap.get("checkpoint_key", ""))
 		if not cp_key.is_empty():
 			_locally_built_keys.erase(cp_key)
-		if not active_feat.is_empty():
-			active_feat["isBuiltInGodot"] = false
+		if not target_feat.is_empty():
+			target_feat["isBuiltInGodot"] = false
 	_diagnostics_dirty = true
 	_last_agent_summary = ""
 	_last_agent_warnings = PackedStringArray()

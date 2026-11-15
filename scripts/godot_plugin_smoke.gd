@@ -244,6 +244,16 @@ func take_damage(amount: float) -> void:
 		printerr("FAIL: restore_bundle_snapshot did not remove newly registered 'smoke_ai_jump' InputMap action")
 		quit(1)
 		return
+	if ProjectSettings.has_setting("input/smoke_ai_jump"):
+		printerr("FAIL: restore_bundle_snapshot left 'input/smoke_ai_jump' in ProjectSettings")
+		quit(1)
+		return
+	ProjectSettings.save()
+	InputMap.load_from_project_settings()
+	if InputMap.has_action("smoke_ai_jump"):
+		printerr("FAIL: 'smoke_ai_jump' resurrected after ProjectSettings.save() and reload")
+		quit(1)
+		return
 
 	var sync_scr := ResourceLoader.load("res://addons/layers/layers_sync_client.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
 	var sync_node: Node = sync_scr.new()
@@ -302,20 +312,55 @@ func take_damage(amount: float) -> void:
 		quit(1)
 		return
 
+	var real_scene_snap: Dictionary = exec.call("capture_rich_scene_snapshot", null, PackedStringArray(["res://scenes/smoke_fighter.tscn"]))
 	var ctx_md: String = exec.call(
 		"format_feature_context_markdown",
 		{"id": "f1", "title": "Smoke Jump", "doneWhen": "Press Space -> Player jumps"},
 		{"res://scripts/smoke_fighter.gd": orig_fighter_disk},
-		{"scenes": {"res://scenes/smoke_fighter.tscn": {"isOpenInEditor": true, "nodes": [{"path": ".", "type": "CharacterBody3D", "script": "res://scripts/smoke_fighter.gd"}]}}},
+		real_scene_snap,
 		{"jump": ["Space"]},
 		["SCRIPT ERROR: sample"],
 		["[3D BASIS FLIP] sample"]
 	)
-	for needle in ["## LAYERS Godot Context", "smoke_fighter.tscn", "jump", "SCRIPT ERROR: sample", "[3D BASIS FLIP] sample"]:
+	for needle in ["## LAYERS Godot Context", "smoke_fighter.tscn", "CharacterBody3D", "Area3D", "jump", "SCRIPT ERROR: sample", "[3D BASIS FLIP] sample"]:
 		if not ctx_md.contains(needle):
-			printerr("FAIL: format_feature_context_markdown missing expected substring")
+			printerr("FAIL: format_feature_context_markdown missing expected substring: ", needle)
 			quit(1)
 			return
+
+	var integrity_probe: Dictionary = exec.call("verify_built_feature_integrity", null, {"id": "f1", "primaryAsset": "res://scenes/smoke_fighter.tscn"}, {}, "")
+	if not integrity_probe.has("project_diagnostics"):
+		printerr("FAIL: verify_built_feature_integrity missing 'project_diagnostics' key")
+		quit(1)
+		return
+
+	var dock_scr := ResourceLoader.load("res://addons/layers/layers_dock.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+	var dock_probe: Node = dock_scr.new()
+	var box1 := HBoxContainer.new()
+	dock_probe.call("_maybe_add_open_script_button", box1, PackedStringArray(["res://scripts/smoke_fighter.gd"]))
+	if box1.get_child_count() != 1 or not (box1.get_child(0) is Button) or (box1.get_child(0) is MenuButton) or (box1.get_child(0) as Button).text != "Open Script":
+		box1.free()
+		dock_probe.free()
+		printerr("FAIL: _maybe_add_open_script_button 1-script mode did not produce flat 'Open Script' Button")
+		quit(1)
+		return
+	box1.free()
+
+	if not _write_text("res://scripts/smoke_second.gd", "extends Node\n"):
+		dock_probe.free()
+		printerr("FAIL: could not write smoke_second.gd")
+		quit(1)
+		return
+	var box2 := HBoxContainer.new()
+	dock_probe.call("_maybe_add_open_script_button", box2, PackedStringArray(["res://scripts/smoke_fighter.gd", "res://scripts/smoke_second.gd"]))
+	if box2.get_child_count() != 1 or not (box2.get_child(0) is MenuButton) or (box2.get_child(0) as MenuButton).text != "Open Script (2)" or (box2.get_child(0) as MenuButton).get_popup().item_count != 2:
+		box2.free()
+		dock_probe.free()
+		printerr("FAIL: _maybe_add_open_script_button multi-script mode did not produce 'Open Script (2)' MenuButton with 2 popup items")
+		quit(1)
+		return
+	box2.free()
+	dock_probe.free()
 
 	exec.call("invalidate_eval_cache")
 	var eval_built: Dictionary = exec.call("evaluate_feature", {"id": "f1", "primaryAsset": "res://scenes/smoke_fighter.tscn"}, null, {}, "")
