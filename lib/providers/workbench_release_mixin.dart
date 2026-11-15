@@ -1930,12 +1930,32 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       '> Use this Feature Spec to build, wire, and playtest this single feature in **$effectiveEngineTarget**.',
     );
 
-    sb.writeln('\n## 1. Feature Scope & Context');
+    sb.writeln('\n## Feature Scope & Context');
     sb.writeln('- **Project**: $projectTitle (`$activeVer`)');
     sb.writeln('- **Target Engine**: $effectiveEngineTarget');
     sb.writeln('- **Epic**: $epicLabel');
     sb.writeln('- **Feature**: ${feat.title}');
     sb.writeln('- **Status**: ${cpNode?.unifiedStatusLabel ?? 'Queued'}');
+    final pillarsText = (draft != null && draft.designPillars.isNotEmpty)
+        ? draft.designPillars.join(' · ')
+        : (proj?.sections['design_pillars'] ??
+                proj?.sections['designPillars'] ??
+                '')
+            .replaceAll('\n', ' · ')
+            .replaceAll('• ', '')
+            .trim();
+    if (pillarsText.isNotEmpty) {
+      sb.writeln('- **Design Pillars**: $pillarsText');
+    }
+    final tradeOffsText = (draft != null && draft.tradeOffs.isNotEmpty)
+        ? draft.tradeOffs.join(' · ')
+        : (proj?.sections['trade_offs'] ?? proj?.sections['tradeOffs'] ?? '')
+            .replaceAll('\n', ' · ')
+            .replaceAll('• ', '')
+            .trim();
+    if (tradeOffsText.isNotEmpty) {
+      sb.writeln('- **Trade-Offs**: $tradeOffsText');
+    }
     final resolvedGoal = SectionTextUtils.resolveGoal(feat.sections).trim();
     if (resolvedGoal.isNotEmpty) {
       sb.writeln('- **Goal**: $resolvedGoal');
@@ -1957,51 +1977,15 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         sb.writeln('  - $item');
       }
     }
-    final cleanDone = SectionTextUtils.resolveCheckpointDoneWhen(
-      playtestGoalParam: cpNode?.parameters['playtestGoal'],
-      checkpointTrigger: cpNode?.trigger,
-      checkpointFeedback: cpNode?.feedback,
-      sections: feat.sections,
-      fallback: cpNode?.playtestCondition ?? '',
-    );
-    if (cleanDone.isNotEmpty) {
-      sb.writeln('- **Playtest Gate (Done When)**: $cleanDone');
-    }
-    final pillarsText = (draft != null && draft.designPillars.isNotEmpty)
-        ? draft.designPillars.join(' · ')
-        : (proj?.sections['design_pillars'] ??
-                proj?.sections['designPillars'] ??
-                '')
-            .replaceAll('\n', ' · ')
-            .replaceAll('• ', '')
-            .trim();
-    if (pillarsText.isNotEmpty) {
-      sb.writeln('- **Design Pillars**: $pillarsText');
-    }
-    final tradeOffsText = (draft != null && draft.tradeOffs.isNotEmpty)
-        ? draft.tradeOffs.join(' · ')
-        : (proj?.sections['trade_offs'] ?? proj?.sections['tradeOffs'] ?? '')
-            .replaceAll('\n', ' · ')
-            .replaceAll('• ', '')
-            .trim();
-    if (tradeOffsText.isNotEmpty) {
-      sb.writeln('- **Trade-Offs**: $tradeOffsText');
-    }
 
-    sb.writeln('\n## 2. Canonical Tuning Variables & Sibling Context');
     final activeTuning = (cpNode != null && cpNode.tuningParams.isNotEmpty)
         ? cpNode.tuningParams
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList()
         : SectionTextUtils.resolveTuningParams(feat.sections);
-    if (activeTuning.isEmpty) {
-      sb.writeln('- *(No numeric tuning variables registered)*');
-    } else {
-      sb.writeln('### Active Feature Variables (`${feat.title}`)');
-      for (final param in activeTuning) {
-        sb.writeln('- `$param`');
-      }
-    }
+    final siblingLines = <String>[];
     if (parentBeat != null) {
-      final siblingLines = <String>[];
       for (final sib in featuresForBeat(parentBeat.id)) {
         if (sib.id == feat.id) continue;
         final sibStates = FeatureStateNode.getStatesForDocument(sib);
@@ -2011,36 +1995,62 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           );
         }
       }
+    }
+    if (activeTuning.isNotEmpty || siblingLines.isNotEmpty) {
+      sb.writeln('\n## Tuning Variables');
+      for (final param in activeTuning) {
+        sb.writeln('- `$param`');
+      }
       if (siblingLines.isNotEmpty) {
-        sb.writeln('\n### Sibling Feature Variables in $epicLabel (Reuse Exact Identifiers)');
+        if (activeTuning.isNotEmpty) {
+          sb.writeln(
+            '\n### Sibling Epic Tuning Variables (Reuse Exact Identifiers)',
+          );
+        } else {
+          sb.writeln(
+            '### Sibling Epic Tuning Variables (Reuse Exact Identifiers)',
+          );
+        }
         for (final line in siblingLines) {
           sb.writeln(line);
         }
       }
     }
 
-    sb.writeln('\n## 3. Playtest & Edge-Case Guards');
-    if (cpNode == null || cpNode.edgeCases.isEmpty) {
-      sb.writeln('- *(No edge-case guards registered)*');
-    } else {
+    final guardLines = <String>[];
+    if (cpNode != null && cpNode.edgeCases.isNotEmpty) {
       for (int gIdx = 0; gIdx < cpNode.edgeCases.length; gIdx++) {
         final g = cpNode.edgeCases[gIdx].trim();
         if (g.isEmpty) continue;
         final checked = cpNode.isGuardSignedOff(gIdx, g) ? 'x' : ' ';
-        sb.writeln('- [$checked] `$g`');
+        guardLines.add('- [$checked] `$g`');
+      }
+    }
+    if (guardLines.isNotEmpty) {
+      sb.writeln('\n## Playtest Guards');
+      for (final gl in guardLines) {
+        sb.writeln(gl);
       }
     }
 
-    if (cpNode != null) {
-      final openFixes = cpNode.openFixItems;
-      sb.writeln('\n## 4. Open Playtest Issues ([FIX])');
-      if (openFixes.isEmpty) {
-        sb.writeln('- *(No open playtest issues)*');
-      } else {
-        for (final fix in openFixes) {
-          sb.writeln('- [ ] ${fix.text.trim()}');
-        }
+    final openFixes = cpNode?.openFixItems ?? const <Subtask>[];
+    if (openFixes.isNotEmpty) {
+      sb.writeln('\n## Open Playtest Issues ([FIX])');
+      for (final fix in openFixes) {
+        sb.writeln('- [ ] ${fix.text.trim()}');
       }
+    }
+
+    final cleanDone = SectionTextUtils.resolveCheckpointDoneWhen(
+      playtestGoalParam: cpNode?.parameters['playtestGoal'],
+      checkpointTrigger: cpNode?.trigger,
+      checkpointFeedback: cpNode?.feedback,
+      sections: feat.sections,
+      fallback: cpNode?.playtestCondition ?? '',
+    );
+    if (cleanDone.isNotEmpty) {
+      sb.writeln('\n## Playtest Gate');
+      sb.writeln('- **Playtest Gate (Done When)**: $cleanDone');
     }
 
     return sb.toString();

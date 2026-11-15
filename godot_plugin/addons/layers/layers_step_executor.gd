@@ -1133,15 +1133,35 @@ func parse_structured_scope_fields(raw_text: String) -> Dictionary:
 	}
 
 
-func dedupe_scope_items(raw_items: Variant, max_items: int = 6) -> PackedStringArray:
+func dedupe_scope_items(raw_items: Variant, max_items: int = 6, release_ver: String = "") -> PackedStringArray:
 	if typeof(raw_items) != TYPE_ARRAY and typeof(raw_items) != TYPE_PACKED_STRING_ARRAY:
 		return PackedStringArray()
-	var out: Array[String] = []
-	var key_to_idx: Dictionary = {}
+	var cleaned: Array[String] = []
 	for raw_entry in raw_items:
 		var clean: String = _strip_scope_bullet_prefix(str(raw_entry))
 		if clean.is_empty():
 			continue
+		if clean.begins_with("+"):
+			clean = "+" + clean.trim_prefix("+").strip_edges()
+		if not clean.is_empty() and clean != "+":
+			cleaned.append(clean)
+	if cleaned.is_empty():
+		return PackedStringArray()
+
+	var clean_ver: String = release_ver.strip_edges().to_lower()
+	var allow_delta: bool = (not clean_ver.is_empty()) and clean_ver != "v0.1" and clean_ver != "0.1"
+	var source: Array[String] = cleaned
+	if allow_delta:
+		var plus_only: Array[String] = []
+		for item in cleaned:
+			if item.begins_with("+"):
+				plus_only.append(item)
+		if not plus_only.is_empty():
+			source = plus_only
+
+	var out: Array[String] = []
+	var key_to_idx: Dictionary = {}
+	for clean in source:
 		var norm_key: String = clean.trim_prefix("+").strip_edges().to_lower()
 		if norm_key.is_empty():
 			continue
@@ -1162,17 +1182,9 @@ func resolve_clean_feature_spec(feat: Dictionary, release_ver: String = "v0.1") 
 	var parsed: Dictionary = parse_structured_scope_fields(str(feat.get("goal", "")))
 	var clean_goal: String = str(parsed.get("goal", "")).strip_edges()
 
-	var scope_items: PackedStringArray = dedupe_scope_items(feat.get("coveredScope", feat.get("inScope", [])), 6)
+	var scope_items: PackedStringArray = dedupe_scope_items(feat.get("coveredScope", feat.get("inScope", [])), 6, release_ver)
 	if scope_items.is_empty():
-		var parsed_in_scope: PackedStringArray = parsed.get("in_scope", PackedStringArray())
-		if not release_ver.is_empty() and release_ver != "v0.1":
-			var plus_only: Array[String] = []
-			for item in parsed_in_scope:
-				if item.begins_with("+"):
-					plus_only.append(item)
-			scope_items = dedupe_scope_items(plus_only, 6) if not plus_only.is_empty() else dedupe_scope_items(parsed_in_scope, 6)
-		else:
-			scope_items = dedupe_scope_items(parsed_in_scope, 6)
+		scope_items = dedupe_scope_items(parsed.get("in_scope", PackedStringArray()), 6, release_ver)
 
 	var has_plus_delta: bool = false
 	for si in scope_items:
@@ -1243,19 +1255,39 @@ func format_feature_context_markdown(
 	var clean_spec: Dictionary = resolve_clean_feature_spec(feat, rel_ver)
 	var feat_goal: String = str(clean_spec.get("goal", "")).strip_edges()
 	var covered_items: PackedStringArray = clean_spec.get("scope_items", PackedStringArray())
+	var scope_hdr: String = str(clean_spec.get("scope_header", "In Scope")).strip_edges()
+	if scope_hdr.is_empty():
+		scope_hdr = "In Scope"
 	var guards_raw: Variant = feat.get("edgeCases", [])
 	var issues_raw: Variant = feat.get("openIssues", [])
 	var done_when: String = str(clean_spec.get("done_when", "")).strip_edges()
+	var status_txt: String = "Queued"
+	if bool(feat.get("isPlaytestPassed", false)) or bool(feat.get("isCompleted", false)):
+		status_txt = "Passed ✓"
+	elif typeof(issues_raw) == TYPE_ARRAY and not (issues_raw as Array).is_empty():
+		status_txt = "Issues (%d)" % (issues_raw as Array).size()
+	else:
+		var raw_pct: int = int(feat.get("progress", 0))
+		if raw_pct <= 0 and typeof(guards_raw) == TYPE_ARRAY and not (guards_raw as Array).is_empty():
+			var g_arr: Array = guards_raw as Array
+			var g_signed: int = 0
+			for gr in g_arr:
+				if typeof(gr) == TYPE_DICTIONARY and bool((gr as Dictionary).get("signedOff", false)):
+					g_signed += 1
+			raw_pct = int(round(float(g_signed) / float(g_arr.size()) * 50.0))
+		if raw_pct > 0:
+			status_txt = "In Progress · %d%%" % raw_pct
 
 	if not feat_title.is_empty() or not feat_goal.is_empty() or not done_when.is_empty():
 		out.append("")
 		out.append("### Active Feature")
 		if not feat_title.is_empty():
 			out.append("- Title: %s" % feat_title)
+		out.append("- Status: %s" % status_txt)
 		if not feat_goal.is_empty() and feat_goal != feat_title:
 			out.append("- Goal: %s" % feat_goal)
 		if not covered_items.is_empty():
-			out.append("- In Scope:")
+			out.append("- %s:" % scope_hdr)
 			for ci in covered_items:
 				out.append("  - %s" % ci)
 		var tuning_raw: Variant = feat.get("tuningParams", [])

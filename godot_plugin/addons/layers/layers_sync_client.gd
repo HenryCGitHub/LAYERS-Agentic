@@ -24,6 +24,7 @@ var _update_http: HTTPRequest
 var _link_token: String = ""
 var _sync_base_url: String = DEFAULT_SYNC_BASE_URL
 var _is_busy: bool = false
+var _current_req_quiet: bool = false
 var _pending_queue: Array[Dictionary] = []
 var _update_busy: bool = false
 var _update_mode: String = ""
@@ -193,6 +194,24 @@ func resolve_playtest_issue(feature_id: String, checkpoint_id: String, issue_id:
 	})
 
 
+func select_active_feature(feature_id: String) -> void:
+	if not has_link_token():
+		return
+	var clean_id: String = feature_id.strip_edges()
+	if clean_id.is_empty():
+		return
+	_dispatch_or_queue({
+		"kind": "select_feature",
+		"quiet": true,
+		"method": HTTPClient.METHOD_POST,
+		"path": "/godotLink/update",
+		"body": JSON.stringify({
+			"featureId": clean_id,
+			"action": "select_feature",
+		}),
+	})
+
+
 func _ensure_layers_dir() -> void:
 	var abs_dir := ProjectSettings.globalize_path(CONFIG_DIR)
 	if not DirAccess.dir_exists_absolute(abs_dir):
@@ -214,7 +233,12 @@ func _dispatch_or_queue(req: Dictionary) -> void:
 		return
 	if _is_busy:
 		var req_kind: String = str(req.get("kind", ""))
-		if req_kind == "update":
+		if req_kind == "select_feature":
+			for i in range(_pending_queue.size() - 1, -1, -1):
+				if str(_pending_queue[i].get("kind", "")) == "select_feature":
+					_pending_queue.remove_at(i)
+			_pending_queue.append(req)
+		elif req_kind == "update":
 			_pending_queue.append(req)
 		elif req_kind == "get_epic" and _pending_queue.is_empty():
 			_pending_queue.append(req)
@@ -224,7 +248,9 @@ func _dispatch_or_queue(req: Dictionary) -> void:
 
 func _start_request(req: Dictionary) -> void:
 	_is_busy = true
-	busy_changed.emit(true)
+	_current_req_quiet = bool(req.get("quiet", false))
+	if not _current_req_quiet:
+		busy_changed.emit(true)
 
 	var url := "%s%s" % [_sync_base_url, str(req.get("path", ""))]
 	var headers := PackedStringArray([
@@ -236,32 +262,41 @@ func _start_request(req: Dictionary) -> void:
 
 	var err := _http.request(url, headers, method, body)
 	if err != OK:
+		var was_quiet := _current_req_quiet
+		_current_req_quiet = false
 		_is_busy = false
-		busy_changed.emit(false)
-		sync_failed.emit("HTTP request failed (%s)" % error_string(err))
+		if not was_quiet:
+			busy_changed.emit(false)
+			sync_failed.emit("HTTP request failed (%s)" % error_string(err))
 
 
 func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
+	var was_quiet := _current_req_quiet
+	_current_req_quiet = false
 	_is_busy = false
-	busy_changed.emit(false)
+	if not was_quiet:
+		busy_changed.emit(false)
 
 	var text := body.get_string_from_utf8()
 	var parsed: Variant = JSON.parse_string(text)
 
 	if result != HTTPRequest.RESULT_SUCCESS:
-		sync_failed.emit("Offline or network error (%d)" % result)
+		if not was_quiet:
+			sync_failed.emit("Offline or network error (%d)" % result)
 	elif response_code < 200 or response_code >= 300:
-		var err_msg := "Sync error (%d)" % response_code
-		if typeof(parsed) == TYPE_DICTIONARY:
-			var err_obj: Variant = (parsed as Dictionary).get("error", {})
-			if typeof(err_obj) == TYPE_DICTIONARY and (err_obj as Dictionary).has("message"):
-				err_msg = str((err_obj as Dictionary)["message"])
-		sync_failed.emit(err_msg)
+		if not was_quiet:
+			var err_msg := "Sync error (%d)" % response_code
+			if typeof(parsed) == TYPE_DICTIONARY:
+				var err_obj: Variant = (parsed as Dictionary).get("error", {})
+				if typeof(err_obj) == TYPE_DICTIONARY and (err_obj as Dictionary).has("message"):
+					err_msg = str((err_obj as Dictionary)["message"])
+			sync_failed.emit(err_msg)
 	elif typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).get("ok", false) == true:
 		var payload_dict: Dictionary = parsed as Dictionary
 		_write_cache(payload_dict)
-		epic_updated.emit(payload_dict)
-	else:
+		if not was_quiet:
+			epic_updated.emit(payload_dict)
+	elif not was_quiet:
 		sync_failed.emit("Unexpected sync response.")
 
 	if not _pending_queue.is_empty():

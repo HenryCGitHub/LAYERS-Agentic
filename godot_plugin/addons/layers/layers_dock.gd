@@ -396,7 +396,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.7")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.8")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -1529,10 +1529,17 @@ func _on_feature_selected(idx: int) -> void:
 	if idx >= 0 and idx < features.size():
 		var f: Dictionary = features[idx]
 		var next_id := str(f.get("id", ""))
-		if next_id != _selected_feature_id:
+		var changed := next_id != _selected_feature_id
+		if changed:
 			_issue_composer_expanded = false
 		_selected_feature_id = next_id
+		if not next_id.is_empty():
+			_payload["selectedFeatureId"] = next_id
+			if _sync != null and _sync.has_method("save_cached_epic") and not _payload.is_empty():
+				_sync.save_cached_epic(_payload)
 		_render_active_feature_workspace(f)
+		if changed and not next_id.is_empty() and _sync != null and _sync.has_link_token() and _sync.has_method("select_active_feature"):
+			_sync.select_active_feature(next_id)
 
 
 func _on_primary_cta_pressed() -> void:

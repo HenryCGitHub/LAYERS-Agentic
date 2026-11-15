@@ -3046,13 +3046,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(singlePrompt,
             contains('# FEATURE SPECIFICATION — ${firstFeat.title}'));
         expect(singlePrompt, contains('GODOT 4 (GDScript)'));
-        expect(singlePrompt,
-            contains('## 2. Canonical Tuning Variables & Sibling Context'));
-        expect(singlePrompt,
-            contains('## 3. Playtest & Edge-Case Guards'));
+        expect(singlePrompt, contains('## Tuning Variables'));
+        expect(singlePrompt, contains('## Playtest Guards'));
+        expect(singlePrompt, isNot(contains('Open Playtest Issues')));
+        expect(singlePrompt, isNot(contains('No open playtest issues')));
         expect(
-          singlePrompt,
-          contains('## 4. Open Playtest Issues ([FIX])'),
+          singlePrompt.indexOf('## Playtest Guards'),
+          lessThan(singlePrompt.indexOf('- **Playtest Gate (Done When)**:')),
         );
         final moreActionsBtn = find.byTooltip('Feature actions');
         expect(moreActionsBtn, findsOneWidget);

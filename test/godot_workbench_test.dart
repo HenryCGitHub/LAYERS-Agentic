@@ -1084,7 +1084,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.7"'));
+        expect(cfgText, contains('version="3.0.8"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1114,10 +1114,12 @@ void main() {
         expect(syncText, contains('func toggle_guard'));
         expect(syncText, contains('func log_playtest_issue'));
         expect(syncText, contains('func resolve_playtest_issue'));
+        expect(syncText, contains('func select_active_feature'));
         expect(syncText, contains('"set_playtest"'));
         expect(syncText, contains('"toggle_guard"'));
         expect(syncText, contains('"log_issue"'));
         expect(syncText, contains('"resolve_issue"'));
+        expect(syncText, contains('"select_feature"'));
         expect(syncText, isNot(contains('build_feature')));
         expect(syncText, isNot(contains('direct_agent')));
         expect(syncText, isNot(contains('sync_scripts')));
@@ -2531,6 +2533,7 @@ assert.strictEqual(parsed.doneWhen, "Land parry or finisher → enemy flashes wh
 
 const deduped = dedupeScopeBulletsJs(["60ms hitstop freeze frame", "+60ms hitstop freeze frame", "• +stagger flash shader"]);
 assert.deepStrictEqual(deduped, ["+60ms hitstop freeze frame", "+stagger flash shader"]);
+assert.deepStrictEqual(dedupeScopeBulletsJs(["Base Dash", "+60ms hitstop"], 6, "v0.1"), ["Base Dash", "+60ms hitstop"]);
 
 const docsById = new Map([
   ["proj_1", { id: "proj_1", tier: "PROJECT", title: "Shell", childrenIds: ["rel_3"], sections: { active_release_id: "rel_3", design_pillars: "• Every parry feels weighty\n• Read enemy tells cleanly", trade_offs: "• Arcade responsiveness over realism" } }],
@@ -2546,7 +2549,7 @@ const docsById = new Map([
       states: JSON.stringify([{
         id: "cp_3",
         trigger: "+hitstop upgrade",
-        coveredScope: ["+60ms hitstop freeze frame", "+stagger flash shader"],
+        coveredScope: ["Staggered vulnerability state", "Knockback slide impulse", "Hit-flash material swap", "Legacy base 4", "+60ms hitstop freeze frame", "+stagger flash shader", "+wall slam bonus damage"],
         parameters: { releaseVersion: "v0.3", playtestPassed: "false" }
       }])
     }
@@ -2585,7 +2588,7 @@ assert.deepStrictEqual(payload.designPillars, ["Every parry feels weighty", "Rea
 assert.deepStrictEqual(payload.tradeOffs, ["Arcade responsiveness over realism"]);
 const feat = payload.activeEpic.features[0];
 assert.strictEqual(feat.goal, "+hitstop freeze frame, +stagger flash material, +wall bounce slam");
-assert.deepStrictEqual(feat.coveredScope, ["+60ms hitstop freeze frame", "+stagger flash shader"]);
+assert.deepStrictEqual(feat.coveredScope, ["+60ms hitstop freeze frame", "+stagger flash shader", "+wall slam bonus damage"]);
 assert.strictEqual(feat.doneWhen, "Land parry or finisher → enemy flashes white, pauses 60ms");
 const featDash = payload.activeEpic.features[1];
 assert.strictEqual(featDash.goal, "+air dash");
@@ -3422,6 +3425,214 @@ process.stdout.write("JS_SCOPE_PARSE_OK\n");
         expect(afterReopen.openFixCount, equals(0));
         expect(afterReopen.signedOffGuardsCount, equals(1));
         expect(provider.getDocumentProgress(feat.id), equals(50));
+      },
+    );
+
+    test(
+      'Copy Spec omits empty sections and places Playtest Gate (Done When) right after Open Issues matching Godot Copy Context',
+      () {
+        // Case A: empty optional sections (0 tuning, 0 guards, 0 open issues) on v0.1
+        final providerA = WorkbenchProvider(enableAutoLoad: false);
+        final projA = TierDocument(
+          id: 'proj_copy_spec_a',
+          title: 'Clean Spec Game',
+          tier: TierType.project,
+          childrenIds: ['rel_copy_spec_a'],
+          sections: {'active_release_id': 'rel_copy_spec_a'},
+        );
+        final relA = TierDocument(
+          id: 'rel_copy_spec_a',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: projA.id,
+          phase: 'v0.1',
+          childrenIds: ['epic_copy_spec_a'],
+          sections: {'version': 'v0.1'},
+        );
+        final epicA = TierDocument(
+          id: 'epic_copy_spec_a',
+          title: 'Movement Core',
+          tier: TierType.epic,
+          parentId: relA.id,
+          phase: 'v0.1',
+          childrenIds: ['feat_copy_spec_a'],
+        );
+        final cpA = FeatureStateNode(
+          id: 'cp_copy_spec_a',
+          name: '01 · PROTOTYPE',
+          trigger: 'Press Space -> player jumps smoothly',
+          coveredScope: ['Ground jump impulse'],
+          parameters: {'releaseVersion': 'v0.1'},
+        );
+        final featA = TierDocument(
+          id: 'feat_copy_spec_a',
+          title: 'Player Jump',
+          tier: TierType.feature,
+          parentId: epicA.id,
+          phase: 'v0.1',
+          sections: {
+            'goal': 'Responsive single jump across platforms',
+            'in_scope': '- Ground jump impulse',
+            'done_when': 'Press Space -> player jumps smoothly',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(featA, [cpA]);
+        for (final doc in [projA, relA, epicA, featA]) {
+          providerA.documents[doc.id] = doc;
+        }
+        providerA.switchProject(projA.id);
+
+        final promptA = providerA.buildActiveFeatureCodingAgentPrompt(featA.id);
+        expect(promptA, contains('- **Status**: Queued'));
+        expect(
+          promptA,
+          contains(
+            '- **Playtest Gate (Done When)**: Press Space → player jumps smoothly',
+          ),
+        );
+        expect(promptA, isNot(contains('No numeric tuning variables')));
+        expect(promptA, isNot(contains('No edge-case guards')));
+        expect(promptA, isNot(contains('No open playtest issues')));
+        expect(promptA, isNot(contains('## Tuning Variables')));
+        expect(promptA, isNot(contains('## Playtest Guards')));
+        expect(promptA, isNot(contains('Open Playtest Issues')));
+
+        // Case B: v0.3 +delta feature with sibling tuning, guards & open [FIX] issue
+        final providerB = WorkbenchProvider(enableAutoLoad: false);
+        final projB = TierDocument(
+          id: 'proj_copy_spec_b',
+          title: 'Shell Combat',
+          tier: TierType.project,
+          childrenIds: ['rel_cs_01', 'rel_cs_02', 'rel_cs_03'],
+          sections: {'active_release_id': 'rel_cs_03'},
+        );
+        final rel01 = TierDocument(
+          id: 'rel_cs_01',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: projB.id,
+          phase: 'v0.1',
+          childrenIds: ['epic_cs_01'],
+          sections: {'version': 'v0.1'},
+        );
+        final epic01 = TierDocument(
+          id: 'epic_cs_01',
+          title: 'Base Combat',
+          tier: TierType.epic,
+          parentId: rel01.id,
+          phase: 'v0.1',
+        );
+        final rel02 = TierDocument(
+          id: 'rel_cs_02',
+          title: 'v0.2 Core',
+          tier: TierType.release,
+          parentId: projB.id,
+          phase: 'v0.2',
+          childrenIds: ['epic_cs_02'],
+          sections: {'version': 'v0.2'},
+        );
+        final epic02 = TierDocument(
+          id: 'epic_cs_02',
+          title: 'Defense Loop',
+          tier: TierType.epic,
+          parentId: rel02.id,
+          phase: 'v0.2',
+        );
+        final rel03 = TierDocument(
+          id: 'rel_cs_03',
+          title: 'v0.3 Vertical Slice',
+          tier: TierType.release,
+          parentId: projB.id,
+          phase: 'v0.3',
+          childrenIds: ['epic_cs_03'],
+          sections: {'version': 'v0.3'},
+        );
+        final epic03 = TierDocument(
+          id: 'epic_cs_03',
+          title: 'Claw & Shell Parry',
+          tier: TierType.epic,
+          parentId: rel03.id,
+          phase: 'v0.3',
+          childrenIds: ['feat_cs_sib', 'feat_cs_main'],
+        );
+        final sibFeat = TierDocument(
+          id: 'feat_cs_sib',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          parentId: epic03.id,
+          phase: 'v0.3',
+        );
+        FeatureStateNode.saveStatesToDocument(sibFeat, [
+          FeatureStateNode(
+            id: 'cp_cs_sib',
+            name: '03 · VERTICAL SLICE',
+            tuningParams: ['dashCooldown: 0.4 s'],
+            parameters: {'releaseVersion': 'v0.3'},
+          ),
+        ]);
+        final cpMain = FeatureStateNode(
+          id: 'cp_cs_main',
+          name: '03 · VERTICAL SLICE',
+          trigger: 'Land parry -> enemy flashes white',
+          coveredScope: ['Base parry', '+60ms hitstop'],
+          tuningParams: ['hitstopDuration: 0.06 s'],
+          edgeCases: ['[STATE GUARD] Ignore input while staggered'],
+          parameters: {'releaseVersion': 'v0.3'},
+          checklist: [
+            Subtask(
+              id: 'fix_cs_0',
+              text: '[FIX] Flash shader flickers',
+              codeLanguage: 'fix',
+              codeTargetFile: 'playtest_fix',
+            ),
+          ],
+        );
+        final featMain = TierDocument(
+          id: 'feat_cs_main',
+          title: 'Enemy Stagger State',
+          tier: TierType.feature,
+          parentId: epic03.id,
+          phase: 'v0.3',
+          sections: {
+            'goal': '+60ms hitstop freeze frame',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(featMain, [cpMain]);
+        for (final doc in [
+          projB,
+          rel01,
+          epic01,
+          rel02,
+          epic02,
+          rel03,
+          epic03,
+          sibFeat,
+          featMain,
+        ]) {
+          providerB.documents[doc.id] = doc;
+        }
+        providerB.switchProject(projB.id);
+
+        final promptB =
+            providerB.buildActiveFeatureCodingAgentPrompt(featMain.id);
+        expect(promptB, contains('- **In Scope (v0.3)**:'));
+        expect(promptB, isNot(contains('Base parry')));
+
+        final goalIdx = promptB.indexOf('- **Goal**:');
+        final scopeIdx = promptB.indexOf('- **In Scope (v0.3)**:');
+        final tuningIdx = promptB.indexOf('## Tuning Variables');
+        final siblingIdx = promptB.indexOf('Sibling Epic Tuning Variables');
+        final guardsIdx = promptB.indexOf('## Playtest Guards');
+        final issuesIdx = promptB.indexOf('## Open Playtest Issues ([FIX])');
+        final gateIdx = promptB.indexOf('- **Playtest Gate (Done When)**:');
+
+        expect(goalIdx, greaterThanOrEqualTo(0));
+        expect(goalIdx, lessThan(scopeIdx));
+        expect(scopeIdx, lessThan(tuningIdx));
+        expect(tuningIdx, lessThan(siblingIdx));
+        expect(siblingIdx, lessThan(guardsIdx));
+        expect(guardsIdx, lessThan(issuesIdx));
+        expect(issuesIdx, lessThan(gateIdx));
       },
     );
   });

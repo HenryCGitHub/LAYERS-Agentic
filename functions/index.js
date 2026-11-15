@@ -295,15 +295,31 @@ function parseStructuredScopeFieldsJs(rawText) {
   };
 }
 
-function dedupeScopeBulletsJs(items, maxItems = 6) {
+function dedupeScopeBulletsJs(items, maxItems = 6, releaseVersion = "") {
   if (!Array.isArray(items)) return [];
-  const out = [];
-  const keyToIdx = new Map();
+  const cleaned = [];
   for (const raw of items) {
-    const clean = String(raw || "")
+    let clean = String(raw || "")
       .replace(/^[-*•]\s*/, "")
       .trim();
     if (!clean) continue;
+    if (clean.startsWith("+")) {
+      clean = `+${clean.replace(/^\+\s*/, "").trim()}`;
+    }
+    if (clean && clean !== "+") {
+      cleaned.push(clean);
+    }
+  }
+  if (cleaned.length === 0) return [];
+  const ver = String(releaseVersion || "").trim().toLowerCase();
+  const allowDeltaFilter = Boolean(ver) && ver !== "v0.1" && ver !== "0.1";
+  const plusOnly = cleaned.filter((s) => s.startsWith("+"));
+  const source =
+    allowDeltaFilter && plusOnly.length > 0 ? plusOnly : cleaned;
+
+  const out = [];
+  const keyToIdx = new Map();
+  for (const clean of source) {
     const normKey = clean.replace(/^\+\s*/, "").trim().toLowerCase();
     if (!normKey) continue;
     if (keyToIdx.has(normKey)) {
@@ -772,10 +788,14 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       ).trim();
       const coveredScope =
         Array.isArray(cp?.coveredScope) && cp.coveredScope.length > 0
-          ? dedupeScopeBulletsJs(cp.coveredScope, 6)
+          ? dedupeScopeBulletsJs(cp.coveredScope, 6, activeVer)
           : String(feat?.sections?.in_scope || "").trim()
-            ? dedupeScopeBulletsJs(String(feat.sections.in_scope).split("\n"), 6)
-            : dedupeScopeBulletsJs(parsedScope.inScope, 6);
+            ? dedupeScopeBulletsJs(
+                String(feat.sections.in_scope).split("\n"),
+                6,
+                activeVer
+              )
+            : dedupeScopeBulletsJs(parsedScope.inScope, 6, activeVer);
       const tuningParams =
         Array.isArray(cp?.tuningParams) && cp.tuningParams.length > 0
           ? cp.tuningParams
@@ -1557,6 +1577,7 @@ exports.geminiProxy = onRequest(
         "toggle_guard",
         "log_issue",
         "resolve_issue",
+        "select_feature",
       ]);
 
       if (!featureId || !validActions.has(action)) {
@@ -1564,7 +1585,7 @@ exports.geminiProxy = onRequest(
           error: {
             code: 400,
             message:
-              "Expected featureId and action (set_playtest, toggle_guard, log_issue, or resolve_issue).",
+              "Expected featureId and action (set_playtest, toggle_guard, log_issue, resolve_issue, or select_feature).",
           },
         });
         return;
@@ -1590,53 +1611,55 @@ exports.geminiProxy = onRequest(
         .collection("documents")
         .doc(featureId);
 
-      try {
-        await db.runTransaction(async (tx) => {
-          const snap = await tx.get(featRef);
-          if (!snap.exists) {
-            const notFound = new Error("Feature document not found.");
-            notFound.statusCode = 404;
-            throw notFound;
-          }
-          const featData = snap.data() || {};
-          const sections =
-            featData.sections && typeof featData.sections === "object"
-              ? { ...featData.sections }
-              : {};
-          const states = parseFeatureStates({ sections });
-          if (states.length === 0) {
-            const badStates = new Error("Feature has no checkpoints.");
-            badStates.statusCode = 400;
-            throw badStates;
-          }
-          let cp = checkpointId
-            ? states.find((s) => String(s?.id || "") === checkpointId)
-            : null;
-          if (!cp) cp = states[states.length - 1];
+      if (action !== "select_feature") {
+        try {
+          await db.runTransaction(async (tx) => {
+            const snap = await tx.get(featRef);
+            if (!snap.exists) {
+              const notFound = new Error("Feature document not found.");
+              notFound.statusCode = 404;
+              throw notFound;
+            }
+            const featData = snap.data() || {};
+            const sections =
+              featData.sections && typeof featData.sections === "object"
+                ? { ...featData.sections }
+                : {};
+            const states = parseFeatureStates({ sections });
+            if (states.length === 0) {
+              const badStates = new Error("Feature has no checkpoints.");
+              badStates.statusCode = 400;
+              throw badStates;
+            }
+            let cp = checkpointId
+              ? states.find((s) => String(s?.id || "") === checkpointId)
+              : null;
+            if (!cp) cp = states[states.length - 1];
 
-          applyGodotFeatureMutationJs({
-            sections,
-            states,
-            cp,
-            action,
-            body,
-          });
+            applyGodotFeatureMutationJs({
+              sections,
+              states,
+              cp,
+              action,
+              body,
+            });
 
-          sections.states = JSON.stringify(states);
-          sections.last_godot_sync_ms = String(Date.now());
-          const nextSubtasks = rebuildDocSubtasksFromStates(states);
-          tx.update(featRef, {
-            sections,
-            subtasks: nextSubtasks,
-            updatedAt: FieldValue.serverTimestamp(),
+            sections.states = JSON.stringify(states);
+            sections.last_godot_sync_ms = String(Date.now());
+            const nextSubtasks = rebuildDocSubtasksFromStates(states);
+            tx.update(featRef, {
+              sections,
+              subtasks: nextSubtasks,
+              updatedAt: FieldValue.serverTimestamp(),
+            });
           });
-        });
-      } catch (err) {
-        const code = err?.statusCode || 500;
-        res.status(code).json({
-          error: { code, message: String(err?.message || err) },
-        });
-        return;
+        } catch (err) {
+          const code = err?.statusCode || 500;
+          res.status(code).json({
+            error: { code, message: String(err?.message || err) },
+          });
+          return;
+        }
       }
 
       const docsSnap = await db
@@ -1647,6 +1670,12 @@ exports.geminiProxy = onRequest(
       const docsById = new Map();
       for (const d of docsSnap.docs) {
         docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
+      }
+      if (action === "select_feature" && !docsById.has(featureId)) {
+        res.status(404).json({
+          error: { code: 404, message: "Feature document not found." },
+        });
+        return;
       }
       const nowMs = String(Date.now());
       const passedJustNow = action === "set_playtest" && Boolean(body.passed);

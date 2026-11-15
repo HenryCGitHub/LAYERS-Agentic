@@ -4,6 +4,7 @@ extends SceneTree
 class _SyncSpy extends Node:
 	var fetched_count: int = 0
 	var update_checked_silent: Array = []
+	var selected_features: Array = []
 
 	func has_link_token() -> bool:
 		return true
@@ -12,10 +13,13 @@ class _SyncSpy extends Node:
 		return "lyr_spy_1234567890123456"
 
 	func get_local_plugin_version() -> String:
-		return "3.0.7"
+		return "3.0.8"
 
 	func fetch_active_epic() -> void:
 		fetched_count += 1
+
+	func select_active_feature(feature_id: String) -> void:
+		selected_features.append(feature_id)
 
 	func check_for_plugin_update(silent: bool = true) -> void:
 		update_checked_silent.append(silent)
@@ -374,6 +378,7 @@ func _run_smoke_suite() -> bool:
 		"toggle_guard",
 		"log_playtest_issue",
 		"resolve_playtest_issue",
+		"select_active_feature",
 		"save_cached_epic",
 		"load_cached_epic",
 		"check_for_plugin_update",
@@ -639,7 +644,7 @@ func _run_smoke_suite() -> bool:
 		"id": "f_stagger_v03",
 		"title": "Enemy Stagger State",
 		"goal": "Goal: +hitstop freeze frame, +stagger flash material\n\nIn Scope:\n• Staggered vulnerability state\n• +60ms hitstop freeze frame\n\nDone When: Land parry -> enemy flashes white",
-		"coveredScope": ["+60ms hitstop freeze frame", "+stagger flash shader"],
+		"coveredScope": ["Staggered vulnerability state", "Knockback slide impulse", "+60ms hitstop freeze frame", "+stagger flash shader"],
 		"tuningParams": ["staggerDuration: 1.8 s"],
 		"edgeCases": [
 			{"index": 0, "rawText": "[STATE GUARD] Ignore attack input while staggered", "text": "Ignore attack input while staggered", "signedOff": false}
@@ -689,11 +694,26 @@ func _run_smoke_suite() -> bool:
 		dock.free()
 		_fail("Expected 'In Scope (v0.3)' section header in v0.3 dock: %s" % v03_joined)
 		return false
-	if v03_joined.find("Staggered vulnerability state") != -1:
+	if v03_joined.find("Staggered vulnerability state") != -1 or v03_joined.find("Knockback slide impulse") != -1:
 		sync_v03.free()
 		dock.set("_sync", null)
 		dock.free()
 		_fail("Raw 3-part baseline In Scope leaked into v0.3 dock: %s" % v03_joined)
+		return false
+	var v03_md: String = exec.call(
+		"format_feature_context_markdown",
+		v03_feat,
+		{},
+		{},
+		{},
+		[],
+		{"releaseVersion": "v0.3"}
+	)
+	if v03_md.find("- Status: Queued") == -1 or v03_md.find("- In Scope (v0.3):") == -1 or v03_md.find("Knockback slide impulse") != -1:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("v0.3 Copy Context parity mismatch:\n%s" % v03_md)
 		return false
 	if v03_joined.find("Enemy Stagger State") != -1 or v03_joined.find("Done When: Land parry") != -1:
 		sync_v03.free()
@@ -800,14 +820,19 @@ func _run_smoke_suite() -> bool:
 		_fail("Expected initial sync to honor selectedFeatureId 'f_2', got: %s" % actual_focus_init)
 		return false
 
-	# Local Godot dropdown pick switches to f_1
+	# Local Godot dropdown pick switches to f_1 and quietly notifies Web Studio
+	var spy_pick: _SyncSpy = _SyncSpy.new()
+	dock.set("_sync", spy_pick)
 	dock.call("_on_feature_selected", 0)
+	dock.set("_sync", sync_v03)
+	var picked_sent: Array = spy_pick.selected_features.duplicate()
+	spy_pick.free()
 	var actual_focus_pick: String = str(dock.get("_selected_feature_id"))
-	if actual_focus_pick != "f_1":
+	if actual_focus_pick != "f_1" or picked_sent != ["f_1"]:
 		sync_v03.free()
 		dock.set("_sync", null)
 		dock.free()
-		_fail("Expected _on_feature_selected(0) to set _selected_feature_id='f_1', got: %s" % actual_focus_pick)
+		_fail("Expected _on_feature_selected(0) to set _selected_feature_id='f_1' & sync select_active_feature, got id=%s sent=%s" % [actual_focus_pick, str(picked_sent)])
 		return false
 
 	# Manual Sync when Web Studio selection did NOT change preserves Godot's f_1
