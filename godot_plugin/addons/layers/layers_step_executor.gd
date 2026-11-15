@@ -551,15 +551,92 @@ func _derive_feature_stem(raw_title: String) -> String:
 	return cleaned.trim_suffix("_")
 
 
+func _normalize_match_token(word: String) -> String:
+	var w := word.strip_edges().to_lower()
+	if w.length() >= 4:
+		if w.ends_with("ies"):
+			w = w.substr(0, w.length() - 3) + "y"
+		elif w.ends_with("s") and not w.ends_with("ss"):
+			w = w.substr(0, w.length() - 1)
+	return w
+
+
+func _extract_feature_match_tokens(feat: Dictionary) -> PackedStringArray:
+	var raw := String(feat.get("title", "")).strip_edges().to_lower()
+	var stopwords := {
+		"and": true,
+		"the": true,
+		"for": true,
+		"with": true,
+		"from": true,
+		"into": true,
+		"over": true,
+		"under": true,
+		"system": true,
+		"systems": true,
+		"feature": true,
+		"features": true,
+		"mechanic": true,
+		"setup": true,
+		"core": true,
+		"basic": true,
+		"game": true,
+		"mode": true,
+		"loop": true,
+	}
+	var cleaned := ""
+	for i in range(raw.length()):
+		var ch := raw[i]
+		var is_alnum := (ch >= "a" and ch <= "z") or (ch >= "0" and ch <= "9")
+		cleaned += ch if is_alnum else " "
+	var out := PackedStringArray()
+	var seen := {}
+	for part in cleaned.split(" ", false):
+		var tok := _normalize_match_token(part)
+		if tok.length() < 3 or stopwords.has(tok) or seen.has(tok):
+			continue
+		seen[tok] = true
+		out.append(tok)
+	return out
+
+
+func _score_stem_match(file_stem: String, full_stem: String, tokens: PackedStringArray) -> int:
+	var normalized_file_stem := file_stem.strip_edges().to_lower()
+	if normalized_file_stem.is_empty():
+		return 0
+	if not full_stem.is_empty() and normalized_file_stem == full_stem:
+		return 100
+	var file_words := PackedStringArray()
+	for chunk in normalized_file_stem.replace("-", "_").split("_", false):
+		var nw := _normalize_match_token(chunk)
+		if nw.length() >= 3:
+			file_words.append(nw)
+	var score := 0
+	for tok in tokens:
+		var exact_hit := false
+		var prefix_hit := false
+		for fw in file_words:
+			if fw == tok:
+				exact_hit = true
+				break
+			if tok.length() >= 4 and fw.length() >= 4 and (fw.begins_with(tok) or tok.begins_with(fw)):
+				prefix_hit = true
+		if exact_hit:
+			score += 25
+		elif prefix_hit:
+			score += 12
+	return score
+
+
 func resolve_feature_paths(feat: Dictionary, arena_hint: String = "") -> Dictionary:
 	var primary_scene := String(feat.get("primaryAsset", "")).strip_edges()
-	if not primary_scene.ends_with(".tscn") and not primary_scene.ends_with(".scn"):
+	if (not primary_scene.ends_with(".tscn") and not primary_scene.ends_with(".scn")) or not FileAccess.file_exists(primary_scene):
 		primary_scene = ""
 	var script_paths: Array[String] = []
 	var seen_scripts := {}
 	var add_script := func(candidate: String) -> void:
 		var sp_str := candidate.strip_edges()
-		if sp_str.begins_with("res://") and sp_str.ends_with(".gd") and not ("addons/layers/" in sp_str) and not seen_scripts.has(sp_str):
+		if sp_str.begins_with("res://") and sp_str.ends_with(".gd") and not ("addons/layers/" in sp_str) and FileAccess.file_exists(sp_str) and not seen_scripts.has(sp_str):
 			seen_scripts[sp_str] = true
 			script_paths.append(sp_str)
 
@@ -567,12 +644,19 @@ func resolve_feature_paths(feat: Dictionary, arena_hint: String = "") -> Diction
 		add_script.call(String(sp))
 
 	var stem := _derive_feature_stem(String(feat.get("title", "")))
-	if primary_scene.is_empty() and not stem.is_empty():
+	var tokens := _extract_feature_match_tokens(feat)
+	if primary_scene.is_empty() and (not stem.is_empty() or not tokens.is_empty()):
+		var best_scene := ""
+		var best_scene_score := 0
 		for sc_raw in _scan_project_files_by_ext("res://", ".tscn", 80):
 			var sc_path := String(sc_raw)
-			if sc_path.get_file().get_basename().to_lower() == stem:
-				primary_scene = sc_path
-				break
+			var sc_stem := sc_path.get_file().get_basename().to_lower()
+			var sc_score := _score_stem_match(sc_stem, stem, tokens)
+			if sc_score > best_scene_score:
+				best_scene_score = sc_score
+				best_scene = sc_path
+		if best_scene_score > 0:
+			primary_scene = best_scene
 
 	if not primary_scene.is_empty() and FileAccess.file_exists(primary_scene):
 		var disk_scripts := _collect_tscn_script_paths_from_disk(primary_scene)
@@ -580,16 +664,38 @@ func resolve_feature_paths(feat: Dictionary, arena_hint: String = "") -> Diction
 			add_script.call(String(ds_raw))
 
 	var scene_stem := primary_scene.get_file().get_basename().to_lower() if not primary_scene.is_empty() else ""
-	if not stem.is_empty() or not scene_stem.is_empty():
+	if not stem.is_empty() or not scene_stem.is_empty() or not tokens.is_empty():
+		var scored_scripts: Array[Dictionary] = []
 		for gd_raw in _scan_project_files_by_ext("res://", ".gd", 80):
 			var gd_path := String(gd_raw)
+			if seen_scripts.has(gd_path):
+				continue
 			var gd_stem := gd_path.get_file().get_basename().to_lower()
-			if (not stem.is_empty() and gd_stem == stem) or (not scene_stem.is_empty() and gd_stem == scene_stem):
-				add_script.call(gd_path)
+			var sc := 0
+			if not scene_stem.is_empty() and gd_stem == scene_stem:
+				sc = 100
+			else:
+				sc = _score_stem_match(gd_stem, stem, tokens)
+			if sc > 0:
+				scored_scripts.append({"path": gd_path, "score": sc})
+		scored_scripts.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			var sa := int(a.get("score", 0))
+			var sb := int(b.get("score", 0))
+			if sa != sb:
+				return sa > sb
+			return String(a.get("path", "")) < String(b.get("path", ""))
+		)
+		var match_cap := mini(scored_scripts.size(), 6)
+		for i in range(match_cap):
+			add_script.call(String(scored_scripts[i].get("path", "")))
+
+	var resolved_arena := arena_hint.strip_edges()
+	if resolved_arena.is_empty() or not FileAccess.file_exists(resolved_arena):
+		resolved_arena = primary_scene
 
 	return {
 		"primary_scene": primary_scene,
-		"arena_scene": arena_hint if not arena_hint.is_empty() else primary_scene,
+		"arena_scene": resolved_arena,
 		"script_paths": script_paths,
 	}
 

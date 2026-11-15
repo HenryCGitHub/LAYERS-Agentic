@@ -460,7 +460,66 @@ func _run_smoke_suite() -> bool:
 		dock.free()
 		_fail("Expected Open Scene (2) + Open Script buttons.")
 		return false
-
 	row_probe.free()
+
+	# 5. Smart keyword real-file discovery & Web deep-link + Queued status parity
+	var ai_fake_feat: Dictionary = {
+		"id": "f_ai_fake",
+		"title": "Player Movement & Dash",
+		"primaryAsset": "res://scenes/fake_ai_player.tscn",
+		"scriptPaths": ["res://scripts/fake_ai_player.gd"],
+	}
+	var smart_paths: Dictionary = exec.call("resolve_feature_paths", ai_fake_feat, SMOKE_SCENE_PATH)
+	if not str(smart_paths.get("primary_scene", "")).is_empty():
+		dock.free()
+		_fail("resolve_feature_paths kept missing AI scene: %s" % str(smart_paths))
+		return false
+	var smart_scripts: Array = smart_paths.get("script_paths", [])
+	if smart_scripts.has("res://scripts/fake_ai_player.gd") or not smart_scripts.has(SMOKE_SCRIPT_PATH):
+		dock.free()
+		_fail("resolve_feature_paths failed smart keyword discovery: %s" % str(smart_paths))
+		return false
+
+	var unmatched_feat: Dictionary = {
+		"id": "f_unmatched",
+		"title": "Inventory Crafting",
+		"primaryAsset": "res://scenes/missing_inventory.tscn",
+		"scriptPaths": ["res://scripts/missing_inventory.gd"],
+	}
+	var unmatched_paths: Dictionary = exec.call("resolve_feature_paths", unmatched_feat, SMOKE_SCENE_PATH)
+	if not str(unmatched_paths.get("primary_scene", "")).is_empty() or not (unmatched_paths.get("script_paths", []) as Array).is_empty():
+		dock.free()
+		_fail("Expected unmatched feature to return empty scene/script paths cleanly: %s" % str(unmatched_paths))
+		return false
+	if str(unmatched_paths.get("arena_scene", "")) != SMOKE_SCENE_PATH:
+		dock.free()
+		_fail("Expected unmatched feature to preserve existing arena_scene.")
+		return false
+
+	var deep_link: String = str(dock.call("build_web_studio_deep_link", "https://henrycgithub.github.io/LAYERS-Agentic/", "proj_abc", "feat_xyz"))
+	if deep_link != "https://henrycgithub.github.io/LAYERS-Agentic/?project=proj_abc&feature=feat_xyz":
+		dock.free()
+		_fail("build_web_studio_deep_link mismatch: %s" % deep_link)
+		return false
+
+	var queued_feat: Dictionary = {
+		"id": "f_queued",
+		"title": "Queued Loot Pickup",
+		"goal": "Pick up loot crystals cleanly",
+		"edgeCases": [
+			{"index": 0, "rawText": "[STATE GUARD] Magnetize within 2m", "text": "Magnetize within 2m", "signedOff": false}
+		],
+		"openIssues": [],
+		"isPlaytestPassed": false,
+		"isCompleted": false,
+	}
+	dock.call("_render_active_feature_workspace", queued_feat)
+	var queued_labels := PackedStringArray()
+	_collect_labels_text(body_container, queued_labels)
+	if not ("\n".join(queued_labels)).contains("Queued"):
+		dock.free()
+		_fail("Expected untouched feature in Godot Dock to render 'Queued' status: %s" % ("\n".join(queued_labels)))
+		return false
+
 	dock.free()
 	return true

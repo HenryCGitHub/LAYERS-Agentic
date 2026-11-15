@@ -138,6 +138,16 @@ class FeatureStateNode {
     return count;
   }
 
+  /// Canonical status badge label shared across Web Studio, Godot Dock & Markdown exports.
+  String get unifiedStatusLabel {
+    if (isPlaytestPassed || isCompleted) return 'Passed ✓';
+    final openCount = openFixCount;
+    if (openCount > 0) return 'Issues ($openCount)';
+    final pct = (progress * 100).round();
+    if (pct > 0) return 'In Progress · $pct%';
+    return 'Queued';
+  }
+
   /// Iterates every executable build step in [checklist] uniformly across both
   /// flat Unified Steps (`entry.children.isEmpty`) and legacy nested subtasks
   /// (`parentTask.children`).

@@ -1081,7 +1081,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.1"'));
+        expect(cfgText, contains('version="3.0.2"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1595,7 +1595,7 @@ void main() {
 
         final releaseMd = provider.buildActiveReleaseCodingAgentMarkdown();
         expect(releaseMd, contains('## 5. Feature Specifications & Playtest Gates'));
-        expect(releaseMd, contains('- **Status**: Queued'));
+        expect(releaseMd, contains('- **Status**: Issues (1)'));
         expect(releaseMd, contains('- **In Scope**:'));
         expect(releaseMd, contains('- **Playtest Guards**:'));
         expect(releaseMd, contains('  - [x] Release hook when obstructed'));
@@ -2100,6 +2100,273 @@ void main() {
         expect(afterReopen.checklist.first.completed, isTrue);
         expect(afterReopen.signedOffGuardsCount, equals(2));
         expect(provider.getDocumentProgress(feat.id), equals(50));
+      },
+    );
+
+    test(
+      'applyDeepLinkParams switches active project and selects target feature across releases',
+      () {
+        final provider = WorkbenchProvider();
+        final f1 = TierDocument(
+          id: 'feat_dl_1',
+          title: 'Main Menu',
+          tier: TierType.feature,
+          parentId: 'epic_dl_1',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(f1, [
+          FeatureStateNode(
+            id: 'cp_dl_1',
+            name: '01 · PROTOTYPE',
+            parameters: {'releaseVersion': 'v0.1'},
+          ),
+        ]);
+        final epic1 = TierDocument(
+          id: 'epic_dl_1',
+          title: 'Shell',
+          tier: TierType.epic,
+          parentId: 'rel_dl_1',
+          phase: 'v0.1',
+          childrenIds: [f1.id],
+        );
+        final rel1 = TierDocument(
+          id: 'rel_dl_1',
+          title: 'v0.1',
+          tier: TierType.release,
+          parentId: 'proj_dl_1',
+          phase: 'v0.1',
+          childrenIds: [epic1.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj1 = TierDocument(
+          id: 'proj_dl_1',
+          title: 'Project One',
+          tier: TierType.project,
+          childrenIds: [rel1.id],
+          sections: {
+            'active_release_id': rel1.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+
+        final f2a = TierDocument(
+          id: 'feat_dl_2a',
+          title: 'Player Move',
+          tier: TierType.feature,
+          parentId: 'epic_dl_2',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(f2a, [
+          FeatureStateNode(
+            id: 'cp_dl_2a',
+            name: '01 · PROTOTYPE',
+            parameters: {'releaseVersion': 'v0.1'},
+          ),
+        ]);
+        final f2b = TierDocument(
+          id: 'feat_dl_2b',
+          title: 'Wall Jump',
+          tier: TierType.feature,
+          parentId: 'epic_dl_2',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(f2b, [
+          FeatureStateNode(
+            id: 'cp_dl_2b',
+            name: '01 · PROTOTYPE',
+            parameters: {'releaseVersion': 'v0.1'},
+          ),
+        ]);
+        final epic2 = TierDocument(
+          id: 'epic_dl_2',
+          title: 'Movement',
+          tier: TierType.epic,
+          parentId: 'rel_dl_2',
+          phase: 'v0.1',
+          childrenIds: [f2a.id, f2b.id],
+        );
+        final rel2 = TierDocument(
+          id: 'rel_dl_2',
+          title: 'v0.1',
+          tier: TierType.release,
+          parentId: 'proj_dl_2',
+          phase: 'v0.1',
+          childrenIds: [epic2.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj2 = TierDocument(
+          id: 'proj_dl_2',
+          title: 'Project Two',
+          tier: TierType.project,
+          childrenIds: [rel2.id],
+          sections: {
+            'active_release_id': rel2.id,
+            'current_stage': WorkbenchStage.projectPitch.name,
+          },
+        );
+
+        for (final doc in [proj1, rel1, epic1, f1, proj2, rel2, epic2, f2a, f2b]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj1.id);
+        expect(provider.activeProjectId, proj1.id);
+
+        provider.applyDeepLinkParams({'project': proj2.id, 'feature': f2b.id});
+
+        expect(provider.activeProjectId, proj2.id);
+        expect(provider.currentStage, WorkbenchStage.releaseWorkbench);
+        expect(provider.selectedFeatureId, f2b.id);
+      },
+    );
+
+    testWidgets(
+      'Web Studio unifies Queued / In Progress / Issues / Passed badges and surfaces live Godot sync dot + 1-click focus jump',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 920);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider();
+        final cp1 = FeatureStateNode(
+          id: 'cp_sync_badge_1',
+          name: '01 · PROTOTYPE',
+          edgeCases: [
+            '[STATE GUARD] Lock move while dash_timer active',
+            '[PLAYTEST GUARD] Reset stamina cleanly',
+          ],
+          parameters: {'releaseVersion': 'v0.1'},
+        );
+        final feat1 = TierDocument(
+          id: 'feat_sync_badge_1',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          parentId: 'epic_sync_badge',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(feat1, [cp1]);
+
+        final cp2 = FeatureStateNode(
+          id: 'cp_sync_badge_2',
+          name: '01 · PROTOTYPE',
+          edgeCases: ['[STATE GUARD] Respawn cleanly'],
+          parameters: {'releaseVersion': 'v0.1'},
+        );
+        final feat2 = TierDocument(
+          id: 'feat_sync_badge_2',
+          title: 'Dash Ghost Trail',
+          tier: TierType.feature,
+          parentId: 'epic_sync_badge',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(feat2, [cp2]);
+
+        final epic = TierDocument(
+          id: 'epic_sync_badge',
+          title: 'Movement Core',
+          tier: TierType.epic,
+          parentId: 'rel_sync_badge',
+          phase: 'v0.1',
+          childrenIds: [feat1.id, feat2.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_sync_badge',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_sync_badge',
+          phase: 'v0.1',
+          childrenIds: [epic.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj = TierDocument(
+          id: 'proj_sync_badge',
+          title: 'Dash Arena',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+            'last_godot_sync_ms':
+                DateTime.now().millisecondsSinceEpoch.toString(),
+          },
+        );
+        for (final doc in [proj, rel, epic, feat1, feat2]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+        provider.selectFeature(feat1.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Live sync indicator dot on Feature Header Godot chip
+        expect(
+          find.byKey(ValueKey('godot_chip_live_sync_dot_${cp1.id}')),
+          findsOneWidget,
+        );
+
+        // 2. Unified status badge progression: Queued -> In Progress · 25% -> Issues (1) -> Passed ✓
+        expect(find.text('Queued'), findsOneWidget);
+
+        final guardCheck = find.byKey(ValueKey('playtest_guard_check_${cp1.id}_0'));
+        await tester.ensureVisible(guardCheck);
+        await tester.tap(guardCheck);
+        await tester.pumpAndSettle();
+        expect(find.text('In Progress · 25%'), findsWidgets);
+
+        final currentStates = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat1.id]!,
+        );
+        provider.logPlaytestIssueOnCheckpoint(
+          featureId: feat1.id,
+          states: currentStates,
+          checkpointIndex: 0,
+          issueDescription: 'Dash stalls on wall corner',
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Issues (1)'), findsWidgets);
+
+        final passBtn = find.byKey(ValueKey('playtest_gate_pass_btn_${cp1.id}'));
+        await tester.ensureVisible(passBtn);
+        await tester.tap(passBtn);
+        await tester.pumpAndSettle();
+        // Passing feat1 auto-advances focus to feat2; switch back to feat1 to inspect Passed ✓ and Jump CTA
+        expect(provider.selectedFeatureId, equals(feat2.id));
+        provider.selectFeature(feat1.id, triggerAiSynthesis: false);
+        await tester.pumpAndSettle();
+        expect(find.text('Passed ✓'), findsWidgets);
+
+        // 3. Now Active Godot Feature is feat2 (since feat1 passed); open modal from feat1 & jump straight to feat2
+        await tester.tap(
+          find.byKey(ValueKey('connect_godot_plugin_chip_${cp1.id}')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('connect_godot_sync_status_badge')),
+          findsOneWidget,
+        );
+        final jumpBtn = find.byKey(
+          const ValueKey('jump_to_active_godot_feature_btn'),
+        );
+        expect(jumpBtn, findsOneWidget);
+        await tester.tap(jumpBtn);
+        await tester.pumpAndSettle();
+
+        expect(provider.selectedFeatureId, equals(feat2.id));
       },
     );
   });

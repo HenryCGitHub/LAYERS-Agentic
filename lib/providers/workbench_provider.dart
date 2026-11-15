@@ -76,6 +76,8 @@ class WorkbenchProvider extends ChangeNotifier {
 
   String? _pendingUrlInviteToken;
   String? _pendingUrlInvitedEmail;
+  String? _pendingUrlProjectId;
+  String? _pendingUrlFeatureId;
   String? _inviteFeedbackMessage;
   String? get pendingUrlInviteToken => _pendingUrlInviteToken;
   String? get pendingUrlInvitedEmail => _pendingUrlInvitedEmail;

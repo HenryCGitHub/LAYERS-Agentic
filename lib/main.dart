@@ -432,9 +432,12 @@ class WorkbenchShell extends StatelessWidget {
                           builder: (ctx) {
                             final isNarrowTopBar =
                                 MediaQuery.sizeOf(ctx).width < 1040;
+                            final isGodotSynced =
+                                workbench.isActiveProjectSyncedWithGodot;
                             return Tooltip(
-                              message:
-                                  'Connect Godot 4 LAYERS Dock (Download Plugin & Link Token)',
+                              message: isGodotSynced
+                                  ? 'Godot 4 LAYERS Dock (${workbench.formatGodotSyncStatusLabel()})'
+                                  : 'Connect Godot 4 LAYERS Dock (Download Plugin & Link Token)',
                               child: InkWell(
                                 key: const ValueKey(
                                   'top_bar_connect_godot_btn',
@@ -453,17 +456,42 @@ class WorkbenchShell extends StatelessWidget {
                                     color: bgSurface,
                                     borderRadius: BorderRadius.circular(5),
                                     border: Border.all(
-                                      color: const Color(0xFF38BDF8)
-                                          .withValues(alpha: 0.4),
+                                      color: (isGodotSynced
+                                              ? const Color(0xFF10B981)
+                                              : const Color(0xFF38BDF8))
+                                          .withValues(
+                                        alpha: isGodotSynced ? 0.55 : 0.4,
+                                      ),
                                     ),
                                   ),
-                                  child: Text(
-                                    isNarrowTopBar ? '🔌' : '🔌 Godot',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: const Color(0xFF7DD3FC),
-                                    ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isGodotSynced) ...[
+                                        Container(
+                                          key: const ValueKey(
+                                            'top_bar_godot_live_sync_dot',
+                                          ),
+                                          width: 6,
+                                          height: 6,
+                                          decoration: const BoxDecoration(
+                                            color: Color(0xFF10B981),
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 5),
+                                      ],
+                                      Text(
+                                        isNarrowTopBar ? '🔌' : '🔌 Godot',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: isGodotSynced
+                                              ? const Color(0xFF6EE7B7)
+                                              : const Color(0xFF7DD3FC),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),

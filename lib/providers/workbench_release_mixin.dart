@@ -1848,11 +1848,10 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
                 .replaceFirst(_goalPrefixRegex, '')
                 .trim();
         for (final cp in effectiveStates) {
-          final cpPassed = cp.isPlaytestPassed || cp.isCompleted;
           sb.writeln(
             '\n#### ${feat.title} — ${cp.cleanStageTitle} (${cp.releaseVersion})',
           );
-          sb.writeln('- **Status**: ${cpPassed ? 'Passed ✓' : 'Queued'}');
+          sb.writeln('- **Status**: ${cp.unifiedStatusLabel}');
           if (goalLine.isNotEmpty) {
             sb.writeln('- **Goal**: $goalLine');
           }
@@ -2077,9 +2076,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     sb.writeln('- **Target Engine**: $effectiveEngineTarget');
     sb.writeln('- **Epic**: $epicLabel');
     sb.writeln('- **Feature**: ${feat.title}');
-    final cpPassed =
-        cpNode != null && (cpNode.isPlaytestPassed || cpNode.isCompleted);
-    sb.writeln('- **Status**: ${cpPassed ? 'Passed ✓' : 'Queued'}');
+    sb.writeln('- **Status**: ${cpNode?.unifiedStatusLabel ?? 'Queued'}');
     final rawGoal = (feat.sections['scope'] ?? feat.sections['goal'] ?? '').trim();
     if (rawGoal.isNotEmpty) {
       sb.writeln('- **Goal**: ${rawGoal.split('\n').first.replaceFirst(_goalPrefixRegex, '').trim()}');

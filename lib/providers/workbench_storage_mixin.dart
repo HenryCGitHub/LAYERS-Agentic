@@ -252,14 +252,16 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
             }
           }
           if (mergedAny && !_isAgentBusy) {
-            if (_activeProjectId == null ||
-                !documents.containsKey(_activeProjectId)) {
-              final projs = savedProjects;
-              if (projs.isNotEmpty) {
-                _restoreProjectState(projs.first.id);
+            if (!_tryResolvePendingDeepLink()) {
+              if (_activeProjectId == null ||
+                  !documents.containsKey(_activeProjectId)) {
+                final projs = savedProjects;
+                if (projs.isNotEmpty) {
+                  _restoreProjectState(projs.first.id);
+                }
+              } else {
+                _restoreProjectState(_activeProjectId!);
               }
-            } else {
-              _restoreProjectState(_activeProjectId!);
             }
             notifyListeners();
           }
@@ -290,7 +292,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           _isDark = remoteTheme != 'light';
         }
         final remoteActiveId = remoteSettings['activeDocumentId']?.toString();
-        if (remoteActiveId != null && documents.containsKey(remoteActiveId)) {
+        if (!_tryResolvePendingDeepLink() &&
+            _activeProjectId == null &&
+            remoteActiveId != null &&
+            documents.containsKey(remoteActiveId)) {
           _restoreProjectState(remoteActiveId);
         }
         notifyListeners();
@@ -316,8 +321,9 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           LocalVaultService.saveDocument(entry.value);
         }
         FeatureStateNode.clearCache();
-        if (_activeProjectId == null ||
-            !documents.containsKey(_activeProjectId)) {
+        if (!_tryResolvePendingDeepLink() &&
+            (_activeProjectId == null ||
+                !documents.containsKey(_activeProjectId))) {
           final projs = savedProjects;
           if (projs.isNotEmpty) {
             _restoreProjectState(projs.first.id);
@@ -564,7 +570,91 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  /// Loads saved projects from LocalStorage / SharedPreferences, detects `?invite=` URL params,
+  /// Applies Web Studio URL deep-link query params (`?project=<id>&feature=<id>`),
+  /// switching straight to that project's Release Workbench and focusing the target Feature.
+  void applyDeepLinkParams(Map<String, String> queryParams) {
+    final projParam = (queryParams['project'] ?? '').trim();
+    final featParam = (queryParams['feature'] ?? '').trim();
+    if (projParam.isNotEmpty) {
+      _pendingUrlProjectId = projParam;
+    }
+    if (featParam.isNotEmpty) {
+      _pendingUrlFeatureId = featParam;
+    }
+    if ((projParam.isNotEmpty || featParam.isNotEmpty) &&
+        _tryResolvePendingDeepLink()) {
+      notifyListeners();
+    }
+  }
+
+  bool _tryResolvePendingDeepLink() {
+    final reqProjId = _pendingUrlProjectId;
+    final reqFeatId = _pendingUrlFeatureId;
+    if ((reqProjId == null || reqProjId.isEmpty) &&
+        (reqFeatId == null || reqFeatId.isEmpty)) {
+      return false;
+    }
+
+    String? targetProjId;
+    if (reqProjId != null &&
+        reqProjId.isNotEmpty &&
+        documents[reqProjId]?.tier == TierType.project) {
+      targetProjId = reqProjId;
+    } else if (reqFeatId != null && reqFeatId.isNotEmpty) {
+      for (final proj in savedProjects) {
+        if (_collectProjectDocumentTreeIds(proj.id).contains(reqFeatId)) {
+          targetProjId = proj.id;
+          break;
+        }
+      }
+    }
+    if (targetProjId == null) {
+      return false;
+    }
+
+    if (_activeProjectId != targetProjId) {
+      _restoreProjectState(targetProjId);
+    }
+    final proj = documents[targetProjId];
+    if (proj != null && projectReleases.isNotEmpty) {
+      _currentStage = WorkbenchStage.releaseWorkbench;
+      proj.sections['current_stage'] = WorkbenchStage.releaseWorkbench.name;
+    }
+
+    bool resolvedFeature = reqFeatId == null || reqFeatId.isEmpty;
+    if (!resolvedFeature) {
+      final targetFeat = documents[reqFeatId];
+      if (targetFeat != null && targetFeat.tier == TierType.feature) {
+        final parentBeatId = targetFeat.parentId;
+        if (parentBeatId != null &&
+            !activeReleaseBeats.any((b) => b.id == parentBeatId)) {
+          for (final rel in projectReleases) {
+            if (rel.childrenIds.contains(parentBeatId)) {
+              _activeReleaseId = rel.id;
+              proj?.sections['active_release_id'] = rel.id;
+              _syncCurrentPhaseFromRelease(rel);
+              final relBp = releaseBlueprintFor(rel.id);
+              if (relBp != null) {
+                _releaseBlueprint = relBp;
+              }
+              break;
+            }
+          }
+        }
+        selectFeature(targetFeat.id, triggerAiSynthesis: false);
+        resolvedFeature = true;
+      }
+    }
+
+    _pendingUrlProjectId = null;
+    if (resolvedFeature) {
+      _pendingUrlFeatureId = null;
+    }
+    _persistSettings();
+    return true;
+  }
+
+  /// Loads saved projects from LocalStorage / SharedPreferences, detects `?invite=` & `?project=`/`?feature=` URL params,
   /// and starts Cloud Firestore sync if an approved Google account is logged in.
   Future<void> initVault() async {
     try {
@@ -574,6 +664,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _pendingUrlInviteToken = urlInvite;
         _pendingUrlInvitedEmail = qp['invited_email']?.trim().toLowerCase();
       }
+      applyDeepLinkParams(qp);
     } catch (_) {}
 
     try {
@@ -617,7 +708,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
               savedPlanning != GeminiAgentClient.pinnedLiveFlashModel ||
               savedThinking != 'LOW');
       final projs = savedProjects;
-      if (projs.isNotEmpty) {
+      if (!_tryResolvePendingDeepLink() && projs.isNotEmpty) {
         final targetId = (loaded.activeDocumentId != null &&
                 documents.containsKey(loaded.activeDocumentId))
             ? loaded.activeDocumentId!

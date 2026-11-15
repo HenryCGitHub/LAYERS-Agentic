@@ -275,11 +275,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         _activeStage2InlineEditKey == 'rename_header_feat_${feat.id}';
     final bool isDrawerOpen = _inlineBugDrawerNodeId == node.id;
     final bool isPassed = node.isPlaytestPassed || node.isCompleted;
+    final bool isGodotSynced = widget.workbench.isActiveProjectSyncedWithGodot;
 
-    final String statusLabel = isPassed ? 'Passed ✓' : 'Queued';
+    final String statusLabel = node.unifiedStatusLabel;
     final Color statusColor = isPassed
         ? accentEmerald
-        : const Color(0xFF94A3B8);
+        : node.openFixCount > 0
+            ? const Color(0xFFF59E0B)
+            : node.progress > 0
+                ? const Color(0xFF38BDF8)
+                : const Color(0xFF94A3B8);
 
     return Container(
       key: ValueKey('unified_header_${node.id}'),
@@ -452,16 +457,40 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                         color: const Color(0xFF07090E),
                         borderRadius: BorderRadius.circular(5),
                         border: Border.all(
-                          color: const Color(0xFF38BDF8).withValues(alpha: 0.4),
+                          color: (isGodotSynced
+                                  ? const Color(0xFF10B981)
+                                  : const Color(0xFF38BDF8))
+                              .withValues(alpha: isGodotSynced ? 0.55 : 0.4),
                         ),
                       ),
-                      child: Text(
-                        '🔌 Godot',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 9.5,
-                          fontWeight: weightSemi,
-                          color: const Color(0xFF7DD3FC),
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isGodotSynced) ...[
+                            Container(
+                              key: ValueKey(
+                                'godot_chip_live_sync_dot_${node.id}',
+                              ),
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                          ],
+                          Text(
+                            '🔌 Godot',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: weightSemi,
+                              color: isGodotSynced
+                                  ? const Color(0xFF6EE7B7)
+                                  : const Color(0xFF7DD3FC),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

@@ -134,12 +134,26 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'GODOT DOCK v3.0 · SPEC, PLAYTEST & 2-WAY SYNC',
+                      'GODOT DOCK v3.0.2 · SPEC, PLAYTEST & 2-WAY SYNC',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.5,
                         color: const Color(0xFF38BDF8),
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      workbench.isActiveProjectSyncedWithGodot
+                          ? '● Live Sync · ${workbench.formatGodotSyncStatusLabel()}'
+                          : '○ Not synced with Godot yet',
+                      key: const ValueKey('connect_godot_sync_status_badge'),
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                        color: workbench.isActiveProjectSyncedWithGodot
+                            ? const Color(0xFF34D399)
+                            : textMuted,
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -151,6 +165,51 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                         color: textPrimary,
                       ),
                     ),
+                    if (snap.activeFeatureId != null &&
+                        snap.activeFeatureTitle.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            'Active Godot Feature: ${snap.activeFeatureTitle}',
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w500,
+                              color: textSecondary,
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            key: const ValueKey(
+                              'jump_to_active_godot_feature_btn',
+                            ),
+                            onPressed: workbench.selectedFeatureId ==
+                                    snap.activeFeatureId
+                                ? null
+                                : () {
+                                    workbench.focusActiveGodotFeature();
+                                    Navigator.of(innerCtx).pop();
+                                  },
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 5,
+                              ),
+                              minimumSize: const Size(0, 26),
+                            ),
+                            icon: const Icon(Icons.my_location_rounded, size: 13),
+                            label: Text(
+                              workbench.selectedFeatureId == snap.activeFeatureId
+                                  ? 'Viewing Active Godot Feature ✓'
+                                  : 'Jump to Active Godot Feature →',
+                              style: GoogleFonts.inter(fontSize: 11),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 4),
                     Text(
                       'Inspect Feature specs inside Godot 4, jump straight to scenes & scripts, run 1-click Playtest, capture debugger traces as [FIX] issues, and sync Done status both ways.',

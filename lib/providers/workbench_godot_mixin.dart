@@ -7,6 +7,8 @@ class ActiveGodotEpicSnapshot {
   final String activeEpicCode;
   final String activeEpicTitle;
   final String activeEpicGoal;
+  final String? activeFeatureId;
+  final String activeFeatureTitle;
   final int epicPosition;
   final int totalEpics;
   final int completedFeaturesInActiveEpic;
@@ -19,6 +21,8 @@ class ActiveGodotEpicSnapshot {
     required this.activeEpicCode,
     required this.activeEpicTitle,
     required this.activeEpicGoal,
+    this.activeFeatureId,
+    this.activeFeatureTitle = '',
     required this.epicPosition,
     required this.totalEpics,
     required this.completedFeaturesInActiveEpic,
@@ -29,6 +33,47 @@ class ActiveGodotEpicSnapshot {
 
 /// Godot 4 Active Epic Cloud Sync snapshot & Dock Link Token helper (`v3.0` Pure Spec & Playtest Dock).
 extension WorkbenchGodotMixin on WorkbenchProvider {
+  /// Returns the latest `last_godot_sync_ms` timestamp across the active project's tree, or null if unsynced.
+  DateTime? get activeProjectLastGodotSyncAt {
+    final pid = _activeProjectId;
+    if (pid == null) return null;
+    int maxMs = 0;
+    for (final id in _collectProjectDocumentTreeIds(pid)) {
+      final raw = documents[id]?.sections['last_godot_sync_ms'];
+      final ms = int.tryParse(raw ?? '') ?? 0;
+      if (ms > maxMs) {
+        maxMs = ms;
+      }
+    }
+    return maxMs > 0 ? DateTime.fromMillisecondsSinceEpoch(maxMs) : null;
+  }
+
+  /// True once the active project (or any document in its tree) has synced with the Godot 4 Dock.
+  bool get isActiveProjectSyncedWithGodot => activeProjectLastGodotSyncAt != null;
+
+  /// Human-readable Godot Cloud Sync status summary for modals and tooltips.
+  String formatGodotSyncStatusLabel({DateTime? now}) {
+    final syncedAt = activeProjectLastGodotSyncAt;
+    if (syncedAt == null) return 'Not synced with Godot yet';
+    final diff = (now ?? DateTime.now()).difference(syncedAt);
+    if (diff.inSeconds < 60) return 'Synced just now';
+    if (diff.inMinutes < 60) return 'Synced ${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return 'Synced ${diff.inHours}h ago';
+    return 'Synced ${diff.inDays}d ago';
+  }
+
+  /// Focuses Web Studio onto the active unfinished Feature shown in the Godot 4 Dock.
+  bool focusActiveGodotFeature() {
+    final snap = computeActiveGodotEpicSnapshot();
+    final targetId = snap.activeFeatureId;
+    if (targetId == null || !documents.containsKey(targetId)) {
+      return false;
+    }
+    _currentStage = WorkbenchStage.releaseWorkbench;
+    selectFeature(targetId, triggerAiSynthesis: false);
+    return true;
+  }
+
   /// Resolves the single active Epic shown inside the Godot 4 Dock (`E01` -> `E02` -> ...),
   /// matching `/godotLink/epic` Cloud Sync progression rules.
   ActiveGodotEpicSnapshot computeActiveGodotEpicSnapshot() {
@@ -80,6 +125,7 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       int originalIndex,
       int doneCount,
       int totalCount,
+      TierDocument? nextFeature,
     })>[];
 
     for (int i = 0; i < beats.length; i++) {
@@ -92,11 +138,20 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
         continue;
       }
       final doneCount = scopedFeats.where(isFeatureFinishedForGodot).length;
+      TierDocument? nextFeat;
+      for (final f in scopedFeats) {
+        if (!isFeatureFinishedForGodot(f)) {
+          nextFeat = f;
+          break;
+        }
+      }
+      nextFeat ??= scopedFeats.isNotEmpty ? scopedFeats.first : null;
       candidates.add((
         beat: beat,
         originalIndex: i,
         doneCount: doneCount,
         totalCount: scopedFeats.length,
+        nextFeature: nextFeat,
       ));
     }
 
@@ -129,6 +184,8 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
           activeEpicCode: code,
           activeEpicTitle: c.beat.title,
           activeEpicGoal: SectionTextUtils.resolveGoal(c.beat.sections),
+          activeFeatureId: c.nextFeature?.id,
+          activeFeatureTitle: c.nextFeature?.title ?? '',
           epicPosition: idx + 1,
           totalEpics: candidates.length,
           completedFeaturesInActiveEpic: c.doneCount,
@@ -145,6 +202,8 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       activeEpicCode: 'E${(last.originalIndex + 1).toString().padLeft(2, '0')}',
       activeEpicTitle: last.beat.title,
       activeEpicGoal: SectionTextUtils.resolveGoal(last.beat.sections),
+      activeFeatureId: last.nextFeature?.id,
+      activeFeatureTitle: last.nextFeature?.title ?? '',
       epicPosition: candidates.length,
       totalEpics: candidates.length,
       completedFeaturesInActiveEpic: last.doneCount,

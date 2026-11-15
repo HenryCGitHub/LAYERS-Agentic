@@ -763,9 +763,12 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	elif not open_issues.is_empty():
 		state_lbl.text = "Issues (%d)" % open_issues.size()
 		state_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
-	else:
-		state_lbl.text = ("In Progress · %d%%" % live_pct) if live_pct > 0 else "In Progress"
+	elif live_pct > 0:
+		state_lbl.text = "In Progress · %d%%" % live_pct
 		state_lbl.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
+	else:
+		state_lbl.text = "Queued"
+		state_lbl.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.64, 0.68, 0.76)))
 	hdr_row.add_child(state_lbl)
 
 	var copy_ctx_btn := Button.new()
@@ -1688,11 +1691,32 @@ func _on_sync_pressed() -> void:
 		_refresh_view()
 
 
-func _on_open_web_pressed() -> void:
-	var url: String = str(_payload.get("webStudioUrl", DEFAULT_WEB_STUDIO_URL)).strip_edges()
+func build_web_studio_deep_link(base_url: String, project_id: String, feature_id: String) -> String:
+	var url := base_url.strip_edges()
 	if url.is_empty():
 		url = DEFAULT_WEB_STUDIO_URL
-	OS.shell_open(url)
+	var fragment := ""
+	var hash_idx := url.find("#")
+	if hash_idx != -1:
+		fragment = url.substr(hash_idx)
+		url = url.substr(0, hash_idx)
+	var params := PackedStringArray()
+	var clean_proj := project_id.strip_edges()
+	var clean_feat := feature_id.strip_edges()
+	if not clean_proj.is_empty():
+		params.append("project=%s" % clean_proj.uri_encode())
+	if not clean_feat.is_empty():
+		params.append("feature=%s" % clean_feat.uri_encode())
+	if not params.is_empty():
+		var sep := "&" if url.contains("?") else "?"
+		url = "%s%s%s" % [url, sep, "&".join(params)]
+	return "%s%s" % [url, fragment]
+
+
+func _on_open_web_pressed() -> void:
+	var base_url: String = str(_payload.get("webStudioUrl", DEFAULT_WEB_STUDIO_URL)).strip_edges()
+	var project_id: String = str(_payload.get("projectId", "")).strip_edges()
+	OS.shell_open(build_web_studio_deep_link(base_url, project_id, _selected_feature_id))
 
 
 func _on_settings_pressed() -> void:
