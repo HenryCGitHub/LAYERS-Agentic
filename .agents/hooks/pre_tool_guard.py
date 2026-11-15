@@ -3,7 +3,10 @@
 
 import json
 import os
+from pathlib import Path
 import sys
+
+sys.dont_write_bytecode = True
 
 EXTERNAL_GODOT_ROOT = "/Users/henry/Godot/Projects/"
 

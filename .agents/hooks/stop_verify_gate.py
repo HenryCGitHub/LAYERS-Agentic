@@ -9,15 +9,17 @@ import re
 import subprocess
 import sys
 
+sys.dont_write_bytecode = True
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 VERIFIED_HASH_FILE = Path("/tmp/layers_verified_state.sha256")
 WATCHED_PREFIXES = (
     "lib/",
     "test/",
     "functions/",
-    "godot_plugin/",
+    "unreal_plugin/",
     "scripts/",
-    "web/layers_godot_plugin.zip",
+    "web/layers_unreal_plugin.zip",
     "pubspec.yaml",
 )
 

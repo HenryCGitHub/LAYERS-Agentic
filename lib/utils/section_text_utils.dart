@@ -77,7 +77,13 @@ class SectionTextUtils {
   );
 
   /// Godot 4 Native engine label across Stage 1 and Stage 2.
-  static String detectEngineLabel(String? engineHint) => 'GODOT 4';
+  static String detectEngineLabel(String? engineHint) {
+    final lower = (engineHint ?? '').trim().toLowerCase();
+    if (lower.contains('ue6') || lower.contains('verse')) {
+      return 'UE6 Verse';
+    }
+    return 'UE 5.9 MCP';
+  }
 
   /// Formats a remaining minute estimate into a compact hour string (`0h`, `4h`, `1.5h`).
   static String formatRemainingHoursShort(int minutes) {

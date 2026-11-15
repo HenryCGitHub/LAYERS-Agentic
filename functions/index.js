@@ -47,24 +47,24 @@ function extractBearerLinkToken(req) {
   return "";
 }
 
-async function verifyGodotLinkToken(req) {
+async function verifyUnrealLinkToken(req) {
   const rawToken = extractBearerLinkToken(req);
   if (!rawToken) {
     return {
       errorStatus: 401,
-      errorMessage: "Missing or invalid Godot Project Link Token (lyr_...).",
+      errorMessage: "Missing or invalid Unreal Project Link Token (lyr_...).",
     };
   }
   const tokenHash = hashLinkToken(rawToken);
   const snap = await getFirestore()
-    .collection("godot_links")
+    .collection("unreal_links")
     .where("tokenHash", "==", tokenHash)
     .limit(1)
     .get();
   if (snap.empty) {
     return {
       errorStatus: 401,
-      errorMessage: "Invalid or expired Godot Project Link Token.",
+      errorMessage: "Invalid or expired Unreal Project Link Token.",
     };
   }
   const linkDoc = snap.docs[0];
@@ -72,7 +72,7 @@ async function verifyGodotLinkToken(req) {
   if (data.revoked === true || !data.uid || !data.projectId) {
     return {
       errorStatus: 401,
-      errorMessage: "This Godot Project Link Token has been revoked.",
+      errorMessage: "This Unreal Project Link Token has been revoked.",
     };
   }
   const email = String(data.email || "").trim().toLowerCase();
@@ -100,543 +100,385 @@ async function verifyGodotLinkToken(req) {
   };
 }
 
-function extractResPath(raw) {
-  const match = String(raw || "").match(/res:\/\/[A-Za-z0-9_./-]+/);
-  return match ? match[0] : "";
-}
-
 function resolveVersionTag(relDoc) {
   const v = String(
-    relDoc?.sections?.versionTag || relDoc?.sections?.version || ""
+    relDoc?.sections?.release_version ||
+      relDoc?.sections?.versionTag ||
+      relDoc?.sections?.version ||
+      ""
   ).trim();
   if (v) return /^v/i.test(v) ? `v${v.slice(1)}` : `v${v}`;
   const m = String(relDoc?.title || "").match(/v?(\d+\.\d+(?:\.\d+)?)/i);
   return m ? `v${m[1]}` : "v0.1";
 }
 
-function parseFeatureStates(featDoc) {
-  const raw = String(featDoc?.sections?.states || "").trim();
-  if (!raw) return [];
+function parseJsonObjectSafe(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object" && !Array.isArray(raw)) return raw;
   try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(String(raw));
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : null;
   } catch (_) {
-    return [];
+    return null;
   }
 }
 
-function selectActiveCheckpoint(states, activeVer) {
-  if (!Array.isArray(states) || states.length === 0) return null;
-  const matching = states.filter(
-    (s) => String(s?.parameters?.releaseVersion || "v0.1").trim() === activeVer
-  );
-  if (matching.length > 0) {
-    return matching[matching.length - 1];
+function normalizeStringArrayJs(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.map((x) => String(x || "").trim()).filter(Boolean);
+}
+
+function formatTradeOffJs(raw) {
+  if (raw && typeof raw === "object") {
+    const prefer = String(raw.prefer || "Direct arcade response").trim();
+    const avoid = String(raw.avoid || "Slow physical inertia").trim();
+    return `${prefer} OVER ${avoid}`;
   }
-  const firstIncomplete = states.find(
-    (s) => String(s?.parameters?.playtestPassed || "") !== "true"
-  );
-  return firstIncomplete || states[states.length - 1];
+  return String(raw || "").trim();
 }
 
-function normalizeResPathJs(rawPath) {
-  let clean = String(rawPath || "").trim().replace(/\\/g, "/");
-  if (!clean) return "";
-  if (clean.startsWith("res://")) {
-    clean = clean.slice("res://".length);
-  }
-  clean = clean.replace(/^\/+/, "").replace(/\/{2,}/g, "/");
-  return clean ? `res://${clean}` : "";
-}
-
-function extractResPathsListJs(rawText, extFilter = "") {
-  const matches = String(rawText || "").match(/res:\/\/[A-Za-z0-9_./-]+/g) || [];
-  const out = [];
-  const seen = new Set();
-  for (const m of matches) {
-    const norm = normalizeResPathJs(m);
-    if (!norm) continue;
-    if (extFilter && !norm.toLowerCase().endsWith(extFilter)) continue;
-    if (!seen.has(norm)) {
-      seen.add(norm);
-      out.push(norm);
-    }
-  }
-  return out;
-}
-
-function guardStorageKeyJs(index, rawGuardText) {
-  const cleaned = String(rawGuardText || "").trim();
-  return cleaned || `#${index}`;
-}
-
-function parseSignedOffGuardsSetJs(cp) {
-  const raw = cp?.parameters?.signedOffGuards;
-  if (!raw) return new Set();
-  try {
-    const parsed = Array.isArray(raw) ? raw : JSON.parse(String(raw));
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.map((x) => String(x || "").trim()).filter(Boolean));
-  } catch (_) {
-    return new Set();
-  }
-}
-
-function cleanGuardDisplayTextJs(rawGuard) {
-  return String(rawGuard || "")
+function parseRootSpecJs(projectDoc) {
+  const parsed =
+    parseJsonObjectSafe(projectDoc?.sections?.concept_blueprint_json) || {};
+  const rawEngine = String(
+    parsed.targetEngine || projectDoc?.sections?.engine || "ue5Mcp"
+  )
     .trim()
-    .replace(/^\[(?:STATE|PLAYTEST)\s+GUARD\]\s*:?\s*/i, "")
-    .trim();
-}
-
-function isFixChecklistItemJs(item) {
-  if (!item || typeof item !== "object") return false;
-  const lang = String(item.codeLanguage || "").trim().toLowerCase();
-  const txt = String(item.text || "").trim().toUpperCase();
-  return lang === "fix" || txt.startsWith("[FIX]");
-}
-
-function collectOpenPlaytestIssuesJs(cp) {
-  const out = [];
-  let seq = 0;
-  const walk = (items) => {
-    if (!Array.isArray(items)) return;
-    for (const item of items) {
-      if (!item || typeof item !== "object") continue;
-      if (isFixChecklistItemJs(item) && !item.completed) {
-        const cleanText = String(item.text || "")
-          .trim()
-          .replace(/^\[FIX\]\s*/i, "")
-          .trim();
-        if (cleanText) {
-          const itemId = String(item.id || "").trim() || `fix_idx_${seq}`;
-          out.push({ id: itemId, text: cleanText });
-        }
-      }
-      seq += 1;
-      if (Array.isArray(item.children) && item.children.length > 0) {
-        walk(item.children);
-      }
-    }
-  };
-  walk(cp?.checklist || []);
-  return out;
-}
-
-function parseStructuredScopeFieldsJs(rawText) {
-  const lines = String(rawText || "").replace(/\r\n/g, "\n").split("\n");
-  let section = "goal";
-  const goalLines = [];
-  const inScopeLines = [];
-  const doneWhenLines = [];
-
-  for (const rawLine of lines) {
-    const trimmed = rawLine.trim();
-    if (!trimmed) continue;
-
-    const goalMatch = trimmed.match(/^goal\s*:\s*(.*)$/i);
-    if (goalMatch) {
-      section = "goal";
-      const rest = String(goalMatch[1] || "").trim();
-      if (rest) goalLines.push(rest);
-      continue;
-    }
-
-    const inScopeMatch = trimmed.match(/^in\s+scope(?:\s*\([^)]*\))?\s*:\s*(.*)$/i);
-    if (inScopeMatch) {
-      section = "in_scope";
-      const rest = String(inScopeMatch[1] || "")
-        .replace(/^[-*•]\s*/, "")
-        .trim();
-      if (rest) inScopeLines.push(rest);
-      continue;
-    }
-
-    const outOfScopeMatch = trimmed.match(
-      /^(?:out\s+of\s+scope|exclusions)(?:\s*\([^)]*\))?\s*:\s*(.*)$/i
-    );
-    if (outOfScopeMatch) {
-      section = "out_of_scope";
-      continue;
-    }
-
-    const doneMatch = trimmed.match(/^(?:done\s+when|playtest\s+gate|end\s+goal)\s*:\s*(.*)$/i);
-    if (doneMatch) {
-      section = "done_when";
-      const rest = String(doneMatch[1] || "").trim();
-      if (rest) doneWhenLines.push(rest);
-      continue;
-    }
-
-    if (section === "goal") {
-      if (/^[-*•]\s+/.test(trimmed) && goalLines.length > 0) {
-        section = "in_scope";
-        const bullet = trimmed.replace(/^[-*•]\s*/, "").trim();
-        if (bullet) inScopeLines.push(bullet);
-      } else {
-        goalLines.push(trimmed);
-      }
-    } else if (section === "in_scope") {
-      const bullet = trimmed.replace(/^[-*•]\s*/, "").trim();
-      if (bullet) inScopeLines.push(bullet);
-    } else if (section === "out_of_scope") {
-      continue;
-    } else {
-      const donePart = trimmed.replace(/^[-*•]\s*/, "").trim();
-      if (donePart) doneWhenLines.push(donePart);
-    }
-  }
+    .toLowerCase();
+  const isUe6 = rawEngine === "ue6verse" || rawEngine.includes("verse") || rawEngine.includes("ue6");
+  const targetEngine = isUe6 ? "ue6Verse" : "ue5Mcp";
+  const rawTitle = String(
+    parsed.gameTitle || projectDoc?.title || "UNTITLED UNREAL PROJECT"
+  ).trim();
+  const normalizedTitle = rawTitle || "UNTITLED UNREAL PROJECT";
 
   return {
-    goal: goalLines.join(" ").trim(),
-    inScope: inScopeLines,
-    doneWhen: doneWhenLines
-      .join(" ")
-      .replace(/\s*->\s*/g, " → ")
-      .trim(),
+    gameTitle: normalizedTitle,
+    normalizedTitle,
+    targetEngine,
+    pitch: String(parsed.pitch || projectDoc?.sections?.goal || "").trim(),
+    coreLoop: normalizeStringArrayJs(parsed.coreLoop),
+    cameraContract: String(
+      parsed.cameraContract ||
+        "SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0"
+    ).trim(),
+    characterScale: String(
+      parsed.characterScale ||
+        "ACharacter CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 620 cm/s"
+    ).trim(),
+    inputContract: String(
+      parsed.inputContract ||
+        "Enhanced Input (IMC_Core + IA_Move / IA_Aim / IA_Primary / IA_Secondary)"
+    ).trim(),
+    assetPolicy: String(
+      parsed.assetPolicy ||
+        "Prototype Greybox Primitives (Engine/BasicShapes) + Debug Materials; UDataAsset for tuning"
+    ).trim(),
+    pillars: normalizeStringArrayJs(parsed.pillars),
+    tradeOffs: Array.isArray(parsed.tradeOffs)
+      ? parsed.tradeOffs.map(formatTradeOffJs).filter(Boolean)
+      : [],
+    outOfScope: normalizeStringArrayJs(parsed.outOfScope),
   };
 }
 
-function dedupeScopeBulletsJs(items, maxItems = 6, releaseVersion = "") {
-  if (!Array.isArray(items)) return [];
-  const cleaned = [];
-  for (const raw of items) {
-    let clean = String(raw || "")
-      .replace(/^[-*•]\s*/, "")
-      .trim();
-    if (!clean) continue;
-    if (clean.startsWith("+")) {
-      clean = `+${clean.replace(/^\+\s*/, "").trim()}`;
-    }
-    if (clean && clean !== "+") {
-      cleaned.push(clean);
-    }
-  }
-  if (cleaned.length === 0) return [];
-  const ver = String(releaseVersion || "").trim().toLowerCase();
-  const allowDeltaFilter = Boolean(ver) && ver !== "v0.1" && ver !== "0.1";
-  const plusOnly = cleaned.filter((s) => s.startsWith("+"));
-  const source =
-    allowDeltaFilter && plusOnly.length > 0 ? plusOnly : cleaned;
-
-  const out = [];
-  const keyToIdx = new Map();
-  for (const clean of source) {
-    const normKey = clean.replace(/^\+\s*/, "").trim().toLowerCase();
-    if (!normKey) continue;
-    if (keyToIdx.has(normKey)) {
-      const existingIdx = keyToIdx.get(normKey);
-      if (clean.startsWith("+") && !out[existingIdx].startsWith("+")) {
-        out[existingIdx] = clean;
-      }
-      continue;
-    }
-    if (out.length >= maxItems) continue;
-    keyToIdx.set(normKey, out.length);
-    out.push(clean);
-  }
-  return out;
+function computeEpicPassedJs(spec) {
+  if (!spec) return false;
+  if (String(spec.lifecycle || "").toLowerCase() === "stable") return true;
+  const checks = Array.isArray(spec.checks) ? spec.checks : [];
+  const fixes = Array.isArray(spec.fixes) ? spec.fixes : [];
+  const openFixes = fixes.filter((f) => !f?.resolved);
+  return checks.length > 0 && checks.every((c) => Boolean(c?.passed)) && openFixes.length === 0;
 }
 
-function parseBulletLinesJs(rawText, maxItems = 6) {
-  return String(rawText || "")
-    .replace(/\r\n/g, "\n")
-    .split("\n")
-    .map((l) => l.replace(/^[-*•]\s*/, "").trim())
-    .filter((l) => Boolean(l) && !l.startsWith("#"))
-    .slice(0, maxItems);
-}
-
-function cleanCheckpointDoneWhenJs(rawText) {
-  const stripped = String(rawText || "")
-    .trim()
-    .replace(/^(?:playtest|done\s+when)\s*:\s*/i, "")
-    .replace(/\s*->\s*/g, " → ")
-    .trim();
-  if (!stripped) return "";
-  if (stripped.startsWith("+")) return "";
-  if (
-    /^(?:Verify stage deliverables and checklist criteria|Press F6 and verify\b)/i.test(
-      stripped
-    )
-  ) {
-    return "";
-  }
-  return stripped;
-}
-
-function markChecklistItemCompletedByIdJs(items, targetId) {
-  const cleanTarget = String(targetId || "").trim();
-  if (!cleanTarget || !Array.isArray(items)) return false;
-  let seq = 0;
-  let matched = false;
-  const walk = (list) => {
-    for (const item of list) {
-      if (!item || typeof item !== "object") continue;
-      const itemId = String(item.id || "").trim() || `fix_idx_${seq}`;
-      const cleanText = String(item.text || "")
-        .trim()
-        .replace(/^\[FIX\]\s*/i, "")
-        .trim();
-      if (itemId === cleanTarget || cleanText === cleanTarget) {
-        item.completed = true;
-        matched = true;
-      }
-      seq += 1;
-      if (Array.isArray(item.children) && item.children.length > 0) {
-        walk(item.children);
-      }
-    }
-  };
-  walk(items);
-  return matched;
-}
-
-function collectFeatureGdScriptPathsJs(feat, cp) {
-  const ordered = [];
-  const seen = new Set();
-  const addFromText = (raw) => {
-    for (const p of extractResPathsListJs(raw, ".gd")) {
-      if (!seen.has(p)) {
-        seen.add(p);
-        ordered.push(p);
-      }
-    }
-  };
-  addFromText(feat?.sections?.primary_asset || "");
-  addFromText(feat?.sections?.scripts || "");
-  addFromText(feat?.sections?.assets || "");
-  addFromText(feat?.sections?.in_scope || "");
-  addFromText(feat?.sections?.engine_areas || "");
-  const walkChecklist = (items) => {
-    if (!Array.isArray(items)) return;
-    for (const item of items) {
-      if (!item || typeof item !== "object") continue;
-      addFromText(item.codeLanguage || "");
-      addFromText(item.text || "");
-      if (Array.isArray(item.children) && item.children.length > 0) {
-        walkChecklist(item.children);
-      }
-    }
-  };
-  walkChecklist(cp?.checklist || []);
-  return ordered.slice(0, 12);
-}
-
-function detectArenaScenePathJs(docsById, candidateEpics, activeIdx) {
-  const allTscns = [];
-  const seen = new Set();
-  const pushTscn = (raw) => {
-    for (const p of extractResPathsListJs(raw, ".tscn")) {
-      if (!seen.has(p)) {
-        seen.add(p);
-        allTscns.push(p);
-      }
-    }
-  };
-  if (Array.isArray(candidateEpics)) {
-    for (const ep of candidateEpics) {
-      for (const f of ep?.features || []) {
-        pushTscn(f?.primaryAsset || "");
-      }
-    }
-  }
-  if (docsById && typeof docsById.values === "function") {
-    for (const d of docsById.values()) {
-      pushTscn(d?.sections?.primary_asset || "");
-      pushTscn(d?.sections?.assets || "");
-    }
-  }
-  const preferredKeywords = ["arena", "main", "world", "level", "island", "stage", "game"];
-  for (const kw of preferredKeywords) {
-    const match = allTscns.find((p) => p.toLowerCase().includes(kw));
-    if (match) return match;
-  }
-  if (
-    Array.isArray(candidateEpics) &&
-    activeIdx >= 0 &&
-    candidateEpics[activeIdx]?.features?.length
-  ) {
-    for (const f of candidateEpics[activeIdx].features) {
-      if (String(f?.primaryAsset || "").endsWith(".tscn")) {
-        return f.primaryAsset;
-      }
-    }
-  }
-  return allTscns[0] || "";
-}
-
-function isFeatureActiveInReleaseJs(featDoc, activeVer, totalReleasesCount) {
-  const lc = String(featDoc?.sections?.lifecycle || "");
-  if (lc === "superseded") return false;
-  const featActiveVer = String(
-    featDoc?.sections?.activeReleaseVersion || ""
-  ).trim();
-  if (
-    lc === "stable" &&
-    (featActiveVer === activeVer || (!featActiveVer && totalReleasesCount <= 1))
-  ) {
-    return false;
-  }
-  const states = parseFeatureStates(featDoc);
-  if (states.length > 0) {
-    return states.some(
-      (s) =>
-        String(s?.parameters?.releaseVersion || "v0.1").trim() === activeVer
-    );
-  }
-  return lc !== "stable";
-}
-
-function rebuildDocSubtasksFromStates(states) {
-  return (Array.isArray(states) ? states : []).map((s) => {
-    const meta = {};
-    meta.trigger = String(s.trigger || "");
-    if (s.guard) meta.guard = s.guard;
-    if (s.feedback) meta.feedback = s.feedback;
-    if (s.parameters && Object.keys(s.parameters).length > 0) {
-      meta.parameters = s.parameters;
-    }
-    if (Array.isArray(s.coveredScope) && s.coveredScope.length > 0) {
-      meta.coveredScope = s.coveredScope;
-    }
-    if (Array.isArray(s.tuningParams) && s.tuningParams.length > 0) {
-      meta.tuningParams = s.tuningParams;
-    }
-    if (Array.isArray(s.edgeCases) && s.edgeCases.length > 0) {
-      meta.edgeCases = s.edgeCases;
-    }
-    return {
-      id: String(s.id || ""),
-      text: String(s.name || "Checkpoint"),
-      completed: String(s?.parameters?.playtestPassed || "") === "true",
-      children: Array.isArray(s.checklist) ? s.checklist : [],
-      isExpanded: true,
-      specNotes: JSON.stringify(meta),
-    };
-  });
-}
-
-function applyGodotFeatureMutationJs({ sections, states, cp, action, body }) {
-  cp.parameters =
-    cp.parameters && typeof cp.parameters === "object"
-      ? { ...cp.parameters }
+function parseEpicSpecJs(epicDoc, indexHint = 0) {
+  const sec =
+    epicDoc?.sections && typeof epicDoc.sections === "object"
+      ? epicDoc.sections
       : {};
+  const parsed = parseJsonObjectSafe(sec.epic_spec_json) || {};
+  const code =
+    String(sec.code || parsed.code || `E0${indexHint + 1}`).trim() ||
+    `E0${indexHint + 1}`;
+  const lineageKey = String(
+    sec.lineage_key || parsed.lineageKey || code.toLowerCase()
+  ).trim();
+  const releaseVersion = String(
+    sec.release_version || parsed.releaseVersion || "v0.1"
+  ).trim();
+  const lifecycle = String(
+    sec.lifecycle || parsed.lifecycle || (epicDoc?.isCompleted ? "stable" : "queued")
+  ).trim();
 
-  if (action === "set_playtest") {
-    const nextPassed = Boolean(body?.passed);
-    if (nextPassed) {
-      cp.parameters.playtestPassed = "true";
-      setAllChecklistItemsCompleted(cp.checklist, true);
-      const rawArr = Array.isArray(cp.edgeCases) ? cp.edgeCases : [];
-      const signedOffSet = parseSignedOffGuardsSetJs(cp);
-      for (let idx = 0; idx < rawArr.length; idx += 1) {
-        const rawGuard = String(rawArr[idx] || "").trim();
-        if (!rawGuard) continue;
-        signedOffSet.add(guardStorageKeyJs(idx, rawGuard));
+  const rawChecks =
+    Array.isArray(parsed.checks) && parsed.checks.length > 0
+      ? parsed.checks
+      : Array.isArray(epicDoc?.subtasks)
+        ? epicDoc.subtasks
+        : [];
+  const checks = rawChecks
+    .map((item, idx) => {
+      if (item && typeof item === "object") {
+        return {
+          id: String(item.id || `chk_${idx + 1}`),
+          text: String(item.text || "").trim(),
+          passed: Boolean(item.passed ?? item.completed),
+        };
       }
-      if (signedOffSet.size > 0) {
-        cp.parameters.signedOffGuards = JSON.stringify(
-          Array.from(signedOffSet)
-        );
+      const txt = String(item || "").trim();
+      return txt ? { id: `chk_${idx + 1}`, text: txt, passed: false } : null;
+    })
+    .filter((c) => c && c.text);
+
+  const rawFixes = Array.isArray(parsed.fixes) ? parsed.fixes : [];
+  const fixes = rawFixes
+    .map((item, idx) => {
+      if (item && typeof item === "object") {
+        return {
+          id: String(item.id || `fix_${idx + 1}`),
+          text: String(item.text || "").trim(),
+          resolved: Boolean(item.resolved),
+          createdAtMs: Number(item.createdAtMs || 0) || 0,
+        };
       }
-    } else {
-      delete cp.parameters.playtestPassed;
-      if (String(sections?.lifecycle || "").trim() === "stable") {
-        sections.lifecycle =
-          Array.isArray(states) && states.length > 1 ? "upgrade" : "newFeature";
-      }
-    }
-    return;
+      const txt = String(item || "").trim();
+      return txt
+        ? { id: `fix_${idx + 1}`, text: txt, resolved: false, createdAtMs: 0 }
+        : null;
+    })
+    .filter((f) => f && f.text);
+
+  const controls = Array.isArray(parsed.controls)
+    ? parsed.controls
+        .filter((c) => c && typeof c === "object")
+        .map((c) => ({
+          action: String(c.action || "IA_Action").trim(),
+          trigger: String(c.trigger || "Pressed (Tap)").trim(),
+          rule: String(c.rule || "").trim(),
+        }))
+    : [];
+
+  const tuning = Array.isArray(parsed.tuning)
+    ? parsed.tuning
+        .filter((t) => t && typeof t === "object")
+        .map((t) => ({
+          key: String(t.key || "param").trim(),
+          value: String(t.value || "0").trim(),
+          unit: String(t.unit || "").trim(),
+        }))
+    : [];
+
+  const spec = {
+    id: String(epicDoc?.id || parsed.id || `epic_${indexHint + 1}`),
+    code,
+    lineageKey,
+    title: String(epicDoc?.title || parsed.title || "Untitled System").trim(),
+    releaseVersion,
+    lifecycle,
+    goal: String(parsed.goal || sec.goal || "").trim(),
+    links: normalizeStringArrayJs(parsed.links || parsed.plugsInto),
+    outOfScope: normalizeStringArrayJs(parsed.outOfScope),
+    controls,
+    states: normalizeStringArrayJs(parsed.states),
+    interrupts: normalizeStringArrayJs(parsed.interrupts),
+    tuning,
+    feedback: normalizeStringArrayJs(parsed.feedback),
+    levelStaging: String(parsed.levelStaging || "").trim(),
+    checks,
+    fixes,
+    baselineSummary: normalizeStringArrayJs(parsed.baselineSummary),
+    upgradeDeltas: normalizeStringArrayJs(parsed.upgradeDeltas),
+    copilotUpgrades: Array.isArray(parsed.copilotUpgrades)
+      ? parsed.copilotUpgrades
+      : [],
+    chosen: Boolean(parsed.chosen),
+  };
+
+  spec.openFixes = spec.fixes.filter((f) => !f.resolved);
+  spec.openFixesCount = spec.openFixes.length;
+  spec.passedChecksCount = spec.checks.filter((c) => c.passed).length;
+  spec.isPassed = computeEpicPassedJs(spec);
+  return spec;
+}
+
+function renderServerUnrealMcpPayloadJs({
+  rootSpec,
+  epicSpec,
+  uprojectContext,
+}) {
+  const isUe6 = rootSpec?.targetEngine === "ue6Verse";
+  const archContract = isUe6
+    ? "Verse Components + Scene Graph Entities (@editable exposed fields)"
+    : "Blueprint Actors/Components + PrimaryDataAsset (EditAnywhere tuning)";
+  const inputContractLabel = isUe6
+    ? "Enhanced Input → Verse InputAction"
+    : "Enhanced Input (UInputAction + IMC_Core)";
+  const tuningColLabel = isUe6
+    ? "@editable Verse Field"
+    : "DataAsset / Details Var";
+
+  const lines = [];
+  lines.push(`# ROOT_MCP_CONTEXT · ${rootSpec.normalizedTitle}`);
+  lines.push(`Target Architecture: ${archContract}`);
+  lines.push("");
+  lines.push("## §01 Concept & 30s Core Loop");
+  lines.push(`- Vision: ${rootSpec.pitch}`);
+  if (Array.isArray(rootSpec.coreLoop) && rootSpec.coreLoop.length > 0) {
+    lines.push(`- Loop: ${rootSpec.coreLoop.join(" -> ")}`);
+  }
+  lines.push("");
+  lines.push("## §02 Global Unreal Contracts (1 UU = 1 cm)");
+  lines.push(`- Camera & Boom: ${rootSpec.cameraContract}`);
+  lines.push(`- Player Scale: ${rootSpec.characterScale}`);
+  lines.push(`- Input Contract: ${rootSpec.inputContract}`);
+  lines.push(`- Asset Policy: ${rootSpec.assetPolicy}`);
+  lines.push("");
+  lines.push("## §03 Pillars & Conflict Trade-Offs");
+  for (const pillar of rootSpec.pillars || []) {
+    lines.push(`- Pillar: ${pillar}`);
+  }
+  for (const tradeOff of rootSpec.tradeOffs || []) {
+    lines.push(`- Trade-Off: ${tradeOff}`);
+  }
+  lines.push("");
+  lines.push("## §04 Hard Scope Cuts (Do Not Build)");
+  for (const cut of rootSpec.outOfScope || []) {
+    lines.push(`- ${cut}`);
   }
 
-  if (action === "toggle_guard") {
-    const guardIdx = Number.isInteger(Number(body?.guardIndex))
-      ? Number(body.guardIndex)
-      : 0;
-    const rawArr = Array.isArray(cp.edgeCases) ? cp.edgeCases : [];
-    const rawFromArr =
-      guardIdx >= 0 && guardIdx < rawArr.length
-        ? String(rawArr[guardIdx] || "").trim()
-        : "";
-    const rawGuard = rawFromArr || String(body?.guardText || "").trim();
-    const key = guardStorageKeyJs(guardIdx, rawGuard);
-    const signedOffSet = parseSignedOffGuardsSetJs(cp);
-    if (Boolean(body?.signedOff)) {
-      signedOffSet.add(key);
-    } else {
-      signedOffSet.delete(key);
-      signedOffSet.delete(`#${guardIdx}`);
-      const bodyKey = String(body?.guardText || "").trim();
-      if (bodyKey) signedOffSet.delete(bodyKey);
-    }
-    if (signedOffSet.size === 0) {
-      delete cp.parameters.signedOffGuards;
-    } else {
-      cp.parameters.signedOffGuards = JSON.stringify(
-        Array.from(signedOffSet)
+  if (uprojectContext && typeof uprojectContext === "object" && Object.keys(uprojectContext).length > 0) {
+    lines.push("");
+    lines.push("## Live Unreal Project Snapshot (.uproject via LayersBridge)");
+    const projName = String(uprojectContext.project_name || "").trim();
+    const level = String(uprojectContext.current_level || "").trim();
+    const gameMode = String(uprojectContext.game_mode || "").trim();
+    const pawn = String(uprojectContext.default_pawn || "").trim();
+    if (projName) lines.push(`- Project: ${projName}`);
+    if (level) lines.push(`- Open Level: ${level}`);
+    if (gameMode) lines.push(`- GameMode: ${gameMode}`);
+    if (pawn) lines.push(`- DefaultPawnClass: ${pawn}`);
+    if (Array.isArray(uprojectContext.input_assets) && uprojectContext.input_assets.length > 0) {
+      lines.push(
+        `- Existing Enhanced Input Assets: ${uprojectContext.input_assets.slice(0, 12).join(", ")}`
       );
     }
-    return;
-  }
-
-  if (action === "log_issue") {
-    const rawText = String(body?.issueText || "").trim();
-    const cleanIssue = rawText.replace(/^\[FIX\]\s*/i, "").trim();
-    const fixText = cleanIssue ? `[FIX] ${cleanIssue}` : rawText;
-    const gdPaths = extractResPathsListJs(rawText, ".gd");
-    cp.checklist = Array.isArray(cp.checklist) ? [...cp.checklist] : [];
-    cp.checklist.push({
-      id: `fix_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-      text: fixText,
-      completed: false,
-      children: [],
-      isExpanded: true,
-      codeTargetFile: "playtest_fix",
-      codeLanguage: gdPaths[0] || "fix",
-      verification: `Re-test: ${cleanIssue || rawText} is resolved with 0 console errors.`,
-    });
-    cp.edgeCases = Array.isArray(cp.edgeCases) ? [...cp.edgeCases] : [];
-    if (cleanIssue) {
-      const lowerIssue = cleanIssue.toLowerCase();
-      if (
-        !cp.edgeCases.some((g) =>
-          String(g || "").toLowerCase().includes(lowerIssue)
-        )
-      ) {
-        cp.edgeCases.push(`[PLAYTEST GUARD] ${cleanIssue}`);
+    if (Array.isArray(uprojectContext.recent_errors) && uprojectContext.recent_errors.length > 0) {
+      lines.push("- Recent Editor/PIE Log Warnings:");
+      for (const err of uprojectContext.recent_errors.slice(0, 4)) {
+        lines.push(`  - ${err}`);
       }
     }
-    if (cp.edgeCases.length > 0 && sections && typeof sections === "object") {
-      sections.edge_cases = cp.edgeCases.map((e) => `• ${e}`).join("\n");
-    }
-    delete cp.parameters.playtestPassed;
-    if (String(sections?.lifecycle || "").trim() === "stable") {
-      sections.lifecycle =
-        Array.isArray(states) && states.length > 1 ? "upgrade" : "newFeature";
-    }
-    return;
   }
 
-  if (action === "resolve_issue") {
-    const targetId = String(body?.issueId || "").trim();
-    cp.checklist = Array.isArray(cp.checklist) ? cp.checklist : [];
-    markChecklistItemCompletedByIdJs(cp.checklist, targetId);
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+  lines.push(
+    `# ACTIVE EPIC SPEC · ${epicSpec.code} · ${epicSpec.title} (${epicSpec.releaseVersion})`
+  );
+  lines.push("");
+  lines.push("## §01 System Intent & Actor Links");
+  lines.push(`- Goal: ${epicSpec.goal}`);
+  if (epicSpec.links.length > 0) {
+    lines.push(`- Links: ${epicSpec.links.join(" · ")}`);
   }
+  if (epicSpec.outOfScope.length > 0) {
+    lines.push(`- Out of Scope: ${epicSpec.outOfScope.join("; ")}`);
+  }
+
+  if (epicSpec.upgradeDeltas.length > 0) {
+    lines.push("");
+    lines.push(
+      `## ${epicSpec.releaseVersion} Upgrade Deltas (atop locked v0.1 baseline)`
+    );
+    for (const delta of epicSpec.upgradeDeltas) {
+      lines.push(`- + ${delta}`);
+    }
+  }
+
+  lines.push("");
+  lines.push(`## §02 Controls (${inputContractLabel})`);
+  if (epicSpec.controls.length === 0) {
+    lines.push("- None (passive/system-driven Epic)");
+  } else {
+    for (const c of epicSpec.controls) {
+      lines.push(`- ${c.action} | ${c.trigger} | ${c.rule}`);
+    }
+  }
+
+  lines.push("");
+  lines.push("## §03 State Flow & Interrupt Rules");
+  for (const s of epicSpec.states) {
+    lines.push(`- State: ${s}`);
+  }
+  for (const rule of epicSpec.interrupts) {
+    lines.push(`- Interrupt: ${rule}`);
+  }
+
+  lines.push("");
+  lines.push(`## §04 Spatial & Exposed Tuning (${tuningColLabel})`);
+  if (epicSpec.tuning.length === 0) {
+    lines.push("- None");
+  } else {
+    for (const t of epicSpec.tuning) {
+      const unitSuffix = t.unit ? ` ${t.unit}` : "";
+      lines.push(`- ${t.key}: ${t.value}${unitSuffix}`);
+    }
+  }
+
+  lines.push("");
+  lines.push("## §05 Viewport, UMG & Audio Cues");
+  if (epicSpec.feedback.length === 0) {
+    lines.push("- Minimal greybox debug visuals");
+  } else {
+    for (const f of epicSpec.feedback) {
+      lines.push(`- ${f}`);
+    }
+  }
+
+  lines.push("");
+  lines.push("## §06 Test Level Staging & PIE Acceptance Gate");
+  if (epicSpec.levelStaging) {
+    lines.push(`- Test Level: ${epicSpec.levelStaging}`);
+  }
+  epicSpec.checks.forEach((chk, i) => {
+    const tag = chk.passed ? "[PASSED]" : "[VERIFY]";
+    lines.push(`  ${tag} Check ${i + 1}: ${chk.text}`);
+  });
+
+  const openFixes = Array.isArray(epicSpec.openFixes)
+    ? epicSpec.openFixes
+    : (epicSpec.fixes || []).filter((f) => !f.resolved);
+  if (openFixes.length > 0) {
+    lines.push("");
+    lines.push("## Open Playtest Revisions ([FIX])");
+    for (const fx of openFixes) {
+      lines.push(`- [FIX] ${fx.text}`);
+    }
+    lines.push("");
+    lines.push(`### FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX])`);
+    lines.push(
+      "Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact and report modified Blueprint/Verse assets + PIE verify steps."
+    );
+  } else {
+    lines.push("");
+    lines.push("### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK");
+    lines.push(
+      "Implement §01-§06 end-to-end in a single Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check before returning for human PIE sign-off."
+    );
+  }
+
+  return lines.join("\n").trimRight();
 }
 
-function setAllChecklistItemsCompleted(items, completed) {
-  if (!Array.isArray(items)) return;
-  for (const item of items) {
-    if (!item || typeof item !== "object") continue;
-    item.completed = completed;
-    if (Array.isArray(item.children) && item.children.length > 0) {
-      setAllChecklistItemsCompleted(item.children, completed);
-    }
-  }
-}
-
-function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
+function computeActiveUnrealEpicPayload({
+  docsById,
+  projectId,
+  webStudioUrl = DEFAULT_WEB_STUDIO_URL,
+  uprojectContext = null,
+}) {
   let projectDoc = docsById.get(projectId) || null;
   if (!projectDoc) {
     for (const d of docsById.values()) {
@@ -648,33 +490,27 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
   }
   if (!projectDoc) {
     return {
-      ok: true,
+      ok: false,
       projectId,
-      projectTitle: "LAYERS Project",
-      releaseVersion: "v0.1",
-      releaseTitle: "",
-      epicPosition: 0,
-      totalEpics: 0,
+      error: "Project not found in Cloud Vault.",
       allEpicsCompleted: false,
-      designPillars: [],
-      tradeOffs: [],
+      totalEpics: 0,
+      epicPosition: 0,
       webStudioUrl,
       activeEpic: null,
+      mcpPayloadMarkdown: "",
     };
   }
 
-  const designPillars = parseBulletLinesJs(
-    projectDoc?.sections?.design_pillars ||
-      projectDoc?.sections?.designPillars ||
-      "",
-    6
-  );
-  const tradeOffs = parseBulletLinesJs(
-    projectDoc?.sections?.trade_offs ||
-      projectDoc?.sections?.tradeOffs ||
-      "",
-    6
-  );
+  const rootSpec = parseRootSpecJs(projectDoc);
+  const projSections =
+    projectDoc.sections && typeof projectDoc.sections === "object"
+      ? projectDoc.sections
+      : {};
+  const liveCtx =
+    uprojectContext && typeof uprojectContext === "object"
+      ? uprojectContext
+      : parseJsonObjectSafe(projSections.unreal_live_context_json);
 
   let releases = (Array.isArray(projectDoc.childrenIds) ? projectDoc.childrenIds : [])
     .map((id) => docsById.get(id))
@@ -690,300 +526,234 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     }
   }
 
-  const savedActiveRelId = String(
-    projectDoc?.sections?.active_release_id || ""
-  ).trim();
-  const hasBuiltEpics = (rel) =>
-    Array.isArray(rel?.childrenIds) &&
-    rel.childrenIds.some((id) => {
-      const ep = docsById.get(id);
-      return ep && String(ep.tier || "").toUpperCase() === "EPIC";
-    });
-  const savedRel = releases.find((r) => r.id === savedActiveRelId) || null;
-  let activeRel = savedRel && hasBuiltEpics(savedRel) ? savedRel : null;
-  if (!activeRel) {
-    for (let i = releases.length - 1; i >= 0; i -= 1) {
-      if (hasBuiltEpics(releases[i])) {
-        activeRel = releases[i];
-        break;
-      }
-    }
-  }
-  if (!activeRel) {
-    activeRel =
-      savedRel ||
-      (releases.length > 0 ? releases[releases.length - 1] : null);
-  }
+  const savedRelId = String(projSections.active_release_id || "").trim();
+  const activeRel =
+    releases.find((r) => r.id === savedRelId) ||
+    (releases.length > 0 ? releases[releases.length - 1] : null);
 
   if (!activeRel) {
     return {
       ok: true,
       projectId: projectDoc.id,
-      projectTitle: String(projectDoc.title || "LAYERS Project"),
+      projectTitle: rootSpec.normalizedTitle,
+      targetEngine: rootSpec.targetEngine,
       releaseVersion: "v0.1",
       releaseTitle: "",
       epicPosition: 0,
       totalEpics: 0,
       allEpicsCompleted: false,
-      designPillars,
-      tradeOffs,
       webStudioUrl,
-      selectedFeatureId: "",
-      webSelectedFeatureId: "",
       activeEpic: null,
+      mcpPayloadMarkdown: renderServerUnrealMcpPayloadJs({
+        rootSpec,
+        epicSpec: {
+          id: "none",
+          code: "E00",
+          title: "No Active Release",
+          releaseVersion: "v0.1",
+          goal: rootSpec.pitch,
+          links: [],
+          outOfScope: [],
+          upgradeDeltas: [],
+          controls: [],
+          states: [],
+          interrupts: [],
+          tuning: [],
+          feedback: [],
+          levelStaging: "",
+          checks: [],
+          fixes: [],
+          openFixes: [],
+        },
+        uprojectContext: liveCtx,
+      }).split("\n---\n")[0],
     };
   }
 
-  const activeVer = resolveVersionTag(activeRel);
-  const epics = (Array.isArray(activeRel.childrenIds) ? activeRel.childrenIds : [])
+  const releaseVersion = resolveVersionTag(activeRel);
+  let epicDocs = (Array.isArray(activeRel.childrenIds) ? activeRel.childrenIds : [])
     .map((id) => docsById.get(id))
     .filter((d) => d && String(d.tier || "").toUpperCase() === "EPIC");
-
-  let releaseHasActiveFeats = false;
-  const rawFeaturesByEpic = new Map();
-  for (const epic of epics) {
-    const feats = (Array.isArray(epic.childrenIds) ? epic.childrenIds : [])
-      .map((id) => docsById.get(id))
-      .filter((d) => d && String(d.tier || "").toUpperCase() === "FEATURE");
-    rawFeaturesByEpic.set(epic.id, feats);
-    if (
-      feats.some((f) => isFeatureActiveInReleaseJs(f, activeVer, releases.length))
-    ) {
-      releaseHasActiveFeats = true;
+  if (epicDocs.length === 0) {
+    for (const d of docsById.values()) {
+      if (
+        String(d?.tier || "").toUpperCase() === "EPIC" &&
+        d?.parentId === activeRel.id
+      ) {
+        epicDocs.push(d);
+      }
     }
   }
 
-  const candidateEpics = [];
-  for (let i = 0; i < epics.length; i++) {
-    const epic = epics[i];
-    const feats = rawFeaturesByEpic.get(epic.id) || [];
-    const scopedFeats = releaseHasActiveFeats
-      ? feats.filter((f) =>
-          isFeatureActiveInReleaseJs(f, activeVer, releases.length)
-        )
-      : feats;
-    if (releaseHasActiveFeats && feats.length > 0 && scopedFeats.length === 0) {
-      continue;
-    }
-
-    const mappedFeatures = scopedFeats.map((feat) => {
-      const states = parseFeatureStates(feat);
-      const cp = selectActiveCheckpoint(states, activeVer);
-      const isPlaytestPassed =
-        String(cp?.parameters?.playtestPassed || "") === "true";
-      const parsedScope = parseStructuredScopeFieldsJs(feat?.sections?.scope || "");
-      const parsedGoal = parseStructuredScopeFieldsJs(feat?.sections?.goal || "");
-      const rawTriggerGoalFallback =
-        cp?.trigger &&
-        !/^(?:playtest|done\s+when)\s*:/i.test(String(cp.trigger).trim()) &&
-        !String(cp.trigger).includes("->") &&
-        !String(cp.trigger).includes("→")
-          ? String(cp.trigger).trim()
-          : "";
-      const goal = String(
-        parsedGoal.goal ||
-          parsedScope.goal ||
-          rawTriggerGoalFallback ||
-          feat?.sections?.summary ||
-          ""
-      ).trim();
-      const coveredScope =
-        Array.isArray(cp?.coveredScope) && cp.coveredScope.length > 0
-          ? dedupeScopeBulletsJs(cp.coveredScope, 6, activeVer)
-          : String(feat?.sections?.in_scope || "").trim()
-            ? dedupeScopeBulletsJs(
-                String(feat.sections.in_scope).split("\n"),
-                6,
-                activeVer
-              )
-            : dedupeScopeBulletsJs(parsedScope.inScope, 6, activeVer);
-      const tuningParams =
-        Array.isArray(cp?.tuningParams) && cp.tuningParams.length > 0
-          ? cp.tuningParams
-              .map((x) => String(x || "").trim())
-              .filter(Boolean)
-              .slice(0, 8)
-          : String(feat?.sections?.tuning || feat?.sections?.variables || "")
-              .split("\n")
-              .map((l) => l.replace(/^[-*•]\s*/, "").trim())
-              .filter(Boolean)
-              .slice(0, 8);
-      const signedOffSet = parseSignedOffGuardsSetJs(cp);
-      const rawEdgeCases = Array.isArray(cp?.edgeCases) ? cp.edgeCases : [];
-      const edgeCases = rawEdgeCases
-        .map((raw, idx) => {
-          const rawText = String(raw || "").trim();
-          if (!rawText) return null;
-          const key = guardStorageKeyJs(idx, rawText);
-          const signedOff =
-            signedOffSet.has(key) || signedOffSet.has(`#${idx}`);
-          return {
-            index: idx,
-            rawText,
-            text: cleanGuardDisplayTextJs(rawText) || rawText,
-            signedOff,
-          };
-        })
-        .filter(Boolean);
-      const signedOffCount = edgeCases.filter((g) => Boolean(g.signedOff)).length;
-      const progress = isPlaytestPassed
-        ? 100
-        : edgeCases.length === 0
-          ? 0
-          : Math.round((signedOffCount / edgeCases.length) * 50);
-      const openIssues = collectOpenPlaytestIssuesJs(cp);
-      const doneWhen =
-        cleanCheckpointDoneWhenJs(cp?.parameters?.playtestGoal) ||
-        cleanCheckpointDoneWhenJs(cp?.trigger) ||
-        cleanCheckpointDoneWhenJs(cp?.feedback) ||
-        cleanCheckpointDoneWhenJs(
-          feat?.sections?.done_when ||
-            feat?.sections?.doneWhen ||
-            feat?.sections?.playtest_criteria
-        ) ||
-        cleanCheckpointDoneWhenJs(parsedScope.doneWhen) ||
-        cleanCheckpointDoneWhenJs(parsedGoal.doneWhen) ||
-        `Press F6 and verify ${feat.title || "this feature"} works with 0 console errors.`;
-      return {
-        id: String(feat.id),
-        title: String(feat.title || "Feature"),
-        goal,
-        primaryAsset: extractResPath(feat?.sections?.primary_asset || ""),
-        scriptPaths: collectFeatureGdScriptPathsJs(feat, cp),
-        coveredScope,
-        tuningParams,
-        edgeCases,
-        openIssues,
-        doneWhen,
-        checkpointId: String(cp?.id || ""),
-        isPlaytestPassed,
-        isCompleted: isPlaytestPassed,
-        progress,
-      };
-    });
-
-    const parsedEpicScope = parseStructuredScopeFieldsJs(
-      epic?.sections?.goal ||
-        epic?.sections?.scope ||
-        epic?.sections?.objective ||
-        epic?.sections?.summary ||
-        ""
-    );
-    const goal = String(
-      parsedEpicScope.goal ||
-        epic?.sections?.goal ||
-        epic?.sections?.objective ||
-        epic?.sections?.summary ||
-        ""
-    ).trim();
-
-    candidateEpics.push({
-      id: String(epic.id),
-      code: `E${String(i + 1).padStart(2, "0")}`,
-      title: String(epic.title || "Epic"),
-      goal,
-      features: mappedFeatures,
-    });
-  }
-
-  let activeIdx = candidateEpics.findIndex(
-    (e) => e.features.length > 0 && e.features.some((f) => !f.isCompleted)
-  );
-  if (activeIdx === -1 && candidateEpics.length > 0) {
-    const hasAnyPopulated = candidateEpics.some((e) => e.features.length > 0);
-    if (!hasAnyPopulated) {
-      activeIdx = 0;
-    }
-  }
-  const arenaScenePath = detectArenaScenePathJs(
-    docsById,
-    candidateEpics,
-    activeIdx >= 0 ? activeIdx : 0
-  );
-
-  if (candidateEpics.length > 0 && activeIdx === -1) {
+  const parsedEpics = epicDocs.map((d, idx) => parseEpicSpecJs(d, idx));
+  if (parsedEpics.length === 0) {
     return {
       ok: true,
       projectId: projectDoc.id,
-      projectTitle: String(projectDoc.title || "LAYERS Project"),
-      releaseVersion: activeVer,
-      releaseTitle: String(activeRel.title || activeVer),
-      epicPosition: candidateEpics.length,
-      totalEpics: candidateEpics.length,
-      allEpicsCompleted: true,
-      designPillars,
-      tradeOffs,
+      projectTitle: rootSpec.normalizedTitle,
+      targetEngine: rootSpec.targetEngine,
+      releaseVersion,
+      releaseTitle: String(activeRel.title || releaseVersion),
+      epicPosition: 0,
+      totalEpics: 0,
+      allEpicsCompleted: false,
       webStudioUrl,
-      arenaScenePath,
-      selectedFeatureId: "",
-      webSelectedFeatureId: "",
       activeEpic: null,
+      mcpPayloadMarkdown: "",
     };
   }
 
-  const projSections =
-    projectDoc.sections && typeof projectDoc.sections === "object"
-      ? projectDoc.sections
-      : {};
-  const rawWebSelId = String(projSections.selected_feature_id || "").trim();
-  const webSelMs = Number(projSections.selected_feature_ms || 0) || 0;
-  const rawGodotFeatId = String(
-    projSections.last_godot_feature_id || ""
-  ).trim();
-  const godotFeatMs = Number(projSections.last_godot_feature_ms || 0) || 0;
+  const selectedId = String(projSections.selected_epic_id || "").trim();
+  const selIdx = selectedId
+    ? parsedEpics.findIndex((e) => e.id === selectedId)
+    : -1;
+  const firstUnpassedIdx = parsedEpics.findIndex((e) => !e.isPassed);
+  const allEpicsCompleted = firstUnpassedIdx === -1;
 
-  const activeEpic = activeIdx >= 0 ? candidateEpics[activeIdx] : null;
-  let webSelectedFeatureId = "";
-  let selectedFeatureId = "";
-  if (
-    activeEpic &&
-    Array.isArray(activeEpic.features) &&
-    activeEpic.features.length > 0
-  ) {
-    const featsInEpic = activeEpic.features;
-    const webFeat = rawWebSelId
-      ? featsInEpic.find((f) => f.id === rawWebSelId) || null
-      : null;
-    if (webFeat) {
-      webSelectedFeatureId = webFeat.id;
-    }
-    const godotFeat = rawGodotFeatId
-      ? featsInEpic.find((f) => f.id === rawGodotFeatId) || null
-      : null;
-    const webIncomplete = webFeat && !webFeat.isCompleted ? webFeat : null;
-    const godotIncomplete =
-      godotFeat && !godotFeat.isCompleted ? godotFeat : null;
-
-    if (webIncomplete && webSelMs > godotFeatMs) {
-      selectedFeatureId = webIncomplete.id;
-    } else if (godotIncomplete) {
-      selectedFeatureId = godotIncomplete.id;
-    } else if (webIncomplete && !rawGodotFeatId && godotFeatMs === 0) {
-      selectedFeatureId = webIncomplete.id;
-    } else {
-      const firstIncomplete =
-        featsInEpic.find((f) => !f.isCompleted) || featsInEpic[0];
-      selectedFeatureId = firstIncomplete ? firstIncomplete.id : "";
-    }
+  let activeIdx = -1;
+  if (selIdx >= 0 && !parsedEpics[selIdx].isPassed) {
+    activeIdx = selIdx;
+  } else if (firstUnpassedIdx >= 0) {
+    activeIdx = firstUnpassedIdx;
+  } else {
+    activeIdx = parsedEpics.length - 1;
   }
+
+  const activeEpic = parsedEpics[activeIdx];
+  const baseUrl = String(webStudioUrl || DEFAULT_WEB_STUDIO_URL).replace(/\/+$/, "");
+  const epicStudioUrl = `${baseUrl}/?project=${encodeURIComponent(
+    projectDoc.id
+  )}&epic=${encodeURIComponent(activeEpic.id)}`;
+
+  const mcpPayloadMarkdown = renderServerUnrealMcpPayloadJs({
+    rootSpec,
+    epicSpec: activeEpic,
+    uprojectContext: liveCtx,
+  });
 
   return {
     ok: true,
     projectId: projectDoc.id,
-    projectTitle: String(projectDoc.title || "LAYERS Project"),
-    releaseVersion: activeVer,
-    releaseTitle: String(activeRel.title || activeVer),
-    epicPosition: activeIdx >= 0 ? activeIdx + 1 : 0,
-    totalEpics: candidateEpics.length,
-    allEpicsCompleted: false,
-    designPillars,
-    tradeOffs,
-    webStudioUrl,
-    arenaScenePath,
-    selectedFeatureId,
-    webSelectedFeatureId,
+    projectTitle: rootSpec.normalizedTitle,
+    targetEngine: rootSpec.targetEngine,
+    releaseVersion,
+    releaseTitle: String(activeRel.title || releaseVersion),
+    epicPosition: activeIdx + 1,
+    totalEpics: parsedEpics.length,
+    allEpicsCompleted,
+    webStudioUrl: epicStudioUrl,
     activeEpic,
+    mcpPayloadMarkdown,
   };
+}
+
+function applyUnrealEpicMutationJs({
+  epicDoc,
+  action,
+  body = {},
+  nowMs = Date.now(),
+}) {
+  const sec =
+    epicDoc?.sections && typeof epicDoc.sections === "object"
+      ? { ...epicDoc.sections }
+      : {};
+  const spec = parseEpicSpecJs(epicDoc);
+  delete spec.openFixes;
+  delete spec.openFixesCount;
+  delete spec.passedChecksCount;
+  delete spec.isPassed;
+
+  if (action === "toggle_check") {
+    const checkId = String(body.checkId || "").trim();
+    const checkIdx = Number.isInteger(Number(body.checkIndex))
+      ? Number(body.checkIndex)
+      : -1;
+    for (let i = 0; i < spec.checks.length; i += 1) {
+      if ((checkId && spec.checks[i].id === checkId) || i === checkIdx) {
+        spec.checks[i].passed =
+          typeof body.passed === "boolean"
+            ? body.passed
+            : !spec.checks[i].passed;
+        break;
+      }
+    }
+    if (spec.lifecycle === "queued") {
+      spec.lifecycle = "active";
+    }
+  } else if (action === "log_fix") {
+    const cleanText = String(body.fixText || "")
+      .trim()
+      .replace(/^\[FIX\]\s*/i, "")
+      .trim();
+    if (!cleanText) {
+      const err = new Error("Expected non-empty fixText for log_fix.");
+      err.statusCode = 400;
+      throw err;
+    }
+    const newId =
+      String(body.fixId || "").trim() ||
+      `fix_${nowMs}_${Math.random().toString(36).slice(2, 6)}`;
+    spec.fixes.push({
+      id: newId,
+      text: cleanText,
+      resolved: false,
+      createdAtMs: Number(nowMs) || Date.now(),
+    });
+    if (spec.lifecycle === "stable" || spec.lifecycle === "queued") {
+      spec.lifecycle = "active";
+    }
+  } else if (action === "resolve_fix") {
+    const targetId = String(body.fixId || "").trim();
+    const nextResolved = body.resolved !== false;
+    let matched = false;
+    if (targetId === "latest") {
+      const target = spec.fixes.find((f) => !f.resolved);
+      if (target) {
+        target.resolved = nextResolved;
+        matched = true;
+      }
+    } else if (targetId) {
+      for (const f of spec.fixes) {
+        if (f.id === targetId || f.text === targetId) {
+          f.resolved = nextResolved;
+          matched = true;
+        }
+      }
+    }
+    if (!matched && !targetId) {
+      const target = spec.fixes.find((f) => !f.resolved);
+      if (target) target.resolved = nextResolved;
+    }
+  } else if (action === "pass_epic") {
+    for (const f of spec.fixes) f.resolved = true;
+    for (const c of spec.checks) c.passed = true;
+    spec.lifecycle = "stable";
+  } else if (action === "reopen_epic") {
+    spec.lifecycle = "active";
+    for (const c of spec.checks) c.passed = false;
+  } else {
+    const err = new Error(`Unsupported Unreal Epic action: ${action}`);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const isCompleted = computeEpicPassedJs(spec);
+  sec.code = spec.code;
+  sec.lineage_key = spec.lineageKey;
+  sec.release_version = spec.releaseVersion;
+  sec.lifecycle = spec.lifecycle;
+  sec.goal = spec.goal;
+  sec.epic_spec_json = JSON.stringify(spec);
+  sec.updated_at_ms = String(nowMs);
+  sec.last_unreal_sync_ms = String(nowMs);
+
+  const subtasks = spec.checks.map((c) => ({
+    id: c.id,
+    text: c.text,
+    completed: Boolean(c.passed),
+  }));
+
+  return { sections: sec, isCompleted, subtasks, epicSpec: spec };
 }
 
 function parseAdminEmails() {
@@ -1399,9 +1169,9 @@ exports.geminiProxy = onRequest(
     }
 
     // -------------------------------------------------------------------------
-    // Route 3B: POST /godotLink/token (Google Sign-In auth: generate/reuse/rotate lyr_... token)
+    // Route 3B: POST /unrealLink/token (Google Sign-In auth: generate/reuse/rotate lyr_... token)
     // -------------------------------------------------------------------------
-    if (cleanPath === "/godotLink/token") {
+    if (cleanPath === "/unrealLink/token") {
       if (req.method !== "POST") {
         res.status(405).json({ error: { code: 405, message: "Expected POST." } });
         return;
@@ -1440,7 +1210,7 @@ exports.geminiProxy = onRequest(
 
       const db = getFirestore();
       const linkDocId = `${projectId}_${caller.uid}`;
-      const linkRef = db.collection("godot_links").doc(linkDocId);
+      const linkRef = db.collection("unreal_links").doc(linkDocId);
       const existingSnap = await linkRef.get();
       const existingData = existingSnap.exists ? existingSnap.data() || {} : null;
 
@@ -1491,20 +1261,28 @@ exports.geminiProxy = onRequest(
     }
 
     // -------------------------------------------------------------------------
-    // Route 3C: GET /godotLink/epic (Godot 4 Dock: strictly 1 active Epic + steps only)
+    // Route 3C: GET / POST /unrealLink/epic (LayersBridge: ROOT_MCP_CONTEXT + 1 active Epic Spec)
     // -------------------------------------------------------------------------
-    if (cleanPath === "/godotLink/epic") {
-      if (req.method !== "GET") {
-        res.status(405).json({ error: { code: 405, message: "Expected GET." } });
+    if (cleanPath === "/unrealLink/epic") {
+      if (req.method !== "GET" && req.method !== "POST") {
+        res.status(405).json({ error: { code: 405, message: "Expected GET or POST." } });
         return;
       }
-      const linkAuth = await verifyGodotLinkToken(req);
+      const linkAuth = await verifyUnrealLinkToken(req);
       if (linkAuth.errorStatus) {
         res.status(linkAuth.errorStatus).json({
           error: { code: linkAuth.errorStatus, message: linkAuth.errorMessage },
         });
         return;
       }
+
+      const body = req.method === "POST" ? parseJsonBody(req) : {};
+      const uprojectContext =
+        body.uprojectContext &&
+        typeof body.uprojectContext === "object" &&
+        !Array.isArray(body.uprojectContext)
+          ? body.uprojectContext
+          : null;
 
       const db = getFirestore();
       const docsSnap = await db
@@ -1516,36 +1294,29 @@ exports.geminiProxy = onRequest(
       for (const d of docsSnap.docs) {
         docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
       }
-      const payload = computeActiveEpicPayload({
+
+      const payload = computeActiveUnrealEpicPayload({
         docsById,
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
+        uprojectContext,
       });
+      if (!payload.ok) {
+        res.status(404).json({
+          error: { code: 404, message: payload.error || "Project not found." },
+        });
+        return;
+      }
+
       const nowMs = String(Date.now());
-      const projDoc = docsById.get(linkAuth.projectId);
-      const projSec =
-        projDoc?.sections && typeof projDoc.sections === "object"
-          ? projDoc.sections
-          : {};
-      const webSelMs = Number(projSec.selected_feature_ms || 0) || 0;
-      const godotFeatMs = Number(projSec.last_godot_feature_ms || 0) || 0;
-      const existingGodotFeat = String(
-        projSec.last_godot_feature_id || ""
-      ).trim();
-      const existingStillIncomplete = Boolean(
-        existingGodotFeat &&
-          Array.isArray(payload.activeEpic?.features) &&
-          payload.activeEpic.features.some(
-            (f) => f.id === existingGodotFeat && !f.isCompleted
-          )
-      );
-      const nextProjSections = { last_godot_sync_ms: nowMs };
-      if (
-        payload.selectedFeatureId &&
-        (!existingStillIncomplete || webSelMs > godotFeatMs)
-      ) {
-        nextProjSections.last_godot_feature_id = payload.selectedFeatureId;
-        nextProjSections.last_godot_feature_ms = nowMs;
+      const nextProjSections = {
+        last_unreal_sync_ms: nowMs,
+      };
+      if (uprojectContext) {
+        nextProjSections.unreal_live_context_json = JSON.stringify(uprojectContext);
+      }
+      if (payload.activeEpic?.id) {
+        nextProjSections.selected_epic_id = payload.activeEpic.id;
       }
 
       linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
@@ -1561,15 +1332,14 @@ exports.geminiProxy = onRequest(
     }
 
     // -------------------------------------------------------------------------
+    // Route 3D: POST /unrealLink/update (LayersBridge: toggle_check / log_fix / resolve_fix / pass_epic / reopen_epic / sync_uproject)
     // -------------------------------------------------------------------------
-    // Route 3D: POST /godotLink/update (Godot 4 Dock: set_playtest / toggle_guard / log_issue / resolve_issue)
-    // -------------------------------------------------------------------------
-    if (cleanPath === "/godotLink/update") {
+    if (cleanPath === "/unrealLink/update") {
       if (req.method !== "POST") {
         res.status(405).json({ error: { code: 405, message: "Expected POST." } });
         return;
       }
-      const linkAuth = await verifyGodotLinkToken(req);
+      const linkAuth = await verifyUnrealLinkToken(req);
       if (linkAuth.errorStatus) {
         res.status(linkAuth.errorStatus).json({
           error: { code: linkAuth.errorStatus, message: linkAuth.errorMessage },
@@ -1578,87 +1348,88 @@ exports.geminiProxy = onRequest(
       }
 
       const body = parseJsonBody(req);
-      const featureId = String(body.featureId || "").trim();
-      const checkpointId = String(body.checkpointId || "").trim();
       const action = String(body.action || "").trim();
       const validActions = new Set([
-        "set_playtest",
-        "toggle_guard",
-        "log_issue",
-        "resolve_issue",
-        "select_feature",
+        "toggle_check",
+        "log_fix",
+        "resolve_fix",
+        "pass_epic",
+        "reopen_epic",
+        "sync_uproject",
       ]);
-
-      if (!featureId || !validActions.has(action)) {
+      if (!validActions.has(action)) {
         res.status(400).json({
           error: {
             code: 400,
             message:
-              "Expected featureId and action (set_playtest, toggle_guard, log_issue, resolve_issue, or select_feature).",
+              "Expected valid action (toggle_check, log_fix, resolve_fix, pass_epic, reopen_epic, or sync_uproject).",
           },
         });
         return;
       }
+      if (action === "log_fix" && !String(body.fixText || "").trim()) {
+        res.status(400).json({
+          error: { code: 400, message: "Expected non-empty fixText for log_fix." },
+        });
+        return;
+      }
 
-      if (action === "log_issue" && !String(body.issueText || "").trim()) {
-        res.status(400).json({
-          error: { code: 400, message: "Expected non-empty issueText for log_issue." },
-        });
-        return;
-      }
-      if (action === "resolve_issue" && !String(body.issueId || "").trim()) {
-        res.status(400).json({
-          error: { code: 400, message: "Expected issueId for resolve_issue." },
-        });
-        return;
-      }
+      const uprojectContext =
+        body.uprojectContext &&
+        typeof body.uprojectContext === "object" &&
+        !Array.isArray(body.uprojectContext)
+          ? body.uprojectContext
+          : null;
 
       const db = getFirestore();
-      const featRef = db
+      const docsCol = db
         .collection("users")
         .doc(linkAuth.uid)
-        .collection("documents")
-        .doc(featureId);
+        .collection("documents");
 
-      if (action !== "select_feature") {
+      let targetEpicId = String(body.epicId || "").trim();
+      if (action !== "sync_uproject" && !targetEpicId) {
+        const preSnap = await docsCol.get();
+        const preDocs = new Map();
+        for (const d of preSnap.docs) {
+          preDocs.set(d.id, { id: d.id, ...(d.data() || {}) });
+        }
+        const prePayload = computeActiveUnrealEpicPayload({
+          docsById: preDocs,
+          projectId: linkAuth.projectId,
+          webStudioUrl: linkAuth.webStudioUrl,
+        });
+        targetEpicId = String(prePayload.activeEpic?.id || "").trim();
+        if (!targetEpicId) {
+          res.status(404).json({
+            error: { code: 404, message: "No active Epic found to update." },
+          });
+          return;
+        }
+      }
+
+      const nowMs = Date.now();
+      if (action !== "sync_uproject") {
+        const epicRef = docsCol.doc(targetEpicId);
         try {
           await db.runTransaction(async (tx) => {
-            const snap = await tx.get(featRef);
+            const snap = await tx.get(epicRef);
             if (!snap.exists) {
-              const notFound = new Error("Feature document not found.");
+              const notFound = new Error("Epic document not found.");
               notFound.statusCode = 404;
               throw notFound;
             }
-            const featData = snap.data() || {};
-            const sections =
-              featData.sections && typeof featData.sections === "object"
-                ? { ...featData.sections }
-                : {};
-            const states = parseFeatureStates({ sections });
-            if (states.length === 0) {
-              const badStates = new Error("Feature has no checkpoints.");
-              badStates.statusCode = 400;
-              throw badStates;
-            }
-            let cp = checkpointId
-              ? states.find((s) => String(s?.id || "") === checkpointId)
-              : null;
-            if (!cp) cp = states[states.length - 1];
-
-            applyGodotFeatureMutationJs({
-              sections,
-              states,
-              cp,
+            const epicData = snap.data() || {};
+            const mutated = applyUnrealEpicMutationJs({
+              epicDoc: { id: snap.id, ...epicData },
               action,
               body,
+              nowMs,
             });
-
-            sections.states = JSON.stringify(states);
-            sections.last_godot_sync_ms = String(Date.now());
-            const nextSubtasks = rebuildDocSubtasksFromStates(states);
-            tx.update(featRef, {
-              sections,
-              subtasks: nextSubtasks,
+            tx.update(epicRef, {
+              sections: mutated.sections,
+              subtasks: mutated.subtasks,
+              isCompleted: mutated.isCompleted,
               updatedAt: FieldValue.serverTimestamp(),
             });
           });
@@ -1671,57 +1442,50 @@ exports.geminiProxy = onRequest(
         }
       }
 
-      const docsSnap = await db
-        .collection("users")
-        .doc(linkAuth.uid)
-        .collection("documents")
-        .get();
+      const docsSnap = await docsCol.get();
       const docsById = new Map();
       for (const d of docsSnap.docs) {
         docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
       }
-      if (action === "select_feature" && !docsById.has(featureId)) {
-        res.status(404).json({
-          error: { code: 404, message: "Feature document not found." },
-        });
-        return;
-      }
-      const nowMs = String(Date.now());
-      const passedJustNow = action === "set_playtest" && Boolean(body.passed);
       const inMemProj = docsById.get(linkAuth.projectId);
       if (inMemProj) {
-        inMemProj.sections = {
-          ...(inMemProj.sections && typeof inMemProj.sections === "object"
-            ? inMemProj.sections
-            : {}),
-          last_godot_sync_ms: nowMs,
-          last_godot_feature_id: passedJustNow ? "" : featureId,
-          last_godot_feature_ms: nowMs,
-        };
+        const existingSec =
+          inMemProj.sections && typeof inMemProj.sections === "object"
+            ? { ...inMemProj.sections }
+            : {};
+        existingSec.last_unreal_sync_ms = String(nowMs);
+        if (uprojectContext) {
+          existingSec.unreal_live_context_json = JSON.stringify(uprojectContext);
+        }
+        if (action === "pass_epic") {
+          existingSec.selected_epic_id = "";
+        } else if (targetEpicId) {
+          existingSec.selected_epic_id = targetEpicId;
+        }
+        inMemProj.sections = existingSec;
       }
-      const payload = computeActiveEpicPayload({
+
+      const payload = computeActiveUnrealEpicPayload({
         docsById,
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
+        uprojectContext,
       });
-      const resolvedGodotFeatId = passedJustNow
-        ? String(payload.selectedFeatureId || "")
-        : featureId;
-      linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
-      db.collection("users")
-        .doc(linkAuth.uid)
-        .collection("documents")
+
+      const nextProjSec = {
+        last_unreal_sync_ms: String(nowMs),
+      };
+      if (uprojectContext) {
+        nextProjSec.unreal_live_context_json = JSON.stringify(uprojectContext);
+      }
+      if (payload.activeEpic?.id) {
+        nextProjSec.selected_epic_id = payload.activeEpic.id;
+      }
+
+      linkAuth.linkRef.set({ lastSyncAt: nowMs }, { merge: true }).catch(() => {});
+      docsCol
         .doc(linkAuth.projectId)
-        .set(
-          {
-            sections: {
-              last_godot_sync_ms: nowMs,
-              last_godot_feature_id: resolvedGodotFeatId,
-              last_godot_feature_ms: nowMs,
-            },
-          },
-          { merge: true }
-        )
+        .set({ sections: nextProjSec }, { merge: true })
         .catch(() => {});
 
       res.status(200).json(payload);
@@ -1857,11 +1621,10 @@ exports.geminiProxy = onRequest(
 );
 
 exports._testHelpers = {
-  rebuildDocSubtasksFromStates,
-  selectActiveCheckpoint,
-  computeActiveEpicPayload,
-  applyGodotFeatureMutationJs,
-  parseStructuredScopeFieldsJs,
-  dedupeScopeBulletsJs,
-  cleanCheckpointDoneWhenJs,
+  hashLinkToken,
+  parseRootSpecJs,
+  parseEpicSpecJs,
+  renderServerUnrealMcpPayloadJs,
+  computeActiveUnrealEpicPayload,
+  applyUnrealEpicMutationJs,
 };

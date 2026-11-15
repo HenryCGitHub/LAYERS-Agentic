@@ -4,14 +4,15 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
-import 'models/feature_state.dart';
+import 'models/epic_spec.dart';
 import 'models/tier_document.dart';
 import 'providers/workbench_provider.dart';
+import 'screens/project_pitch_screen.dart';
 import 'screens/release_workbench_screen.dart';
-import 'screens/widgets/godot_workbench_modals.dart';
+import 'screens/widgets/unreal_bridge_modals.dart';
+import 'utils/unreal_mcp_payload_builder.dart';
 import 'theme/app_theme.dart';
 import 'utils/markdown_exporter.dart';
-import 'utils/section_text_utils.dart';
 
 part 'screens/shell_exporters_part.dart';
 part 'screens/shell_dialogs_part.dart';
@@ -78,7 +79,7 @@ class WorkbenchShell extends StatelessWidget {
     final draft = workbench.conceptDraft;
 
     final projTitle = workbench.activeProject?.title.trim();
-    final draftIdea = draft?.sparkIdea.trim();
+    final draftIdea = draft?.sparkPrompt.trim();
     final String? rawSpark = (projTitle != null && projTitle.isNotEmpty)
         ? projTitle
         : ((draftIdea != null && draftIdea.isNotEmpty) ? draftIdea : null);
@@ -407,7 +408,7 @@ class WorkbenchShell extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '${workbench.activeReleaseVersionTag} · ${workbench.releaseConciseLabel(workbench.activeRelease!)} ▾',
+                              '${workbench.releaseConciseLabel(workbench.activeRelease!)} ▾',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
@@ -415,6 +416,84 @@ class WorkbenchShell extends StatelessWidget {
                               ),
                             ),
                           ],
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (workbench.activeReleaseEpicDocs.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    InkWell(
+                      key: const ValueKey('nav_stage_1_btn'),
+                      borderRadius: BorderRadius.circular(5),
+                      onTap: () =>
+                          workbench.setStage(WorkbenchStage.projectPitch),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: workbench.currentStage ==
+                                  WorkbenchStage.projectPitch
+                              ? AppTheme.bgSurfaceActiveFor(isDark)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: workbench.currentStage ==
+                                    WorkbenchStage.projectPitch
+                                ? AppTheme.accentCyanFor(isDark)
+                                    .withValues(alpha: 0.45)
+                                : borderColor,
+                          ),
+                        ),
+                        child: Text(
+                          '1. Project Spec',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: workbench.currentStage ==
+                                    WorkbenchStage.projectPitch
+                                ? textPrimary
+                                : textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    InkWell(
+                      key: const ValueKey('nav_stage_2_btn'),
+                      borderRadius: BorderRadius.circular(5),
+                      onTap: () =>
+                          workbench.setStage(WorkbenchStage.releaseWorkbench),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: workbench.currentStage ==
+                                  WorkbenchStage.releaseWorkbench
+                              ? AppTheme.bgSurfaceActiveFor(isDark)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(5),
+                          border: Border.all(
+                            color: workbench.currentStage ==
+                                    WorkbenchStage.releaseWorkbench
+                                ? AppTheme.accentCyanFor(isDark)
+                                    .withValues(alpha: 0.45)
+                                : borderColor,
+                          ),
+                        ),
+                        child: Text(
+                          '2. Epic Specs',
+                          style: GoogleFonts.inter(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w600,
+                            color: workbench.currentStage ==
+                                    WorkbenchStage.releaseWorkbench
+                                ? textPrimary
+                                : textMuted,
+                          ),
                         ),
                       ),
                     ),
@@ -433,18 +512,18 @@ class WorkbenchShell extends StatelessWidget {
                           builder: (ctx) {
                             final isNarrowTopBar =
                                 MediaQuery.sizeOf(ctx).width < 1040;
-                            final isGodotSynced =
-                                workbench.isActiveProjectSyncedWithGodot;
+                            final isUnrealSynced =
+                                workbench.isActiveProjectSyncedWithUnreal;
                             return Tooltip(
-                              message: isGodotSynced
-                                  ? 'Godot 4 LAYERS Dock (${workbench.formatGodotSyncStatusLabel()})'
-                                  : 'Connect Godot 4 LAYERS Dock (Download Plugin & Link Token)',
+                              message: isUnrealSynced
+                                  ? 'Unreal MCP LayersBridge (${workbench.formatUnrealSyncStatusLabel()})'
+                                  : 'Connect Unreal MCP & LayersBridge (.uplugin + Token)',
                               child: InkWell(
                                 key: const ValueKey(
-                                  'top_bar_connect_godot_btn',
+                                  'top_bar_connect_unreal_btn',
                                 ),
                                 borderRadius: BorderRadius.circular(5),
-                                onTap: () => showConnectGodotPluginDialog(
+                                onTap: () => showConnectUnrealPluginDialog(
                                   context,
                                   workbench,
                                 ),
@@ -457,21 +536,21 @@ class WorkbenchShell extends StatelessWidget {
                                     color: bgSurface,
                                     borderRadius: BorderRadius.circular(5),
                                     border: Border.all(
-                                      color: (isGodotSynced
+                                      color: (isUnrealSynced
                                               ? const Color(0xFF10B981)
                                               : const Color(0xFF38BDF8))
                                           .withValues(
-                                        alpha: isGodotSynced ? 0.55 : 0.4,
+                                        alpha: isUnrealSynced ? 0.55 : 0.4,
                                       ),
                                     ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (isGodotSynced) ...[
+                                      if (isUnrealSynced) ...[
                                         Container(
                                           key: const ValueKey(
-                                            'top_bar_godot_live_sync_dot',
+                                            'top_bar_unreal_live_sync_dot',
                                           ),
                                           width: 6,
                                           height: 6,
@@ -483,11 +562,13 @@ class WorkbenchShell extends StatelessWidget {
                                         const SizedBox(width: 5),
                                       ],
                                       Text(
-                                        isNarrowTopBar ? '🔌' : '🔌 Godot',
+                                        isNarrowTopBar
+                                            ? '🔌'
+                                            : '🔌 Unreal MCP',
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 10.5,
                                           fontWeight: FontWeight.w600,
-                                          color: isGodotSynced
+                                          color: isUnrealSynced
                                               ? const Color(0xFF6EE7B7)
                                               : const Color(0xFF7DD3FC),
                                         ),
@@ -510,8 +591,8 @@ class WorkbenchShell extends StatelessWidget {
                             side: BorderSide(color: borderColor),
                           ),
                           onSelected: (val) {
-                            if (val == 'connect_godot') {
-                              showConnectGodotPluginDialog(context, workbench);
+                            if (val == 'connect_unreal') {
+                              showConnectUnrealPluginDialog(context, workbench);
                             } else if (val == 'spec') {
                               _exportFullProjectSpec(context);
                             } else if (val == 'agents_md') {
@@ -524,7 +605,7 @@ class WorkbenchShell extends StatelessWidget {
                           },
                           itemBuilder: (ctx) => [
                             PopupMenuItem<String>(
-                              value: 'connect_godot',
+                              value: 'connect_unreal',
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -535,7 +616,7 @@ class WorkbenchShell extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Connect Godot 4 Plugin',
+                                    'Connect Unreal MCP & LayersBridge',
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
@@ -1147,6 +1228,10 @@ class WorkbenchShell extends StatelessWidget {
   }
 
   Widget _buildActiveStageBody() {
-    return ReleaseWorkbenchScreen(workbench: workbench);
+    if (workbench.currentStage == WorkbenchStage.releaseWorkbench &&
+        workbench.activeReleaseEpicDocs.isNotEmpty) {
+      return ReleaseWorkbenchScreen(workbench: workbench);
+    }
+    return ProjectPitchScreen(workbench: workbench);
   }
 }

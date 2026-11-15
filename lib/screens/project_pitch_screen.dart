@@ -1,767 +1,1105 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
-import '../constants/text_style_guide.dart';
+import '../models/epic_spec.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 
-part 'pitch_spark_and_outliner_part.dart';
-part 'pitch_section_workspace_part.dart';
-part 'pitch_full_review_part.dart';
-
-final RegExp _overSplitRegex = RegExp(
-  r'\s+over\s+',
-  caseSensitive: false,
-);
-final RegExp _prioritizePrefixRegex = RegExp(
-  r'^(?:Prioritize|Prefer|Favor|Choose|Focus\s+on)\s+',
-  caseSensitive: false,
-);
-final RegExp _versionSuffixNoiseRegex = RegExp(
-  r'\s+(?:in|for|from|during|until)\s+(?:v\d+(?:\.\d+)?|prototype|mvp)\.?$',
-  caseSensitive: false,
-);
-final RegExp _tradeOffFillerWordRegex = RegExp(
-  r'\b(?:immediate|instant|complex|realistic|heavy|detailed|elaborate|multi-bone|waiting\s+on|60\s*fps|clean|transparent|responsive|fast)\b\s*',
-  caseSensitive: false,
-);
-final RegExp _exclusionLeadVerbRegex = RegExp(
-  r'^(?:Cut|Defer|Exclude|Omit|Skip|Remove)\s+',
-  caseSensitive: false,
-);
-final RegExp _leadInFillerVerbRegex = RegExp(
-  r'^(?:Prioritize|Focus\s+on|Ensure)\s+',
-  caseSensitive: false,
-);
-final RegExp _whitespaceRegex = RegExp(r'\s+');
-final RegExp _dotPipeSepRegex = RegExp(r'[·|]');
-final RegExp _dotPipeSplitRegex = RegExp(r'\s*[·|]\s*');
-final RegExp _newlineCollapseRegex = RegExp(r'\s*\n\s*');
-
-/// Wraps each line of text at [maxCharsPerLine] (default 80 characters),
-/// breaking cleanly at the last space before column 80 (or at column 80 for
-/// continuous words) while preserving manual `Shift + Enter` newlines.
-class MaxColumnLineWrapFormatter extends TextInputFormatter {
-  final int maxCharsPerLine;
-
-  const MaxColumnLineWrapFormatter({this.maxCharsPerLine = 80});
-
-  static String wrapTextAtColumn(String input, {int maxCharsPerLine = 80}) {
-    if (input.isEmpty) return input;
-    final rawLines = input.split('\n');
-    final wrappedLines = <String>[];
-
-    for (final line in rawLines) {
-      if (line.length <= maxCharsPerLine) {
-        wrappedLines.add(line);
-        continue;
-      }
-      var remaining = line;
-      while (remaining.length > maxCharsPerLine) {
-        final window = remaining.substring(0, maxCharsPerLine + 1);
-        final lastSpace = window.lastIndexOf(' ');
-        if (lastSpace > 0) {
-          wrappedLines.add(remaining.substring(0, lastSpace));
-          remaining = remaining.substring(lastSpace + 1);
-        } else {
-          wrappedLines.add(remaining.substring(0, maxCharsPerLine));
-          remaining = remaining.substring(maxCharsPerLine);
-        }
-      }
-      wrappedLines.add(remaining);
-    }
-    return wrappedLines.join('\n');
-  }
-
-  @override
-  TextEditingValue formatEditUpdate(
-    TextEditingValue oldValue,
-    TextEditingValue newValue,
-  ) {
-    final text = newValue.text;
-    if (text.isEmpty) return newValue;
-    final hasLongLine =
-        text.split('\n').any((line) => line.length > maxCharsPerLine);
-    if (!hasLongLine) return newValue;
-
-    final wrapped = wrapTextAtColumn(text, maxCharsPerLine: maxCharsPerLine);
-    final lengthDelta = wrapped.length - text.length;
-    final rawOffset = newValue.selection.baseOffset;
-    final nextOffset = rawOffset < 0
-        ? wrapped.length
-        : (rawOffset + lengthDelta).clamp(0, wrapped.length);
-
-    return TextEditingValue(
-      text: wrapped,
-      selection: TextSelection.collapsed(offset: nextOffset),
-    );
-  }
-}
-
-/// Metadata and Agent guidance for each of the 8 focused sections in Stage 1.
-class _SectionConfig {
-  final String numLabel;
-  final String optionKey;
-  final String shortTitle;
-  final String title;
-  final List<String> options;
-  final bool isMultiSelect;
-
-  const _SectionConfig({
-    required this.numLabel,
-    required this.optionKey,
-    required this.shortTitle,
-    required this.title,
-    required this.options,
-    this.isMultiSelect = false,
-  });
-}
-
-/// Stage 1 Screen: Structure-First One-Section-at-a-Time Dynamic UI + Full Blueprint Review
-/// - Steps `01` to `09`: Focuses on one blueprint section at a time (Artifact Zone + Agent Console + Nav Bar).
-/// - Step `10`: Full-Width Blueprint Review sheet right before approval.
+/// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_MCP_CONTEXT`).
+/// State 1A: 1-Sentence Spark + 3 Unreal Presets (`Shellbreaker`, `Railjack Drift`, `Ember Keep`).
+/// State 1B: Centered Editorial Spec Document (`Clean Spec Document` | `Raw ROOT_MCP_CONTEXT.md`)
+/// paired with `1 UU = 1 cm` architecture, camera forks, strict `v0.1` Epics, and Co-Designer bar.
 class ProjectPitchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
+  final VoidCallback? onOpenAiSettings;
 
   const ProjectPitchScreen({
     super.key,
     required this.workbench,
+    this.onOpenAiSettings,
   });
 
   @override
   State<ProjectPitchScreen> createState() => _ProjectPitchScreenState();
 }
 
-class _ProjectPitchScreenState extends State<ProjectPitchScreen>
-    with WorkbenchThemeMixin {
+class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   final TextEditingController _sparkController = TextEditingController();
-  final TextEditingController _agentPromptController = TextEditingController();
-  final FocusNode _sparkFocusNode = FocusNode();
-  final List<String> _sparkUndoStack = <String>[];
-
-  KeyEventResult _handleMultilinePitchKeyEvent(
-    KeyEvent event,
-    TextEditingController controller, {
-    required VoidCallback onSubmit,
-  }) =>
-      handleEnterSubmitShiftNewline(event, controller, onSubmit: onSubmit);
-
-  String? _lastTrackedProjectId;
-  final Map<int, int?> _selectedOptionBySection = {};
-  final Map<int, Set<int>> _selectedOptionsBySection = {};
-  final Map<int, dynamic> _initialSectionDefaults = {};
-
-  /// Step 10 Full Review hover, Bento focus, & single-open Refine drawer state.
-  int? _hoveredReviewSectionIdx;
-  int? _focusedBentoSectionIdx;
-  int? _openRefineDrawerSectionIdx;
-
-  /// Inline Click-to-Edit state (Upgrade 2: replaces popup AlertDialogs across Stage 1).
-  String? _activeInlineEditKey;
-  final TextEditingController _inlineItemEditController =
-      TextEditingController();
-
-  @override
-  bool get isDark => widget.workbench.isDark;
-
-  // Unified Single-Column 680px Quiet Document Measure (matches Feature Runbook & Progressive Release):
-  double get _viewportWidth => MediaQuery.sizeOf(context).width;
-  bool get _isMobileMeasure => _viewportWidth < 640;
-  bool get _isTabletMeasure => _viewportWidth >= 640 && _viewportWidth < 1024;
-  double get _measureColumnMaxWidth => _isMobileMeasure ? 460.0 : 680.0;
-  double get _measureBodyFontSize => 13.5;
-  double get _measureLeadFontSize => 15.0;
-  double get _measureTitleFontSize => _isMobileMeasure ? 20.0 : 22.0;
-  double get _measureSpecValueSize => 12.5;
-  double get _measureCardPadH => _isMobileMeasure ? 14.0 : 16.0;
-  double get _measureCardPadV => _isMobileMeasure ? 12.0 : 14.0;
-  double get _measureCardGap => 10.0;
-
-  void _rebuild([VoidCallback? fn]) => setState(fn ?? () {});
-
-  List<_SectionConfig> get _sections => _kSections;
-  static const List<_SectionConfig> _kSections = [
-    _SectionConfig(
-      numLabel: '01',
-      optionKey: 'goal',
-      shortTitle: 'Goal',
-      title: 'Goal',
-      options: [],
-    ),
-    _SectionConfig(
-      numLabel: '02',
-      optionKey: 'gameSpec',
-      shortTitle: 'Game Spec',
-      title: 'Game Spec',
-      options: [
-        'Top-Down Twin-Stick Arena: 2D Top-Down · Twin-Stick (WASD + Aim) · Singleplayer · Single-Screen Wave Arena',
-        '3D Isometric Action Roguelite: 3D Isometric · Mouse + WASD · Singleplayer · Procedural Room Grid',
-        '2D Side-Scrolling Platformer: 2D Side-Scrolling · Gamepad / Precision Platformer · Singleplayer · Multi-Room Obstacle Course',
-      ],
-    ),
-    _SectionConfig(
-      numLabel: '03',
-      optionKey: 'techSpec',
-      shortTitle: 'Tech Spec',
-      title: 'Tech Spec',
-      options: [
-        'Godot 4 2D Native Stack: Godot 4 (GDScript) · PC & Web · Godot 4 2D Pixel / Vector · ConfigFile (.cfg / .tres)',
-        'Godot 4 Forward+ 3D Stack: Godot 4 (GDScript) · PC & Steam Deck · Godot 4 Forward+ 3D · Resource (.tres)',
-        'Godot 4 GDExtension Stack: Godot 4 (GDScript + GDExtension C++) · PC Desktop · Godot 4 Forward+ 3D · ConfigFile (.cfg / .tres)',
-      ],
-    ),
-    _SectionConfig(
-      numLabel: '04',
-      optionKey: 'designPillars',
-      shortTitle: 'Design Pillars',
-      title: 'Design Pillars',
-      isMultiSelect: true,
-      options: [],
-    ),
-    _SectionConfig(
-      numLabel: '05',
-      optionKey: 'tradeOffs',
-      shortTitle: 'Trade-Offs',
-      title: 'Trade-Offs',
-      isMultiSelect: true,
-      options: [],
-    ),
-    _SectionConfig(
-      numLabel: '06',
-      optionKey: 'coreLoop',
-      shortTitle: 'Core Loop',
-      title: 'Core Loop',
-      isMultiSelect: true,
-      options: [],
-    ),
-    _SectionConfig(
-      numLabel: '07',
-      optionKey: 'exclusions',
-      shortTitle: 'Out of Scope',
-      title: 'Out of Scope',
-      isMultiSelect: true,
-      options: [],
-    ),
-    _SectionConfig(
-      numLabel: '08',
-      optionKey: 'doneWhen',
-      shortTitle: 'Done When',
-      title: 'Done When',
-      options: [],
-    ),
-  ];
-
-  List<String> _optionsForSection(ProjectConceptBlueprint draft, int sectionIdx) {
-    final sec = _sections[sectionIdx];
-    final dynamicOpts = draft.sectionOptions[sec.optionKey];
-    if (dynamicOpts != null && dynamicOpts.isNotEmpty) {
-      return dynamicOpts;
-    }
-    return sec.options;
-  }
-
-  /// Splits an option string into `(title, description)` so Playing Cards always display
-  /// a crisp bold Card Title on top and a 2-line Short Description underneath.
-  ({String title, String description}) _splitOptionIntoCardTitleAndBody(
-    String rawOption,
-    int sectionIdx,
-    int optIdx,
-  ) {
-    final clean = rawOption.trim();
-    if (clean.contains(':')) {
-      final colonIdx = clean.indexOf(':');
-      final head = clean.substring(0, colonIdx).trim();
-      final tail = clean.substring(colonIdx + 1).trim();
-      if (head.isNotEmpty && tail.isNotEmpty && head.length <= 42) {
-        return (title: head, description: tail);
-      }
-    }
-    if (clean.contains('·')) {
-      final dotIdx = clean.indexOf('·');
-      final head = clean.substring(0, dotIdx).trim();
-      final tail = clean.substring(dotIdx + 1).trim();
-      if (head.isNotEmpty && tail.isNotEmpty) {
-        return (title: head, description: tail);
-      }
-    }
-    if (clean.toLowerCase().contains(' over ')) {
-      final overParts = clean.split(_overSplitRegex);
-      if (overParts.length >= 2) {
-        final winTitle = overParts.first
-            .replaceFirst(_prioritizePrefixRegex, '')
-            .trim();
-        return (title: winTitle, description: clean);
-      }
-    }
-    final words = clean.split(_whitespaceRegex);
-    if (words.length > 4) {
-      return (
-        title: words.take(3).join(' '),
-        description: clean,
-      );
-    }
-    return (
-      title: 'Option 0${optIdx + 1}',
-      description: clean,
-    );
-  }
+  final TextEditingController _coDesignController = TextEditingController();
 
   @override
   void dispose() {
     _sparkController.dispose();
-    _agentPromptController.dispose();
-    _inlineItemEditController.dispose();
-    _sparkFocusNode.dispose();
+    _coDesignController.dispose();
     super.dispose();
-  }
-
-  void _captureSectionDefaultIfNeeded(
-    ProjectConceptBlueprint draft,
-    int sectionIdx,
-  ) {
-    if (_initialSectionDefaults.containsKey(sectionIdx)) return;
-    switch (sectionIdx) {
-      case 0:
-        _initialSectionDefaults[0] = draft.goal;
-        break;
-      case 1:
-        _initialSectionDefaults[1] = List<String>.from(draft.gameSpec);
-        break;
-      case 2:
-        _initialSectionDefaults[2] = List<String>.from(draft.techSpec);
-        break;
-      case 3:
-        _initialSectionDefaults[3] = List<String>.from(draft.designPillars);
-        break;
-      case 4:
-        _initialSectionDefaults[4] = List<String>.from(draft.tradeOffs);
-        break;
-      case 5:
-        _initialSectionDefaults[5] = List<String>.from(draft.coreLoopBeats);
-        break;
-      case 6:
-        _initialSectionDefaults[6] = List<String>.from(draft.exclusions);
-        break;
-      case 7:
-        _initialSectionDefaults[7] = draft.doneWhen;
-        break;
-    }
-  }
-
-  void _restoreSectionDefault(ProjectConceptBlueprint draft, int sectionIdx) {
-    final saved = _initialSectionDefaults[sectionIdx];
-    if (saved == null) return;
-    widget.workbench.updateConceptDraft((d) {
-      switch (sectionIdx) {
-        case 0:
-          if (saved is String) d.goal = saved;
-          break;
-        case 1:
-          if (saved is List<String>) d.gameSpec = List<String>.from(saved);
-          break;
-        case 2:
-          if (saved is List<String>) d.techSpec = List<String>.from(saved);
-          break;
-        case 3:
-          if (saved is List<String>) d.designPillars = List<String>.from(saved);
-          break;
-        case 4:
-          if (saved is List<String>) d.tradeOffs = List<String>.from(saved);
-          break;
-        case 5:
-          if (saved is List<String>) d.coreLoopBeats = List<String>.from(saved);
-          break;
-        case 6:
-          if (saved is List<String>) d.exclusions = List<String>.from(saved);
-          break;
-        case 7:
-          if (saved is String) d.doneWhen = saved;
-          break;
-      }
-    });
-  }
-
-  bool _isSectionOptionSelected(int sectionIdx, int optIdx) {
-    final sec = _sections[sectionIdx];
-    if (sec.isMultiSelect) {
-      return _selectedOptionsBySection[sectionIdx]?.contains(optIdx) ?? false;
-    }
-    return _selectedOptionBySection[sectionIdx] == optIdx;
-  }
-
-  Future<void> _selectSectionOption(
-    ProjectConceptBlueprint draft,
-    int sectionIdx,
-    int optIdx,
-  ) async {
-    final opts = _optionsForSection(draft, sectionIdx);
-    if (optIdx < 0 || optIdx >= opts.length) return;
-    final optionText = opts[optIdx];
-    final sec = _sections[sectionIdx];
-
-    if (sec.isMultiSelect) {
-      _captureSectionDefaultIfNeeded(draft, sectionIdx);
-      final currentSet = Set<int>.from(
-        _selectedOptionsBySection[sectionIdx] ?? const <int>{},
-      );
-      final wasSelected = currentSet.contains(optIdx);
-      if (wasSelected) {
-        currentSet.remove(optIdx);
-      } else {
-        currentSet.add(optIdx);
-      }
-      if (currentSet.isEmpty) {
-        _restoreSectionDefault(draft, sectionIdx);
-        setState(() {
-          _selectedOptionsBySection.remove(sectionIdx);
-          _selectedOptionBySection.remove(sectionIdx);
-        });
-        return;
-      }
-
-      setState(() {
-        _selectedOptionsBySection[sectionIdx] = currentSet;
-        _selectedOptionBySection[sectionIdx] = currentSet.last;
-      });
-      _applyMultiSelectSectionOptionsDeterministic(
-        draft,
-        sectionIdx,
-        currentSet,
-        opts,
-      );
-      return;
-    }
-
-    // Clicking the already-selected Option Card unselects it and restores the initial generated default!
-    if (_selectedOptionBySection[sectionIdx] == optIdx) {
-      _restoreSectionDefault(draft, sectionIdx);
-      setState(() {
-        _selectedOptionBySection.remove(sectionIdx);
-      });
-      return;
-    }
-
-    _captureSectionDefaultIfNeeded(draft, sectionIdx);
-
-    _applySectionOptionDeterministic(draft, sectionIdx, optIdx, optionText);
-    if (!mounted) return;
-    setState(() {
-      _selectedOptionBySection[sectionIdx] = optIdx;
-    });
-  }
-
-  void _applyMultiSelectSectionOptionsDeterministic(
-    ProjectConceptBlueprint draft,
-    int sectionIdx,
-    Set<int> selectedIndices,
-    List<String> opts,
-  ) {
-    final sorted = selectedIndices.toList()..sort();
-    final savedDefault = _initialSectionDefaults[sectionIdx];
-    final baseList = savedDefault is List<String>
-        ? List<String>.from(savedDefault)
-        : <String>[];
-
-    widget.workbench.updateConceptDraft((d) {
-      switch (sectionIdx) {
-        case 3: // 04 Design Pillars
-          final combined = List<String>.from(baseList);
-          for (final idx in sorted) {
-            if (idx < 0 || idx >= opts.length) continue;
-            final raw = opts[idx].trim();
-            final val = ProjectConceptBlueprint.ensureNamedPillar(
-              raw,
-              combined.length,
-            );
-            if (!combined.contains(val)) combined.add(val);
-          }
-          d.designPillars = combined;
-          break;
-        case 4: // 05 Trade-Offs
-          final combined = List<String>.from(baseList);
-          for (final idx in sorted) {
-            if (idx < 0 || idx >= opts.length) continue;
-            final raw = opts[idx].trim();
-            final body = raw.contains(':')
-                ? raw.substring(raw.indexOf(':') + 1).trim()
-                : raw;
-            if (!combined.contains(body)) combined.add(body);
-          }
-          d.tradeOffs = combined;
-          break;
-        case 5: // 06 Core Loop Beats
-          final combined = List<String>.from(baseList);
-          for (final idx in sorted) {
-            if (idx < 0 || idx >= opts.length) continue;
-            final raw = opts[idx].trim();
-            final body = raw.contains(':')
-                ? raw.substring(raw.indexOf(':') + 1).trim()
-                : raw;
-            if (body.contains('→')) {
-              combined.clear();
-              final steps = body
-                  .split('→')
-                  .map((s) => s.trim())
-                  .where((s) => s.isNotEmpty)
-                  .toList();
-              for (int i = 0; i < steps.length; i++) {
-                final formatted = steps[i].trim();
-                if (!combined.any((c) => c.toLowerCase().startsWith(
-                    formatted.split(':').first.trim().toLowerCase()))) {
-                  combined.add(formatted);
-                }
-              }
-            } else {
-              final formatted = raw.contains(':')
-                  ? raw
-                  : 'Beat ${combined.length + 1}: $raw';
-              if (!combined.contains(formatted) && !combined.contains(raw)) {
-                combined.add(formatted);
-              }
-            }
-          }
-          if (combined.isNotEmpty) {
-            d.coreLoopBeats = combined;
-          }
-          break;
-        case 6: // 07 Out of Scope Exclusions
-          final combined = List<String>.from(baseList);
-          for (final idx in sorted) {
-            if (idx < 0 || idx >= opts.length) continue;
-            final raw = opts[idx].trim();
-            final body = raw.contains(':')
-                ? raw.substring(raw.indexOf(':') + 1).trim()
-                : raw;
-            if (!combined.contains(body)) combined.add(body);
-          }
-          d.exclusions = combined;
-          break;
-      }
-    });
-  }
-
-  void _applySectionOptionDeterministic(
-    ProjectConceptBlueprint draft,
-    int sectionIdx,
-    int optIdx,
-    String optionText,
-  ) {
-    final trimmedOption = optionText.trim();
-    final colonIdx = trimmedOption.indexOf(':');
-    final firstSepMatch = _dotPipeSepRegex.firstMatch(trimmedOption);
-    final hasLeadingTitlePrefix = colonIdx > 0 &&
-        (firstSepMatch == null || colonIdx < firstSepMatch.start);
-    final bodyAfterColon = hasLeadingTitlePrefix
-        ? trimmedOption.substring(colonIdx + 1).trim()
-        : trimmedOption;
-
-    widget.workbench.updateConceptDraft((d) {
-      switch (sectionIdx) {
-        case 0:
-          final cleanGoal = ProjectConceptBlueprint.sanitizeGoalText(optionText);
-          if (cleanGoal.isNotEmpty) {
-            d.goal = cleanGoal.endsWith('.') ? cleanGoal : '$cleanGoal.';
-          }
-          break;
-        case 1:
-          final specParts = bodyAfterColon
-              .split(_dotPipeSplitRegex)
-              .map((s) => s.trim())
-              .where((s) => s.isNotEmpty)
-              .toList();
-          if (specParts.isNotEmpty) {
-            d.gameSpec = [
-              specParts[0],
-              specParts.length > 1 ? specParts[1] : (d.gameSpec.length > 1 ? d.gameSpec[1] : ''),
-              specParts.length >= 4 ? specParts[2] : (d.gameSpec.length > 2 ? d.gameSpec[2] : ''),
-              specParts.length >= 3 ? specParts.last : (d.gameSpec.length > 3 ? d.gameSpec[3] : ''),
-            ];
-          }
-          break;
-        case 2:
-          final techParts = bodyAfterColon
-              .split(_dotPipeSplitRegex)
-              .map((s) => s.trim())
-              .where((s) => s.isNotEmpty)
-              .toList();
-          if (techParts.isNotEmpty) {
-            d.techSpec = ProjectConceptBlueprint.normalizeGodotTechSpec([
-              techParts[0],
-              techParts.length > 1 ? techParts[1] : (d.techSpec.length > 1 ? d.techSpec[1] : ''),
-              techParts.length > 2 ? techParts[2] : (d.techSpec.length > 2 ? d.techSpec[2] : ''),
-              techParts.length > 3 ? techParts[3] : (d.techSpec.length > 3 ? d.techSpec[3] : ''),
-            ]);
-          }
-          break;
-        case 7:
-          d.doneWhen = bodyAfterColon;
-          break;
-      }
-    });
-  }
-
-  Future<void> _submitSectionPrompt(
-    ProjectConceptBlueprint draft,
-    int sectionIdx, {
-    TextEditingController? controller,
-  }) async {
-    final activeController = controller ?? _agentPromptController;
-    final text = activeController.text
-        .replaceAll(_newlineCollapseRegex, ' ')
-        .trim();
-    if (text.isEmpty || widget.workbench.isAgentBusy) return;
-    activeController.clear();
-
-    final sec = _sections[sectionIdx];
-    await widget.workbench.sendConceptChatMessage(
-      '[Section ${sec.numLabel} ${sec.title}] $text',
-    );
-    if (!mounted) return;
-    setState(() {
-      _initialSectionDefaults.remove(sectionIdx);
-      _selectedOptionBySection.remove(sectionIdx);
-      _selectedOptionsBySection.remove(sectionIdx);
-    });
-  }
-
-  List<String> _kvPresetsForCell(bool isGameSpec, int cellIndex) {
-    const gameSpecPresets = <int, List<String>>{
-      0: ['2D Top-Down', '2D Side-Scrolling', '3D First-Person', '3D Third-Person', '3D Isometric'],
-      1: ['WASD + Mouse', 'KBM / Gamepad', 'Gamepad Platformer', 'Point & Click'],
-      2: ['Singleplayer', 'Local Couch Co-Op', 'Singleplayer Leaderboards', 'Singleplayer Survival'],
-      3: ['Single-Screen Arena', 'Continuous Overworld', 'Multi-Room Course', 'Procedural Room Grid'],
-    };
-    const techSpecPresets = <int, List<String>>{
-      0: [
-        'Godot 4 (GDScript)',
-        'Godot 4 (GDScript + GDExtension C++)',
-      ],
-      1: ['PC Desktop', 'PC & Steam Deck', 'PC & Web (HTML5)'],
-      2: [
-        'Godot 4 Greybox (2D / Forward+)',
-        'Godot 4 Forward+ 3D',
-        'Godot 4 2D Pixel / Vector',
-        'Godot 4 Compatibility (Web/Mobile)',
-      ],
-      3: ['ConfigFile (.cfg / .tres)', 'Steam Cloud Save', 'Stateless Arcade Session'],
-    };
-    return (isGameSpec ? gameSpecPresets[cellIndex] : techSpecPresets[cellIndex]) ?? const <String>[];
-  }
-
-  void _startInlineEdit(String key, String initialText) {
-    _rebuild(() {
-      _activeInlineEditKey = key;
-      _inlineItemEditController.text = initialText;
-      _inlineItemEditController.selection = TextSelection.fromPosition(
-        TextPosition(offset: _inlineItemEditController.text.length),
-      );
-    });
-  }
-
-  void _applyDirectKvValue({
-    required bool isGameSpec,
-    required int cellIndex,
-    required String newValue,
-  }) {
-    final trimmed = newValue.trim();
-    if (trimmed.isEmpty) return;
-    widget.workbench.updateConceptDraft((d) {
-      final targetList = isGameSpec ? List<String>.from(d.gameSpec) : List<String>.from(d.techSpec);
-      while (targetList.length <= cellIndex) {
-        targetList.add('—');
-      }
-      targetList[cellIndex] = trimmed;
-      if (isGameSpec) {
-        d.gameSpec = targetList;
-      } else {
-        d.techSpec = targetList;
-      }
-    });
-  }
-
-  void _promptEditProjectTitle(ProjectConceptBlueprint draft, {String key = 'project_title'}) {
-    _startInlineEdit(key, draft.title);
-  }
-
-  void _saveInlineProjectTitle(String val) {
-    final trimmed = val.trim();
-    if (trimmed.isEmpty) return;
-    final activeId = widget.workbench.activeProjectId;
-    if (activeId != null) {
-      widget.workbench.renameProject(activeId, trimmed);
-    } else {
-      widget.workbench.updateConceptDraft((d) => d.title = trimmed);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentProjectId = widget.workbench.activeProjectId;
-    if (currentProjectId != _lastTrackedProjectId) {
-      _lastTrackedProjectId = currentProjectId;
-      _selectedOptionBySection.clear();
-      _selectedOptionsBySection.clear();
-      _initialSectionDefaults.clear();
-      _hoveredReviewSectionIdx = null;
-      _focusedBentoSectionIdx = null;
-      _openRefineDrawerSectionIdx = null;
-      _activeInlineEditKey = null;
-      _sparkController.clear();
-      _sparkUndoStack.clear();
-      _agentPromptController.clear();
+    final wb = widget.workbench;
+    final draft = wb.conceptDraft;
+    final showSpark = wb.showingSparkPicker || draft == null || !draft.hasSpec;
+    if (showSpark) {
+      return _buildSparkOnboarding(context, wb, draft);
     }
+    return _buildSpecDocumentWorkspace(context, wb, draft);
+  }
 
-    final draft = widget.workbench.conceptDraft;
+  Widget _buildSparkOnboarding(
+    BuildContext context,
+    WorkbenchProvider wb,
+    ProjectConceptBlueprint? existingDraft,
+  ) {
+    final isDark = wb.isDark;
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final border = AppTheme.borderFor(isDark);
+    final cyan = AppTheme.accentCyanFor(isDark);
 
-    // Step 1A: Before the first Spark is submitted, show the centered Spark launcher
-    if (draft == null) {
-      return Container(
-        color: bgBase,
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 960),
-              child: _buildInitialSparkLauncher(),
+    return Container(
+      color: AppTheme.bgBaseFor(isDark),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 36),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 740),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: cyan.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusPill),
+                        border: Border.all(color: cyan.withValues(alpha: 0.35)),
+                      ),
+                      child: Text(
+                        'STAGE 1 · UNREAL MCP ROOT SPEC',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: cyan,
+                        ),
+                      ),
+                    ),
+                    const Spacer(),
+                    if (existingDraft != null && existingDraft.hasSpec)
+                      TextButton.icon(
+                        key: const ValueKey('resume_spec_btn'),
+                        onPressed: wb.resumeActiveRootSpec,
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 15),
+                        label: Text(
+                          'Resume ${existingDraft.normalizedTitle} Spec',
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'Describe your Unreal game in one sentence.',
+                  style: AppTheme.displayFont(
+                    fontSize: 30,
+                    fontWeight: FontWeight.w700,
+                    color: textPrimary,
+                    height: 1.15,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'LAYERS drafts a clean PROJECT_SPEC.md with 1 UU = 1 cm Unreal contracts and strictly v0.1 prototype Epics before anything hits Unreal MCP.',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: textSecondary,
+                    height: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgSurfaceRaisedFor(isDark),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                    border: Border.all(color: AppTheme.borderBrightFor(isDark)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      TextField(
+                        key: const ValueKey('spark_prompt_input'),
+                        controller: _sparkController,
+                        minLines: 2,
+                        maxLines: 4,
+                        style: TextStyle(fontSize: 15, color: textPrimary),
+                        decoration: InputDecoration(
+                          hintText:
+                              'e.g. Top-down twin-stick crustacean mech arena shooter with claw dash armor breaks and 3-wave combat...',
+                          hintStyle: TextStyle(color: textMuted, fontSize: 14),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          filled: false,
+                          contentPadding: EdgeInsets.zero,
+                        ),
+                        onSubmitted: (val) async {
+                          if (!wb.isAgentBusy && val.trim().isNotEmpty) {
+                            await wb.generateSpecFromSpark(val);
+                          }
+                        },
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        alignment: WrapAlignment.spaceBetween,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: [
+                          _TargetEngineToggle(
+                            target: wb.targetEngine,
+                            isDark: isDark,
+                            onChanged: wb.setTargetEngine,
+                          ),
+                          ElevatedButton.icon(
+                            key: const ValueKey('draft_spark_btn'),
+                            onPressed: wb.isAgentBusy
+                                ? null
+                                : () async {
+                                    final text = _sparkController.text.trim();
+                                    if (text.isEmpty) {
+                                      AppToast.show(
+                                        context,
+                                        'Enter a 1-sentence game idea or pick a preset below.',
+                                        isDark: isDark,
+                                        accentColor: AppTheme.accentRedFor(isDark),
+                                      );
+                                      return;
+                                    }
+                                    await wb.generateSpecFromSpark(text);
+                                  },
+                            icon: wb.isAgentBusy
+                                ? const SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.auto_awesome, size: 15),
+                            label: Text(
+                              wb.isAgentBusy
+                                  ? (wb.agentProgressStep ?? 'Drafting...')
+                                  : 'Draft Project Spec ✦',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'OR START FROM AN UNREAL STARTER SPEC',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    for (final preset in UnrealSparkPresets.entries)
+                      InkWell(
+                        key: ValueKey('preset_pill_${preset.id}'),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        onTap: wb.isAgentBusy
+                            ? null
+                            : () {
+                                _sparkController.text = preset.sparkPrompt;
+                                wb.loadPresetSpark(preset.id);
+                              },
+                        child: Container(
+                          width: 236,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgSurfaceFor(isDark),
+                            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                            border: Border.all(color: border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      preset.label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(
+                                    Icons.bolt_rounded,
+                                    size: 14,
+                                    color: cyan,
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                preset.subtitle,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: textMuted,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSpecDocumentWorkspace(
+    BuildContext context,
+    WorkbenchProvider wb,
+    ProjectConceptBlueprint spec,
+  ) {
+    final isDark = wb.isDark;
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final border = AppTheme.borderFor(isDark);
+    final cyan = AppTheme.accentCyanFor(isDark);
+    final green = AppTheme.accentGreenFor(isDark);
+
+    return Container(
+      color: AppTheme.bgBaseFor(isDark),
+      child: Column(
+        children: [
+          // Top editorial bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.bgPanelFor(isDark),
+              border: Border(bottom: BorderSide(color: border)),
+            ),
+            child: SizedBox(
+              width: double.infinity,
+              child: Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      TextButton.icon(
+                        key: const ValueKey('back_to_spark_btn'),
+                        onPressed: wb.showSparkPicker,
+                        icon: const Icon(Icons.arrow_back, size: 15),
+                        label: const Text('Change Spark', style: TextStyle(fontSize: 12)),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgSurfaceFor(isDark),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+                          border: Border.all(color: border),
+                        ),
+                        child: Text(
+                          'PROJECT_SPEC.md',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        spec.normalizedTitle,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.displayFont(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 12,
+                    runSpacing: 6,
+                    children: [
+                      // View Tabs: Clean Spec Document | Raw ROOT_MCP_CONTEXT.md
+                      _SegmentedTab(
+                        isDark: isDark,
+                        leftKey: const ValueKey('stage1_tab_clean'),
+                        rightKey: const ValueKey('stage1_tab_raw'),
+                        leftLabel: 'Clean Spec Document',
+                        rightLabel: 'Raw ROOT_MCP_CONTEXT.md',
+                        isRightSelected: wb.showRawRootContext,
+                        onSelect: (isRaw) => wb.toggleRawRootContext(isRaw),
+                      ),
+                      ElevatedButton.icon(
+                        key: const ValueKey('approve_launch_workbench_btn'),
+                        onPressed: wb.isAgentBusy
+                            ? null
+                            : () {
+                                wb.approveRootSpecAndLaunchWorkbench();
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: green,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                        ),
+                        icon: const Icon(Icons.check_circle_outline, size: 16),
+                        label: const Text('Approve & Launch Unreal Workbench →'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Centered single-column scrolling document
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 820),
+                  child: wb.showRawRootContext
+                      ? _buildRawContextView(context, wb, isDark, textPrimary, border, cyan)
+                      : _buildCleanSpecDocument(context, wb, spec),
+                ),
+              ),
+            ),
+          ),
+
+          // Bottom Co-Designer bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppTheme.bgPanelFor(isDark),
+              border: Border(top: BorderSide(color: border)),
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 820),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (spec.lastCoDesignNote.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          'Co-Designer: ${spec.lastCoDesignNote}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            color: cyan,
+                          ),
+                        ),
+                      ),
+                    Row(
+                      children: [
+                        Icon(Icons.smart_toy_outlined, size: 16, color: cyan),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: TextField(
+                            key: const ValueKey('stage1_codesign_input'),
+                            controller: _coDesignController,
+                            style: TextStyle(fontSize: 13, color: textPrimary),
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Co-Designer: "Switch camera to third-person" or "No boss phase in v0.1"...',
+                              hintStyle: TextStyle(fontSize: 13, color: textMuted),
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 10,
+                              ),
+                            ),
+                            onSubmitted: (val) async {
+                              await _submitCoDesign(wb);
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          key: const ValueKey('stage1_codesign_apply_btn'),
+                          onPressed: wb.isAgentBusy
+                              ? null
+                              : () => _submitCoDesign(wb),
+                          child: Text(wb.isAgentBusy ? 'Applying...' : 'Apply ✦'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _submitCoDesign(WorkbenchProvider wb) async {
+    final text = _coDesignController.text.trim();
+    if (text.isEmpty || wb.isAgentBusy) return;
+    _coDesignController.clear();
+    await wb.applyStage1CoDesignInstruction(text);
+  }
+
+  Widget _buildRawContextView(
+    BuildContext context,
+    WorkbenchProvider wb,
+    bool isDark,
+    Color textPrimary,
+    Color border,
+    Color cyan,
+  ) {
+    final rawText = wb.activeRootMcpMarkdown;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.bgInsetFor(isDark),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Exact ROOT_MCP_CONTEXT Wire Markdown',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: cyan,
+                ),
+              ),
+              const Spacer(),
+              OutlinedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: rawText));
+                  AppToast.show(
+                    context,
+                    'Copied ROOT_MCP_CONTEXT Markdown',
+                    isDark: isDark,
+                  );
+                },
+                icon: const Icon(Icons.copy, size: 14),
+                label: const Text('Copy Context', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SelectableText(
+            rawText,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 12.5,
+              color: textPrimary,
+              height: 1.55,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCleanSpecDocument(
+    BuildContext context,
+    WorkbenchProvider wb,
+    ProjectConceptBlueprint spec,
+  ) {
+    final isDark = wb.isDark;
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final border = AppTheme.borderFor(isDark);
+    final cyan = AppTheme.accentCyanFor(isDark);
+    final green = AppTheme.accentGreenFor(isDark);
+    final red = AppTheme.accentRedFor(isDark);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Target Architecture banner row
+        Row(
+          children: [
+            _TargetEngineToggle(
+              target: spec.targetEngine,
+              isDark: isDark,
+              onChanged: wb.setTargetEngine,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                spec.targetEngine.architectureContract,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  color: textMuted,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 20),
+
+        // §01 Core Fantasy & 30s Loop
+        _SectionCard(
+          isDark: isDark,
+          code: '§01',
+          title: 'Core Fantasy & 30s Loop',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                spec.pitch,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500,
+                  color: textPrimary,
+                  height: 1.45,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (int i = 0; i < spec.coreLoop.length; i++) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSurfaceFor(isDark),
+                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                        border: Border.all(color: border),
+                      ),
+                      child: Text(
+                        '${i + 1}. ${spec.coreLoop[i]}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          color: textPrimary,
+                        ),
+                      ),
+                    ),
+                    if (i < spec.coreLoop.length - 1)
+                      Icon(Icons.arrow_forward, size: 14, color: cyan),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // §02 Global Unreal Scale & Architecture (1 UU = 1 cm)
+        _SectionCard(
+          isDark: isDark,
+          code: '§02',
+          title: 'Global Unreal Scale & Architecture (1 UU = 1 cm)',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Co-Designer Fork · Camera Framing:',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final opt in spec.cameraDecisionOptions)
+                    ChoiceChip(
+                      key: ValueKey('camera_opt_${opt.id}'),
+                      label: Text(opt.label),
+                      selected: spec.cameraChoiceId == opt.id,
+                      onSelected: (_) => wb.selectCameraDecisionOption(opt.id),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _ContractRow(label: 'Camera & Boom', value: spec.cameraContract, isDark: isDark),
+              _ContractRow(label: 'Player Scale', value: spec.characterScale, isDark: isDark),
+              _ContractRow(label: 'Input Contract', value: spec.inputContract, isDark: isDark),
+              _ContractRow(label: 'Asset Policy', value: spec.assetPolicy, isDark: isDark, isLast: true),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // §03 Design Pillars & Conflict Trade-Offs
+        _SectionCard(
+          isDark: isDark,
+          code: '§03',
+          title: 'Design Pillars & Conflict Trade-Offs',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              for (final p in spec.pillars)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('• ', style: TextStyle(color: cyan, fontWeight: FontWeight.bold)),
+                      Expanded(
+                        child: Text(
+                          p,
+                          style: TextStyle(fontSize: 13.5, color: textPrimary, height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              if (spec.tradeOffs.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final t in spec.tradeOffs)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgSurfaceFor(isDark),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                          border: Border.all(color: border),
+                        ),
+                        child: Text(
+                          '${t.prefer}  OVER  ${t.avoid}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11.5,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // §04 Hard Scope Cuts (Do Not Build)
+        _SectionCard(
+          isDark: isDark,
+          code: '§04',
+          title: 'Hard Scope Cuts (Do Not Build)',
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final cut in spec.outOfScope)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: red.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    border: Border.all(color: red.withValues(alpha: 0.35)),
+                  ),
+                  child: Text(
+                    cut,
+                    style: TextStyle(fontSize: 12.5, color: textPrimary),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // §05 Initial Release (v0.1 Prototype Epics Only)
+        _SectionCard(
+          isDark: isDark,
+          code: '§05',
+          title: 'Initial Release (v0.1 Prototype Epics Only)',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  border: Border.all(color: green.withValues(alpha: 0.35)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.shield_outlined, size: 15, color: green),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Strict v0.1 Prototype Gate: Only these Epics build first. v0.2+ waves & meta unlock after v0.1 passes PIE.',
+                        style: TextStyle(fontSize: 12, color: textPrimary),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Release Done When: ${spec.releaseDoneWhen}',
+                style: GoogleFonts.jetBrainsMono(fontSize: 12, color: cyan),
+              ),
+              const SizedBox(height: 12),
+              for (final ep in spec.initialEpics)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgSurfaceFor(isDark),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    border: Border.all(color: border),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: cyan.withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+                        ),
+                        child: Text(
+                          '${ep.code} · ${ep.releaseVersion}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: cyan,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              ep.title,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              ep.goal,
+                              style: TextStyle(fontSize: 12.5, color: textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${ep.checks.length} Checks\n${ep.tuning.length} Tuning',
+                        textAlign: TextAlign.right,
+                        style: GoogleFonts.jetBrainsMono(fontSize: 11, color: textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 36),
+      ],
+    );
+  }
+}
+
+class _TargetEngineToggle extends StatelessWidget {
+  final UnrealTargetEngine target;
+  final bool isDark;
+  final ValueChanged<UnrealTargetEngine> onChanged;
+
+  const _TargetEngineToggle({
+    required this.target,
+    required this.isDark,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final border = AppTheme.borderFor(isDark);
+    final activeBg = AppTheme.accentCyanFor(isDark).withValues(alpha: 0.16);
+    final activeFg = AppTheme.accentCyanFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+
+    Widget btn(UnrealTargetEngine mode, Key key) {
+      final selected = target == mode;
+      return InkWell(
+        key: key,
+        onTap: () => onChanged(mode),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected ? activeBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+          ),
+          child: Text(
+            mode.shortLabel,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11.5,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? activeFg : muted,
             ),
           ),
         ),
       );
     }
 
-    if (widget.workbench.jumpToFullReviewPending) {
-      widget.workbench.consumeJumpToFullReviewPending();
-    }
-
-    // Step 1B: Spacious Single-Column Concept Blueprint (75ch Desktop · 65ch Tablet · 50ch Mobile)
     return Container(
-      key: const ValueKey('concept_interview_card'),
-      color: bgBase,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurfaceFor(isDark),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.fromLTRB(
-                _isMobileMeasure ? 14 : 24,
-                _isMobileMeasure ? 18 : 26,
-                _isMobileMeasure ? 14 : 24,
-                36,
-              ),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxWidth: _measureColumnMaxWidth),
-                  child: _buildFullReviewWorkspace(draft),
-                ),
-              ),
-            ),
-          ),
-          _buildConceptStickyBottomDock(draft),
+          btn(UnrealTargetEngine.ue5Mcp, const ValueKey('stage1_target_ue5')),
+          btn(UnrealTargetEngine.ue6Verse, const ValueKey('stage1_target_ue6')),
         ],
       ),
     );
   }
+}
 
+class _SegmentedTab extends StatelessWidget {
+  final bool isDark;
+  final Key leftKey;
+  final Key rightKey;
+  final String leftLabel;
+  final String rightLabel;
+  final bool isRightSelected;
+  final ValueChanged<bool> onSelect;
+
+  const _SegmentedTab({
+    required this.isDark,
+    required this.leftKey,
+    required this.rightKey,
+    required this.leftLabel,
+    required this.rightLabel,
+    required this.isRightSelected,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final border = AppTheme.borderFor(isDark);
+    final raised = AppTheme.bgSurfaceRaisedFor(isDark);
+    final primary = AppTheme.textPrimaryFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurfaceFor(isDark),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            key: leftKey,
+            onTap: () => onSelect(false),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: !isRightSelected ? raised : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+              ),
+              child: Text(
+                leftLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: !isRightSelected ? FontWeight.w600 : FontWeight.w400,
+                  color: !isRightSelected ? primary : muted,
+                ),
+              ),
+            ),
+          ),
+          InkWell(
+            key: rightKey,
+            onTap: () => onSelect(true),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: isRightSelected ? raised : Colors.transparent,
+                borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+              ),
+              child: Text(
+                rightLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isRightSelected ? FontWeight.w600 : FontWeight.w400,
+                  color: isRightSelected ? primary : muted,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SectionCard extends StatelessWidget {
+  final bool isDark;
+  final String code;
+  final String title;
+  final Widget child;
+
+  const _SectionCard({
+    required this.isDark,
+    required this.code,
+    required this.title,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurfaceRaisedFor(isDark),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppTheme.borderFor(isDark)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                code,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: AppTheme.accentCyanFor(isDark),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: AppTheme.displayFont(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.textPrimaryFor(isDark),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+class _ContractRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool isDark;
+  final bool isLast;
+
+  const _ContractRow({
+    required this.label,
+    required this.value,
+    required this.isDark,
+    this.isLast = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      decoration: isLast
+          ? null
+          : BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppTheme.borderFor(isDark)),
+              ),
+            ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 132,
+            child: Text(
+              label,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 12,
+                color: AppTheme.textMutedFor(isDark),
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppTheme.textPrimaryFor(isDark),
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }

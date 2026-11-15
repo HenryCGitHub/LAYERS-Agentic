@@ -1,51 +1,45 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../agents/full_production_blueprint_agent.dart';
 import '../agents/gemini_agent_client.dart';
 import '../agents/project_concept_agent.dart';
 import '../agents/release_planner_agent.dart';
-import '../constants/text_style_guide.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
-import '../models/feature_state.dart';
+import '../models/epic_spec.dart';
 import '../models/tier_document.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_vault_service.dart';
 import '../services/local_vault_service.dart';
-import '../utils/godot_gdscript_guard.dart';
-import '../utils/section_text_utils.dart';
+import '../utils/unreal_mcp_payload_builder.dart';
+import '../utils/unreal_spec_guard.dart';
 
 part 'workbench_storage_mixin.dart';
 part 'workbench_concept_mixin.dart';
 part 'workbench_release_mixin.dart';
 part 'workbench_progressive_planner_mixin.dart';
-part 'workbench_inbox_mixin.dart';
-part 'workbench_godot_mixin.dart';
+part 'workbench_unreal_mixin.dart';
 
-/// Top-level stage in the streamlined 2-stage Antigravity workflow.
+/// Pure 2-Stage Antigravity Studio Workflow:
+/// - [projectPitch]: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_MCP_CONTEXT`, Spark Onboarding, Co-Designer).
+/// - [releaseWorkbench]: `2. Epic Specs` (6-section Unreal MCP Spec Sheets, `v0.1` -> `v0.2+`, `LayersBridge` Sync).
 enum WorkbenchStage {
-  /// Stage 1: Spark -> Concept Blueprint & Release Train
   projectPitch,
-
-  /// Stage 2: Open-Canvas Release Workbench (Epics -> Features -> Steps)
   releaseWorkbench,
 }
 
-/// Central state provider for LAYERS-Agentic.
-/// Manages the 4-tier document hierarchy and orchestrates the 2-stage
-/// Concept Blueprint -> Release Workbench workflow with Cloud Firestore + Local persistence.
 class WorkbenchProvider extends ChangeNotifier {
-  final Map<String, TierDocument> documents = {};
-
   static const String ownerAdminEmail = 'henryyoungchoi@gmail.com';
 
+  final bool enableAutoLoad;
   final AuthService _authService = AuthService();
   final FirestoreVaultService _firestoreService = FirestoreVaultService();
-  final bool enableAutoLoad;
 
-  /// Optional test-only email override so widget tests can verify Admin/Invitee UI deterministically.
-  @visibleForTesting
+  bool _isDisposed = false;
+  DateTime? _lastCloudSyncAt;
+  DateTime? get lastCloudSyncAt => _lastCloudSyncAt;
+
+  /// Test-only hook to simulate signed-in collaborator/admin identity in unit tests.
   String? testOverrideUserEmail;
 
   bool _isCloudSynced = false;
@@ -62,13 +56,13 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _myAiAccessStatus;
   String? get myAiAccessStatus => isAdminUser ? 'approved' : _myAiAccessStatus;
   bool get isSessionApprovedForAi =>
-      isUserLoggedIn && (isAdminUser || _myAiAccessStatus == 'approved');
+      isAdminUser || _myAiAccessStatus == 'approved';
 
   List<AiAccessRecord> _aiAccessRecords = const [];
   List<AiAccessRecord> get aiAccessRecords =>
       List.unmodifiable(_aiAccessRecords);
   List<AiAccessRecord> get pendingInvites =>
-      _aiAccessRecords.where((r) => r.status == 'invited').toList();
+      _aiAccessRecords.where((r) => r.status == 'pending').toList();
   List<AiAccessRecord> get activeApprovedMembers =>
       _aiAccessRecords.where((r) => r.status == 'approved').toList();
   List<AiAccessRecord> get revokedMembers =>
@@ -77,27 +71,16 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _pendingUrlInviteToken;
   String? _pendingUrlInvitedEmail;
   String? _pendingUrlProjectId;
-  String? _pendingUrlFeatureId;
+  String? _pendingUrlEpicId;
   String? _inviteFeedbackMessage;
+
   String? get pendingUrlInviteToken => _pendingUrlInviteToken;
   String? get pendingUrlInvitedEmail => _pendingUrlInvitedEmail;
   String? get inviteFeedbackMessage => _inviteFeedbackMessage;
   bool get hasPendingInviteLanding =>
-      _pendingUrlInviteToken != null &&
-      _pendingUrlInviteToken!.isNotEmpty &&
-      !isSessionApprovedForAi;
-
-  DateTime? _lastCloudSyncAt;
-  DateTime? get lastCloudSyncAt => _lastCloudSyncAt;
-  final Map<String, List<Map<String, String>>> _projectCollaborators = {};
-
-  final Map<String, Timer> _persistTimers = {};
-  final Set<String> _pendingCloudWriteDocIds = {};
-
-  /// Pre-project AI Idea Intake & Summary state on the New Project screen (`Stage 1A`).
-  SparkIdeaIntakeResult? _sparkIntake;
-  SparkIdeaIntakeResult? get sparkIntake => _sparkIntake;
-  int _sparkSuggestionVariantOffset = 0;
+      (_pendingUrlInviteToken != null &&
+          _pendingUrlInviteToken!.trim().isNotEmpty) &&
+      (!isUserLoggedIn || !isSessionApprovedForAi);
 
   String? _offlineErrorMessage;
   String? get offlineErrorMessage => _offlineErrorMessage;
@@ -112,12 +95,9 @@ class WorkbenchProvider extends ChangeNotifier {
   String _apiKey = GeminiAgentClient.resolveDefaultApiKey();
   String get apiKey => _apiKey;
   bool get isUsingHostedGoogleAi =>
-      _apiKey.trim().isEmpty &&
-      isSessionApprovedForAi &&
-      GeminiAgentClient.effectiveProxyBaseUrl.isNotEmpty;
+      isUserLoggedIn && isSessionApprovedForAi && _apiKey.trim().isEmpty;
   bool get hasLiveAiKey =>
-      GeminiAgentClient.hasKey(_apiKey) &&
-      GeminiAgentClient.lastErrorStatus == null;
+      GeminiAgentClient.hasKey(_apiKey) || isUsingHostedGoogleAi;
   String? get aiLastErrorStatus => GeminiAgentClient.lastErrorStatus;
   String? get aiFallbackReason => GeminiAgentClient.lastFallbackReason;
 
@@ -127,50 +107,43 @@ class WorkbenchProvider extends ChangeNotifier {
   String _planningModel = 'gemini-4-hydrogen';
   String get planningModel => _planningModel;
 
-  /// True while the Act 2 Full Production Blueprint draft is being generated.
-  bool _isDraftingFullProductionBlueprint = false;
-
   String _thinkingLevel = 'LOW';
   String get thinkingLevel => _thinkingLevel;
 
-  /// Accumulative token usage across Gemini calls in this session.
   int get totalInputTokens => GeminiAgentClient.totalInputTokens;
   int get totalOutputTokens => GeminiAgentClient.totalOutputTokens;
   int get totalThinkingTokens => GeminiAgentClient.totalThinkingTokens;
   double get totalEstimatedCostUsd => GeminiAgentClient.totalEstimatedCostUsd;
 
-  /// Compact token usage label for top bar and status displays (e.g. "12.4k in · 1.8k out · $0.016").
   String get tokenUsageCompactLabel {
-    final inStr = _formatCompactTokens(totalInputTokens);
-    final outStr = _formatCompactTokens(totalOutputTokens);
-    final costStr = totalEstimatedCostUsd == 0.0
-        ? '0.00'
-        : totalEstimatedCostUsd < 0.01
-            ? totalEstimatedCostUsd.toStringAsFixed(4)
-            : totalEstimatedCostUsd.toStringAsFixed(3);
-    return '$inStr in · $outStr out · \$$costStr';
+    final total = totalInputTokens + totalOutputTokens;
+    if (total <= 0) return '0 tok · \$0.000';
+    final cost = totalEstimatedCostUsd < 0.01
+        ? '\$${totalEstimatedCostUsd.toStringAsFixed(3)}'
+        : '\$${totalEstimatedCostUsd.toStringAsFixed(2)}';
+    return '${_formatCompactTokens(total)} · $cost';
   }
 
   static String _formatCompactTokens(int count) {
     if (count >= 1000000) {
-      return '${(count / 1000000.0).toStringAsFixed(1)}M';
-    } else if (count >= 1000) {
-      return '${(count / 1000.0).toStringAsFixed(count >= 10000 ? 0 : 1)}k';
+      return '${(count / 1000000).toStringAsFixed(1)}M tok';
     }
-    return '$count';
+    if (count >= 1000) {
+      return '${(count / 1000).toStringAsFixed(1)}k tok';
+    }
+    return '$count tok';
   }
 
-  /// Resets accumulative session token counters and notifies listeners.
   void resetTokenUsage() {
     GeminiAgentClient.resetUsage();
     notifyListeners();
   }
 
-  /// Records token consumption manually or from mock responses and notifies listeners.
   void recordTokenUsage({
     required int inputTokens,
     required int outputTokens,
     int thinkingTokens = 0,
+    String? modelUsed,
   }) {
     GeminiAgentClient.recordUsage(
       inputTokens: inputTokens,
@@ -180,15 +153,12 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Compact live model indicator ("⚡ Hydrogen" vs "⚡ Flash (Fallback)") for the top bar.
   String get activeModelIndicatorLabel {
-    final used = (GeminiAgentClient.lastResolvedModel ??
-            GeminiAgentClient.lastModelVersion ??
-            _conversationModel)
+    final used = (GeminiAgentClient.lastResolvedModel ?? _conversationModel)
         .toLowerCase();
     if (used.contains('hydrogen')) return '⚡ Hydrogen';
     if (used.contains('flash')) return '⚡ Flash (Fallback)';
-    return '⚡ Hydrogen';
+    return 'Gemini';
   }
 
   static const List<String> availableConversationModels = [
@@ -207,53 +177,39 @@ class WorkbenchProvider extends ChangeNotifier {
     'HIGH',
   ];
 
+  final Map<String, TierDocument> documents = {};
+  final Map<String, List<Map<String, String>>> _projectCollaborators = {};
+  final Map<String, Timer> _persistTimers = {};
+  final Set<String> _pendingCloudWriteDocIds = <String>{};
+  final List<String> _executionLog = <String>[];
+  final Map<String, String> _cachedUnrealLinkTokensByProjectId = {};
+
   String? _activeProjectId;
   String? get activeProjectId => _activeProjectId;
 
   String? _activeReleaseId;
   String? get activeReleaseId => _activeReleaseId;
 
-  String? _selectedBeatId;
-  String? get selectedBeatId => _selectedBeatId;
+  String? _selectedEpicId;
+  String? get selectedEpicId => _selectedEpicId;
 
-  String? _selectedFeatureId;
-  String? get selectedFeatureId => _selectedFeatureId;
+  bool _showingSparkPicker = true;
+  bool get showingSparkPicker => _showingSparkPicker;
 
-  bool _focusMode = true;
-  bool get focusMode => _focusMode;
+  bool _showRawRootContext = false;
+  bool get showRawRootContext => _showRawRootContext;
 
-  final Map<String, String> _cachedGodotLinkTokensByProjectId = {};
-  String? get cachedGodotLinkTokenForActiveProject => _activeProjectId != null
-      ? _cachedGodotLinkTokensByProjectId[_activeProjectId!]
-      : null;
-
-  void clearCachedGodotLinkTokens() {
-    _cachedGodotLinkTokensByProjectId.clear();
-  }
-
-  Timer? _autoSyncDebounceTimer;
-
-  /// Triggers a debounced background sync to Cloud Firestore (2.5s after last modification).
-  void scheduleDebouncedAutoSync() {
-    _autoSyncDebounceTimer?.cancel();
-    if (!isUserLoggedIn) return;
-    _autoSyncDebounceTimer = Timer(const Duration(milliseconds: 2500), () async {
-      await syncNowWithCloud();
-    });
-  }
-
-  /// Filter for the compact Release Dropdown in Stage 3:
-  /// - 'active': Active Milestone
-  /// - 'all': All Live Game Features
-  /// - 'archived': Superseded Testbeds Archive
-  String _releaseViewFilter = 'active';
-  String get releaseViewFilter => _releaseViewFilter;
+  bool _showRawEpicPayload = false;
+  bool get showRawEpicPayload => _showRawEpicPayload;
 
   ProjectConceptBlueprint? _conceptDraft;
   ProjectConceptBlueprint? get conceptDraft => _conceptDraft;
 
-  ReleaseBlueprint? _releaseBlueprint;
-  ReleaseBlueprint? get releaseBlueprint => _releaseBlueprint;
+  ProgressiveReleaseDraft? _progressiveDraft;
+  ProgressiveReleaseDraft? get progressiveDraft => _progressiveDraft;
+
+  bool _isDraftingProgressive = false;
+  bool get isDraftingProgressive => _isDraftingProgressive;
 
   bool _isAgentBusy = false;
   bool get isAgentBusy => _isAgentBusy;
@@ -261,113 +217,75 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _agentProgressStep;
   String? get agentProgressStep => _agentProgressStep;
 
-  final List<String> _executionLog = [];
-  List<String> get executionLog => List.unmodifiable(_executionLog);
+  Timer? _autoSyncDebounceTimer;
 
-  bool _jumpToFullReviewPending = false;
-  bool get jumpToFullReviewPending => _jumpToFullReviewPending;
+  String? get cachedUnrealLinkTokenForActiveProject => _activeProjectId != null
+      ? _cachedUnrealLinkTokensByProjectId[_activeProjectId!]
+      : null;
 
-  Set<String>? _preModalReleaseIds;
-  ReleaseBlueprint? _preModalReleaseBlueprint;
-  String? _preModalFeatureInboxJson;
-  String? _preModalExclusions;
-  List<String>? _preModalConceptExclusions;
-  Map<String, String?>? _preModalFeatureLifecycles;
-  String? _initialProgressiveTrack0BlueprintJson;
+  void clearCachedUnrealLinkTokens() {
+    _cachedUnrealLinkTokensByProjectId.clear();
+  }
 
-  final Set<String> _enrichingFeatureIds = <String>{};
-  int? _activeConceptSectionBuildIndex;
-  int? get activeConceptSectionBuildIndex => _activeConceptSectionBuildIndex;
-  bool isSynthesizingConceptSection(int sectionIdx) =>
-      _activeConceptSectionBuildIndex == sectionIdx;
-  bool isConceptSectionQueued(int sectionIdx) =>
-      _activeConceptSectionBuildIndex != null &&
-      sectionIdx > _activeConceptSectionBuildIndex!;
-  String? _synthesizingBeatId;
-  String? get synthesizingBeatId => _synthesizingBeatId;
-  bool isSynthesizingBeatFeatures(String beatId) =>
-      _synthesizingBeatId == beatId;
-  bool _isSynthesizingProgressiveFocus = false;
-  bool get isSynthesizingProgressiveFocus => _isSynthesizingProgressiveFocus;
-  String? _synthesizingProgressiveBeatId;
-  String? get synthesizingProgressiveBeatId => _synthesizingProgressiveBeatId;
-  final Set<String> _queuedProgressiveBeatIds = <String>{};
-  int _progressivePlanGeneration = 0;
-  bool isSynthesizingProgressiveBeat(String beatId) =>
-      _synthesizingProgressiveBeatId == beatId;
-  bool isQueuedProgressiveBeat(String beatId) =>
-      _queuedProgressiveBeatIds.contains(beatId);
+  void scheduleDebouncedAutoSync() {
+    _autoSyncDebounceTimer?.cancel();
+    if (!isUserLoggedIn) return;
+    _autoSyncDebounceTimer = Timer(const Duration(seconds: 2), () async {
+      await syncNowWithCloud();
+    });
+  }
 
-  String? _cachedInboxProjectId;
-  int? _cachedInboxRawHash;
-  List<FeatureInboxItem> _cachedInboxItems = const [];
-
-  ProductionPhase _currentPhase = ProductionPhase.prototype;
-  ProductionPhase get currentPhase => _currentPhase;
-
-  ReleaseRetrospectiveSummary? _lastReleaseRetrospective;
-  ReleaseRetrospectiveSummary? get lastReleaseRetrospective =>
-      _lastReleaseRetrospective;
-
-  static final RegExp _mvpEpicLabelRegex =
-      RegExp(r'MVP Epic\s*\d+(?:\s*\([^)]+\))?', caseSensitive: false);
-  static final RegExp _versionBoilerplateRegex =
-      RegExp(r'^v\d+\.\d+(?:\.\d+)?\s*[:\-–—]?\s*', caseSensitive: false);
-  static final RegExp _scopeSuffixRegex = RegExp(
-    r'\s*[\-–—]\s*(?:Feature\s+Prototype|Prototype|MVP|Vertical\s+Slice|Full\s+Production)\s*$',
-    caseSensitive: false,
-  );
-  static final RegExp _mvpParenRegex =
-      RegExp(r'^MVP\s+Epic\s*\d+\s*\(([^)]+)\)$', caseSensitive: false);
-  static final RegExp _protoPartRegex =
-      RegExp(r'^Prototype\s*[\-–—]\s*Part\s*\d+\s*:\s*(.+)$', caseSensitive: false);
-  static final RegExp _mvpEpicExactRegex =
-      RegExp(r'^mvp\s+epic\s*\d+$', caseSensitive: false);
-
-  WorkbenchProvider({
-    this.enableAutoLoad = false,
-  }) {
+  WorkbenchProvider({this.enableAutoLoad = true}) {
     _authService.addListener(_onAuthStateChanged);
     if (enableAutoLoad) {
-      GeminiAgentClient.isProxyAuthenticated = () => isSessionApprovedForAi;
-      GeminiAgentClient.authTokenProvider ??=
+      GeminiAgentClient.authTokenProvider =
           ({bool forceRefresh = false}) =>
               _authService.getValidIdToken(forceRefresh: forceRefresh);
       initVault();
     }
   }
 
-  @visibleForTesting
   void setAiAccessRecordsForTest(
     List<AiAccessRecord> records, {
-    String? myStatus,
+    String? overrideEmail,
   }) {
-    _aiAccessRecords = List<AiAccessRecord>.from(records);
-    if (myStatus != null) {
-      _myAiAccessStatus = myStatus;
+    if (overrideEmail != null) {
+      testOverrideUserEmail = overrideEmail;
+    }
+    _aiAccessRecords = List.unmodifiable(records);
+    final me = (userEmail ?? '').trim().toLowerCase();
+    for (final rec in records) {
+      if (rec.email.toLowerCase() == me) {
+        _myAiAccessStatus = rec.status;
+        break;
+      }
     }
     notifyListeners();
   }
 
-  @visibleForTesting
   void setPendingUrlInviteForTest({
-    String? token,
+    String? inviteToken,
     String? invitedEmail,
-    String? feedbackMessage,
+    String? projectId,
+    String? epicId,
   }) {
-    _pendingUrlInviteToken = token;
+    _pendingUrlInviteToken = inviteToken;
     _pendingUrlInvitedEmail = invitedEmail;
-    _inviteFeedbackMessage = feedbackMessage;
+    _pendingUrlProjectId = projectId;
+    _pendingUrlEpicId = epicId;
     notifyListeners();
   }
 
   @override
   void notifyListeners() {
+    if (_isDisposed) return;
     super.notifyListeners();
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _autoSyncDebounceTimer?.cancel();
     for (final timer in _persistTimers.values) {
       timer.cancel();
     }
@@ -389,36 +307,14 @@ class WorkbenchProvider extends ChangeNotifier {
     }
   }
 
-  void _setOfflineState([String? customReason]) {
-    final err = GeminiAgentClient.lastErrorStatus;
-    if (customReason != null) {
-      _offlineErrorMessage = customReason;
-      return;
-    }
-    if (!isUserLoggedIn && _apiKey.trim().isEmpty) {
-      _offlineErrorMessage =
-          'App is offline — Sign in with Google to use LAYERS-Agentic.';
-      return;
-    }
-    if (isUserLoggedIn && !isSessionApprovedForAi && _apiKey.trim().isEmpty) {
-      _offlineErrorMessage =
-          'App is offline — Invite required for ${userEmail ?? "this Google account"}.';
-      return;
-    }
-    _offlineErrorMessage =
-        'App is offline — Unable to reach Gemini AI${err != null ? " ($err)" : ""}. Check your connection and try again.';
-  }
-
   void updateAiConfig({
     String? apiKey,
     String? conversationModel,
     String? planningModel,
     String? thinkingLevel,
   }) {
-    if (apiKey != null) {
+    if (apiKey != null && apiKey.trim().isNotEmpty) {
       _apiKey = apiKey.trim();
-      GeminiAgentClient.lastErrorStatus = null;
-      _offlineErrorMessage = null;
     }
     if (conversationModel != null && conversationModel.trim().isNotEmpty) {
       _conversationModel = conversationModel.trim();
@@ -427,191 +323,10 @@ class WorkbenchProvider extends ChangeNotifier {
       _planningModel = planningModel.trim();
     }
     if (thinkingLevel != null && thinkingLevel.trim().isNotEmpty) {
-      _thinkingLevel = thinkingLevel.trim().toUpperCase();
+      _thinkingLevel = thinkingLevel.trim();
     }
     _persistSettings();
     notifyListeners();
-  }
-
-  void toggleFocusMode() {
-    _focusMode = !_focusMode;
-    notifyListeners();
-  }
-
-  void setReleaseViewFilter(String filter) {
-    _releaseViewFilter = filter;
-    if (filter == 'archived') {
-      final archived = supersededFeatures;
-      if (archived.isNotEmpty &&
-          !archived.any((f) => f.id == _selectedFeatureId)) {
-        selectFeature(archived.first.id);
-        return;
-      }
-    } else {
-      final currentFeat =
-          _selectedFeatureId != null ? documents[_selectedFeatureId] : null;
-      if (currentFeat == null ||
-          currentFeat.sections['lifecycle'] ==
-              FeatureLifecycleStatus.superseded.name) {
-        _selectFirstIncompleteFeatureInActiveRelease();
-        _syncActiveProjectMetadata();
-      }
-    }
-    notifyListeners();
-  }
-
-  void consumeJumpToFullReviewPending() {
-    _jumpToFullReviewPending = false;
-  }
-
-  String? get _activeEngineHint {
-    final draft = _conceptDraft;
-    if (_activeProjectId == null && draft != null) {
-      final parts = <String>[
-        if (draft.gameSpec.isNotEmpty) draft.gameSpec.join(' '),
-        if (draft.techSpec.isNotEmpty) draft.techSpec.join(' '),
-      ];
-      if (parts.isNotEmpty) return parts.join(' ');
-    }
-    final proj = activeProject;
-    if (proj != null) {
-      final gSpec =
-          (proj.sections['game_spec'] ?? proj.sections['gameSpec'] ?? '').trim();
-      final tSpec = (proj.sections['tech_spec'] ??
-              proj.sections['techSpec'] ??
-              proj.sections['tech_stack'] ??
-              '')
-          .trim();
-      final combined = '$gSpec $tSpec'.trim();
-      if (combined.isNotEmpty) return combined;
-    }
-    if (draft != null &&
-        (draft.gameSpec.isNotEmpty || draft.techSpec.isNotEmpty)) {
-      return '${draft.gameSpec.join(' ')} ${draft.techSpec.join(' ')}'.trim();
-    }
-    return null;
-  }
-
-  String get _activeEngineLabel =>
-      SectionTextUtils.detectEngineLabel(_activeEngineHint);
-
-  TierDocument? get activeProject =>
-      _activeProjectId != null ? documents[_activeProjectId] : null;
-
-  TierDocument? get activeRelease =>
-      _activeReleaseId != null ? documents[_activeReleaseId] : null;
-
-  TierDocument? get selectedBeat =>
-      _selectedBeatId != null ? documents[_selectedBeatId] : null;
-
-  TierDocument? get selectedFeature =>
-      _selectedFeatureId != null ? documents[_selectedFeatureId] : null;
-
-  List<TierDocument> get projectReleases {
-    final proj = activeProject;
-    if (proj == null) return const [];
-    return proj.childrenIds
-        .map((id) => documents[id])
-        .whereType<TierDocument>()
-        .toList();
-  }
-
-  List<TierDocument> get activeReleaseBeats {
-    final rel = activeRelease;
-    if (rel == null) return const [];
-    if (rel.childrenIds.isNotEmpty) {
-      return rel.childrenIds
-          .map((id) => documents[id])
-          .whereType<TierDocument>()
-          .toList();
-    }
-    // While drafting a new progressive release (before approveAndExecuteReleasePlan),
-    // fall back to the most recent built release's Beats so the Left Outliner Rail stays populated.
-    for (final priorRel in projectReleases.reversed) {
-      if (priorRel.id != rel.id && priorRel.childrenIds.isNotEmpty) {
-        return priorRel.childrenIds
-            .map((id) => documents[id])
-            .whereType<TierDocument>()
-            .toList();
-      }
-    }
-    return const [];
-  }
-
-  bool isFeatureSuperseded(TierDocument featDoc) =>
-      featDoc.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name;
-
-  List<TierDocument> featuresForBeat(
-    String beatId, {
-    bool includeSuperseded = false,
-  }) {
-    final beat = documents[beatId];
-    if (beat == null) return const [];
-    final childDocs = beat.childrenIds
-        .map((id) => documents[id])
-        .whereType<TierDocument>()
-        .toList();
-    if (!includeSuperseded) {
-      return childDocs.where((f) => !isFeatureSuperseded(f)).toList();
-    }
-    final seenIds = <String>{for (final f in childDocs) f.id};
-    for (final doc in documents.values) {
-      if (doc.tier == TierType.feature &&
-          doc.parentId == beatId &&
-          isFeatureSuperseded(doc) &&
-          seenIds.add(doc.id)) {
-        childDocs.add(doc);
-      }
-    }
-    return childDocs;
-  }
-
-  /// All superseded/archived testbed features belonging to the active project.
-  List<TierDocument> get supersededFeatures {
-    final proj = activeProject;
-    if (proj == null) return const [];
-    final releaseIds = proj.childrenIds.toSet();
-    final projectBeatIds = <String>{
-      for (final relId in releaseIds)
-        ...?documents[relId]?.childrenIds,
-      for (final doc in documents.values)
-        if (doc.tier == TierType.epic &&
-            doc.parentId != null &&
-            releaseIds.contains(doc.parentId))
-          doc.id,
-    };
-    return documents.values
-        .where(
-          (d) =>
-              d.tier == TierType.feature &&
-              d.sections['lifecycle'] ==
-                  FeatureLifecycleStatus.superseded.name &&
-              (d.parentId != null && projectBeatIds.contains(d.parentId)),
-        )
-        .toList();
-  }
-
-  /// Next incomplete feature in the active Release after the currently selected feature.
-  TierDocument? get nextIncompleteFeature {
-    final allFeats = <TierDocument>[];
-    for (final b in activeReleaseBeats) {
-      for (final f in featuresForBeat(b.id)) {
-        if (isFeatureActiveInRelease(f)) {
-          allFeats.add(f);
-        }
-      }
-    }
-    if (allFeats.isEmpty) return null;
-    final currentIdx =
-        allFeats.indexWhere((f) => f.id == _selectedFeatureId);
-    for (int offset = 1; offset <= allFeats.length; offset++) {
-      final candidate = allFeats[(currentIdx + offset) % allFeats.length];
-      if (candidate.id != _selectedFeatureId &&
-          getDocumentProgress(candidate.id) < 100) {
-        return candidate;
-      }
-    }
-    return null;
   }
 
   void toggleTheme() {
@@ -620,31 +335,113 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setStage(WorkbenchStage stage) {
-    _currentStage = stage;
-    if (stage == WorkbenchStage.releaseWorkbench &&
-        _selectedFeatureId != null) {
-      final selFeat = documents[_selectedFeatureId!];
-      if (selFeat != null &&
-          selFeat.sections['needs_ai_enrichment'] == 'true' &&
-          (GeminiAgentClient.hasKey(_apiKey) ||
-              GeminiAgentClient.testMockResponder != null)) {
-        selectFeature(selFeat.id);
-      }
-    }
-    _syncActiveProjectMetadata();
+  void toggleRawRootContext([bool? value]) {
+    _showRawRootContext = value ?? !_showRawRootContext;
     notifyListeners();
   }
 
-  /// Extracts or resolves the canonical version tag (`v0.1`, `v0.2`, `v1.0`) for a Release document.
+  void toggleRawEpicPayload([bool? value]) {
+    _showRawEpicPayload = value ?? !_showRawEpicPayload;
+    notifyListeners();
+  }
+
+  UnrealTargetEngine get targetEngine =>
+      _conceptDraft?.targetEngine ?? UnrealTargetEngine.ue5Mcp;
+
+  TierDocument? get activeProject =>
+      _activeProjectId != null ? documents[_activeProjectId] : null;
+
+  TierDocument? get activeRelease =>
+      _activeReleaseId != null ? documents[_activeReleaseId] : null;
+
+  TierDocument? get selectedEpicDoc =>
+      _selectedEpicId != null ? documents[_selectedEpicId] : null;
+
+  EpicSpec? get selectedEpicSpec {
+    final doc = selectedEpicDoc;
+    if (doc == null || doc.tier != TierType.epic) return null;
+    final epics = activeReleaseEpicDocs;
+    final idx = epics.indexWhere((e) => e.id == doc.id);
+    return EpicSpec.fromDocument(doc, indexHint: idx >= 0 ? idx : 0);
+  }
+
+  List<TierDocument> get savedProjects {
+    final projs = documents.values
+        .where((d) => d.tier == TierType.project)
+        .toList();
+    projs.sort((a, b) {
+      final tA = int.tryParse(a.sections['updated_at_ms'] ?? '') ?? 0;
+      final tB = int.tryParse(b.sections['updated_at_ms'] ?? '') ?? 0;
+      if (tA != tB) return tB.compareTo(tA);
+      return a.title.compareTo(b.title);
+    });
+    return projs;
+  }
+
+  List<TierDocument> get projectReleases {
+    final proj = activeProject;
+    if (proj == null) return const [];
+    final out = <TierDocument>[];
+    final seen = <String>{};
+    for (final rid in proj.childrenIds) {
+      final d = documents[rid];
+      if (d != null && d.tier == TierType.release && seen.add(d.id)) {
+        out.add(d);
+      }
+    }
+    for (final d in documents.values) {
+      if (d.tier == TierType.release &&
+          d.parentId == proj.id &&
+          seen.add(d.id)) {
+        out.add(d);
+      }
+    }
+    return out;
+  }
+
+  List<TierDocument> epicDocsForRelease(String releaseId) {
+    final rel = documents[releaseId];
+    if (rel == null) return const [];
+    final out = <TierDocument>[];
+    final seen = <String>{};
+    for (final cid in rel.childrenIds) {
+      final doc = documents[cid];
+      if (doc != null && doc.tier == TierType.epic && seen.add(doc.id)) {
+        out.add(doc);
+      }
+    }
+    for (final doc in documents.values) {
+      if (doc.tier == TierType.epic &&
+          doc.parentId == releaseId &&
+          seen.add(doc.id)) {
+        out.add(doc);
+      }
+    }
+    return out;
+  }
+
+  List<EpicSpec> epicsForRelease(String releaseId) {
+    final docs = epicDocsForRelease(releaseId);
+    return [
+      for (int i = 0; i < docs.length; i++)
+        EpicSpec.fromDocument(docs[i], indexHint: i),
+    ];
+  }
+
+  List<TierDocument> get activeReleaseEpicDocs =>
+      _activeReleaseId != null
+          ? epicDocsForRelease(_activeReleaseId!)
+          : const [];
+
+  List<EpicSpec> get activeReleaseEpics =>
+      _activeReleaseId != null
+          ? epicsForRelease(_activeReleaseId!)
+          : const [];
+
   String releaseVersionTagFor(TierDocument relDoc) {
-    final tag = relDoc.sections['versionTag']?.trim();
-    final ver = relDoc.sections['version']?.trim();
-    final explicitTag = (tag != null && tag.isNotEmpty) ? tag : ver;
-    if (explicitTag != null && explicitTag.isNotEmpty) {
-      return explicitTag.toLowerCase().startsWith('v')
-          ? 'v${explicitTag.substring(1)}'
-          : 'v$explicitTag';
+    final explicit = relDoc.sections['release_version'];
+    if (explicit != null && explicit.trim().isNotEmpty) {
+      return ReleasePlannerAgent.extractReleaseVersionTag(explicit);
     }
     return ReleasePlannerAgent.extractReleaseVersionTag(relDoc.title);
   }
@@ -655,475 +452,66 @@ class WorkbenchProvider extends ChangeNotifier {
     return releaseVersionTagFor(rel);
   }
 
-  /// Resolves the canonical `ProductionPhase` (`prototype`, `mvp`, `verticalSlice`, `fullProduction`, `postLaunch`) for a Release document.
-  ProductionPhase releasePhaseFor(TierDocument relDoc) {
-    final rawPhase = (relDoc.sections['phase'] ?? '').trim();
-    return switch (rawPhase) {
-      'postLaunch' => ProductionPhase.postLaunch,
-      'fullProduction' => ProductionPhase.fullProduction,
-      'verticalSlice' => ProductionPhase.verticalSlice,
-      'mvp' => ProductionPhase.mvp,
-      'prototype' => ProductionPhase.prototype,
-      _ => switch (relDoc.releaseScope) {
-        ReleaseScope.patch ||
-        ReleaseScope.contentUpdate =>
-          ProductionPhase.postLaunch,
-        ReleaseScope.fullProduction => ProductionPhase.fullProduction,
-        ReleaseScope.verticalSlice => ProductionPhase.verticalSlice,
-        ReleaseScope.mvp => ProductionPhase.mvp,
-        _ => ProductionPhase.prototype,
-      },
-    };
-  }
-
-  /// Short uppercase phase badge (`PROTO`, `MVP`, `SLICE`, `PROD`, `LIVE`) for compact header pills.
-  String releasePhaseShortBadge(TierDocument relDoc) =>
-      switch (releasePhaseFor(relDoc)) {
-        ProductionPhase.prototype => 'PROTO',
-        ProductionPhase.mvp => 'MVP',
-        ProductionPhase.verticalSlice => 'SLICE',
-        ProductionPhase.fullProduction => 'PROD',
-        ProductionPhase.postLaunch => 'LIVE',
-      };
-
-  /// Resolves a clean, descriptive human-readable name for a Release in the Release Selector Dropdown and Header Pill.
-  /// Strips version/scope boilerplate and, if the stored title is generic (e.g. `"Prototype"`, `"MVP Epic 1"`),
-  /// synthesizes a 2–4 word focus name from the actual Features built or upgraded in that release.
   String releaseDisplayName(TierDocument relDoc) {
-    var clean = relDoc.title
-        .trim()
-        .replaceFirst(_versionBoilerplateRegex, '')
-        .trim()
-        .replaceFirst(_scopeSuffixRegex, '')
-        .trim();
-
-    final mvpParenMatch = _mvpParenRegex.firstMatch(clean);
-    if (mvpParenMatch != null) {
-      clean = mvpParenMatch.group(1)!.trim();
+    final tag = releaseVersionTagFor(relDoc);
+    final raw = relDoc.title.trim();
+    if (raw.isEmpty) {
+      return tag == 'v0.1' ? 'v0.1 · Prototype' : '$tag · Update';
     }
-
-    final protoPartMatch = _protoPartRegex.firstMatch(clean);
-    if (protoPartMatch != null) {
-      clean = protoPartMatch.group(1)!.trim();
+    if (raw.toLowerCase().startsWith(tag.toLowerCase())) {
+      return raw;
     }
-
-    final lower = clean.toLowerCase();
-    final projTitleLower = (activeProject?.title ?? '').toLowerCase().trim();
-    final isGeneric = clean.isEmpty ||
-        lower == 'prototype' ||
-        lower == 'feature prototype' ||
-        lower == 'prototype (part 1)' ||
-        lower == 'prototype (part 2)' ||
-        lower == 'progressive release' ||
-        lower == 'mvp' ||
-        lower == 'vertical slice' ||
-        lower == 'full production' ||
-        lower == 'post-launch' ||
-        lower == 'post-launch & live ops' ||
-        lower == 'core loop' ||
-        (projTitleLower.isNotEmpty && lower == '$projTitleLower core loop') ||
-        _mvpEpicExactRegex.hasMatch(clean);
-
-    if (!isGeneric) {
-      return clean;
-    }
-
-    final rVer = releaseVersionTagFor(relDoc).toLowerCase();
-    final versionFeatTitles = <String>{};
-    for (final beatId in relDoc.childrenIds) {
-      for (final feat in featuresForBeat(beatId)) {
-        final states = FeatureStateNode.getStatesForDocument(feat);
-        final touchedInRel = states.any(
-          (s) => s.releaseVersion.toLowerCase() == rVer,
-        );
-        if (touchedInRel) {
-          versionFeatTitles.add(feat.title);
-          if (versionFeatTitles.length >= 2) break;
-        }
-      }
-      if (versionFeatTitles.length >= 2) break;
-    }
-    if (versionFeatTitles.isNotEmpty) {
-      return versionFeatTitles.take(2).join(' & ');
-    }
-
-    final targetBp = (_releaseBlueprint != null &&
-            _releaseBlueprint!.releaseDocId == relDoc.id)
-        ? _releaseBlueprint
-        : releaseBlueprintFor(relDoc.id);
-    if (targetBp != null) {
-      final bpTitles = <String>[
-        for (final b in targetBp.beats)
-          for (final f in b.features)
-            if (f.included && f.lifecycle != FeatureLifecycleStatus.stable)
-              f.title,
-      ];
-      if (bpTitles.isNotEmpty) {
-        return bpTitles.take(2).join(' & ');
-      }
-    }
-
-    final fallbackFeatTitles = <String>{};
-    for (final beatId in relDoc.childrenIds) {
-      for (final feat in featuresForBeat(beatId)) {
-        fallbackFeatTitles.add(feat.title);
-        if (fallbackFeatTitles.length >= 2) break;
-      }
-      if (fallbackFeatTitles.length >= 2) break;
-    }
-    if (fallbackFeatTitles.isNotEmpty) {
-      return fallbackFeatTitles.take(2).join(' & ');
-    }
-
-    return clean.isNotEmpty ? clean : releaseConciseLabel(relDoc);
+    return '$tag · $raw';
   }
 
-  /// Retrieves the persisted `ReleaseBlueprint` for any Release (`v0.1`, `v0.2`, ...)
-  /// so previous release plans are never lost when advancing to later releases.
-  ReleaseBlueprint? releaseBlueprintFor(String releaseId) {
-    if (_releaseBlueprint != null &&
-        _releaseBlueprint!.releaseDocId == releaseId) {
-      return _releaseBlueprint;
-    }
-    final relDoc = documents[releaseId];
-    if (relDoc == null) return null;
-    final raw = relDoc.sections['release_blueprint_json'];
-    if (raw == null || raw.trim().isEmpty) return null;
-    try {
-      return ReleaseBlueprint.fromJson(
-        jsonDecode(raw) as Map<String, dynamic>,
-      );
-    } catch (_) {
-      return null;
-    }
+  String releaseConciseLabel(TierDocument relDoc) => releaseDisplayName(relDoc);
+
+  String get nextReleaseActionLabel =>
+      '+ Plan ${ReleasePlannerAgent.nextMinorVersionTag(activeReleaseVersionTag)} Release ✦';
+
+  bool get isActiveReleaseComplete {
+    final epics = activeReleaseEpics;
+    return epics.isNotEmpty && epics.every((e) => e.isPassed);
   }
 
-  /// Concise milestone subtitle for the Stage 3 Release Dropdown and header pill.
-  String releaseConciseLabel(TierDocument relDoc) {
-    final protoPart = relDoc.sections['prototypePart'] ?? '';
-    if (protoPart == '1') return 'Prototype (Part 1)';
-    if (protoPart == '2') return 'Prototype (Part 2)';
-    final phase = relDoc.sections['phase'] ?? '';
-    if (phase == ProductionPhase.mvp.name) {
-      final match = _mvpEpicLabelRegex.firstMatch(relDoc.title);
-      if (match != null) return match.group(0)!.trim();
-      final explicitEpicIdx =
-          int.tryParse(relDoc.sections['targetEpicIndex'] ?? '');
-      if (explicitEpicIdx != null) {
-        return 'MVP Epic ${explicitEpicIdx + 1}';
-      }
-      final mvpRels = projectReleases
-          .where((r) => releasePhaseFor(r) == ProductionPhase.mvp)
-          .toList();
-      final passIdx = mvpRels.indexWhere((r) => r.id == relDoc.id);
-      if (passIdx >= 0 && mvpRels.length > 1) {
-        return 'MVP (Pass ${passIdx + 1})';
-      }
-      return 'MVP';
-    }
-    if (phase == ProductionPhase.verticalSlice.name ||
-        relDoc.releaseScope == ReleaseScope.verticalSlice) {
-      final vsRels = projectReleases
-          .where((r) => releasePhaseFor(r) == ProductionPhase.verticalSlice)
-          .toList();
-      final passIdx = vsRels.indexWhere((r) => r.id == relDoc.id);
-      if (passIdx >= 0 && vsRels.length > 1) {
-        return 'Vertical Slice (Pass ${passIdx + 1})';
-      }
-      return 'Vertical Slice';
-    }
-    if (phase == ProductionPhase.postLaunch.name) {
-      final pass = relDoc.sections['postLaunchPass'] ??
-          relDoc.sections['fullProductionPass'] ??
-          '1';
-      return 'Post-Launch (Pass $pass)';
-    }
-    if (phase == ProductionPhase.fullProduction.name ||
-        relDoc.releaseScope == ReleaseScope.fullProduction) {
-      final pass = relDoc.sections['fullProductionPass'] ?? '1';
-      return 'Full Production (Pass $pass)';
-    }
-    return relDoc.releaseScope.label;
-  }
-
-  /// Returns true if [feat] is an active deliverable (`newFeature` or `upgrade`) in [releaseVersionTag]
-  /// (defaults to [activeReleaseVersionTag]), rather than stabilized in a prior release or added in a future release.
-  bool isFeatureActiveInRelease(
-    TierDocument feat, [
-    String? releaseVersionTag,
-  ]) {
-    final lc = feat.sections['lifecycle'] ?? '';
-    if (lc == FeatureLifecycleStatus.superseded.name) {
-      return false;
-    }
-    final targetVer = (releaseVersionTag ?? activeReleaseVersionTag).trim();
-    final featActiveVer = feat.sections['activeReleaseVersion']?.trim();
-    if (lc == FeatureLifecycleStatus.stable.name) {
-      if (featActiveVer == targetVer ||
-          (featActiveVer == null && projectReleases.length <= 1)) {
-        return false;
-      }
-    }
-    final states = FeatureStateNode.getStatesForDocument(feat);
-    if (states.isNotEmpty) {
-      final hasCheckpointInTarget =
-          states.any((s) => s.releaseVersion == targetVer);
-      if (hasCheckpointInTarget) return true;
-    }
-    if (releaseVersionTag == null &&
-        activeRelease != null &&
-        activeRelease!.childrenIds.isEmpty &&
-        projectReleases.length > 1 &&
-        _releaseBlueprint != null &&
-        _releaseBlueprint!.releaseDocId == activeRelease!.id) {
-      final parentBeatId = feat.parentId;
-      if (parentBeatId != null &&
-          (_queuedProgressiveBeatIds.contains(parentBeatId) ||
-              _synthesizingProgressiveBeatId == parentBeatId)) {
-        return true;
-      }
-      final featTitleLower = feat.title.trim().toLowerCase();
-      for (final b in _releaseBlueprint!.beats) {
-        if (parentBeatId != null && b.id != parentBeatId) continue;
-        for (final bf in b.features) {
-          if (bf.id == feat.id ||
-              bf.title.trim().toLowerCase() == featTitleLower) {
-            return bf.included && !bf.isStable && !bf.isSuperseded;
-          }
-        }
-      }
-      return false;
-    }
-    if (states.isNotEmpty &&
-        states.any((s) => s.releaseVersion.trim().isNotEmpty)) {
-      return false;
-    }
-    return lc != FeatureLifecycleStatus.stable.name;
-  }
-
-  /// Rollup progress (0-100) for any document in the hierarchy, scoped to the active release's delta checkpoints.
   int getDocumentProgress(String docId) {
     final doc = documents[docId];
     if (doc == null) return 0;
-
-    if (doc.tier == TierType.feature) {
-      if (!isFeatureActiveInRelease(doc)) {
-        return 100;
-      }
-      final states = FeatureStateNode.getStatesForDocument(doc);
-      if (states.isEmpty) return doc.isCompleted ? 100 : 0;
-      final activeVer = activeReleaseVersionTag;
-      final hasActiveVer = states.any((s) => s.releaseVersion == activeVer);
-      double progressSum = 0.0;
-      int stateCount = 0;
-      for (final s in states) {
-        if (!hasActiveVer || s.releaseVersion == activeVer) {
-          progressSum += s.progress;
-          stateCount++;
-        }
-      }
-      return stateCount == 0 ? 0 : ((progressSum / stateCount) * 100).round();
-    }
-
-    if (doc.childrenIds.isEmpty) return doc.isCompleted ? 100 : 0;
-
-    // For a Release document, scope progress to active (non-STABLE) Epics so new releases start at 0%
-    if (doc.tier == TierType.release) {
-      if (doc.id != _activeReleaseId) {
-        final relVer = releaseVersionTagFor(doc);
-        double relProgressSum = 0.0;
-        int relCount = 0;
-        for (final beatId in doc.childrenIds) {
-          for (final feat in featuresForBeat(beatId)) {
-            final states = FeatureStateNode.getStatesForDocument(feat);
-            for (final s in states) {
-              if (s.releaseVersion == relVer) {
-                relProgressSum += s.progress;
-                relCount++;
-              }
-            }
-          }
-        }
-        if (relCount > 0) {
-          return ((relProgressSum / relCount) * 100).round();
-        }
-      }
-      int activeSum = 0;
-      int activeCount = 0;
-      int allSum = 0;
-      int allCount = 0;
-      for (final beatId in doc.childrenIds) {
-        if (!documents.containsKey(beatId)) continue;
-        final prog = getDocumentProgress(beatId);
-        allSum += prog;
-        allCount++;
-        if (featuresForBeat(beatId).any(isFeatureActiveInRelease)) {
-          activeSum += prog;
-          activeCount++;
-        }
-      }
-      if (activeCount > 0) return (activeSum / activeCount).round();
-      return allCount == 0 ? 0 : (allSum / allCount).round();
-    }
-
     if (doc.tier == TierType.epic) {
-      int activeSum = 0;
-      int activeCount = 0;
-      int allSum = 0;
-      int allCount = 0;
-      for (final featId in doc.childrenIds) {
-        final f = documents[featId];
-        if (f == null) continue;
-        final prog = getDocumentProgress(featId);
-        allSum += prog;
-        allCount++;
-        if (isFeatureActiveInRelease(f)) {
-          activeSum += prog;
-          activeCount++;
-        }
-      }
-      if (activeCount > 0) return (activeSum / activeCount).round();
-      return allCount == 0 ? 0 : (allSum / allCount).round();
+      return EpicSpec.fromDocument(doc).progressPercent;
     }
-
-    int sum = 0;
-    int count = 0;
-    for (final childId in doc.childrenIds) {
-      if (documents.containsKey(childId)) {
-        sum += getDocumentProgress(childId);
-        count++;
-      }
+    if (doc.tier == TierType.release) {
+      final epics = epicsForRelease(doc.id);
+      if (epics.isEmpty) return doc.isCompleted ? 100 : 0;
+      final sum = epics.fold<int>(0, (acc, e) => acc + e.progressPercent);
+      return (sum / epics.length).round();
     }
-    return count == 0 ? 0 : (sum / count).round();
+    if (doc.tier == TierType.project) {
+      final rel = activeReleaseId != null &&
+              documents[activeReleaseId]?.parentId == doc.id
+          ? documents[activeReleaseId]
+          : (projectReleases.isNotEmpty ? projectReleases.first : null);
+      if (rel == null) return 0;
+      return getDocumentProgress(rel.id);
+    }
+    return 0;
   }
 
-  /// Returns true if all Checkpoints across all Features in the active Release are 100% verified.
-  bool get isActiveReleaseComplete {
-    final rel = activeRelease;
-    if (rel == null || rel.childrenIds.isEmpty) return false;
-    final beats = activeReleaseBeats;
-    if (beats.isEmpty) return false;
-    final activeVerTag = releaseVersionTagFor(rel);
-    bool hasAnyActiveFeatureInRelease = false;
-    for (final b in beats) {
-      final feats = featuresForBeat(b.id);
-      if (feats.isEmpty) return false;
-      for (final f in feats) {
-        if (isFeatureActiveInRelease(f, activeVerTag)) {
-          hasAnyActiveFeatureInRelease = true;
-        }
-        if (getDocumentProgress(f.id) < 100) return false;
+  void setStage(WorkbenchStage stage) {
+    if (stage == WorkbenchStage.releaseWorkbench &&
+        activeReleaseEpicDocs.isEmpty) {
+      _currentStage = WorkbenchStage.projectPitch;
+      notifyListeners();
+      return;
+    }
+    _currentStage = stage;
+    if (stage == WorkbenchStage.releaseWorkbench && _selectedEpicId == null) {
+      final docs = activeReleaseEpicDocs;
+      if (docs.isNotEmpty) {
+        _selectedEpicId = docs.first.id;
       }
     }
-    return hasAnyActiveFeatureInRelease;
-  }
-
-  /// Concise 4-Phase Release Train badge displayed in Stage 2 and Stage 3 headers.
-  String get activePhaseBadgeLabel {
-    final rel = activeRelease;
-    final allRels = projectReleases;
-    switch (_currentPhase) {
-      case ProductionPhase.prototype:
-        final protoPart = rel?.sections['prototypePart'] ?? '';
-        if (protoPart == '1' || protoPart == '2') {
-          return 'PHASE 1 · PROTOTYPE ($protoPart/2)';
-        }
-        final protoRels = allRels
-            .where(
-              (r) =>
-                  r.sections['phase'] == ProductionPhase.prototype.name ||
-                  r.releaseScope == ReleaseScope.prototype ||
-                  r.releaseScope == ReleaseScope.featurePrototype,
-            )
-            .toList();
-        if (protoRels.length > 1 && rel != null) {
-          final idx = protoRels.indexWhere((r) => r.id == rel.id);
-          if (idx >= 0) {
-            return 'PHASE 1 · PROTOTYPE (${idx + 1}/${protoRels.length})';
-          }
-        }
-        return 'PHASE 1 · PROTOTYPE';
-      case ProductionPhase.mvp:
-        final mvpRels = allRels
-            .where((r) => r.sections['phase'] == ProductionPhase.mvp.name)
-            .toList();
-        if (rel != null) {
-          final isAgentReasoned = rel.sections['agentReasoned'] == 'true';
-          final explicitIdx =
-              int.tryParse(rel.sections['targetEpicIndex'] ?? '');
-          final explicitTotal =
-              int.tryParse(rel.sections['mvpEpicTotal'] ?? '');
-          if (explicitIdx != null) {
-            final total = explicitTotal ??
-                (activeReleaseBeats.isNotEmpty
-                    ? activeReleaseBeats.length
-                    : mvpRels.length);
-            if (explicitIdx >= 0 && total > 0) {
-              return 'PHASE 2 · MVP EPIC ${explicitIdx + 1} OF $total';
-            }
-          } else if (!isAgentReasoned) {
-            final idx = mvpRels.indexWhere((r) => r.id == rel.id);
-            final total = activeReleaseBeats.isNotEmpty
-                ? activeReleaseBeats.length
-                : mvpRels.length;
-            if (idx >= 0 && total > 0) {
-              return 'PHASE 2 · MVP EPIC ${idx + 1} OF $total';
-            }
-          }
-        }
-        return 'PHASE 2 · MVP';
-      case ProductionPhase.verticalSlice:
-        return 'PHASE 3 · VERTICAL SLICE';
-      case ProductionPhase.fullProduction:
-        final pass = rel?.sections['fullProductionPass'] ?? '1';
-        return 'PHASE 4 · FULL PRODUCTION (PASS $pass)';
-      case ProductionPhase.postLaunch:
-        final pass = rel?.sections['postLaunchPass'] ?? '1';
-        return 'PHASE 5 · POST-LAUNCH & LIVE OPS (PASS $pass)';
-    }
-  }
-
-  /// Descriptive CTA label for the Stage 3 `Ship & Plan Next Release` button naming the exact next milestone or phase unlock.
-  String get nextReleaseActionLabel {
-    final rel = activeRelease;
-    final releases = projectReleases;
-    final currentIdx = releases.indexWhere((r) => r.id == _activeReleaseId);
-    final nextIdx = currentIdx + 1;
-    if (currentIdx >= 0 && nextIdx < releases.length) {
-      final nextRel = releases[nextIdx];
-      final nextVer = releaseVersionTagFor(nextRel);
-      if (nextRel.sections['phase'] == ProductionPhase.mvp.name) {
-        final epicIdx =
-            (int.tryParse(nextRel.sections['targetEpicIndex'] ?? '') ?? 0) + 1;
-        return 'Ship & Plan $nextVer (MVP Epic $epicIdx) ✦';
-      }
-      if (nextRel.sections['prototypePart'] == '2') {
-        return 'Ship & Plan $nextVer (Prototype Part 2) ✦';
-      }
-      return 'Ship & Plan $nextVer ✦';
-    }
-    return switch (_currentPhase) {
-      ProductionPhase.prototype => rel?.sections['prototypePart'] == '1'
-          ? 'Ship & Plan v0.2 (Prototype Part 2) ✦'
-          : 'Ship & Unlock Phase 2 (MVP Epic 1) ✦',
-      ProductionPhase.mvp => () {
-        final explicitIdx =
-            int.tryParse(rel?.sections['targetEpicIndex'] ?? '') ?? 0;
-        final explicitTotal =
-            int.tryParse(rel?.sections['mvpEpicTotal'] ?? '') ??
-                (activeReleaseBeats.isNotEmpty ? activeReleaseBeats.length : 1);
-        if ((explicitIdx + 1) < explicitTotal) {
-          final nextVer = 'v0.${releases.length + 1}';
-          return 'Ship & Plan $nextVer (MVP Epic ${explicitIdx + 2}) ✦';
-        }
-        return 'Ship & Unlock Phase 3 (Vertical Slice) ✦';
-      }(),
-      ProductionPhase.verticalSlice =>
-        'Ship & Unlock Phase 4 (Full Production) ✦',
-      ProductionPhase.fullProduction =>
-        'Ship & Unlock Phase 5 (Post-Launch & Live Ops) ✦',
-      ProductionPhase.postLaunch =>
-        'Ship & Plan Next Post-Launch Pass ✦',
-    };
+    _syncActiveProjectMetadata();
+    notifyListeners();
   }
 }

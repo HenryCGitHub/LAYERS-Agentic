@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ./hooks/pre_tool_guard.py",
+            "command": "PYTHONDONTWRITEBYTECODE=1 python3 ./hooks/pre_tool_guard.py",
             "timeout": 10
           }
         ]
@@ -17,7 +17,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "python3 ./hooks/stop_verify_gate.py",
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 ./hooks/stop_verify_gate.py",
         "timeout": 120
       }
     ]
@@ -26,7 +26,7 @@
     "PreInvocation": [
       {
         "type": "command",
-        "command": "python3 ./hooks/auto_gg_hook.py --event pre_invocation",
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 ./hooks/auto_gg_hook.py --event pre_invocation",
         "timeout": 10
       }
     ],
@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ./hooks/auto_gg_hook.py --event post_tool",
+            "command": "PYTHONDONTWRITEBYTECODE=1 python3 ./hooks/auto_gg_hook.py --event post_tool",
             "timeout": 10
           }
         ]
@@ -45,7 +45,7 @@
     "Stop": [
       {
         "type": "command",
-        "command": "python3 ./hooks/auto_gg_hook.py --event stop",
+        "command": "PYTHONDONTWRITEBYTECODE=1 python3 ./hooks/auto_gg_hook.py --event stop",
         "timeout": 10
       }
     ]

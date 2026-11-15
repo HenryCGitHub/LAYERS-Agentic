@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 enum TierType {
   project,
   release,
-  epic,
-  feature;
+  epic;
 
   String get id => name.toUpperCase();
 
@@ -12,35 +11,30 @@ enum TierType {
         TierType.project => 'Project',
         TierType.release => 'Release',
         TierType.epic => 'Epic',
-        TierType.feature => 'Feature',
       };
 
   String get pluralDisplayName => switch (this) {
         TierType.project => 'Projects',
         TierType.release => 'Releases',
         TierType.epic => 'Epics',
-        TierType.feature => 'Features',
       };
 
   int get level => switch (this) {
         TierType.project => 1,
         TierType.release => 2,
         TierType.epic => 3,
-        TierType.feature => 4,
       };
 
   String get shortTag => switch (this) {
         TierType.project => 'PROJ',
         TierType.release => 'REL',
         TierType.epic => 'EPIC',
-        TierType.feature => 'FEAT',
       };
 
   String get letterBadge => switch (this) {
         TierType.project => 'P',
         TierType.release => 'R',
         TierType.epic => 'E',
-        TierType.feature => 'F',
       };
 
   String get emoji => letterBadge;
@@ -49,14 +43,12 @@ enum TierType {
         TierType.project => Icons.folder_outlined,
         TierType.release => Icons.rocket_launch_outlined,
         TierType.epic => Icons.layers_outlined,
-        TierType.feature => Icons.widgets_outlined,
       };
 
   String get descriptionTooltip => switch (this) {
-        TierType.project => 'Project: Root game workspace',
-        TierType.release => 'Release: Target ship milestone',
-        TierType.epic => 'Epic: Core Gameplay Loop Epic',
-        TierType.feature => 'Feature: Playable mechanic & deliverable',
+        TierType.project => 'Project: Root Unreal PROJECT_SPEC.md workspace',
+        TierType.release => 'Release: Target playable milestone (v0.1, v0.2+)',
+        TierType.epic => 'Epic: 6-section Unreal MCP cohesive system spec',
       };
 
   Color colorFor(bool isDark) => switch (this) {
@@ -66,8 +58,6 @@ enum TierType {
           isDark ? const Color(0xFFE2E8F0) : const Color(0xFF1E293B),
         TierType.epic =>
           isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
-        TierType.feature =>
-          isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
       };
 
   Color get color => colorFor(true);
@@ -75,15 +65,13 @@ enum TierType {
   TierType? get nextChildTier => switch (this) {
         TierType.project => TierType.release,
         TierType.release => TierType.epic,
-        TierType.epic => TierType.feature,
-        TierType.feature => null,
+        TierType.epic => null,
       };
 
   TierType? get parentTier => switch (this) {
         TierType.project => null,
         TierType.release => TierType.project,
         TierType.epic => TierType.release,
-        TierType.feature => TierType.epic,
       };
 
   static TierType fromString(String val) {
@@ -91,7 +79,6 @@ enum TierType {
     if (lower == 'goal' || lower == 'project') return TierType.project;
     if (lower == 'phase' || lower == 'release') return TierType.release;
     if (lower == 'epic') return TierType.epic;
-    if (lower == 'task' || lower == 'feature') return TierType.feature;
     return TierType.values.firstWhere(
       (e) => e.name.toLowerCase() == lower,
       orElse: () => TierType.project,
@@ -103,19 +90,19 @@ enum ReleaseScope {
   featurePrototype(
     'Prototype',
     '',
-    'A fast prototype to test if a single mechanic or feature is fun and feasible.',
+    'A fast prototype to test if the core gameplay loop is fun and responsive in Unreal PIE.',
     2,
-    Color(0xFF71717A), // Monochromatic Neutral
+    Color(0xFF71717A),
     category: 'rd',
     appDescription:
-        'A rapid spike to validate a single technical approach or interaction pattern.',
+        'A rapid greybox spike proving core controls and physics feel cleanly.',
   ),
   firstPlayable(
     'Proof of Concept',
     '',
     'A rapid concept prototype proving the core game idea works as a playable whole.',
     4,
-    Color(0xFF71717A), // Monochromatic Neutral
+    Color(0xFF71717A),
     category: 'preLaunch',
     appDescription:
         'A rapid concept prototype proving the core product idea works as a usable whole.',
@@ -125,7 +112,7 @@ enum ReleaseScope {
     '',
     'The bare-minimum playable build to test the complete game loop from start to finish.',
     4,
-    Color(0xFF71717A), // Monochromatic Neutral
+    Color(0xFF71717A),
     category: 'preLaunch',
     appDescription:
         'The minimum viable product delivering the end-to-end core user workflow.',
@@ -133,29 +120,29 @@ enum ReleaseScope {
   verticalSlice(
     'Vertical Slice',
     '',
-    'A 10–15 minute showcase level built to near-final visual, audio, and feel quality to prove the finished quality bar.',
+    'A 10-15 minute showcase level built to near-final visual, audio, and feel quality.',
     4,
-    Color(0xFF71717A), // Monochromatic Neutral
+    Color(0xFF71717A),
     category: 'preLaunch',
     appDescription:
-        'A complete end-to-end slice of one full feature module built to production-grade quality and polish.',
+        'A complete end-to-end slice of one full feature module built to production-grade polish.',
   ),
   fullProduction(
     'Full Production',
     '',
     'Building out all content, levels, systems, and polish for the complete game release.',
     6,
-    Color(0xFF71717A), // Monochromatic Neutral
+    Color(0xFF71717A),
     category: 'preLaunch',
     appDescription:
-        'Complete product engineering, backend integrations, security, edge cases, and launch readiness.',
+        'Complete product engineering, polish, and launch readiness.',
   ),
   patch(
     'Patch / Maintenance',
     '',
-    'A targeted fix release addressing bugs, balance issues, and stability improvements for a live product.',
+    'A targeted fix release addressing bugs, balance issues, and stability improvements.',
     2,
-    Color(0xFF71717A), // Monochromatic Neutral
+    Color(0xFF71717A),
     category: 'postLaunch',
     appDescription:
         'A targeted fix release addressing bugs, performance regressions, and stability issues.',
@@ -163,12 +150,12 @@ enum ReleaseScope {
   contentUpdate(
     'Feature & Content Update',
     '',
-    'A post-launch content drop adding new features, levels, mechanics, and systems to an already-shipped game.',
+    'A post-launch content drop adding new features, levels, mechanics, and systems.',
     4,
-    Color(0xFF71717A), // Monochromatic Neutral
+    Color(0xFF71717A),
     category: 'postLaunch',
     appDescription:
-        'A post-launch update delivering new features, workflows, integrations, and enhancements.',
+        'A post-launch update delivering new features, workflows, and enhancements.',
   );
 
   static const ReleaseScope prototype = ReleaseScope.featurePrototype;
@@ -262,7 +249,6 @@ enum ReleaseScope {
         doc.sections is Map ? (doc.sections as Map) : const {};
     final String title = doc.title is String ? (doc.title as String) : '';
 
-    // 1. Explicit releaseScope or milestonePass section takes top priority
     final releaseScopeVal = sections['releaseScope'] ?? sections['milestonePass'];
     if (releaseScopeVal != null &&
         releaseScopeVal.toString().trim().isNotEmpty) {
@@ -270,21 +256,18 @@ enum ReleaseScope {
       if (s != null) return s;
     }
 
-    // 2. Explicit preset section
     final preset = sections['preset'];
     if (preset != null && preset.toString().trim().isNotEmpty) {
       final s = _matchEnum(preset.toString());
       if (s != null) return s;
     }
 
-    // 3. 'scope' or legacy 'work' section check - strictly exact match only (prevent long S.I.P. false match)
     final legacyScope = sections['scope'] ?? sections['work'];
     if (legacyScope != null && legacyScope.toString().trim().isNotEmpty) {
       final s = _matchEnum(legacyScope.toString());
       if (s != null) return s;
     }
 
-    // 4. Fallback to keywords in title
     return _fromTitle(title);
   }
 

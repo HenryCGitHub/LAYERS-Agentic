@@ -1,385 +1,183 @@
 part of '../main.dart';
 
-final RegExp _slugInvalidCharRegex = RegExp(r'[^a-z0-9]+');
-final RegExp _slugTrimRegex = RegExp(r'^_+|_+$');
-
-extension _ShellExportersExt on WorkbenchShell {
+extension _WorkbenchShellExporters on WorkbenchShell {
+  /// Exports the complete Stage 1 + Stage 2 project markdown (`PROJECT_SPEC.md`).
   Future<void> _exportFullProjectSpec(BuildContext context) async {
-    final draft = workbench.conceptDraft;
-    final bp = workbench.releaseBlueprint;
-    final rel = workbench.activeRelease;
-    final sb = StringBuffer();
-    final title = draft != null && draft.title.trim().isNotEmpty
-        ? draft.title.trim()
-        : (draft != null && draft.sparkIdea.trim().isNotEmpty
-            ? draft.sparkIdea.trim()
-            : 'LAYERS-Agentic Game Project');
-    sb.writeln('# $title — Project & Release Specification');
-    if (draft != null) {
-      sb.writeln('\n## Stage 1: Project Concept Blueprint');
-      sb.writeln(draft.toFullMarkdownSpec());
-    } else if (workbench.activeProject != null) {
-      final projSec = workbench.activeProject!.sections;
-      final goalText = (projSec['goal'] ?? '').trim();
-      final gameSpecText =
-          (projSec['game_spec'] ?? projSec['gameSpec'] ?? '').trim();
-      final techSpecText =
-          (projSec['tech_spec'] ?? projSec['techSpec'] ?? '').trim();
-      final pillarsText =
-          (projSec['design_pillars'] ?? projSec['designPillars'] ?? '').trim();
-      final tradeOffsText =
-          (projSec['trade_offs'] ?? projSec['tradeOffs'] ?? '').trim();
-      final scopeText = (projSec['scope'] ?? '').trim();
-      final exclusionsText = (projSec['exclusions'] ?? '').trim();
-      final doneWhenText =
-          (projSec['done_when'] ?? projSec['doneWhen'] ?? '').trim();
-      sb.writeln('\n## Stage 1: Project Concept Blueprint');
-      if (goalText.isNotEmpty) {
-        sb.writeln('Goal: $goalText');
-      }
-      if (gameSpecText.isNotEmpty) {
-        sb.writeln('Game Spec: $gameSpecText');
-      }
-      if (techSpecText.isNotEmpty) {
-        sb.writeln('Tech Spec: $techSpecText');
-      }
-      if (pillarsText.isNotEmpty) {
-        sb.writeln('\nDesign Pillars:\n$pillarsText');
-      }
-      if (tradeOffsText.isNotEmpty) {
-        sb.writeln('\nTrade-Offs:\n$tradeOffsText');
-      }
-      if (scopeText.isNotEmpty) {
-        sb.writeln('\n$scopeText');
-      }
-      if (exclusionsText.isNotEmpty) {
-        sb.writeln('\nOut of Scope:\n$exclusionsText');
-      }
-      if (doneWhenText.isNotEmpty) {
-        sb.writeln('\nDone When: $doneWhenText');
-      }
-    }
-    final beats = workbench.activeReleaseBeats;
-    if (rel != null && beats.isNotEmpty) {
-      final relProgress = workbench.getDocumentProgress(rel.id);
-      sb.writeln('\n## Stage 2: Active Release Workbench (${rel.title} · $relProgress% Verified)');
-      for (int bIdx = 0; bIdx < beats.length; bIdx++) {
-        final beat = beats[bIdx];
-        sb.writeln('\n### Epic ${bIdx + 1}: ${beat.title}');
-        final epicGoal = SectionTextUtils.resolveGoal(beat.sections);
-        if (epicGoal.isNotEmpty) {
-          sb.writeln('Goal: $epicGoal');
-        }
-        final feats = workbench.featuresForBeat(beat.id);
-        for (final feat in feats) {
-          final p = workbench.getDocumentProgress(feat.id);
-          sb.writeln('- **${feat.title}** ($p% verified · ${feat.estimatedDuration})');
-          final states = FeatureStateNode.getStatesForDocument(feat);
-          for (final cp in states) {
-            final cpDone = cp.isCompleted ? '✓' : '○';
-            final cpDoneWhen = SectionTextUtils.resolveCheckpointDoneWhen(
-              playtestGoalParam: cp.parameters['playtestGoal'],
-              checkpointTrigger: cp.trigger,
-              checkpointFeedback: cp.feedback,
-              sections: feat.sections,
-              fallback: cp.playtestCondition,
-            );
-            sb.writeln(
-              '  - [$cpDone] **${cp.cleanStageTitle} (${cp.releaseVersion})** — *$cpDoneWhen*',
-            );
-            final scopeItems = SectionTextUtils.resolveCheckpointInScope(
-              checkpointScope: cp.coveredScope,
-              sections: feat.sections,
-              releaseVersion: cp.releaseVersion,
-            );
-            if (scopeItems.isNotEmpty) {
-              final scopeHdr = SectionTextUtils.resolveInScopeHeaderLabel(
-                scopeItems,
-                releaseVersion: cp.releaseVersion,
-                uppercase: false,
-              );
-              sb.writeln('    - $scopeHdr: ${scopeItems.join(' · ')}');
-            }
-            if (cp.tuningParams.isNotEmpty) {
-              sb.writeln('    - Tuning: `${cp.tuningParams.join(', ')}`');
-            }
-            if (cp.edgeCases.isNotEmpty) {
-              final guardParts = <String>[
-                for (int gIdx = 0; gIdx < cp.edgeCases.length; gIdx++)
-                  '[${cp.isGuardSignedOff(gIdx, cp.edgeCases[gIdx]) ? 'x' : ' '}] ${cp.edgeCases[gIdx]}',
-              ];
-              sb.writeln('    - Guards: ${guardParts.join(' · ')}');
-            }
-            for (final fix in cp.openFixItems) {
-              sb.writeln('    - [ ] ${fix.text.trim()}');
-            }
-          }
-        }
-      }
-    } else if (bp != null) {
-      sb.writeln(
-        '\n## Stage 2: ${bp.releaseTitle} (${bp.totalIncludedFeatures} Features · ${bp.totalIncludedHours}h)',
+    final wb = workbench;
+    final isDark = wb.isDark;
+    final rootSpec = wb.conceptDraft;
+    if (rootSpec == null || !rootSpec.hasSpec) {
+      AppToast.show(
+        context,
+        'Draft a Stage 1 Project Spec first.',
+        isDark: isDark,
+        accentColor: AppTheme.accentRedFor(isDark),
       );
-      for (int i = 0; i < bp.beats.length; i++) {
-        final b = bp.beats[i];
-        sb.writeln('\n### Epic ${i + 1}: ${b.title}');
-        for (final f in b.features) {
-          final status = f.included ? 'INCLUDED (${f.estimatedHours}h)' : 'DEFERRED';
-          sb.writeln('- **${f.title}** [$status]: ${f.goal}');
-        }
-      }
+      return;
     }
-    final evolutionLedger = workbench.buildCrossReleaseEvolutionLedger();
-    if (evolutionLedger.isNotEmpty) {
-      sb.writeln('\n## Cross-Release Evolution & Tuning Ledger');
-      sb.writeln(
-        '| Epic | Feature | Status | Checkpoint Progression | Tuning Evolution | Guards |',
-      );
-      sb.writeln('| :--- | :--- | :--- | :--- | :--- | :--- |');
-      for (final row in evolutionLedger) {
-        final cpText = row.checkpointProgression.isNotEmpty
-            ? row.checkpointProgression.join(' → ')
-            : row.originVersion;
-        final tuneText = row.tuningDeltaSummary.isNotEmpty
-            ? row.tuningDeltaSummary.join(', ')
-            : '—';
-        sb.writeln(
-          '| ${row.epicCode} | **${row.featureTitle}** | `${row.lifecycle}` | $cpText | `$tuneText` | ${row.guardCount} |',
-        );
-      }
+
+    final releases = wb.projectReleases;
+    final epicsByRelease = <String, List<EpicSpec>>{};
+    for (final rel in releases) {
+      epicsByRelease[wb.releaseDisplayName(rel)] = wb.epicsForRelease(rel.id);
     }
-    final fullMd = sb.toString();
-    await Clipboard.setData(ClipboardData(text: fullMd));
-    triggerMarkdownFileDownload(
-      filename: 'PROJECT_SPEC.md',
-      content: fullMd,
-    );
-    if (!context.mounted) return;
-    final isDark = workbench.isDark;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppTheme.bgSurfaceFor(isDark),
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          'Copied full Project & Release Spec to clipboard ✓',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimaryFor(isDark),
-          ),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
 
-  Future<void> _exportActiveReleaseAgentsMd(BuildContext context) async {
-    final agentsMd = workbench.buildActiveReleaseCodingAgentMarkdown();
-    await Clipboard.setData(ClipboardData(text: agentsMd));
-    final downloaded = triggerMarkdownFileDownload(
-      filename: 'AGENTS.md',
-      content: agentsMd,
+    final md = UnrealMcpPayloadBuilder.buildFullProjectSpecMarkdown(
+      rootSpec: rootSpec,
+      epicsByReleaseLabel: epicsByRelease,
     );
-    if (!context.mounted) return;
-    final isDark = workbench.isDark;
-    final ver = workbench.activeReleaseVersionTag;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppTheme.bgSurfaceFor(isDark),
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          downloaded
-              ? 'Downloaded AGENTS.md & copied $ver AI Coding Context to clipboard ✓'
-              : 'Copied Active Release ($ver) AGENTS.md / .cursorrules for AI Coding Agent ✓',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimaryFor(isDark),
-          ),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
 
-  Future<void> _exportActiveProjectJson(BuildContext context) async {
-    final jsonText = workbench.exportProjectToJson();
-    await Clipboard.setData(ClipboardData(text: jsonText));
-    final projTitle = workbench.activeProject?.title.trim();
-    final draftTitle = workbench.conceptDraft?.title.trim();
-    final rawTitle = (projTitle != null && projTitle.isNotEmpty)
-        ? projTitle
-        : ((draftTitle != null && draftTitle.isNotEmpty)
-            ? draftTitle
-            : 'project');
-    final slug = rawTitle
+    final safeSlug = rootSpec.normalizedTitle
         .toLowerCase()
-        .replaceAll(_slugInvalidCharRegex, '_')
-        .replaceAll(_slugTrimRegex, '');
-    final filename = '${slug.isEmpty ? 'project' : slug}.layers.json';
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+        .replaceAll(RegExp(r'^_+|_+$'), '');
+    final filename =
+        '${safeSlug.isEmpty ? 'layers' : safeSlug}_project_spec.md';
+
+    await Clipboard.setData(ClipboardData(text: md));
     final downloaded = triggerMarkdownFileDownload(
       filename: filename,
-      content: jsonText,
+      content: md,
     );
     if (!context.mounted) return;
-    final isDark = workbench.isDark;
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor: AppTheme.bgSurfaceFor(isDark),
-        behavior: SnackBarBehavior.floating,
-        content: Text(
-          downloaded
-              ? 'Downloaded $filename & copied Project JSON Backup to clipboard ✓'
-              : 'Copied Project JSON Backup ($filename) to clipboard ✓',
-          style: GoogleFonts.inter(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-            color: AppTheme.textPrimaryFor(isDark),
-          ),
-        ),
-        duration: const Duration(seconds: 2),
-      ),
+    AppToast.show(
+      context,
+      downloaded
+          ? 'Downloaded $filename & copied to clipboard'
+          : 'Copied full PROJECT_SPEC.md to clipboard',
+      isDark: isDark,
+    );
+  }
+
+  /// Exports the active Release (`ROOT_MCP_CONTEXT` + all active Epic payloads).
+  Future<void> _exportActiveReleaseAgentsMd(BuildContext context) async {
+    final wb = workbench;
+    final isDark = wb.isDark;
+    final rootSpec = wb.conceptDraft;
+    if (rootSpec == null) {
+      AppToast.show(
+        context,
+        'Create a Project Spec first.',
+        isDark: isDark,
+        accentColor: AppTheme.accentRedFor(isDark),
+      );
+      return;
+    }
+    final rel = wb.activeRelease;
+    final releaseLabel =
+        rel != null ? wb.releaseDisplayName(rel) : 'v0.1 · Prototype';
+    final md = UnrealMcpPayloadBuilder.buildReleaseMcpBundle(
+      rootSpec: rootSpec,
+      releaseLabel: releaseLabel,
+      releaseEpics: wb.activeReleaseEpics,
+      liveUprojectContext: wb.latestLiveUprojectContext,
+    );
+
+    final filename =
+        'unreal_mcp_release_${wb.activeReleaseVersionTag.replaceAll('.', '_')}.md';
+    await Clipboard.setData(ClipboardData(text: md));
+    final downloaded = triggerMarkdownFileDownload(
+      filename: filename,
+      content: md,
+    );
+    if (!context.mounted) return;
+    AppToast.show(
+      context,
+      downloaded
+          ? 'Downloaded $filename & copied to clipboard'
+          : 'Copied active Release MCP bundle to clipboard',
+      isDark: isDark,
+    );
+  }
+
+  /// Exports a portable `.layers.json` backup of the active project tree.
+  Future<void> _exportActiveProjectJson(BuildContext context) async {
+    final wb = workbench;
+    final isDark = wb.isDark;
+    final rawJson = wb.exportProjectToJson();
+    if (rawJson.isEmpty) {
+      AppToast.show(
+        context,
+        'No active project to export.',
+        isDark: isDark,
+        accentColor: AppTheme.accentRedFor(isDark),
+      );
+      return;
+    }
+    final projTitle = (wb.activeProject?.title ?? 'layers_project')
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    final filename = '$projTitle.layers.json';
+    await Clipboard.setData(ClipboardData(text: rawJson));
+    final downloaded = triggerMarkdownFileDownload(
+      filename: filename,
+      content: rawJson,
+    );
+    if (!context.mounted) return;
+    AppToast.show(
+      context,
+      downloaded
+          ? 'Downloaded $filename & copied JSON'
+          : 'Copied .layers.json backup to clipboard',
+      isDark: isDark,
     );
   }
 
   Future<void> _showImportProjectJsonDialog(BuildContext context) async {
-    final isDark = workbench.isDark;
-    final bgSurface = AppTheme.bgSurfaceFor(isDark);
-    final bgElevated = AppTheme.bgSurfaceRecessedFor(isDark);
-    final borderColor = AppTheme.borderFor(isDark);
-    final textPrimary = AppTheme.textPrimaryFor(isDark);
-    final textSecondary = AppTheme.textSecondaryFor(isDark);
-    final ctrl = TextEditingController();
+    final wb = workbench;
+    final controller = TextEditingController();
+    final isDark = wb.isDark;
+    final primary = AppTheme.textPrimaryFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
 
-    try {
-      await showDialog<void>(
-        context: context,
-        builder: (dialogCtx) => AlertDialog(
-          key: const ValueKey('import_project_json_dialog'),
-          backgroundColor: bgSurface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(color: borderColor),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.file_upload_outlined, size: 16, color: textSecondary),
-              const SizedBox(width: 8),
-              Text(
-                'Import Project Backup (.layers.json)',
-                style: GoogleFonts.inter(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: textPrimary,
-                ),
-              ),
-            ],
-          ),
+    await showDialog<void>(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.bgSurfaceRaisedFor(isDark),
+          title: Text('Import .layers.json Backup', style: TextStyle(color: primary)),
           content: SizedBox(
             width: 480,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Paste a previously exported .layers.json backup below to restore the complete Project Concept, Release Blueprint, and Workbench progress.',
-                  style: GoogleFonts.inter(
-                    fontSize: 11.5,
-                    color: textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  key: const ValueKey('import_project_json_input'),
-                  controller: ctrl,
-                  maxLines: 8,
-                  autofocus: true,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    color: textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: '{\n  "schemaVersion": 1,\n  "project": { ... }\n}',
-                    hintStyle: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: textSecondary.withValues(alpha: 0.6),
-                    ),
-                    filled: true,
-                    fillColor: bgElevated,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderColor),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                      borderSide: BorderSide(color: borderColor),
-                    ),
-                  ),
-                ),
-              ],
+            child: TextField(
+              controller: controller,
+              maxLines: 8,
+              style: GoogleFonts.jetBrainsMono(fontSize: 12, color: primary),
+              decoration: InputDecoration(
+                hintText: 'Paste exported .layers.json contents here...',
+                hintStyle: TextStyle(color: muted, fontSize: 12),
+              ),
             ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: Text(
-                'Cancel',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: textSecondary,
-                ),
-              ),
+              child: const Text('Cancel'),
             ),
-            ElevatedButton.icon(
-              key: const ValueKey('confirm_import_project_json_btn'),
+            ElevatedButton(
               onPressed: () {
-                final raw = ctrl.text.trim();
-                final importedId = workbench.importProjectFromJson(raw);
-                Navigator.of(dialogCtx).pop();
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).clearSnackBars();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    backgroundColor: bgSurface,
-                    behavior: SnackBarBehavior.floating,
-                    content: Text(
-                      importedId != null
-                          ? 'Restored project "${workbench.activeProject?.title ?? 'Imported Project'}" from JSON ✓'
-                          : 'Invalid .layers.json payload — could not import project.',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: importedId != null
-                            ? textPrimary
-                            : AppTheme.accentRedFor(isDark),
-                      ),
-                    ),
-                    duration: const Duration(seconds: 2),
-                  ),
-                );
+                final importedId = wb.importProjectFromJson(controller.text);
+                if (importedId != null) {
+                  Navigator.of(dialogCtx).pop();
+                  AppToast.show(
+                    context,
+                    'Imported project cleanly.',
+                    isDark: isDark,
+                  );
+                } else {
+                  AppToast.show(
+                    dialogCtx,
+                    'Invalid .layers.json payload.',
+                    isDark: isDark,
+                    accentColor: AppTheme.accentRedFor(isDark),
+                  );
+                }
               },
-              icon: const Icon(Icons.restore_page_outlined, size: 14),
-              label: Text(
-                'Import & Switch',
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF10B981),
-                foregroundColor: const Color(0xFF06281E),
-                elevation: 0,
-              ),
+              child: const Text('Import Project'),
             ),
           ],
-        ),
-      );
-    } finally {
-      ctrl.dispose();
-    }
+        );
+      },
+    );
+    controller.dispose();
   }
 }

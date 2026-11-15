@@ -1,37 +1,88 @@
 part of 'workbench_provider.dart';
 
-/// Stage 1 Spark Idea Intake, GDD Extraction, and 10-Step Concept Blueprint orchestration
-/// for [WorkbenchProvider].
+/// Stage 1 actions: Spark Onboarding, Preset Packs, Target Engine toggle,
+/// Co-Designer live edits, and `Approve & Launch Unreal Workbench`.
 extension WorkbenchConceptMixin on WorkbenchProvider {
-  /// Ingests a raw game idea (or refines the existing ingested summary) on the New Project screen
-  /// and populates the 3 Concept Expansion / Twist Cards below the input field.
-  Future<void> ingestOrRefineSparkIdea(String userInput) async {
-    final clean = userInput.trim();
-    if (clean.isEmpty && _sparkIntake == null) return;
-    if (_sparkIntake != null) {
-      _sparkSuggestionVariantOffset++;
-    }
+  void showSparkPicker() {
+    _showingSparkPicker = true;
+    _currentStage = WorkbenchStage.projectPitch;
+    notifyListeners();
+  }
+
+  void resumeActiveRootSpec() {
+    if (_conceptDraft == null) return;
+    _showingSparkPicker = false;
+    _currentStage = WorkbenchStage.projectPitch;
+    notifyListeners();
+  }
+
+  void _ensureActiveProjectDocument(ProjectConceptBlueprint bp) {
+    final pid = _activeProjectId ?? 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    _activeProjectId = pid;
+    final existing = documents[pid];
+    final nextSections = Map<String, String>.from(
+      existing?.sections ?? const <String, String>{},
+    );
+    nextSections['concept_blueprint_json'] = jsonEncode(bp.toJson());
+    nextSections['engine'] = bp.targetEngine.shortLabel;
+    nextSections['current_stage'] = _currentStage.name;
+
+    final updated = (existing ??
+            TierDocument(
+              id: pid,
+              title: bp.normalizedTitle,
+              tier: TierType.project,
+              childrenIds: const <String>[],
+            ))
+        .copyWith(
+          title: bp.normalizedTitle,
+          tier: TierType.project,
+          sections: nextSections,
+        );
+    documents[pid] = updated;
+    _persistDocument(updated);
+    _persistSettings();
+  }
+
+  void loadPresetSpark(String presetId) {
+    final preset = UnrealSparkPresets.byId(presetId);
+    preset.targetEngine = _conceptDraft?.targetEngine ?? UnrealTargetEngine.ue5Mcp;
+    _conceptDraft = preset;
+    _showingSparkPicker = false;
+    _showRawRootContext = false;
+    _currentStage = WorkbenchStage.projectPitch;
+    _ensureActiveProjectDocument(preset);
+    notifyListeners();
+  }
+
+  Future<ProjectConceptBlueprint?> generateSpecFromSpark(
+    String sparkPrompt,
+  ) async {
+    final cleanPrompt = sparkPrompt.trim();
+    if (cleanPrompt.isEmpty) return null;
 
     _isAgentBusy = true;
-    _agentProgressStep =
-        'Ingesting & summarizing idea ($_conversationModel)...';
+    _agentProgressStep = 'Drafting Unreal Root Spec (PROJECT_SPEC.md)...';
+    _offlineErrorMessage = null;
     notifyListeners();
 
     try {
-      final result = await ProjectConceptAgent.ingestOrRefineSparkIdea(
-        userInput: clean,
-        existingIntake: _sparkIntake,
-        suggestionVariantOffset: _sparkSuggestionVariantOffset,
+      final drafted = await ProjectConceptAgent.draftSpecFromSpark(
+        sparkPrompt: cleanPrompt,
         apiKey: _apiKey,
-        modelName: _conversationModel,
+        targetEngine: _conceptDraft?.targetEngine ?? UnrealTargetEngine.ue5Mcp,
+        preferredModel: _planningModel,
         thinkingLevel: _thinkingLevel,
       );
-      if (result != null) {
-        _sparkIntake = result;
-        _offlineErrorMessage = null;
-      } else {
-        _setOfflineState();
-      }
+      _conceptDraft = drafted;
+      _showingSparkPicker = false;
+      _showRawRootContext = false;
+      _currentStage = WorkbenchStage.projectPitch;
+      _ensureActiveProjectDocument(drafted);
+      return drafted;
+    } catch (e) {
+      _offlineErrorMessage = 'Spec generation error: $e';
+      return null;
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -39,45 +90,32 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     }
   }
 
-  /// Toggles one of the 3 Concept Expansion / Twist Cards on the New Project screen on or off,
-  /// folding that mechanic into (or removing it from) the Agent's Idea Summary without auto-launching Stage 1B.
-  void toggleSparkExpansionCard(int cardIndex) {
-    final intake = _sparkIntake;
-    if (intake == null) return;
-    final cards = intake.expansionCards;
-    if (cardIndex < 0 || cardIndex >= cards.length) return;
-    cards[cardIndex].isSelected = !cards[cardIndex].isSelected;
-    notifyListeners();
-  }
-
-  /// Cycles ONLY the 3 Concept Expansion / Twist Cards on the New Project screen to fresh suggestions,
-  /// never overwriting `workingTitle`, `baseSummary`, or `mechanics`.
-  Future<void> shuffleSparkExpansionCards() async {
-    final currentIntake = _sparkIntake;
-    if (currentIntake == null) return;
-    _sparkSuggestionVariantOffset++;
+  Future<ProjectConceptBlueprint?> applyStage1CoDesignInstruction(
+    String instruction,
+  ) async {
+    final draft = _conceptDraft;
+    final clean = instruction.trim();
+    if (draft == null || clean.isEmpty) return null;
 
     _isAgentBusy = true;
-    _agentProgressStep =
-        'Refreshing suggestions for ${currentIntake.workingTitle} ($_conversationModel)...';
+    _agentProgressStep = 'Co-Designer updating ROOT_MCP_CONTEXT...';
+    _offlineErrorMessage = null;
     notifyListeners();
 
     try {
-      final freshCards = await ProjectConceptAgent.refreshSparkExpansionCards(
-        existingIntake: currentIntake,
-        suggestionVariantOffset: _sparkSuggestionVariantOffset,
+      final updated = await ProjectConceptAgent.applyCoDesignEdit(
+        currentSpec: draft,
+        instruction: clean,
         apiKey: _apiKey,
-        modelName: _conversationModel,
+        preferredModel: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
-      if (freshCards != null && freshCards.isNotEmpty) {
-        if (_sparkIntake == currentIntake) {
-          currentIntake.expansionCards = freshCards;
-        }
-        _offlineErrorMessage = null;
-      } else {
-        _setOfflineState();
-      }
+      _conceptDraft = updated;
+      _ensureActiveProjectDocument(updated);
+      return updated;
+    } catch (e) {
+      _offlineErrorMessage = 'Co-Designer edit error: $e';
+      return null;
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
@@ -85,936 +123,145 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     }
   }
 
-  /// Clears the current pre-project Idea Summary so the user can start fresh.
-  void clearSparkIdeaIntake() {
-    _sparkIntake = null;
-    notifyListeners();
-  }
-
-  /// Imports an unstructured GDD, Notion note, or README document on Stage 1A,
-  /// extracts all 8 Concept sections, and jumps straight to `Step 09 · Full Concept Review`.
-  Future<void> importExistingGddAndJumpToReview(String rawGdd) async {
-    final clean = rawGdd.trim();
-    if (clean.isEmpty) return;
-
-    _isAgentBusy = true;
-    _agentProgressStep =
-        'Extracting 8-section Concept Blueprint from GDD ($_conversationModel)...';
-    notifyListeners();
-
-    try {
-      final extracted = await ProjectConceptAgent.extractConceptFromGdd(
-        clean,
-        apiKey: _apiKey,
-        modelName: _conversationModel,
-        thinkingLevel: _thinkingLevel,
-      );
-      if (extracted != null) {
-        _conceptDraft = extracted;
-        _offlineErrorMessage = null;
-        _commitConceptToVault(_conceptDraft!);
-        _jumpToFullReviewPending = true;
-      } else {
-        _setOfflineState();
-      }
-    } finally {
-      _isAgentBusy = false;
-      _agentProgressStep = null;
-      notifyListeners();
+  void setTargetEngine(UnrealTargetEngine target) {
+    final draft = _conceptDraft;
+    if (draft == null) {
+      _conceptDraft = ProjectConceptBlueprint(targetEngine: target);
+    } else {
+      draft.targetEngine = target;
     }
+    if (activeProject != null && _conceptDraft != null) {
+      _ensureActiveProjectDocument(_conceptDraft!);
+    }
+    notifyListeners();
   }
 
-  /// Regenerates the 3 Option Playing Cards for a specific Stage 1 section (`01`..`08`).
-  Future<void> regenerateStage1SectionOptions(String optionKey) async {
+  void selectCameraDecisionOption(String optionId) {
     final draft = _conceptDraft;
     if (draft == null) return;
-    final title = draft.title;
-    final previousOptions = List<String>.from(
-      draft.sectionOptions[optionKey] ?? const <String>[],
-    );
-
-    _isAgentBusy = true;
-    _agentProgressStep =
-        'Refreshing $optionKey options for $title ($_conversationModel)...';
-    notifyListeners();
-    try {
-      final aiOptions =
-          await ProjectConceptAgent.regenerateSectionOptionsWithAi(
-        draft: draft,
-        optionKey: optionKey,
-        currentOptions: previousOptions,
-        apiKey: _apiKey,
-        modelName: _conversationModel,
-        thinkingLevel: _thinkingLevel,
-      );
-      if (aiOptions != null && aiOptions.isNotEmpty && _conceptDraft == draft) {
-        draft.sectionOptions[optionKey] = aiOptions;
-        _offlineErrorMessage = null;
-        _commitConceptToVault(draft);
-      } else {
-        _setOfflineState();
-      }
-    } finally {
-      _isAgentBusy = false;
-      _agentProgressStep = null;
-      notifyListeners();
-    }
-  }
-
-  /// Resets the current Concept Blueprint draft so the user returns to Step 1A (`The Spark` Playing Cards).
-  void resetConceptToSpark() {
-    createNewProject();
-  }
-
-  String _deriveInitialWorkingTitle(String rawSpark) {
-    final intakeTitle = (_sparkIntake?.workingTitle ?? '').trim();
-    if (intakeTitle.isNotEmpty) return intakeTitle;
-    final words = rawSpark
-        .split('—')
-        .first
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((w) => w.isNotEmpty)
-        .take(3)
-        .toList();
-    return words.isEmpty ? 'Game Prototype' : words.join(' ');
-  }
-
-  /// Step 1A -> 1B: User accepts their summarized idea (or submits a direct idea) and starts the 8-section Concept Blueprint.
-  /// In live mode, transitions immediately to the Concept Blueprint view (`0ms` skeleton) and synthesizes Sections `01`..`08` in a single pass.
-  Future<void> startConceptInterview([
-    String sparkText = '',
-    bool jumpToFullReview = true,
-  ]) async {
-    final cleanText = sparkText.trim();
-    final effectiveSpark = cleanText.isNotEmpty
-        ? cleanText
-        : (_sparkIntake?.canonicalPrompt ?? '');
-    if (effectiveSpark.isEmpty) return;
-
-    _isAgentBusy = true;
-    _agentProgressStep =
-        'Drafting initial Concept Blueprint ($_conversationModel)...';
-    notifyListeners();
-
-    try {
-      ProjectConceptBlueprint? liveDraft;
-      if (GeminiAgentClient.testMockResponder == null) {
-        if (!GeminiAgentClient.hasKey(_apiKey)) {
-          _setOfflineState();
-          return;
-        }
-        final initialTitle = _deriveInitialWorkingTitle(effectiveSpark);
-        liveDraft = ProjectConceptBlueprint(
-          title: initialTitle,
-          sparkIdea: effectiveSpark,
-          questions: const <AgentQuestion>[],
-          goal: '',
-          gameSpec: const <String>[],
-          techSpec: const <String>[],
-          designPillars: const <String>[],
-          tradeOffs: const <String>[],
-          coreLoopBeats: const <String>[],
-          exclusions: const <String>[],
-          doneWhen: '',
-          firstReleasePreset: ReleaseScope.featurePrototype,
-          releaseTrainTitles: <String>['v0.1: $initialTitle - Prototype'],
-          isInterviewComplete: false,
-          lastUpdatedFields: const <String>[],
-        );
-        _conceptDraft = liveDraft;
-        _activeConceptSectionBuildIndex = 0;
-        _offlineErrorMessage = null;
-        if (jumpToFullReview) {
-          _jumpToFullReviewPending = true;
-        }
-        _commitConceptToVault(liveDraft, syncBuiltWorkbench: false);
+    for (final opt in draft.cameraDecisionOptions) {
+      if (opt.id == optionId) {
+        draft.cameraChoiceId = opt.id;
+        draft.cameraContract = opt.contractValue;
+        draft.lastCoDesignNote =
+            'Camera contract set to ${opt.label}.';
+        _ensureActiveProjectDocument(draft);
         notifyListeners();
-      }
-
-      final draft = await ProjectConceptAgent.startConceptInterview(
-        effectiveSpark,
-        apiKey: _apiKey,
-        modelName: _conversationModel,
-        thinkingLevel: _thinkingLevel,
-      );
-      if (liveDraft != null && _conceptDraft != liveDraft) {
         return;
       }
-      if (draft != null) {
-        _conceptDraft = draft;
-        _offlineErrorMessage = null;
-        if (jumpToFullReview && liveDraft == null) {
-          _jumpToFullReviewPending = true;
-        }
-        _commitConceptToVault(_conceptDraft!);
-      } else {
-        if (liveDraft != null) {
-          _conceptDraft = null;
-        }
-        _setOfflineState();
-      }
-    } finally {
-      _activeConceptSectionBuildIndex = null;
-      _isAgentBusy = false;
-      _agentProgressStep = null;
-      notifyListeners();
     }
   }
 
-  /// 1-Click Express Build from Spark: Synthesizes the 8-section Concept Blueprint
-  /// (if not yet drafted) and immediately builds the v0.1 Release Workbench in a single pass.
-  Future<void> expressBuildReleaseFromSpark([String sparkText = '']) async {
-    if (_conceptDraft == null || sparkText.trim().isNotEmpty) {
-      await startConceptInterview(sparkText, true);
-    }
-    if (_conceptDraft != null) {
-      await approveConceptAndBuildRelease();
-    }
-  }
-
-  /// Sends a user turn in the Stage 1 Co-Design Chat and updates the live Project Concept Blueprint
-  /// using the fast `_conversationModel` (`gemini-flash-latest`).
-  Future<void> sendConceptChatMessage(String message) async {
-    final clean = message.trim();
-    if (clean.isEmpty) return;
-
-    // If no concept exists yet, treat the first message as the opening Spark!
-    if (_conceptDraft == null) {
-      await startConceptInterview(clean);
-      return;
-    }
-
-    _isAgentBusy = true;
-    _agentProgressStep =
-        'Updating Concept Blueprint ($_conversationModel)...';
-    notifyListeners();
-
-    try {
-      final ok = await ProjectConceptAgent.sendConceptChatTurn(
-        _conceptDraft!,
-        clean,
-        apiKey: _apiKey,
-        conversationModel: _conversationModel,
-        planningModel: _planningModel,
-        thinkingLevel: _thinkingLevel,
-      );
-      if (ok) {
-        _offlineErrorMessage = null;
-        _commitConceptToVault(_conceptDraft!);
-      } else {
-        _setOfflineState();
-      }
-    } finally {
-      _isAgentBusy = false;
-      _agentProgressStep = null;
-      notifyListeners();
-    }
-  }
-
-  /// Allows direct inline adjustments to the ProjectConceptBlueprint if needed.
-  void updateConceptDraft(void Function(ProjectConceptBlueprint draft) mutator) {
+  void updateRootSpecSections({
+    String? gameTitle,
+    String? pitch,
+    String? cameraContract,
+    String? characterScale,
+    String? inputContract,
+    String? assetPolicy,
+    String? releaseDoneWhen,
+    List<String>? coreLoop,
+    List<String>? pillars,
+    List<String>? outOfScope,
+  }) {
     final draft = _conceptDraft;
     if (draft == null) return;
-    mutator(draft);
-    _commitConceptToVault(draft);
+    if (gameTitle != null && gameTitle.trim().isNotEmpty) {
+      draft.gameTitle = gameTitle.trim().toUpperCase();
+    }
+    if (pitch != null) draft.pitch = pitch.trim();
+    if (cameraContract != null) draft.cameraContract = cameraContract.trim();
+    if (characterScale != null) draft.characterScale = characterScale.trim();
+    if (inputContract != null) draft.inputContract = inputContract.trim();
+    if (assetPolicy != null) draft.assetPolicy = assetPolicy.trim();
+    if (releaseDoneWhen != null) draft.releaseDoneWhen = releaseDoneWhen.trim();
+    if (coreLoop != null) draft.coreLoop = coreLoop;
+    if (pillars != null) draft.pillars = pillars;
+    if (outOfScope != null) draft.outOfScope = outOfScope;
+    _ensureActiveProjectDocument(draft);
     notifyListeners();
   }
 
-  void _commitConceptToVault(
-    ProjectConceptBlueprint draft, {
-    bool syncBuiltWorkbench = true,
-  }) {
-    final projId = _activeProjectId ?? 'proj_main';
-    final existingProj = documents[projId];
-    final projDoc = existingProj ??
-        TierDocument(
-          id: projId,
-          title: draft.title,
-          tier: TierType.project,
+  /// Approves `PROJECT_SPEC.md` and materializes strict `v0.1 · Prototype` release + 6-section Epics,
+  /// transitioning straight to Stage 2 (`2. Epic Specs`).
+  String? approveRootSpecAndLaunchWorkbench() {
+    var draft = _conceptDraft;
+    if (draft == null) return null;
+    draft = UnrealSpecGuard.sanitizeConceptBlueprint(draft);
+    draft.approved = true;
+    _conceptDraft = draft;
+
+    final pid = _activeProjectId ?? 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    _activeProjectId = pid;
+    _ensureActiveProjectDocument(draft);
+    final proj = documents[pid]!;
+
+    // Reuse existing v0.1 release if present cleanly, or create fresh v0.1 Prototype
+    TierDocument? v01Rel;
+    for (final rid in proj.childrenIds) {
+      final candidate = documents[rid];
+      if (candidate != null &&
+          candidate.tier == TierType.release &&
+          releaseVersionTagFor(candidate) == 'v0.1') {
+        v01Rel = candidate;
+        break;
+      }
+    }
+
+    final relId = v01Rel?.id ?? '${pid}_rel_v01';
+    final epicIds = <String>[];
+
+    if (v01Rel == null || epicDocsForRelease(relId).isEmpty) {
+      for (int i = 0; i < draft.initialEpics.length; i++) {
+        final rawEpic = draft.initialEpics[i];
+        final epId = '${relId}_epic_${i + 1}';
+        final cleanEpic = rawEpic.deepCopy(
+          idOverride: epId,
+          releaseVersionOverride: 'v0.1',
+          lifecycleOverride:
+              i == 0 ? EpicLifecycle.active : EpicLifecycle.queued,
         );
-    final prevTechSpec =
-        existingProj?.sections['tech_spec'] ?? existingProj?.sections['techSpec'];
-    projDoc.title = draft.title;
-    projDoc.sections['scope'] = draft.toFormattedScopeSection();
-    projDoc.sections['goal'] = draft.goal;
-    projDoc.sections['game_spec'] = draft.gameSpec.join(' · ');
-    projDoc.sections['tech_spec'] = draft.techSpec.join(' · ');
-    projDoc.sections['design_pillars'] =
-        draft.designPillars.map((p) => '• $p').join('\n');
-    projDoc.sections['trade_offs'] = draft.tradeOffs
-        .map((t) => '• ${LayersTextStyleGuide.compactStoredTradeOff(t)}')
-        .join('\n');
-    projDoc.sections['exclusions'] = draft.exclusions
-        .map((e) => '• ${LayersTextStyleGuide.compactStoredExclusion(e)}')
-        .join('\n');
-    projDoc.sections['done_when'] = draft.doneWhen;
-
-    final releaseIds = <String>[];
-    final trainTitles = draft.releaseTrainTitles.isNotEmpty
-        ? draft.releaseTrainTitles
-        : <String>[
-            'v0.1: ${draft.title.trim().isEmpty ? "Game" : draft.title.trim()} Core Loop - Prototype',
-          ];
-    final isSplitPrototype = trainTitles.length > 1;
-    final relId = projId == 'proj_main' ? 'rel_v0_1' : '${projId}_rel_v0_1';
-    final relTitle = trainTitles.first;
-    final existingRel = documents[relId];
-    final draftEngineHint = '${draft.gameSpec.join(' ')} ${draft.techSpec.join(' ')}';
-    final draftEngineLabel =
-        SectionTextUtils.detectEngineLabel(draftEngineHint);
-    final draftStackSig =
-        _godotTechStackSignature(draftEngineHint);
-
-    if (existingRel != null) {
-      existingRel.title = relTitle;
-      existingRel.sections['phase'] ??= ProductionPhase.prototype.name;
-      if (isSplitPrototype) {
-        existingRel.sections['prototypePart'] = '1';
-        existingRel.sections['splitPrototypePart2Title'] = trainTitles[1];
-      } else {
-        existingRel.sections.remove('prototypePart');
-        existingRel.sections.remove('splitPrototypePart2Title');
+        cleanEpic.code = 'E0${i + 1}';
+        cleanEpic.lineageKey = 'e0${i + 1}';
+        final epDoc = cleanEpic.toTierDocument(
+          docId: epId,
+          parentReleaseId: relId,
+        );
+        documents[epId] = epDoc;
+        _persistDocument(epDoc);
+        epicIds.add(epId);
       }
-      if (existingRel.childrenIds.isEmpty) {
-        existingRel.sections['releaseScope'] = ReleaseScope.prototype.name;
-        existingRel.sections['synced_core_loop_sig'] =
-            draft.coreLoopBeats.join('||');
-        existingRel.sections['synced_engine_label'] = draftEngineLabel;
-        existingRel.sections['synced_tech_stack_sig'] = draftStackSig;
-        existingRel.sections['scope'] = draft.toFormattedScopeSection();
-      } else if (prevTechSpec != null && prevTechSpec.trim().isNotEmpty) {
-        final prevGameSpec =
-            existingProj?.sections['game_spec'] ?? existingProj?.sections['gameSpec'] ?? '';
-        final prevHint = '$prevGameSpec $prevTechSpec'.trim();
-        existingRel.sections['synced_engine_label'] ??=
-            SectionTextUtils.detectEngineLabel(prevHint);
-        existingRel.sections['synced_tech_stack_sig'] ??=
-            _godotTechStackSignature(prevHint);
-      }
-      _persistDocument(existingRel);
-      releaseIds.add(relId);
     } else {
-      final relDoc = TierDocument(
-        id: relId,
-        title: relTitle,
-        tier: TierType.release,
-        parentId: projId,
-        sections: {
-          'releaseScope': ReleaseScope.prototype.name,
-          'phase': ProductionPhase.prototype.name,
-          'synced_core_loop_sig': draft.coreLoopBeats.join('||'),
-          'synced_engine_label': draftEngineLabel,
-          'synced_tech_stack_sig': draftStackSig,
-          if (isSplitPrototype) 'prototypePart': '1',
-          if (isSplitPrototype) 'splitPrototypePart2Title': trainTitles[1],
-          'scope': draft.toFormattedScopeSection(),
-        },
-      );
-      documents[relId] = relDoc;
-      _persistDocument(relDoc);
-      releaseIds.add(relDoc.id);
-    }
-
-    // Preserve only already-built subsequent releases (never pre-queue unbuilt future releases)
-    // so revisiting Stage 1 mid-project keeps built releases intact without queuing unbuilt ones.
-    if (existingProj != null) {
-      for (final existingRelId in existingProj.childrenIds) {
-        if (releaseIds.contains(existingRelId)) continue;
-        final existingRelDoc = documents[existingRelId];
-        if (existingRelDoc == null) continue;
-        if (existingRelDoc.childrenIds.isNotEmpty ||
-            existingRelId == _activeReleaseId) {
-          releaseIds.add(existingRelId);
-        }
+      for (final d in epicDocsForRelease(relId)) {
+        epicIds.add(d.id);
       }
     }
 
-    projDoc.childrenIds = releaseIds;
-    documents[projId] = projDoc;
-    _activeProjectId = projId;
-    _activeReleaseId ??= releaseIds.isNotEmpty ? releaseIds.first : null;
-    repackProjectReleasesSequentially(
-      projDoc,
-      keepReleaseId: _activeReleaseId,
+    final relDoc = TierDocument(
+      id: relId,
+      title: 'v0.1 · Prototype',
+      tier: TierType.release,
+      parentId: pid,
+      childrenIds: epicIds,
+      estimatedDuration: '${epicIds.length} Epics',
+      sections: <String, String>{
+        'release_version': 'v0.1',
+        'goal': draft.pitch,
+        'doneWhen': draft.releaseDoneWhen,
+      },
     );
-    if (syncBuiltWorkbench) {
-      syncConceptChangesToBuiltWorkbench(draft);
+    documents[relId] = relDoc;
+    _persistDocument(relDoc);
+
+    if (!proj.childrenIds.contains(relId)) {
+      proj.childrenIds = [relId, ...proj.childrenIds];
     }
+    _activeReleaseId = relId;
+    _selectedEpicId = epicIds.isNotEmpty ? epicIds.first : null;
+    _currentStage = WorkbenchStage.releaseWorkbench;
+    _showRawEpicPayload = false;
     _syncActiveProjectMetadata();
-  }
-
-  static final RegExp _beatTokenRegex = RegExp(r'[a-z0-9]+');
-  static const Set<String> _beatStopWords = <String>{
-    'the',
-    'and',
-    'for',
-    'with',
-    'into',
-    'from',
-    'that',
-    'this',
-    'epic',
-    'beat',
-    'loop',
-    'player',
-    'game',
-  };
-  static const List<String> _kSyncStarterTuning = <String>[
-    'responseTime: 0.12 s',
-    'cooldownDuration: 0.50 s',
-  ];
-
-  Set<String> _extractBeatKeywords(String text) {
-    final lower = text.toLowerCase();
-    final tokens = <String>{};
-    for (final m in _beatTokenRegex.allMatches(lower)) {
-      final w = m.group(0)!;
-      if (w.length >= 3 && !_beatStopWords.contains(w)) {
-        tokens.add(w);
-      }
-    }
-    return tokens;
-  }
-
-  static double _keywordSetOverlap(Set<String> setA, Set<String> setB) {
-    if (setA.isEmpty || setB.isEmpty) return 0.0;
-    final intersection = setA.intersection(setB).length;
-    final minLen = setA.length < setB.length ? setA.length : setB.length;
-    return intersection / minLen;
-  }
-
-  ({String title, String description}) _parseStage1CoreLoopBeat(
-    String rawBeat,
-    int index,
-  ) {
-    final trimmed = rawBeat.trim();
-    final colonIdx = trimmed.indexOf(':');
-    final dashIdx = trimmed.indexOf('—');
-    int splitIdx = -1;
-    if (colonIdx > 0 && (dashIdx < 0 || colonIdx < dashIdx)) {
-      splitIdx = colonIdx;
-    } else if (dashIdx > 0) {
-      splitIdx = dashIdx;
-    }
-    if (splitIdx > 0) {
-      final t = trimmed.substring(0, splitIdx).trim();
-      final d = trimmed.substring(splitIdx + 1).trim();
-      return (
-        title: t.isNotEmpty ? t : 'Core Loop Beat ${index + 1}',
-        description: d.isNotEmpty ? d : trimmed,
-      );
-    }
-    return (
-      title: trimmed.isNotEmpty ? trimmed : 'Core Loop Beat ${index + 1}',
-      description: trimmed,
-    );
-  }
-
-  static String _godotTechStackSignature(String hint) {
-    final lower = hint.toLowerCase();
-    final is2d = lower.contains('2d') ||
-        lower.contains('sprite') ||
-        lower.contains('pixel') ||
-        lower.contains('tilemap') ||
-        (lower.contains('top-down') && !lower.contains('3d')) ||
-        (lower.contains('side-scroll') && !lower.contains('3d'));
-    final isGdExt = lower.contains('gdextension') || lower.contains('c++');
-    return 'GODOT4_${is2d ? '2D' : '3D'}_${isGdExt ? 'GDEXT' : 'GDSCRIPT'}';
-  }
-
-  /// Non-destructively syncs Stage 1 edits (`06 Core Loop`, `07 Out of Scope`, `01 Goal`, `08 Done When`)
-  /// into an already-built Stage 2 Release (`activeRelease.childrenIds.isNotEmpty`) without wiping
-  /// existing `v0.1+` Feature checkpoints or completed subtask progress.
-  void syncConceptChangesToBuiltWorkbench(ProjectConceptBlueprint draft) {
-    final releases = projectReleases;
-    final rel = releases.firstOrNull ?? activeRelease;
-    if (rel == null || rel.childrenIds.isEmpty) return;
-    final builtReleaseCount =
-        releases.where((r) => r.childrenIds.isNotEmpty).length;
-    final isSingleV01Release = builtReleaseCount <= 1;
-
-    // 1. Sync v0.1 Release Scope (`01 Goal`, `06 Core Loop`, `07 Out of Scope`, `08 Done When`)
-    rel.sections['scope'] = draft.toFormattedScopeSection();
-    _persistDocument(rel);
-
-    final bp = (_releaseBlueprint != null &&
-            _releaseBlueprint!.releaseDocId == rel.id)
-        ? _releaseBlueprint
-        : null;
-    if (_releaseBlueprint != null) {
-      _releaseBlueprint!.explicitExclusions =
-          List<String>.from(draft.exclusions);
-    }
-    if (bp != null) {
-      if (draft.goal.trim().isNotEmpty) {
-        bp.goal = draft.goal.trim();
-      }
-      if (draft.doneWhen.trim().isNotEmpty) {
-        bp.doneWhen = draft.doneWhen.trim();
-      }
-      rel.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
-      _persistDocument(rel);
-    }
-
-    // 1b. If 03 · Tech Spec changed meaningfully (e.g., 2D <-> 3D, GDScript <-> GDExtension C++, or legacy engine migration),
-    // invalidate stale engine-specific custom_snippet steps and primary_asset paths across built features.
-    final newEngineHint = '${draft.gameSpec.join(' ')} ${draft.techSpec.join(' ')}';
-    final currentEngineLabel =
-        SectionTextUtils.detectEngineLabel(newEngineHint);
-    final currentStackSig = _godotTechStackSignature(newEngineHint);
-    final previousEngineLabel = rel.sections['synced_engine_label'] ?? '';
-    final previousStackSig = rel.sections['synced_tech_stack_sig'] ?? '';
-    final engineChanged = previousEngineLabel.isNotEmpty &&
-        previousEngineLabel != currentEngineLabel;
-    final stackChanged = previousStackSig.isNotEmpty &&
-        previousStackSig != currentStackSig;
-    if (engineChanged || stackChanged) {
-      for (final r in releases) {
-        r.sections['synced_engine_label'] = currentEngineLabel;
-        r.sections['synced_tech_stack_sig'] = currentStackSig;
-        _persistDocument(r);
-      }
-
-      final projectFeatureIds = <String>{};
-      for (final r in releases) {
-        for (final bId in r.childrenIds) {
-          final beatDoc = documents[bId];
-          if (beatDoc == null) continue;
-          for (final fId in beatDoc.childrenIds) {
-            if (documents[fId]?.tier == TierType.feature) {
-              projectFeatureIds.add(fId);
-            }
-          }
-        }
-      }
-      for (final fId in projectFeatureIds) {
-        final featDoc = documents[fId];
-        if (featDoc == null) continue;
-        featDoc.sections.remove('primary_asset');
-        final states = FeatureStateNode.getStatesForDocument(featDoc);
-        for (final cp in states) {
-          cp.parameters.remove('primarySharedScriptOrScene');
-          cp.parameters.removeWhere(
-            (k, _) => k.startsWith('synthesized_') || k.endsWith('_steps_json'),
-          );
-          cp.checklist = [];
-        }
-        FeatureStateNode.saveStatesToDocument(featDoc, states);
-        _persistDocument(featDoc);
-      }
-    } else {
-      for (final r in releases) {
-        var dirty = false;
-        if ((r.sections['synced_engine_label'] ?? '').isEmpty) {
-          r.sections['synced_engine_label'] = currentEngineLabel;
-          dirty = true;
-        }
-        if ((r.sections['synced_tech_stack_sig'] ?? '').isEmpty) {
-          r.sections['synced_tech_stack_sig'] = currentStackSig;
-          dirty = true;
-        }
-        if (dirty) _persistDocument(r);
-      }
-    }
-
-    // Once v0.2+ releases are built, keep existing synthesized Stage 2 Epics intact while
-    // non-destructively appending any brand-new Core Loop Beats added in Stage 1 (`06 · Core Loop`).
-    final currentLoopSig = draft.coreLoopBeats.join('||');
-    final previousLoopSig = rel.sections['synced_core_loop_sig'] ?? '';
-    if (draft.coreLoopBeats.isEmpty || currentLoopSig == previousLoopSig) {
-      return;
-    }
-    if (!isSingleV01Release) {
-      if (previousLoopSig.isNotEmpty) {
-        final prevSet = previousLoopSig
-            .split('||')
-            .map((s) => s.toLowerCase().trim())
-            .where((s) => s.isNotEmpty)
-            .toSet();
-        final currentLiveBeats = activeReleaseBeats;
-        final existingKeywordsList = [
-          for (final b in currentLiveBeats)
-            _extractBeatKeywords('${b.title} ${b.sections['scope'] ?? ''}'),
-        ];
-        final existingTitles = {
-          for (final b in currentLiveBeats) b.title.toLowerCase().trim(),
-        };
-        for (int i = 0; i < draft.coreLoopBeats.length; i++) {
-          final rawBeat = draft.coreLoopBeats[i].trim();
-          if (rawBeat.isEmpty || prevSet.contains(rawBeat.toLowerCase())) {
-            continue;
-          }
-          final parsed = _parseStage1CoreLoopBeat(rawBeat, i);
-          final normTitle = parsed.title.toLowerCase().trim();
-          if (existingTitles.contains(normTitle)) continue;
-          final newKw =
-              _extractBeatKeywords('${parsed.title} ${parsed.description}');
-          final matchesExisting = existingKeywordsList.any(
-            (ek) => _keywordSetOverlap(newKw, ek) >= 0.45,
-          );
-          if (!matchesExisting) {
-            addLiveEpicToActiveRelease(rawBeat);
-            existingTitles.add(normTitle);
-            existingKeywordsList.add(newKw);
-          }
-        }
-      }
-      rel.sections['synced_core_loop_sig'] = currentLoopSig;
-      _persistDocument(rel);
-      return;
-    }
-    rel.sections['synced_core_loop_sig'] = currentLoopSig;
-
-    final existingBeats = <TierDocument>[
-      for (final bid in rel.childrenIds)
-        if (documents[bid] != null) documents[bid]!,
-    ];
-    if (existingBeats.isEmpty) return;
-
-    final parsedStage1Beats = [
-      for (int i = 0; i < draft.coreLoopBeats.length; i++)
-        _parseStage1CoreLoopBeat(draft.coreLoopBeats[i], i),
-    ];
-
-    final isConsolidatedSystemRelease =
-        rel.sections['systemEpicsConsolidated'] == 'true';
-    final stage1KeywordSets = [
-      for (final sBeat in parsedStage1Beats)
-        _extractBeatKeywords('${sBeat.title} ${sBeat.description}'),
-    ];
-    final existingBeatKeywordSets = {
-      for (final candidate in existingBeats)
-        candidate.id: _extractBeatKeywords(
-          <String>[
-            candidate.title,
-            candidate.sections['scope'] ?? '',
-            if (isConsolidatedSystemRelease)
-              for (final fid in candidate.childrenIds)
-                if (documents[fid] != null) ...<String>[
-                  documents[fid]!.title,
-                  documents[fid]!.sections['scope'] ?? '',
-                ],
-          ].join(' '),
-        ),
-    };
-
-    final matchedBeatForStage1Idx = <int, TierDocument>{};
-    final claimedBeatIds = <String>{};
-
-    // Pass 1: Global Exact & High-Similarity Match (`>= 0.45` keyword overlap) across all positions
-    // so shifted beats (e.g., when a middle beat is deleted) claim their true Epic first.
-    for (int i = 0; i < parsedStage1Beats.length; i++) {
-      final sBeat = parsedStage1Beats[i];
-      final sKeywords = stage1KeywordSets[i];
-      final normTitle = sBeat.title.toLowerCase().trim();
-      TierDocument? bestMatch;
-      double bestScore = 0.0;
-
-      for (final candidate in existingBeats) {
-        if (claimedBeatIds.contains(candidate.id)) continue;
-        final candNorm = candidate.title.toLowerCase().trim();
-        if (candNorm == normTitle ||
-            (candNorm.length >= 4 &&
-                normTitle.length >= 4 &&
-                (candNorm.contains(normTitle) || normTitle.contains(candNorm)))) {
-          bestMatch = candidate;
-          bestScore = 1.0;
-          break;
-        }
-        final overlap = _keywordSetOverlap(
-          sKeywords,
-          existingBeatKeywordSets[candidate.id] ?? const <String>{},
-        );
-        if (overlap >= 0.45 && overlap > bestScore) {
-          bestScore = overlap;
-          bestMatch = candidate;
-        }
-      }
-
-      if (bestMatch != null) {
-        matchedBeatForStage1Idx[i] = bestMatch;
-        claimedBeatIds.add(bestMatch.id);
-      }
-    }
-
-    // Pass 1b (Many-to-1 System Epic Coverage):
-    // Multiple chronological Loop Beats can belong to the same consolidated System Epic
-    // (e.g., "Settlement Barter" + "Gear Resupply" -> "Settlement Merchant & Resupply").
-    if (isConsolidatedSystemRelease) {
-      for (int i = 0; i < parsedStage1Beats.length; i++) {
-        if (matchedBeatForStage1Idx.containsKey(i)) continue;
-        final sBeat = parsedStage1Beats[i];
-        final sTitleKeywords = _extractBeatKeywords(sBeat.title);
-        final sKeywords = stage1KeywordSets[i];
-        TierDocument? bestSharedSystemEpic;
-        double bestSharedScore = 0.0;
-
-        for (final candidate in existingBeats) {
-          final candKeywords =
-              existingBeatKeywordSets[candidate.id] ?? const <String>{};
-          final titleOverlap = _keywordSetOverlap(sTitleKeywords, candKeywords);
-          final fullOverlap = _keywordSetOverlap(sKeywords, candKeywords);
-          final score = titleOverlap > fullOverlap ? titleOverlap : fullOverlap;
-          if (score >= 0.34 && score > bestSharedScore) {
-            bestSharedScore = score;
-            bestSharedSystemEpic = candidate;
-          }
-        }
-
-        if (bestSharedSystemEpic != null) {
-          matchedBeatForStage1Idx[i] = bestSharedSystemEpic;
-          claimedBeatIds.add(bestSharedSystemEpic.id);
-        }
-      }
-    }
-
-    // Pass 2: Guarded Positional Rename Match (Edge Case 3 protection)
-    // Only allow positional fallback (`index == index`) when either:
-    // - Total count is unchanged AND only 1 single beat in the list was edited in-place, OR
-    // - Keyword overlap between the new beat and the existing beat at `i` is `>= 0.20`.
-    final unmatchedStage1Indices = [
-      for (int i = 0; i < parsedStage1Beats.length; i++)
-        if (!matchedBeatForStage1Idx.containsKey(i)) i,
-    ];
-    final isSingleInPlaceRename =
-        parsedStage1Beats.length == existingBeats.length &&
-            unmatchedStage1Indices.length == 1 &&
-            (existingBeats.length - claimedBeatIds.length) == 1;
-
-    for (final idx in unmatchedStage1Indices) {
-      if (idx < existingBeats.length) {
-        final positionalCandidate = existingBeats[idx];
-        if (!claimedBeatIds.contains(positionalCandidate.id)) {
-          final overlap = _keywordSetOverlap(
-            stage1KeywordSets[idx],
-            existingBeatKeywordSets[positionalCandidate.id] ?? const <String>{},
-          );
-          if (isSingleInPlaceRename || overlap >= 0.20) {
-            matchedBeatForStage1Idx[idx] = positionalCandidate;
-            claimedBeatIds.add(positionalCandidate.id);
-          }
-        }
-      }
-    }
-
-    final mappedStage1IndicesByBeatId = <String, List<int>>{};
-    matchedBeatForStage1Idx.forEach((stage1Idx, beatDoc) {
-      mappedStage1IndicesByBeatId
-          .putIfAbsent(beatDoc.id, () => <int>[])
-          .add(stage1Idx);
-    });
-
-    // Pass 3: Reconstruct `rel.childrenIds` in Stage 1 order, updating matched Epics in-place,
-    // creating playable Epics/Features for newly added beats, and archiving removed Epics.
-    final activeVer = activeReleaseVersionTag;
-    final newReleaseBeatIds = <String>[];
-    final newBlueprintBeats = <ProposedBeatBlueprint>[];
-    final formattedStarterTuning =
-        _kSyncStarterTuning.map((p) => '• $p').join('\n');
-
-    for (int i = 0; i < parsedStage1Beats.length; i++) {
-      final sBeat = parsedStage1Beats[i];
-      final existingBeat = matchedBeatForStage1Idx[i];
-
-      if (existingBeat != null) {
-        if (newReleaseBeatIds.contains(existingBeat.id)) {
-          // Co-covered by a shared System Epic that is already in `newReleaseBeatIds`.
-          continue;
-        }
-        final mappedCount =
-            mappedStage1IndicesByBeatId[existingBeat.id]?.length ?? 1;
-        final preserveSystemEpicIdentity =
-            mappedCount > 1 || rel.sections['systemEpicsConsolidated'] == 'true';
-        final oldTitle = existingBeat.title;
-        if (!preserveSystemEpicIdentity) {
-          existingBeat.title = sBeat.title;
-          existingBeat.sections['scope'] =
-              'Goal: Build and playtest ${sBeat.description}\n\nIn Scope:\n• ${sBeat.title}: ${sBeat.description}\n\nDone When: Playtester can trigger and complete ${sBeat.title} in the test scene.';
-          _persistDocument(existingBeat);
-        }
-        newReleaseBeatIds.add(existingBeat.id);
-
-        if (bp != null) {
-          final matchingBpBeat = bp.beats
-              .where(
-                (b) =>
-                    b.id == existingBeat.id ||
-                    b.title.toLowerCase().trim() ==
-                        oldTitle.toLowerCase().trim(),
-              )
-              .firstOrNull;
-          if (matchingBpBeat != null) {
-            if (!preserveSystemEpicIdentity) {
-              matchingBpBeat.title = sBeat.title;
-              matchingBpBeat.goal = sBeat.description;
-            }
-            newBlueprintBeats.add(matchingBpBeat);
-          }
-        }
-      } else {
-        // Brand-new Core Loop Beat added in Stage 1 — create Epic + starter Playable Feature
-        final newBeatId =
-            'beat_${rel.id}_sync_${i + 1}_${DateTime.now().millisecondsSinceEpoch % 10000}';
-        final featTitle = ReleasePlannerAgent.disambiguateFeatureTitleFromBeat(
-          sBeat.title,
-          beatTitle: sBeat.title,
-          featureGoal: sBeat.description,
-          beatIndex: i,
-        );
-        final newFeatId = 'feat_${newBeatId}_1';
-        final playtestGate =
-            'Trigger $featTitle in the test scene -> ${sBeat.description} completes cleanly';
-        final starterTasks = ReleasePlannerAgent.defaultDockStepTitles(
-          subject: featTitle,
-        );
-        final starterGuards = <String>[
-          '[STATE GUARD] Block duplicate $featTitle activation while active',
-        ];
-        final cpNode = FeatureStateNode(
-          id: '${newFeatId}_${activeVer}_cp_1',
-          name: 'Checkpoint 1: $featTitle',
-          trigger: 'Playtest: $playtestGate',
-          order: 0,
-          coveredScope: [featTitle],
-          tuningParams: List<String>.from(_kSyncStarterTuning),
-          edgeCases: starterGuards,
-          parameters: {
-            'releaseVersion': activeVer,
-            if (starterTasks.isNotEmpty)
-              'plannedSlices': starterTasks.join(' | '),
-          },
-        );
-        final newFeatDoc = TierDocument(
-          id: newFeatId,
-          title: featTitle,
-          tier: TierType.feature,
-          parentId: newBeatId,
-          estimatedDuration: '4h',
-          sections: {
-            'originVersion': activeVer,
-            'activeReleaseVersion': activeVer,
-            'lifecycle': FeatureLifecycleStatus.newFeature.name,
-            'needs_ai_enrichment': 'true',
-            'scope':
-                'Goal: Build ${sBeat.description}\n\nIn Scope:\n• $featTitle\n\nDone When: $playtestGate',
-            'tuning': formattedStarterTuning,
-            'variables': formattedStarterTuning,
-            'edge_cases': starterGuards.map((e) => '• $e').join('\n'),
-          },
-        );
-        FeatureStateNode.saveStatesToDocument(newFeatDoc, [cpNode]);
-        documents[newFeatId] = newFeatDoc;
-        _persistDocument(newFeatDoc);
-
-        final newBeatDoc = TierDocument(
-          id: newBeatId,
-          title: sBeat.title,
-          tier: TierType.epic,
-          parentId: rel.id,
-          estimatedDuration: '4h',
-          childrenIds: [newFeatId],
-          sections: {
-            'scope':
-                'Goal: Build and playtest ${sBeat.description}\n\nIn Scope:\n• $featTitle\n\nDone When: $playtestGate',
-          },
-        );
-        documents[newBeatId] = newBeatDoc;
-        _persistDocument(newBeatDoc);
-        newReleaseBeatIds.add(newBeatId);
-
-        if (bp != null) {
-          newBlueprintBeats.add(
-            ProposedBeatBlueprint(
-              id: newBeatId,
-              title: sBeat.title,
-              goal: sBeat.description,
-              doneWhen: playtestGate,
-              features: [
-                ProposedFeatureBlueprint(
-                  id: newFeatId,
-                  title: featTitle,
-                  goal: 'Build ${sBeat.description}',
-                  doneWhen: playtestGate,
-                  estimatedHours: 4,
-                  included: true,
-                  lifecycle: FeatureLifecycleStatus.newFeature,
-                  originVersion: activeVer,
-                  inScope: [featTitle],
-                  outOfScope: const [],
-                  tuningParams: List<String>.from(_kSyncStarterTuning),
-                  edgeCases: starterGuards,
-                  checkpoints: [
-                    ProposedCheckpointBlueprint(
-                      title: featTitle,
-                      playtestCriteria: playtestGate,
-                      tasks: starterTasks,
-                      coveredScope: [featTitle],
-                      tuningParams: List<String>.from(_kSyncStarterTuning),
-                      edgeCases: starterGuards,
-                      releaseVersion: activeVer,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          );
-        }
-      }
-    }
-
-    // Archive any removed Stage 1 Beats on single-release v0.1 projects (without deleting historical feature progress).
-    // If v0.2+ releases already exist, preserve any v0.2+ Epics rather than superseding them.
-    if (newReleaseBeatIds.isNotEmpty) {
-      for (final oldBeat in existingBeats) {
-        if (!claimedBeatIds.contains(oldBeat.id)) {
-          if (isSingleV01Release) {
-            for (final fid in oldBeat.childrenIds) {
-              final fDoc = documents[fid];
-              if (fDoc != null) {
-                fDoc.sections['lifecycle'] =
-                    FeatureLifecycleStatus.superseded.name;
-                _persistDocument(fDoc);
-              }
-            }
-          } else if (!newReleaseBeatIds.contains(oldBeat.id)) {
-            newReleaseBeatIds.add(oldBeat.id);
-          }
-        }
-      }
-      rel.childrenIds = newReleaseBeatIds;
-      if (!isSingleV01Release) {
-        for (final otherRel in releases) {
-          if (otherRel.id != rel.id && otherRel.childrenIds.isNotEmpty) {
-            for (final bId in newReleaseBeatIds) {
-              if (!otherRel.childrenIds.contains(bId)) {
-                otherRel.childrenIds.add(bId);
-              }
-            }
-            _persistDocument(otherRel);
-          }
-        }
-      }
-      if (bp != null && newBlueprintBeats.isNotEmpty) {
-        bp.beats = newBlueprintBeats;
-        rel.sections['release_blueprint_json'] = jsonEncode(bp.toJson());
-      }
-      _persistDocument(rel);
-      if (_selectedBeatId == null ||
-          !newReleaseBeatIds.contains(_selectedBeatId)) {
-        _selectFirstIncompleteFeatureInActiveRelease();
-      }
-      if (_currentStage == WorkbenchStage.releaseWorkbench &&
-          _selectedFeatureId != null) {
-        final selFeat = documents[_selectedFeatureId!];
-        if (selFeat != null &&
-            selFeat.sections['needs_ai_enrichment'] == 'true' &&
-            (GeminiAgentClient.hasKey(_apiKey) ||
-                GeminiAgentClient.testMockResponder != null)) {
-          selectFeature(selFeat.id);
-        }
-      }
-    }
+    notifyListeners();
+    return relId;
   }
 }
-
