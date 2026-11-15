@@ -700,56 +700,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     );
   }
 
-  Widget _buildLiveSynthesisPlaceholder({
-    required TierDocument feat,
-    required bool isSynthesizingFeatureNow,
-  }) {
-    return Container(
-      key: ValueKey('feature_steps_in_progress_${feat.id}'),
-      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 18),
-      decoration: BoxDecoration(
-        color: bgSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: borderSubtle),
-      ),
-      child: Column(
-        children: [
-          SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(
-              strokeWidth: 2.2,
-              color: isSynthesizingFeatureNow
-                  ? const Color(0xFFFBBF24)
-                  : textMuted,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            isSynthesizingFeatureNow
-                ? 'Drafting ${feat.title} Brief…'
-                : '${feat.title} — Drafting Brief',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: textPrimary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Preparing plain-English Goal, In Scope, and Done When playtest criteria…',
-            textAlign: TextAlign.center,
-            style: GoogleFonts.inter(
-              fontSize: 12,
-              color: textMuted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildInlinePlaytestBugDrawer({
     required TierDocument feat,
     required List<FeatureStateNode> states,
@@ -912,11 +862,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
       beatIndex: parentBeatIdx,
     );
 
-    final isFeatureBeingBuiltInLiveMode =
-        widget.workbench.isFeatureBeingBuiltInLiveMode(feat.id);
-    final isSynthesizingFeatureNow =
-        widget.workbench.isSynthesizingFeatureSteps(feat.id);
-
     final Widget doneBtn = _buildUnifiedDoneButton(
       feat: feat,
       states: states,
@@ -932,22 +877,14 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
 
     final isDrawerOpen = _inlineBugDrawerNodeId == node.id;
 
-    final Widget bodyContent = isFeatureBeingBuiltInLiveMode
-        ? Padding(
-            padding: EdgeInsets.all(isHalfScreenOverlayMode ? 12 : 16),
-            child: _buildLiveSynthesisPlaceholder(
-              feat: feat,
-              isSynthesizingFeatureNow: isSynthesizingFeatureNow,
-            ),
-          )
-        : _buildPlaytestGateWorkspacePane(
-            feat: feat,
-            states: states,
-            checkpointIndex: index,
-            node: node,
-            epicShortCode: epicShortCode,
-            epicTitle: cleanEpicTitle,
-          );
+    final Widget bodyContent = _buildPlaytestGateWorkspacePane(
+      feat: feat,
+      states: states,
+      checkpointIndex: index,
+      node: node,
+      epicShortCode: epicShortCode,
+      epicTitle: cleanEpicTitle,
+    );
 
     return Container(
       key: ValueKey('checkpoint_single_col_$index'),

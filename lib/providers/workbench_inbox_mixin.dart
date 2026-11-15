@@ -375,12 +375,7 @@ extension WorkbenchInboxMixin on WorkbenchProvider {
       final feats = featuresForBeat(b.id);
       final featSummary = feats.isEmpty
           ? '(no features yet)'
-          : feats.map((f) {
-              final asset = (f.sections['primary_asset'] ?? '').trim();
-              final assetSuffix =
-                  asset.isNotEmpty ? ' [shared asset: $asset]' : '';
-              return '${f.id}:"${f.title}"$assetSuffix';
-            }).join(', ');
+          : feats.map((f) => '${f.id}:"${f.title}"').join(', ');
       beatCatalogLines.add(
         '- Epic E${(bIdx + 1).toString().padLeft(2, '0')} [id="${b.id}"]: "${b.title}" -> Features: [$featSummary]',
       );
@@ -395,7 +390,7 @@ You are the Principal Game Producer & Lead Systems Architect ($engineLabel) for 
 Triage this developer feature request captured in the Feature Inbox across 3 dimensions:
 1. WHEN (Release Timing): Does it belong in the CURRENT release ($activeVer · ${_currentPhase.label}), should it be SPLIT (lean 4h core slice in $activeVer now + deeper upgrade scheduled for a future ProductionPhase), or should it be SCHEDULED entirely for a future ProductionPhase (mvp, verticalSlice, fullProduction, postLaunch)?
 2. WHERE (Single Live Tree Placement): Which existing Epic (or new Epic) owns it, and should it be a standalone NEW feature ("newFeatureInEpic") or an UPGRADE checkpoint on an existing Feature ("upgradeExistingFeature")?
-3. HOW (Implementation Architecture): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Engine Architecture bullets ($engineLabel matching the project's 2D/3D spec), Playtest Gate, Dock-Aligned Build Steps (editor_setup -> inspector_setup -> script_logic -> wire_and_verify), Tuning Params, and [STATE GUARD] rules.
+3. HOW (Feature Specification): Plain 2-4 word functional title, Goal/In Scope/Done When, 3 Feature Specification bullets ($engineLabel matching the project's 2D/3D spec), Playtest Gate, Tuning Params, and [STATE GUARD] rules.
 
 Developer Request: "${item.rawIdea}"
 Active Release: $activeVer (${_currentPhase.label})
@@ -404,7 +399,7 @@ Existing Epics & Live Features:
 ${beatCatalogLines.join('\n')}
 
 ${GeminiAgentClient.compactStyleRules}
-- If `releaseTimingMode` is `"now"`, omit `"targetFuturePhase"`, `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, `"futureTasks"`, `"futureTuningParams"`, and `"futureEdgeCases"`.
+- If `releaseTimingMode` is `"now"`, omit `"targetFuturePhase"`, `"futureCheckpointTitle"`, `"futureGoal"`, `"futurePlaytestGate"`, `"futureTuningParams"`, and `"futureEdgeCases"`.
 
 Invoke `commit_inbox_feature_triage` with the structured triage recommendation.''';
 
@@ -479,11 +474,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
     if (aiGoal.isNotEmpty) target.goal = aiGoal;
     final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
     if (aiDoneWhen.isNotEmpty) target.doneWhen = aiDoneWhen;
-    final aiPrimaryAsset =
-        json['primarySharedScriptOrScene']?.toString().trim() ?? '';
-    if (aiPrimaryAsset.isNotEmpty) {
-      target.primarySharedScriptOrScene = aiPrimaryAsset;
-    }
     final aiCpTitle = json['checkpointTitle']?.toString().trim() ?? '';
     if (aiCpTitle.isNotEmpty) target.checkpointTitle = aiCpTitle;
     final aiGate = json['playtestGate']?.toString().trim() ?? '';
@@ -730,14 +720,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
       final tasks = item.tasks.isNotEmpty
           ? item.tasks
           : ReleasePlannerAgent.defaultDockStepTitles(subject: cpTitle);
-      final existingPrimaryAsset =
-          (featDoc.sections['primary_asset'] ?? '').trim();
-      final resolvedPrimaryAsset = existingPrimaryAsset.isNotEmpty
-          ? existingPrimaryAsset
-          : (item.primarySharedScriptOrScene ?? '').trim();
-      if (existingPrimaryAsset.isEmpty && resolvedPrimaryAsset.isNotEmpty) {
-        featDoc.sections['primary_asset'] = resolvedPrimaryAsset;
-      }
       final newCp = FeatureStateNode(
         id: '${featDoc.id}_${activeVer}_cp_$nextCpNum',
         name: 'Checkpoint $nextCpNum: $cpTitle',
@@ -749,8 +731,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
         parameters: {
           'releaseVersion': activeVer,
           if (tasks.isNotEmpty) 'plannedSlices': tasks.join(' | '),
-          if (resolvedPrimaryAsset.isNotEmpty)
-            'primarySharedScriptOrScene': resolvedPrimaryAsset,
         },
       );
       states.add(newCp);
@@ -811,8 +791,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
         .map((s) => '• $s')
         .join('\n');
 
-    final inboxPrimaryAsset =
-        (item.primarySharedScriptOrScene ?? '').trim();
     final featDoc = TierDocument(
       id: featId,
       title: item.featureTitle,
@@ -823,7 +801,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
         'originVersion': activeVer,
         'activeReleaseVersion': activeVer,
         'lifecycle': FeatureLifecycleStatus.newFeature.name,
-        if (inboxPrimaryAsset.isNotEmpty) 'primary_asset': inboxPrimaryAsset,
         'scope':
             'Goal: ${item.goal}\n\nIn Scope:\n$inScopeBullets\n\nDone When: ${item.doneWhen}',
         'variables': formattedTuning,
@@ -842,8 +819,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
       parameters: {
         'releaseVersion': activeVer,
         if (tasks.isNotEmpty) 'plannedSlices': tasks.join(' | '),
-        if (inboxPrimaryAsset.isNotEmpty)
-          'primarySharedScriptOrScene': inboxPrimaryAsset,
       },
     );
     FeatureStateNode.saveStatesToDocument(featDoc, [cpNode]);
@@ -869,8 +844,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
               included: true,
               lifecycle: FeatureLifecycleStatus.newFeature,
               originVersion: activeVer,
-              primarySharedScriptOrScene:
-                  inboxPrimaryAsset.isNotEmpty ? inboxPrimaryAsset : null,
               inScope:
                   item.inScope.isNotEmpty ? item.inScope : [item.featureTitle],
               outOfScope: const [],
@@ -1032,11 +1005,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
         existingFeat.estimatedHours = 4;
         existingFeat.goal = goalText;
         existingFeat.doneWhen = gateText;
-        if ((existingFeat.primarySharedScriptOrScene ?? '').trim().isEmpty &&
-            (item.primarySharedScriptOrScene ?? '').trim().isNotEmpty) {
-          existingFeat.primarySharedScriptOrScene =
-              item.primarySharedScriptOrScene!.trim();
-        }
         if (effectiveTuning.isNotEmpty) {
           existingFeat.tuningParams = List<String>.from(effectiveTuning);
         }
@@ -1071,11 +1039,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
               included: true,
               lifecycle: FeatureLifecycleStatus.newFeature,
               originVersion: verTag,
-              primarySharedScriptOrScene:
-                  (item.primarySharedScriptOrScene != null &&
-                          item.primarySharedScriptOrScene!.trim().isNotEmpty)
-                      ? item.primarySharedScriptOrScene!.trim()
-                      : null,
               inScope:
                   item.inScope.isNotEmpty ? item.inScope : [item.featureTitle],
               outOfScope: const [],

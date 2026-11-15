@@ -152,12 +152,11 @@ class ReleasePlannerAgent {
 
   /// Native Gemini Tool Declaration for `planRelease` (`commit_release_plan`).
   /// Enforces 100% dynamic counts for Epics (`beats`), Features (`features`), and Checkpoint Tasks (`tasks`),
-  /// while enforcing Foundation-First task build-stage progression (`stage_1_scene_or_data_foundation` ->
-  /// `1..N stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`) at the schema level.
+  /// Commits the ordered Epics, Playable Features, Tuning Parameters, and Guards.
   static const Map<String, dynamic> commitReleasePlanTool = {
     'name': 'commit_release_plan',
     'description':
-        'Commits the structured Epic and Feature Release Plan Blueprint with dynamic Epic, Feature, and Task counts.',
+        'Commits the structured Epic and Feature Release Plan Blueprint with dynamic Epic and Feature counts.',
     'parameters': {
       'type': 'OBJECT',
       'properties': {
@@ -252,11 +251,6 @@ class ReleasePlannerAgent {
                       'description':
                           'Optional title of an earlier feature that this feature replaces/supersedes.',
                     },
-                    'primarySharedScriptOrScene': {
-                      'type': 'STRING',
-                      'description':
-                          'Shared Godot 4 scene or script asset owned or extended by this feature (e.g. "res://scenes/player_character.tscn · res://scripts/player_character.gd").',
-                    },
                     'inScope': {
                       'type': 'ARRAY',
                       'description':
@@ -287,37 +281,8 @@ class ReleasePlannerAgent {
                             'description': LayersTextStyleGuide
                                 .causalTriggerResultSchemaDesc,
                           },
-                          'tasks': {
-                            'type': 'ARRAY',
-                            'description':
-                                'Dynamic list of sequential tasks required to build and verify this checkpoint on one shared asset. Start with stage_1_scene_or_data_foundation, include as many stage_2_mechanic_logic tasks as the mechanic requires, and finish with stage_3_state_and_playtest_verify.',
-                            'items': {
-                              'type': 'OBJECT',
-                              'required': ['role', 'title'],
-                              'properties': {
-                                'role': {
-                                  'type': 'STRING',
-                                  'enum': [
-                                    'stage_1_scene_or_data_foundation',
-                                    'stage_2_mechanic_logic',
-                                    'stage_3_state_and_playtest_verify',
-                                  ],
-                                },
-                                'title': {
-                                  'type': 'STRING',
-                                  'description': LayersTextStyleGuide
-                                      .taskGroupTitleSchemaDesc,
-                                },
-                                'goal': {
-                                  'type': 'STRING',
-                                  'description': LayersTextStyleGuide
-                                      .taskGroupGoalSchemaDesc,
-                                },
-                              },
-                            },
-                          },
                         },
-                        'required': ['title', 'playtestCriteria', 'tasks'],
+                        'required': ['title', 'playtestCriteria'],
                       },
                     },
                   },
@@ -386,7 +351,7 @@ class ReleasePlannerAgent {
   };
 
   /// Native Gemini Tool Declaration for Phase 2 of Section-by-Section Workbench Build (`commit_epic_features`).
-  /// Synthesizes the playable Features (and their tasks, tuning parameters, and guards) for a SINGLE System Epic.
+  /// Synthesizes the playable Features (with tuning parameters and state guards) for a SINGLE System Epic.
   static const Map<String, dynamic> commitEpicFeaturesTool = {
     'name': 'commit_epic_features',
     'description':
@@ -405,13 +370,11 @@ class ReleasePlannerAgent {
               'doneWhen',
               'estimatedHours',
               'buildTier',
-              'primarySharedScriptOrScene',
               'inScope',
               'tuningParams',
               'edgeCases',
               'checkpointTitle',
               'playtestCriteria',
-              'tasks',
             ],
             'properties': {
               'title': {
@@ -433,11 +396,6 @@ class ReleasePlannerAgent {
                 'type': 'STRING',
                 'enum': LayersTextStyleGuide.engineBuildTierEnum,
                 'description': LayersTextStyleGuide.buildTierSchemaDesc,
-              },
-              'primarySharedScriptOrScene': {
-                'type': 'STRING',
-                'description':
-                    'Canonical Godot 4 scene and script owned or extended by this feature (e.g. "res://scenes/player_character.tscn · res://scripts/player_character.gd").',
               },
               'inScope': {
                 'type': 'ARRAY',
@@ -462,35 +420,6 @@ class ReleasePlannerAgent {
                 'type': 'STRING',
                 'description':
                     LayersTextStyleGuide.causalTriggerResultSchemaDesc,
-              },
-              'tasks': {
-                'type': 'ARRAY',
-                'description':
-                    'Dynamic list of sequential tasks required to build and verify this feature on one shared asset. Start with stage_1_scene_or_data_foundation, include as many stage_2_mechanic_logic tasks as the mechanic requires, and finish with stage_3_state_and_playtest_verify.',
-                'items': {
-                  'type': 'OBJECT',
-                  'required': ['role', 'title'],
-                  'properties': {
-                    'role': {
-                      'type': 'STRING',
-                      'enum': [
-                        'stage_1_scene_or_data_foundation',
-                        'stage_2_mechanic_logic',
-                        'stage_3_state_and_playtest_verify',
-                      ],
-                    },
-                    'title': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.taskGroupTitleSchemaDesc,
-                    },
-                    'goal': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.taskGroupGoalSchemaDesc,
-                    },
-                  },
-                },
               },
             },
           },
@@ -524,7 +453,6 @@ class ReleasePlannerAgent {
               'edgeCases',
               'checkpointTitle',
               'playtestCriteria',
-              'tasks',
             ],
             'properties': {
               'id': {'type': 'STRING'},
@@ -552,7 +480,6 @@ class ReleasePlannerAgent {
                 'enum': LayersTextStyleGuide.engineBuildTierEnum,
                 'description': LayersTextStyleGuide.buildTierSchemaDesc,
               },
-              'primarySharedScriptOrScene': {'type': 'STRING'},
               'inScope': {
                 'type': 'ARRAY',
                 'description':
@@ -576,35 +503,6 @@ class ReleasePlannerAgent {
                 'type': 'STRING',
                 'description':
                     LayersTextStyleGuide.causalTriggerResultSchemaDesc,
-              },
-              'tasks': {
-                'type': 'ARRAY',
-                'description':
-                    'Dynamic list of sequential tasks required to build and verify this feature on one shared asset. Start with stage_1_scene_or_data_foundation, include as many stage_2_mechanic_logic tasks as the mechanic requires, and finish with stage_3_state_and_playtest_verify.',
-                'items': {
-                  'type': 'OBJECT',
-                  'required': ['role', 'title'],
-                  'properties': {
-                    'role': {
-                      'type': 'STRING',
-                      'enum': [
-                        'stage_1_scene_or_data_foundation',
-                        'stage_2_mechanic_logic',
-                        'stage_3_state_and_playtest_verify',
-                      ],
-                    },
-                    'title': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.taskGroupTitleSchemaDesc,
-                    },
-                    'goal': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.taskGroupGoalSchemaDesc,
-                    },
-                  },
-                },
               },
             },
           },
@@ -665,7 +563,6 @@ class ReleasePlannerAgent {
                       'enum': ['new', 'upgrade', 'stable', 'superseded'],
                     },
                     'supersedesFeatureTitle': {'type': 'STRING'},
-                    'primarySharedScriptOrScene': {'type': 'STRING'},
                     'inScope': {
                       'type': 'ARRAY',
                       'description':
@@ -695,35 +592,6 @@ class ReleasePlannerAgent {
                             'type': 'STRING',
                             'description': LayersTextStyleGuide
                                 .causalTriggerResultSchemaDesc,
-                          },
-                          'tasks': {
-                            'type': 'ARRAY',
-                            'description':
-                                'Dynamic list of sequential tasks for this checkpoint ordered from stage_1_scene_or_data_foundation -> stage_2_mechanic_logic (1..N) -> stage_3_state_and_playtest_verify.',
-                            'items': {
-                              'type': 'OBJECT',
-                              'required': ['role', 'title'],
-                              'properties': {
-                                'role': {
-                                  'type': 'STRING',
-                                  'enum': [
-                                    'stage_1_scene_or_data_foundation',
-                                    'stage_2_mechanic_logic',
-                                    'stage_3_state_and_playtest_verify',
-                                  ],
-                                },
-                                'title': {
-                                  'type': 'STRING',
-                                  'description': LayersTextStyleGuide
-                                      .taskGroupTitleSchemaDesc,
-                                },
-                                'goal': {
-                                  'type': 'STRING',
-                                  'description': LayersTextStyleGuide
-                                      .taskGroupGoalSchemaDesc,
-                                },
-                              },
-                            },
                           },
                         },
                       },
@@ -1111,22 +979,18 @@ $progressiveDiagnosticInstructions
   * `Dependency Rule 2 (Target Entity Before Tool / Tether / Resolver)`: Inside any Epic, always build the physical Target Object, Pickup Body, Container, or Enemy Spawner (`"Scrap Core Physics"`, `"Sentry Drone Spawner"`, `"Water Tank Container"`, `"Cargo Crate"`) BEFORE the Tether, Harpoon, Raycast, Weapon Impact, or Delivery Zone (`"Harpoon Tow Cable"`, `"Drone Projectile Impact"`, `"Winch Docking Zone"`) that attaches to or acts on it. Never put a tether or interaction before the object it hooks onto!
   * `Dependency Rule 3 (Base Mechanic Before Lock / Gate / Constraint)`: Always build the core playable action (`"Mature Crop Harvest"`, `"Heat Cannon Fire"`) BEFORE adding the lock, pressure seal, or overheat gate (`"Tank Seal Depressurize"`, `"Reactor Steam Vent"`) that restricts it.
 - THOROUGH MULTI-FEATURE EPIC DECOMPOSITION: Break each Epic into the exact number of cohesive Playable Features (`"included": true`) needed to complete that Epic end-to-end for ${releaseDoc.title}. Group closely related controls, physics, and feedback into cohesive playable units; split into separate Feature cards inside an Epic whenever they represent distinct mechanics (e.g., planting vs. harvesting, or target spawner vs. weapon fire)!
-- ZERO ARTIFICIAL COUNT LIMITS ON EPICS, FEATURES, OR TASKS: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
+- ZERO ARTIFICIAL COUNT LIMITS ON EPICS OR FEATURES: Never merge distinct features just to hit a smaller number, and never drop a mechanic mentioned in `01 Goal`, `02 Game Spec`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, or `08 Done When`.
 - PLAYABLE BEAT COMPLETENESS (NO ORPHANED MECHANICS): Never leave a weapon, turret, or defense without a reactive enemy/threat/target feature to test it against, never leave a resource/crop system without both planting/spawning and harvesting/pickup features, and ensure the final Epic covers both the specific reward/upgrade payoff and starting the next cycle/run.
 - PLAIN ACTION FEATURE TITLES (NO CODE OR FILLER SUFFIXES & NEVER CLONE EPIC TITLE): Every Feature must name 1 observable gameplay action or interactive world object (`2–3` plain game-dev words, e.g. `"Greybox Arena Layout"`, `"Player Dash"`, `"Enemy Wave Spawner"`, `"Loot Pickup"`, `"Upgrade Terminal"`). NEVER name a child Feature identical to its parent Epic (`beat.title`)—each Feature inside an Epic must name the specific playable action, tool, or object inside that Epic. NEVER use code-architecture or filler nouns (`"Controller"`, `"System"`, `"Mechanic"`, `"Manager"`, `"Component"`, `"Handler"`, `"Action"`, `"Loop"`) and NEVER combine two mechanics with `"&"` or `"and"` in a Feature title.
 - RIGHT-SIZED GREYBOX FEATURES: Keep individual `v0.1` greybox features focused on unpolished playable functionality buildable in one sitting rather than lumping an entire physics or combat architecture into a single monolithic ticket.
 - Keep temporary greybox testbeds in a separate Feature from permanent mechanics.
-- MANDATORY TUNING PARAMETERS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"moveSpeed: 6.0 m/s"`, `"dashCooldown: 0.8 s"`, `"pickupRadius: 1.5 m"`). NEVER return an empty `"tuningParams": []` array on any feature.
-- DYNAMIC, CONCRETE TASKS ON ONE SHARED ASSET (NO TEMPLATE SUFFIXES LIKE "BODY & COLLISION", "ACTION & MATH", OR "CUE & BOUNDARY CLAMP"): Give each Feature checkpoint the exact number of concrete, mechanic-specific tasks (`2–4` words) that its complexity genuinely requires—naming the specific scene node, UI widget, data resource, or gameplay calculation for that feature (NEVER use generic template phrases like `"Body & Collision"`, `"Prop & Collision"`, `"Action & Math"`, `"Cue & Clamp"`, or `"Cue & Boundary Clamp"`):
-  * `stage_1_scene_or_data_foundation` (First Task): Create or place the specific Scene Node, UI Panel, Data Resource, Character, or Interactive Prop for this feature (e.g., `"Capsule Body & Camera"`, `"Merchant Trade Panel"`, `"Cargo Grid Slots"`). NEVER put the words `"Input"`, `"Mapping"`, or `"Keybind"` in the foundation task's title.
-  * `stage_2_mechanic_logic` (`1..N` Middle Tasks): Wire the specific interaction, state transition, movement, or transaction logic onto that same shared asset (e.g., `"WASD Velocity & Look"`, `"Buy & Sell Price Delta"`, `"Slot Drag & Drop"`).
-  * `stage_3_state_and_playtest_verify` (Final Task): Hook a concrete state guard, trigger volume, boundary clamp, or observable screen/audio cue onto that asset (e.g., `"Wall Slide & Pitch Clamp"`, `"KillZ Fall Reset Volume"`, `"Zero-Balance Purchase Lock"`). NEVER emit passive QA/testing task titles (`"Floor Collision Verification"`, `"Movement State Verification"`, `"Playtest Check"`) and keep every task strictly non-overlapping so Task 1 never builds Task 2's geometry or logic.
+- MANDATORY TUNING PARAMETERS & GUARDS ON EVERY FEATURE (NEVER EMPTY): Every single Feature in `beats[].features[]` MUST include `2` to `3` concrete numeric tuning parameters in `"tuningParams"` formatted as `"paramName: value unit"` (e.g., `"moveSpeed: 6.0 m/s"`, `"dashCooldown: 0.8 s"`, `"pickupRadius: 1.5 m"`) and `1–2` `[STATE GUARD]` rules in `"edgeCases"`. NEVER return an empty `"tuningParams": []` array on any feature.
 - `lifecycle`: `"new"` for v0.1; for v0.2+, output only `"upgrade"` (delta hours/checkpoints only), `"new"`, or `"superseded"` (omit untouched `"stable"` features from JSON).
 - THINKING VERIFICATION BEFORE EMITTING JSON:
   1. 100% Concept Coverage: Verify every action in `01 Goal`, `04 Pillars`, `05 Trade-Offs`, `06 Core Loop`, and `08 Done When` has a dedicated Feature while honoring `07 Out of Scope`.
   2. Strict Build Dependency Order: Verify `beat_1` starts with Greybox Level/Arena Blockout before Character Movement, and every target entity is built before its tool/tether/gate.
   3. Concrete Tuning & Guards: Verify every Feature has 2–3 `"paramName: value unit"` entries in `tuningParams` and `[TAG]` edge-case guards.
-  4. Progressive Delta Integrity: For v0.2+, verify `"upgrade"` checkpoints extend existing v0.1 features in-place without duplicating v0.1 tasks.
+  4. Progressive Delta Integrity: For v0.2+, verify `"upgrade"` checkpoints extend existing v0.1 features in-place without duplicating v0.1 scope.
 
 Call `commit_release_plan` with the structured release blueprint.
 ''';
@@ -1627,13 +1491,11 @@ ${GeminiAgentClient.compactStyleRules}
 - DETERMINE THE PLAYABLE FEATURES NEEDED FOR E$epicNum (5-TIER ENGINE BUILD DEPENDENCY ORDER):
   * Break E$epicNum ("${epicBlueprint.title}") into the exact number of cohesive, singular-focused Playable Features (`1..M`) needed to build this system end-to-end.
   * NEVER name a Feature identical to the Epic title ("${epicBlueprint.title}"). Each Feature must name a specific playable mechanic, tool, or interactive object inside E$epicNum (`2–3` plain game-dev words, e.g., `"Greybox Dome Floor"`, `"Player Walk & Aim"`, `"Laser Debris Cutter"`).
-  * Assign `buildTier` and `primarySharedScriptOrScene` on EVERY feature and order Features strictly from Tier 1 to Tier 5:
+  * Assign `buildTier` on EVERY feature and order Features strictly from Tier 1 to Tier 5:
     ${epicIndex == 0 ? '1. `tier_1_world_space` FIRST: Feature #1 in E01 MUST be the Greybox Level/Arena/Grid Blockout & Collision surface BEFORE `tier_2_actor_locomotion` (Player/Vehicle/Tool movement) at Feature #2.' : '1. `tier_3_targets_hazards` BEFORE `tier_4_verbs_tools_combat`: Place any target entity, enemy, container, prop, or spawner BEFORE the weapon, projectile, tool, tether, or harvester that acts on it.'}
     2. `tier_5_loop_economy_hud` LAST: Place any HUD widget, counter, shop panel, round reset, or pressure/seal lock gate AFTER the base gameplay mechanics and state variables it reads or restricts.
-- MANDATORY SHARED ASSET, TUNING, GUARDS & MECHANIC-SPECIFIC TASKS ON EVERY FEATURE:
-  * Set `primarySharedScriptOrScene` to the exact Godot 4 scene (.tscn) and script (.gd) filename for that feature (reusing an earlier feature's player/actor script when adding a player-attached ability, or naming a dedicated target/weapon/UI asset).
+- MANDATORY TUNING & GUARDS ON EVERY FEATURE:
   * Include 2–3 concrete `"paramName: numericValue unit"` entries in `tuningParams` and 1–2 `[TAG]` guard rules in `edgeCases`.
-  * Include non-overlapping, foundation-first `tasks` (`stage_1_scene_or_data_foundation` -> `stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`) whose `title` names the specific scene node, UI widget, data resource, or gameplay calculation for that feature (NEVER use generic template phrases like `"Body & Collision"`, `"Prop & Collision"`, `"Action & Math"`, `"Cue & Clamp"`, `"Cue & Boundary Clamp"`, or passive `"Verification"` / `"Testing"` task titles).
 
 Call `commit_epic_features` with the ordered playable features.
 ''';
@@ -1675,8 +1537,6 @@ Call `commit_epic_features` with the ordered playable features.
         final estHours =
             (int.tryParse(fMap['estimatedHours']?.toString() ?? '') ?? 4)
                 .clamp(2, 16);
-        final primaryAsset =
-            (fMap['primarySharedScriptOrScene'] ?? '').toString().trim();
         final rawBuildTier = (fMap['buildTier'] ?? '').toString().trim();
         final inScope = (fMap['inScope'] is List)
             ? (fMap['inScope'] as List)
@@ -1742,8 +1602,6 @@ Call `commit_epic_features` with the ordered playable features.
             included: true,
             lifecycle: FeatureLifecycleStatus.newFeature,
             originVersion: versionTag,
-            primarySharedScriptOrScene:
-                primaryAsset.isNotEmpty ? primaryAsset : null,
             buildTier: rawBuildTier.isNotEmpty ? rawBuildTier : null,
             inScope: inScope,
             outOfScope: const <String>[],
@@ -1812,7 +1670,6 @@ Call `commit_epic_features` with the ordered playable features.
       for (final ef in existingFeats) {
         final isSuperseded =
             ef.sections['lifecycle'] == FeatureLifecycleStatus.superseded.name;
-        final existingAsset = (ef.sections['primary_asset'] ?? '').trim();
         proposedFeats.add(
           ProposedFeatureBlueprint(
             id: ef.id,
@@ -1825,8 +1682,6 @@ Call `commit_epic_features` with the ordered playable features.
                 ? FeatureLifecycleStatus.superseded
                 : FeatureLifecycleStatus.stable,
             originVersion: ef.sections['originVersion'] ?? 'v0.1',
-            primarySharedScriptOrScene:
-                existingAsset.isNotEmpty ? existingAsset : null,
             inScope: SectionTextUtils.resolveInScope(ef.sections),
             outOfScope: const [],
             tuningParams: const [],
@@ -1956,9 +1811,9 @@ ${existingFeatLines.isNotEmpty ? existingFeatLines.join('\n') : '(No existing fe
 - PHASE DIRECTIVE: $phaseUpgradeDirective
 ${GeminiAgentClient.compactStyleRules}
 - WHOLE-EPIC COMPLETION RULE (NO PARTIAL EPICS):
-  * Because **Epic $epicCode · ${epicDoc.title}** was chosen for $versionTag, you MUST return an `"upgrade"` entry for **EVERY** existing non-superseded feature listed above in Epic $epicCode (using its EXACT `"id"` and `"title"`), describing its $versionTag delta upgrade in `"goal"`, `"inScope"`, and `"tasks"`, so the **entire Epic $epicCode** is completed in $versionTag.
+  * Because **Epic $epicCode · ${epicDoc.title}** was chosen for $versionTag, you MUST return an `"upgrade"` entry for **EVERY** existing non-superseded feature listed above in Epic $epicCode (using its EXACT `"id"` and `"title"`), describing its $versionTag delta upgrade in `"goal"` and `"inScope"`, so the **entire Epic $epicCode** is completed in $versionTag.
   * You may also add a brand-new feature in Epic $epicCode (`"lifecycle": "new"`) if a missing mechanic is required to complete the Epic.
-  * Include 2–3 `"paramName: numericValue unit"` entries in `"tuningParams"`, 1–2 `[STATE GUARD]` rules in `"edgeCases"`, and non-overlapping, foundation-first `"tasks"` (`stage_1_scene_or_data_foundation` -> `stage_2_mechanic_logic` -> `stage_3_state_and_playtest_verify`) whose `title` names the specific scene node, UI widget, data resource, or gameplay calculation (NEVER use generic template phrases like `"Body & Collision"`, `"Prop & Collision"`, `"Action & Math"`, `"Cue & Clamp"`, `"Cue & Boundary Clamp"`, or passive `"Verification"` / `"Testing"` task titles).
+  * Include 2–3 `"paramName: numericValue unit"` entries in `"tuningParams"` and 1–2 `[STATE GUARD]` rules in `"edgeCases"`.
 
 Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features for Epic $epicCode.
 ''';
@@ -2097,10 +1952,6 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
                     ? FeatureLifecycleStatus.superseded
                     : FeatureLifecycleStatus.stable,
                 originVersion: ef.sections['originVersion'] ?? 'v0.1',
-                primarySharedScriptOrScene:
-                    (ef.sections['primary_asset'] ?? '').trim().isNotEmpty
-                        ? ef.sections['primary_asset']!.trim()
-                        : null,
                 inScope: SectionTextUtils.resolveInScope(ef.sections),
                 outOfScope: const [],
                 tuningParams: const [],
@@ -2151,7 +2002,6 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
         included: true,
         lifecycle: FeatureLifecycleStatus.upgrade,
         originVersion: f.originVersion,
-        primarySharedScriptOrScene: f.primarySharedScriptOrScene,
         inScope: <String>[defaultGoal],
         outOfScope: const [],
         tuningParams: tuning,
@@ -2351,20 +2201,18 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
   }
 
   /// Formats a planned feature into a compact 1-line cross-Epic contract so subsequent
-  /// Epics see existing shared scripts/scenes and variable names during feature planning.
+  /// Epics see existing feature names and tuning variable names during feature planning.
   static String formatFeatureContractForEpicPlanning(
     ProposedFeatureBlueprint feat, {
     required int epicIndex,
   }) {
     final epicCode = 'E${(epicIndex + 1).toString().padLeft(2, '0')}';
-    final asset = (feat.primarySharedScriptOrScene ?? '').trim();
     final vars = feat.tuningParams
         .map((p) => p.split(':').first.trim())
         .where((v) => v.isNotEmpty)
         .take(3)
         .join(', ');
     final metaParts = <String>[
-      if (asset.isNotEmpty) 'asset: $asset',
       if (vars.isNotEmpty) 'vars: $vars',
     ];
     return metaParts.isEmpty
@@ -2648,8 +2496,6 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
             (fMap['originVersion'] ?? versionTag).toString().trim();
         final supersedesTitle =
             fMap['supersedesFeatureTitle']?.toString().trim();
-        final primaryAsset =
-            fMap['primarySharedScriptOrScene']?.toString().trim();
         final rawBuildTier = fMap['buildTier']?.toString().trim();
 
         final inScope = _parseStringList(fMap['inScope']);
@@ -2714,10 +2560,6 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
             supersedesFeatureTitle:
                 (supersedesTitle != null && supersedesTitle.isNotEmpty)
                     ? supersedesTitle
-                    : null,
-            primarySharedScriptOrScene:
-                (primaryAsset != null && primaryAsset.isNotEmpty)
-                    ? primaryAsset
                     : null,
             buildTier: (rawBuildTier != null && rawBuildTier.isNotEmpty)
                 ? rawBuildTier
@@ -3724,13 +3566,6 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
             lf.title = matchedEf.title;
           }
           lf.originVersion = matchedEf.sections['originVersion'] ?? 'v0.1';
-          final existingAsset =
-              (matchedEf.sections['primary_asset'] ?? '').trim();
-          if ((lf.primarySharedScriptOrScene == null ||
-                  lf.primarySharedScriptOrScene!.trim().isEmpty) &&
-              existingAsset.isNotEmpty) {
-            lf.primarySharedScriptOrScene = existingAsset;
-          }
           matchedByExistingId[matchedEf.id] = lf;
         } else {
           if (lf.lifecycle == FeatureLifecycleStatus.upgrade) {
@@ -3759,7 +3594,6 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
         if (matchedLf != null) {
           orderedFeatures.add(matchedLf);
         } else {
-          final existingAsset = (ef.sections['primary_asset'] ?? '').trim();
           orderedFeatures.add(
             ProposedFeatureBlueprint(
               id: ef.id,
@@ -3772,8 +3606,6 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
                   ? FeatureLifecycleStatus.superseded
                   : FeatureLifecycleStatus.stable,
               originVersion: ef.sections['originVersion'] ?? 'v0.1',
-              primarySharedScriptOrScene:
-                  existingAsset.isNotEmpty ? existingAsset : null,
               inScope: SectionTextUtils.resolveInScope(ef.sections),
               outOfScope: const [],
               tuningParams: const [],
@@ -3861,7 +3693,7 @@ Call `commit_progressive_epic_changes` with the active UPGRADE and NEW features 
     final currentBeatsSummary = blueprint.beats
         .map(
           (b) => '- ${b.id} "${b.title}": '
-              '${b.features.map((f) => '"${f.title}" [id: ${f.id}, origin: ${f.originVersion.isNotEmpty ? f.originVersion : "v0.1"}, ${f.lifecycle.name}, ${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h${(f.primarySharedScriptOrScene != null && f.primarySharedScriptOrScene!.trim().isNotEmpty) ? ", asset: ${f.primarySharedScriptOrScene!.trim()}" : ""}${f.tuningParams.isNotEmpty ? ", vars: ${f.tuningParams.take(2).join("; ")}" : ""}]').join(', ')}',
+              '${b.features.map((f) => '"${f.title}" [id: ${f.id}, origin: ${f.originVersion.isNotEmpty ? f.originVersion : "v0.1"}, ${f.lifecycle.name}, ${f.included ? "IN" : "DEFERRED"}, ${f.activeDeltaHours}h${f.tuningParams.isNotEmpty ? ", vars: ${f.tuningParams.take(2).join("; ")}" : ""}]').join(', ')}',
         )
         .join('\n');
 
@@ -3911,7 +3743,7 @@ $currentBeatsSummary
 Developer Request: "$cleanMsg"
 ${GeminiAgentClient.compactStyleRules}
 - DELTA-ONLY BEATS: In `beats`, return ONLY the specific Beat(s) that were modified or added by the developer's request (untouched Beats are preserved automatically).
-- Keep `Task 1` focused on Scene/Entity/Collision foundation (never Input/Keybind) and include 2–3 `"paramName: value unit"` entries in `tuningParams`.
+- Include 2–3 `"paramName: value unit"` entries in `tuningParams` and 1–2 `[STATE GUARD]` entries in `edgeCases` on modified features.
 
 Call `mutate_release_plan` with the delta updates.
 ''';
@@ -4076,13 +3908,6 @@ Call `mutate_release_plan` with the delta updates.
             if (df.originVersion != blueprint.releaseVersionTag &&
                 df.lifecycle == FeatureLifecycleStatus.newFeature) {
               df.lifecycle = FeatureLifecycleStatus.upgrade;
-            }
-            if ((df.primarySharedScriptOrScene == null ||
-                    df.primarySharedScriptOrScene!.trim().isEmpty) &&
-                existingFeat.primarySharedScriptOrScene != null &&
-                existingFeat.primarySharedScriptOrScene!.trim().isNotEmpty) {
-              df.primarySharedScriptOrScene =
-                  existingFeat.primarySharedScriptOrScene;
             }
             matchedUpdatesById[existingFeat.id] = df;
           } else {
@@ -4478,13 +4303,6 @@ class ReleaseExecutorAgent {
         featDoc.sections['lifecycle'] = resolvedLifecycle.name;
         featDoc.sections.remove('supersededInVersion');
         featDoc.sections.remove('supersededByRelease');
-        final effectivePrimaryAsset = (featBp.primarySharedScriptOrScene != null &&
-                featBp.primarySharedScriptOrScene!.trim().isNotEmpty)
-            ? featBp.primarySharedScriptOrScene!.trim()
-            : (existingFeat?.sections['primary_asset'] ?? '').trim();
-        if (effectivePrimaryAsset.isNotEmpty) {
-          featDoc.sections['primary_asset'] = effectivePrimaryAsset;
-        }
         featDoc.sections['scope'] = 'Goal: ${featBp.goal}\n\n'
             'In Scope:\n$inScopeText\n\n'
             '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
@@ -4542,8 +4360,6 @@ class ReleaseExecutorAgent {
             edgeCases: List<String>.from(cpBp.edgeCases),
             parameters: {
               'releaseVersion': versionTag,
-              if (effectivePrimaryAsset.isNotEmpty)
-                'primarySharedScriptOrScene': effectivePrimaryAsset,
               if (plannedSlices.isNotEmpty)
                 'plannedSlices': plannedSlices.join(' | '),
             },
@@ -4759,8 +4575,6 @@ class ReleaseExecutorAgent {
       final outScopeText = featBp.outOfScope.map((s) => '• $s').join('\n');
       final tuningText = featBp.tuningParams.map((t) => '• $t').join('\n');
       final edgeText = featBp.edgeCases.map((e) => '• $e').join('\n');
-      final effectivePrimaryAsset =
-          (featBp.primarySharedScriptOrScene ?? '').trim();
 
       final featDoc = TierDocument(
         id: featId,
@@ -4772,8 +4586,6 @@ class ReleaseExecutorAgent {
           'originVersion': versionTag,
           'activeReleaseVersion': versionTag,
           'lifecycle': featBp.lifecycle.name,
-          if (effectivePrimaryAsset.isNotEmpty)
-            'primary_asset': effectivePrimaryAsset,
           'scope': 'Goal: ${featBp.goal}\n\n'
               'In Scope:\n$inScopeText\n\n'
               '${outScopeText.isNotEmpty ? 'Out of Scope:\n$outScopeText\n\n' : ''}'
@@ -4821,8 +4633,6 @@ class ReleaseExecutorAgent {
           edgeCases: List<String>.from(cpBp.edgeCases),
           parameters: {
             'releaseVersion': versionTag,
-            if (effectivePrimaryAsset.isNotEmpty)
-              'primarySharedScriptOrScene': effectivePrimaryAsset,
             if (plannedSlices.isNotEmpty)
               'plannedSlices': plannedSlices.join(' | '),
           },

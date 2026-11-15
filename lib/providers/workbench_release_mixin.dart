@@ -334,27 +334,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         _activeProjectId != startProjectId ||
         _activeReleaseId != startReleaseId;
 
-    final e01BeatDoc = activeReleaseBeats.firstOrNull;
-    final e01FeatDocs = e01BeatDoc != null
-        ? featuresForBeat(e01BeatDoc.id)
-        : const <TierDocument>[];
-    final firstFeatureId = e01FeatDocs.firstOrNull?.id;
-
-    // Populate E02..EN Features top-down one Epic at a time in the Outliner
-    // Carry each planned feature's shared script/scene & key tuning vars so later Epics wire directly into them.
-    final firstEpicGeneratedAsset = (firstFeatureId != null
-            ? (documents[firstFeatureId]?.sections['primary_asset'] ?? '')
-            : '')
-        .trim();
-    if (firstEpicGeneratedAsset.isNotEmpty &&
-        blueprint.beats.isNotEmpty &&
-        blueprint.beats.first.features.isNotEmpty &&
-        (blueprint.beats.first.features.first.primarySharedScriptOrScene ?? '')
-            .trim()
-            .isEmpty) {
-      blueprint.beats.first.features.first.primarySharedScriptOrScene =
-          firstEpicGeneratedAsset;
-    }
+    // Populate E02..EN Features top-down one Epic at a time in the Outliner,
+    // carrying each planned feature's key tuning vars so later Epics wire directly into them.
     final plannedFeatureTitles = <String>[
       for (final f in blueprint.beats.first.features)
         ReleasePlannerAgent.formatFeatureContractForEpicPlanning(
@@ -568,19 +549,14 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final specContext = _buildCompactWorkbenchSpecContext();
     final siblingTitles = targetBeat.features
         .where((s) => s.id != featureId)
-        .map((s) {
-          final pAsset = (s.primarySharedScriptOrScene ?? '').trim();
-          return pAsset.isNotEmpty
-              ? '"${s.title}" [shared asset: $pAsset]'
-              : '"${s.title}"';
-        })
+        .map((s) => '"${s.title}"')
         .toList();
 
     final prompt = '''
 You are the Systems Designer for "$projTitle" ($engineLabel).
-Enrich this newly proposed Feature ("${targetFeat.title}" inside Epic "$beatTitle" for ${bp.releaseVersionTag}) so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
-$specContext${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
-- Return the exact number of tasks required: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
+Enrich this newly proposed Feature ("${targetFeat.title}" inside Epic "$beatTitle" for ${bp.releaseVersionTag}) so its goal, scope, doneWhen criteria, numeric tuning parameters, and edge-case guards fit "$projTitle".
+$specContext${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle": ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+- Include 2–3 "paramName: numericValue unit" entries in tuningParams and 1–2 [STATE GUARD] rules in edgeCases.
 Call `commit_live_feature_enrichment` with the enriched feature details.''';
 
     final json = await GeminiAgentClient.generateJson(
@@ -594,8 +570,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     if (json == null || _releaseBlueprint != bp) return;
     final aiGoal = json['goal']?.toString().trim() ?? '';
     final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
-    final aiPrimaryAsset =
-        json['primarySharedScriptOrScene']?.toString().trim() ?? '';
     final aiCpTitle = json['checkpointTitle']?.toString().trim() ?? '';
     final aiGate = json['playtestGate']?.toString().trim() ?? '';
     final extractedTasks =
@@ -609,9 +583,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     }
     if (aiDoneWhen.isNotEmpty) {
       targetFeat.doneWhen = aiDoneWhen;
-    }
-    if (aiPrimaryAsset.isNotEmpty) {
-      targetFeat.primarySharedScriptOrScene = aiPrimaryAsset;
     }
     if (rawInScope is List && rawInScope.isNotEmpty) {
       final scopeItems = rawInScope
@@ -1026,7 +997,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     if (featDoc == null) return;
     final states = FeatureStateNode.getStatesForDocument(featDoc);
     if (states.isEmpty) return;
-    _synthesizingFeatureIds.add(featureId);
+    _enrichingFeatureIds.add(featureId);
     notifyListeners();
     try {
       final projTitle = activeProject?.title ?? 'Game Prototype';
@@ -1036,18 +1007,13 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           ? const <String>[]
           : featuresForBeat(featDoc.parentId!)
               .where((s) => s.id != featureId)
-              .map((s) {
-                final pAsset = (s.sections['primary_asset'] ?? '').trim();
-                return pAsset.isNotEmpty
-                    ? '"${s.title}" [shared asset: $pAsset]'
-                    : '"${s.title}"';
-              })
+              .map((s) => '"${s.title}"')
               .toList();
       final prompt = '''
 You are the Systems Designer for "$projTitle" ($engineLabel).
-Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its tasks, numeric tuning parameters, and edge-case guards fit "$projTitle".
-$specContext${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle" (reuse shared Epic script/scene when appropriate): ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
-- Return the exact number of tasks required: start with Scene/Entity/Collision foundation (never Input/Keybind), include 1..N middle tasks for core mechanic actions/math, finish with observable feedback & boundary clamp, and include 2–3 "paramName: numericValue unit" entries in tuningParams.
+Tailor this newly added Feature ("${featDoc.title}" inside Epic "$beatTitle") so its goal, scope, doneWhen criteria, numeric tuning parameters, and edge-case guards fit "$projTitle".
+$specContext${siblingTitles.isNotEmpty ? 'Sibling Features in "$beatTitle": ${siblingTitles.join(', ')}\n' : ''}${GeminiAgentClient.compactStyleRules}
+- Include 2–3 "paramName: numericValue unit" entries in tuningParams and 1–2 [STATE GUARD] rules in edgeCases.
 Call `commit_live_feature_enrichment` with the enriched feature details.''';
     final json = await GeminiAgentClient.generateJson(
       prompt: prompt,
@@ -1061,12 +1027,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       final cp = states.first;
       final aiGoal = json['goal']?.toString().trim() ?? '';
       final aiDoneWhen = json['doneWhen']?.toString().trim() ?? '';
-      final aiPrimaryAsset =
-          json['primarySharedScriptOrScene']?.toString().trim() ?? '';
-      if (aiPrimaryAsset.isNotEmpty) {
-        featDoc.sections['primary_asset'] = aiPrimaryAsset;
-        cp.parameters['primarySharedScriptOrScene'] = aiPrimaryAsset;
-      }
       final rawInScope = json['inScope'];
       final parsedInScope = (rawInScope is List)
           ? rawInScope
@@ -1144,9 +1104,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         for (final b in bp.beats) {
           for (final f in b.features) {
             if (f.id == featureId) {
-              if (aiPrimaryAsset.isNotEmpty) {
-                f.primarySharedScriptOrScene = aiPrimaryAsset;
-              }
               f.tuningParams = List<String>.from(cp.tuningParams);
               f.edgeCases = List<String>.from(cp.edgeCases);
               f.checkpoints = [
@@ -1175,7 +1132,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       updateFeatureStates(featureId, states);
       }
     } finally {
-      _synthesizingFeatureIds.remove(featureId);
+      _enrichingFeatureIds.remove(featureId);
       notifyListeners();
     }
   }
@@ -1401,21 +1358,11 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     }
   }
 
-  bool isSynthesizingFeatureSteps(String featureId) =>
-      _synthesizingFeatureIds.contains(featureId);
-
-  bool isFeatureWaitingForStepsInLiveMode(String featureId) =>
-      documents[featureId]?.sections['needs_ai_enrichment'] == 'true';
-
-  bool isFeatureBeingBuiltInLiveMode(String featureId) =>
-      isSynthesizingFeatureSteps(featureId) ||
-      isFeatureWaitingForStepsInLiveMode(featureId);
-
   /// Native Gemini Tool (`functionDeclarations`) for Stage 2 "+ Add Feature" in Left Outliner (`_enrichLiveFeatureWithAi`).
   static const Map<String, dynamic> commitLiveFeatureEnrichmentTool = {
     'name': 'commit_live_feature_enrichment',
     'description':
-        'Enriches a newly added Feature card in the active Epic with its goal, doneWhen, checkpoint title, playtest gate, role-ordered tasks, numeric tuning parameters, and edge-case guards.',
+        'Enriches a newly added Feature card in the active Epic with its goal, inScope, doneWhen, checkpoint title, playtest gate, numeric tuning parameters, and edge-case guards.',
     'parameters': {
       'type': 'OBJECT',
       'required': [
@@ -1423,7 +1370,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         'doneWhen',
         'checkpointTitle',
         'playtestGate',
-        'tasks',
         'tuningParams',
         'edgeCases',
       ],
@@ -1441,39 +1387,10 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           'type': 'STRING',
           'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
         },
-        'primarySharedScriptOrScene': {'type': 'STRING'},
         'checkpointTitle': {'type': 'STRING'},
         'playtestGate': {
           'type': 'STRING',
           'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
-        },
-        'tasks': {
-          'type': 'ARRAY',
-          'description':
-              'Sequential build steps ordered from editor_setup (Scene Tree) -> inspector_setup (Properties) -> script_logic (Code) -> wire_and_verify (Signals & F6 Playtest).',
-          'items': {
-            'type': 'OBJECT',
-            'required': ['role', 'title'],
-            'properties': {
-              'role': {
-                'type': 'STRING',
-                'enum': [
-                  'editor_setup',
-                  'inspector_setup',
-                  'script_logic',
-                  'wire_and_verify',
-                ],
-              },
-              'title': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
-              },
-              'goal': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.taskGroupGoalSchemaDesc,
-              },
-            },
-          },
         },
         'tuningParams': {
           'type': 'ARRAY',
@@ -1495,7 +1412,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
   static const Map<String, dynamic> commitInboxFeatureTriageTool = {
     'name': 'commit_inbox_feature_triage',
     'description':
-        'Commits the 3-dimensional Feature Inbox triage (WHEN releaseTimingMode, WHERE integrationMode & targetBeatId, HOW tasks, tuningParams, edgeCases).',
+        'Commits the 3-dimensional Feature Inbox triage (WHEN releaseTimingMode, WHERE integrationMode & targetBeatId, HOW feature spec, tuningParams, edgeCases).',
     'parameters': {
       'type': 'OBJECT',
       'required': [
@@ -1511,7 +1428,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         'architectureHowSummary',
         'checkpointTitle',
         'playtestGate',
-        'tasks',
         'tuningParams',
         'edgeCases',
       ],
@@ -1559,7 +1475,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           'type': 'STRING',
           'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
         },
-        'primarySharedScriptOrScene': {'type': 'STRING'},
         'architectureHowSummary': {
           'type': 'ARRAY',
           'items': {'type': 'STRING'},
@@ -1568,34 +1483,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         'playtestGate': {
           'type': 'STRING',
           'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
-        },
-        'tasks': {
-          'type': 'ARRAY',
-          'description':
-              'Sequential build steps ordered from editor_setup (Scene Tree) -> inspector_setup (Properties) -> script_logic (Code) -> wire_and_verify (Signals & F6 Playtest).',
-          'items': {
-            'type': 'OBJECT',
-            'required': ['role', 'title'],
-            'properties': {
-              'role': {
-                'type': 'STRING',
-                'enum': [
-                  'editor_setup',
-                  'inspector_setup',
-                  'script_logic',
-                  'wire_and_verify',
-                ],
-              },
-              'title': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
-              },
-              'goal': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.taskGroupGoalSchemaDesc,
-              },
-            },
-          },
         },
         'tuningParams': {
           'type': 'ARRAY',
@@ -1617,34 +1504,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         'futurePlaytestGate': {
           'type': 'STRING',
           'description': LayersTextStyleGuide.causalTriggerResultSchemaDesc,
-        },
-        'futureTasks': {
-          'type': 'ARRAY',
-          'description':
-              'Future-phase build steps ordered from editor_setup (Scene Tree) -> inspector_setup (Properties) -> script_logic (Code) -> wire_and_verify (Signals & F6 Playtest).',
-          'items': {
-            'type': 'OBJECT',
-            'required': ['role', 'title'],
-            'properties': {
-              'role': {
-                'type': 'STRING',
-                'enum': [
-                  'editor_setup',
-                  'inspector_setup',
-                  'script_logic',
-                  'wire_and_verify',
-                ],
-              },
-              'title': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.taskGroupTitleSchemaDesc,
-              },
-              'goal': {
-                'type': 'STRING',
-                'description': LayersTextStyleGuide.taskGroupGoalSchemaDesc,
-              },
-            },
-          },
         },
         'futureTuningParams': {
           'type': 'ARRAY',
@@ -2191,7 +2050,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     if (triggerAiSynthesis &&
         (GeminiAgentClient.hasKey(_apiKey) ||
             GeminiAgentClient.testMockResponder != null)) {
-      if (_synthesizingFeatureIds.contains(featureId)) {
+      if (_enrichingFeatureIds.contains(featureId)) {
         return;
       }
       if (feat.sections.remove('needs_ai_enrichment') == 'true') {
@@ -2239,7 +2098,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       }
       final bp = _releaseBlueprint;
       if (bp != null) {
-        final primaryAsset = (feat.sections['primary_asset'] ?? '').trim();
         for (final b in bp.beats) {
           for (final f in b.features) {
             if (f.id == featureId ||
@@ -2251,9 +2109,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
               }
               if (activeCp.edgeCases.isNotEmpty) {
                 f.edgeCases = List<String>.from(activeCp.edgeCases);
-              }
-              if (primaryAsset.isNotEmpty) {
-                f.primarySharedScriptOrScene = primaryAsset;
               }
               if (f.checkpoints.isNotEmpty) {
                 final cpIdx = f.checkpoints.lastIndexWhere(

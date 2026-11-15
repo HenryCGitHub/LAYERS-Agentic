@@ -16,7 +16,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 - Feature Goals & In-Scope (Changelog +Delta): Direct 5-10 word summary of concrete mechanics/deltas (e.g. "+6-pellet cone spread, +knockback impulse" for upgrades; "Magnetic ore shard spawn on enemy kill" for new features). NEVER start feature goals with "Build a playable..." or "Upgrade <Feature> into/with..." and NEVER copy-paste raw user instructions verbatim.
 - Done When, Playtest Gates & Verify (Causal Trigger -> Result): "[Player Action] -> [Observable Screen Result]" (<= 14 words, e.g. "Press Fire within 4m of target -> 6 pellets fan out + push enemy back 2.5m"). NEVER use FPS/60fps targets.
 - Concept Spec Cells (02 Game Spec & 03 Tech Spec): Strictly 2-4 Title-Case words naming the concrete setup (e.g. "3D First-Person", "WASD + Mouse", "Singleplayer", "Rooftop Garden Hub", "Godot 4 (GDScript)", "PC Desktop"). NEVER write narrative sentences, explanatory preambles ("with...", "featuring..."), or punctuation.
-- Unified Step Titles & Instructions (Imperative Runbook, Single Feature Step List): Emit 1 flat Godot-dock-ordered steps[] array (3-7 cohesive steps per checkpoint: editor_setup -> inspector_setup -> script_logic -> wire_and_verify; NO nested T1..T3 parent tasks). steps[].title = 3-4 Title-Case "Verb + Object" words (e.g. "Build Dash Child Nodes", "Spawn 6 Pellet Raycasts", NO "STEP X.Y" prefix); instruction = 1-3 crisp newline-separated command bullets (<= 18 words each) naming the exact node/script and tuning value.''';
+- Tuning Variables & State Guards: Format tuningParams as "paramName: numericValue unit" (e.g. "dashSpeed: 14.0 m/s") and edgeCases as "[STATE GUARD] <3-6 word rule>" (e.g. "[STATE GUARD] Block dash while cooldown active"). Stop at the Feature Specification level (NO micro-step instructions, NO tasks[], NO guessed res:// file paths).''';
 
   // ── Stage 1: Concept Blueprint Schema Descriptions ────────────────────────
 
@@ -459,7 +459,7 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
   ];
 
   static const String stepPhaseRoleSchemaDesc =
-      'Godot workflow dock beat inside a Feature Build Queue: editor_setup (create/attach Scene Tree child nodes in .tscn FIRST), inspector_setup (bind InputMap, Collision Layers, and @export Inspector properties SECOND), script_logic (add/extend functions & math on primarySharedScriptOrScene THIRD), or wire_and_verify (connect Node Signals & verify F6 FOURTH).';
+      'Godot workflow dock beat inside a Feature Build Queue: editor_setup (create/attach Scene Tree child nodes in .tscn FIRST), inspector_setup (bind InputMap, Collision Layers, and @export Inspector properties SECOND), script_logic (add/extend functions & math on the feature script THIRD), or wire_and_verify (connect Node Signals & verify F6 FOURTH).';
 
   static const List<String> verifyModeEnum = <String>[
     'editor',

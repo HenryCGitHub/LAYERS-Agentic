@@ -5506,28 +5506,29 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
 
         // Verify AI Add Workflow Refinements:
-        // 1. commitLiveFeatureEnrichmentTool includes inScope and primarySharedScriptOrScene
+        // 1. commitLiveFeatureEnrichmentTool includes inScope and omits primarySharedScriptOrScene & tasks
         final liveEnrichProps =
             (WorkbenchReleaseMixin.commitLiveFeatureEnrichmentTool['parameters']
                 as Map)['properties'] as Map;
         expect(liveEnrichProps.containsKey('inScope'), isTrue);
         expect(
           liveEnrichProps.containsKey('primarySharedScriptOrScene'),
-          isTrue,
+          isFalse,
         );
+        expect(liveEnrichProps.containsKey('tasks'), isFalse);
 
-        // 2. commitInboxFeatureTriageTool uses typed { role, title } tasks & futureTasks + futureTuningParams & futureEdgeCases
+        // 2. commitInboxFeatureTriageTool includes futureTuningParams & futureEdgeCases and omits tasks/futureTasks/primarySharedScriptOrScene
         final inboxTriageProps =
             (WorkbenchReleaseMixin.commitInboxFeatureTriageTool['parameters']
                 as Map)['properties'] as Map;
         expect(inboxTriageProps.containsKey('futureTuningParams'), isTrue);
         expect(inboxTriageProps.containsKey('futureEdgeCases'), isTrue);
-        final inboxTasksSchema = inboxTriageProps['tasks'] as Map;
-        final inboxTaskItemSchema = inboxTasksSchema['items'] as Map;
-        expect(inboxTaskItemSchema['type'], equals('OBJECT'));
-        final inboxFutureTasksSchema = inboxTriageProps['futureTasks'] as Map;
-        final inboxFutureTaskItemSchema = inboxFutureTasksSchema['items'] as Map;
-        expect(inboxFutureTaskItemSchema['type'], equals('OBJECT'));
+        expect(inboxTriageProps.containsKey('tasks'), isFalse);
+        expect(inboxTriageProps.containsKey('futureTasks'), isFalse);
+        expect(
+          inboxTriageProps.containsKey('primarySharedScriptOrScene'),
+          isFalse,
+        );
 
         // 4. Verify End-to-End AI & Workflow Audit fixes:
         // 4a. commitSparkIntakeTool & proposeSparkExpansionCardsTool require badge & description
@@ -5608,8 +5609,13 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final upgradedStates =
             FeatureStateNode.getStatesForDocument(targetFeatForAddTask);
         expect(
-          upgradedStates.last.parameters['primarySharedScriptOrScene'],
+          targetFeatForAddTask.sections['primary_asset'],
           equals('res://actors/salvage_winch.gd'),
+        );
+        expect(
+          upgradedStates.last.parameters
+              .containsKey('primarySharedScriptOrScene'),
+          isFalse,
         );
 
         // 4d. Stage 1 -> Stage 2 newly synced Core Loop Beat stamps needs_ai_enrichment and clears on selectFeature
@@ -5625,10 +5631,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           equals('true'),
         );
 
-        // 5b. commitInboxFeatureTriageTool & FeatureInboxItem support primarySharedScriptOrScene
+        // 5b. commitInboxFeatureTriageTool & FeatureInboxItem omit retired primarySharedScriptOrScene
         expect(
           inboxTriageProps.containsKey('primarySharedScriptOrScene'),
-          isTrue,
+          isFalse,
         );
         final inboxSample = FeatureInboxItem(
           id: 'inbox_test_1',
@@ -5640,12 +5646,16 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           playtestGate: 'Aim at ledge -> fire hook -> swing across',
           targetBeatId: 'beat_1',
           targetBeatTitle: 'Core Movement',
-          primarySharedScriptOrScene: 'res://actors/grapple_hook.gd',
         );
-        final decodedInbox = FeatureInboxItem.fromJson(inboxSample.toJson());
+        final inboxJson = inboxSample.toJson();
         expect(
-          decodedInbox.primarySharedScriptOrScene,
-          equals('res://actors/grapple_hook.gd'),
+          inboxJson.containsKey('primarySharedScriptOrScene'),
+          isFalse,
+        );
+        final decodedInbox = FeatureInboxItem.fromJson(inboxJson);
+        expect(
+          decodedInbox.featureTitle,
+          equals('Grapple Hook'),
         );
 
         // 5c. buildSectionOptionsTool('techSpec') uses canonical 'Godot 4 (GDScript)' & 'Godot 4 (GDScript + GDExtension C++)'
@@ -5735,7 +5745,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(singleFeaturePrompt, contains('**Design Pillars**:'));
 
         // 8. Pass 5 AI & Workflow Refinements
-        // 8a. Feature Inbox switching integrationMode to upgradeExistingFeature auto-resolves targetFeatureId & syncs primarySharedScriptOrScene
+        // 8a. Feature Inbox switching integrationMode to upgradeExistingFeature auto-resolves targetFeatureId
         final inboxUpgradeIdea = await provider.submitFeatureIdeaToInbox(
           'Add grapple cable sparks and tension recoil',
         );
@@ -6169,7 +6179,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                       'doneWhen':
                           'Playtester dashes through projectiles and sees cooldown bar.',
                       'estimatedHours': 3,
-                      'primarySharedScriptOrScene': 'PlayerTank.gd',
                       'inScope': ['Dash recharge bar', 'I-frame window'],
                       'outOfScope': ['Skill tree perks'],
                       'tuningParams': ['dashCooldown: 1.2 s'],
@@ -6210,7 +6219,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                     'doneWhen':
                         'Clearing wave 1 spawns wave 2 and wave 3 in sequence.',
                     'estimatedHours': 4,
-                    'primarySharedScriptOrScene': 'WaveDirector.gd',
                     'inScope': ['3-wave table', 'Spawn perimeter points'],
                     'outOfScope': ['Endless leaderboard'],
                     'tuningParams': ['waveSpawnDelay: 2.5 s'],
@@ -6627,7 +6635,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                         'goal': '+Weapon rack interactable, +gold upgrade button',
                         'inScope': ['+Forge UI panel', '+Gold deduction'],
                         'doneWhen': 'Click upgrade → Weapon damage increases',
-                        'primarySharedScriptOrScene': 'res://scripts/hub_forge.gd',
                         'checkpoints': [
                           {
                             'title': 'Functional Baseline (Hub Weapon Forge)',
@@ -6656,8 +6663,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                         'goal': '+JSON save writer, +auto-load on boot',
                         'inScope': ['+SaveManager singleton', '+Boot load'],
                         'doneWhen': 'Restart game → Gold and relics restored',
-                        'primarySharedScriptOrScene':
-                            'res://scripts/save_manager.gd',
                         'checkpoints': [
                           {
                             'title':
@@ -8276,13 +8281,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             title: 'Player Dash',
             goal: '+dash',
             doneWhen: 'Shift -> dash',
-            primarySharedScriptOrScene: 'res://scripts/player_controller.gd',
             tuningParams: const ['dashSpeed: 900.0', 'dashCooldown: 0.6'],
           ),
           epicIndex: 0,
         );
         expect(contractLine, contains('E01 · Player Dash'));
-        expect(contractLine, contains('res://scripts/player_controller.gd'));
         expect(contractLine, contains('dashSpeed, dashCooldown'));
         expect(
           ReleasePlannerAgent.extractCleanTitleFromPlannedContract(
@@ -8473,9 +8476,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             id: 'cp_v02',
             name: '[v0.2] Ghost Dash Upgrade',
             order: 1,
-            parameters: {
-              'primarySharedScriptOrScene': 'res://scripts/katana_dash.gd',
-            },
             tuningParams: ['dashSpeed: 740.0', 'iFrameWindow: 0.22'],
             edgeCases: ['[STATE GUARD] Cancel i-frames on melee attack'],
             checklist: [

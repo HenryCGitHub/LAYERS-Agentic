@@ -571,7 +571,6 @@ class ProposedFeatureBlueprint {
   FeatureLifecycleStatus lifecycle;
   String originVersion;
   String? supersedesFeatureTitle;
-  String? primarySharedScriptOrScene;
   String? buildTier;
   List<String> inScope;
   List<String> outOfScope;
@@ -589,7 +588,6 @@ class ProposedFeatureBlueprint {
     this.lifecycle = FeatureLifecycleStatus.newFeature,
     this.originVersion = 'v0.1',
     this.supersedesFeatureTitle,
-    this.primarySharedScriptOrScene,
     this.buildTier,
     this.inScope = const [],
     this.outOfScope = const [],
@@ -614,9 +612,6 @@ class ProposedFeatureBlueprint {
         'originVersion': originVersion,
         if (supersedesFeatureTitle != null)
           'supersedesFeatureTitle': supersedesFeatureTitle,
-        if (primarySharedScriptOrScene != null &&
-            primarySharedScriptOrScene!.trim().isNotEmpty)
-          'primarySharedScriptOrScene': primarySharedScriptOrScene,
         if (buildTier != null && buildTier!.trim().isNotEmpty)
           'buildTier': buildTier,
         'inScope': inScope,
@@ -637,8 +632,6 @@ class ProposedFeatureBlueprint {
       lifecycle: FeatureLifecycleStatus.fromString(json['lifecycle']?.toString()),
       originVersion: json['originVersion']?.toString() ?? 'v0.1',
       supersedesFeatureTitle: json['supersedesFeatureTitle']?.toString(),
-      primarySharedScriptOrScene:
-          json['primarySharedScriptOrScene']?.toString(),
       buildTier: json['buildTier']?.toString(),
       inScope: _parseStringList(json['inScope']),
       outOfScope: _parseStringList(json['outOfScope']),
@@ -666,7 +659,7 @@ class ProposedCheckpointBlueprint {
   const ProposedCheckpointBlueprint({
     required this.title,
     required this.playtestCriteria,
-    required this.tasks,
+    this.tasks = const [],
     this.coveredScope = const [],
     this.tuningParams = const [],
     this.edgeCases = const [],
@@ -1097,7 +1090,6 @@ class FeatureInboxItem {
   String goal;
   List<String> inScope;
   String doneWhen;
-  String? primarySharedScriptOrScene;
   List<String> architectureHowSummary;
   String checkpointTitle;
   String playtestGate;
@@ -1133,7 +1125,6 @@ class FeatureInboxItem {
     required this.goal,
     this.inScope = const [],
     required this.doneWhen,
-    this.primarySharedScriptOrScene,
     this.architectureHowSummary = const [],
     required this.checkpointTitle,
     required this.playtestGate,
@@ -1167,9 +1158,6 @@ class FeatureInboxItem {
         'goal': goal,
         'inScope': inScope,
         'doneWhen': doneWhen,
-        if (primarySharedScriptOrScene != null &&
-            primarySharedScriptOrScene!.trim().isNotEmpty)
-          'primarySharedScriptOrScene': primarySharedScriptOrScene,
         'architectureHowSummary': architectureHowSummary,
         'checkpointTitle': checkpointTitle,
         'playtestGate': playtestGate,
@@ -1216,8 +1204,6 @@ class FeatureInboxItem {
       goal: json['goal']?.toString() ?? '',
       inScope: _parseStringList(json['inScope']),
       doneWhen: json['doneWhen']?.toString() ?? '',
-      primarySharedScriptOrScene:
-          json['primarySharedScriptOrScene']?.toString(),
       architectureHowSummary: _parseStringList(json['architectureHowSummary']),
       checkpointTitle: json['checkpointTitle']?.toString() ?? '',
       playtestGate: json['playtestGate']?.toString() ?? '',

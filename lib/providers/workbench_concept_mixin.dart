@@ -573,15 +573,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       for (final r in releases) {
         r.sections['synced_engine_label'] = currentEngineLabel;
         r.sections['synced_tech_stack_sig'] = currentStackSig;
-        final relBp = releaseBlueprintFor(r.id);
-        if (relBp != null) {
-          for (final b in relBp.beats) {
-            for (final f in b.features) {
-              f.primarySharedScriptOrScene = null;
-            }
-          }
-          r.sections['release_blueprint_json'] = jsonEncode(relBp.toJson());
-        }
         _persistDocument(r);
       }
 
@@ -611,19 +602,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         }
         FeatureStateNode.saveStatesToDocument(featDoc, states);
         _persistDocument(featDoc);
-      }
-      if (_releaseBlueprint != null) {
-        for (final b in _releaseBlueprint!.beats) {
-          for (final f in b.features) {
-            f.primarySharedScriptOrScene = null;
-          }
-        }
-        final ownerRel = documents[_releaseBlueprint!.releaseDocId];
-        if (ownerRel != null) {
-          ownerRel.sections['release_blueprint_json'] =
-              jsonEncode(_releaseBlueprint!.toJson());
-          _persistDocument(ownerRel);
-        }
       }
     } else {
       for (final r in releases) {

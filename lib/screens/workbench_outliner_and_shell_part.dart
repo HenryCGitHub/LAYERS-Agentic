@@ -1965,10 +1965,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
       beatTitle,
       beatIndex: beatIndex,
     );
-    final isSynthesizingSteps =
-        widget.workbench.isSynthesizingFeatureSteps(feat.id);
-    final isWaitingForStepsInLiveMode =
-        widget.workbench.isFeatureWaitingForStepsInLiveMode(feat.id);
 
     int openFixCount = 0;
     int activeFocusIndex = 0;
@@ -2128,34 +2124,6 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               fontWeight: FontWeight.w600,
                               color: textSecondary,
                             ),
-                          ),
-                        ),
-                      ),
-                    ] else if (isSynthesizingSteps) ...[
-                      const SizedBox(width: 6),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 1),
-                        child: Text(
-                          'Building…',
-                          key: ValueKey('rail_queued_badge_${feat.id}'),
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: const Color(0xFFFBBF24),
-                          ),
-                        ),
-                      ),
-                    ] else if (isWaitingForStepsInLiveMode) ...[
-                      const SizedBox(width: 6),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 1),
-                        child: Text(
-                          'Waiting',
-                          key: ValueKey('rail_queued_badge_${feat.id}'),
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                            color: textMuted,
                           ),
                         ),
                       ),

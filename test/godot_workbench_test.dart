@@ -8,7 +8,11 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
+import 'package:layers_agentic/agents/release_planner_agent.dart';
+import 'package:layers_agentic/constants/text_style_guide.dart';
 import 'package:layers_agentic/constants/tiers.dart';
+import 'package:layers_agentic/main.dart';
+import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/feature_state.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
@@ -185,7 +189,6 @@ void main() {
         edgeCases: ['[STATE GUARD] Lock move while dash_timer active'],
         parameters: {
           'releaseVersion': 'v0.1',
-          'primarySharedScriptOrScene': 'res://scripts/player_dash.gd',
         },
         checklist: const [],
       );
@@ -2367,6 +2370,147 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(provider.selectedFeatureId, equals(feat2.id));
+      },
+    );
+
+    testWidgets(
+      'Round 20: Stage 2 schemas omit tasks/primarySharedScriptOrScene & needs_ai_enrichment renders editable Feature Card immediately',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 920);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        // 1. All 6 Stage 2 Gemini tool schemas omit primarySharedScriptOrScene, tasks, and futureTasks
+        final stage2Tools = <Map<String, dynamic>>[
+          ReleasePlannerAgent.commitReleasePlanTool,
+          ReleasePlannerAgent.commitEpicFeaturesTool,
+          ReleasePlannerAgent.commitProgressiveEpicChangesTool,
+          ReleasePlannerAgent.mutateReleasePlanTool,
+          WorkbenchReleaseMixin.commitLiveFeatureEnrichmentTool,
+          WorkbenchReleaseMixin.commitInboxFeatureTriageTool,
+        ];
+        for (final tool in stage2Tools) {
+          final encoded = jsonEncode(tool);
+          expect(
+            encoded.contains('"primarySharedScriptOrScene"'),
+            isFalse,
+            reason: '${tool['name']} must omit primarySharedScriptOrScene',
+          );
+          expect(
+            encoded.contains('"tasks"'),
+            isFalse,
+            reason: '${tool['name']} must omit tasks',
+          );
+          expect(
+            encoded.contains('"futureTasks"'),
+            isFalse,
+            reason: '${tool['name']} must omit futureTasks',
+          );
+        }
+
+        // 2. Models & compactStyleRules omit primarySharedScriptOrScene and steps[] prompt bloat
+        final featBp = ProposedFeatureBlueprint(
+          id: 'feat_r20',
+          title: 'Player Dash',
+          goal: '+burst dash impulse',
+          doneWhen: 'Press Shift -> Player dashes forward',
+        );
+        expect(
+          featBp.toJson().containsKey('primarySharedScriptOrScene'),
+          isFalse,
+        );
+        final inboxItem = FeatureInboxItem(
+          id: 'inbox_r20',
+          rawIdea: 'Add wall jump',
+          targetBeatId: 'epic_1',
+          targetBeatTitle: 'Movement',
+          featureTitle: 'Wall Jump',
+          goal: '+wall kick impulse',
+          doneWhen: 'Press Jump on wall -> Player kicks upward',
+          checkpointTitle: 'Wall Jump Core',
+          playtestGate: 'Jump into wall -> kick off cleanly',
+        );
+        expect(
+          inboxItem.toJson().containsKey('primarySharedScriptOrScene'),
+          isFalse,
+        );
+        expect(LayersTextStyleGuide.compactStyleRules.contains('steps[]'), isFalse);
+
+        // 3. Selecting a feature with needs_ai_enrichment renders editable Playtest Gate Card immediately (no Waiting/Building block)
+        final provider = WorkbenchProvider();
+        final cp = FeatureStateNode(
+          id: 'cp_r20_live',
+          name: '01 · PROTOTYPE',
+          trigger: 'Playtest: Press Shift -> Dash triggers cleanly',
+          tuningParams: ['dashSpeed: 720 px/s'],
+          edgeCases: ['[STATE GUARD] Ignore dash while cooldown > 0'],
+          parameters: {'releaseVersion': 'v0.1'},
+        );
+        final feat = TierDocument(
+          id: 'feat_r20_live',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          parentId: 'epic_r20_live',
+          phase: 'v0.1',
+          sections: {
+            'scope':
+                'Goal: +burst dash impulse\n\nIn Scope:\n• Shift burst velocity\n\nDone When: Press Shift -> Dash triggers cleanly',
+            'needs_ai_enrichment': 'true',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+        final epic = TierDocument(
+          id: 'epic_r20_live',
+          title: 'Movement Core',
+          tier: TierType.epic,
+          parentId: 'rel_r20_live',
+          phase: 'v0.1',
+          childrenIds: [feat.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_r20_live',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_r20_live',
+          phase: 'v0.1',
+          childrenIds: [epic.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj = TierDocument(
+          id: 'proj_r20_live',
+          title: 'Dash Arena',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+        for (final doc in [proj, rel, epic, feat]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+        provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(ValueKey('playtest_gate_card_${cp.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('feature_steps_in_progress_${feat.id}')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(ValueKey('rail_queued_badge_${feat.id}')),
+          findsNothing,
+        );
       },
     );
   });

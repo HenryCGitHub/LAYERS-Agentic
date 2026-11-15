@@ -174,9 +174,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     if (pAsset.contains(q)) return true;
     final states = FeatureStateNode.getStatesForDocument(feat);
     for (final s in states) {
-      final cpAsset =
-          (s.parameters['primarySharedScriptOrScene'] ?? '').toLowerCase();
-      if (cpAsset.contains(q)) return true;
       if (s.tuningParams.any((tp) => tp.toLowerCase().contains(q))) return true;
       if (s.edgeCases.any((ec) => ec.toLowerCase().contains(q))) return true;
     }

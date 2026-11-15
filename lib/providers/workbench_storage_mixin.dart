@@ -751,7 +751,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
   /// Starts a brand-new Project at Stage 1A (`New Project`) while keeping existing projects in the vault.
   void createNewProject() {
-    _synthesizingFeatureIds.clear();
+    _enrichingFeatureIds.clear();
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedBeatId = null;
@@ -1246,7 +1246,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     if (proj == null) return;
     final wasSameProject = projectId == _activeProjectId;
     if (!wasSameProject) {
-      _synthesizingFeatureIds.clear();
+      _enrichingFeatureIds.clear();
     }
     _lastReleaseRetrospective = null;
     _releaseViewFilter = 'active';

@@ -275,7 +275,7 @@ class WorkbenchProvider extends ChangeNotifier {
   Map<String, String?>? _preModalFeatureLifecycles;
   String? _initialProgressiveTrack0BlueprintJson;
 
-  final Set<String> _synthesizingFeatureIds = <String>{};
+  final Set<String> _enrichingFeatureIds = <String>{};
   int? _activeConceptSectionBuildIndex;
   int? get activeConceptSectionBuildIndex => _activeConceptSectionBuildIndex;
   bool isSynthesizingConceptSection(int sectionIdx) =>

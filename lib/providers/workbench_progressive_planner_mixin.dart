@@ -1119,10 +1119,6 @@ Concept Blueprint:
                 ? FeatureLifecycleStatus.superseded
                 : FeatureLifecycleStatus.stable,
             originVersion: f.sections['originVersion'] ?? 'v0.1',
-            primarySharedScriptOrScene:
-                (f.sections['primary_asset'] ?? '').trim().isNotEmpty
-                    ? f.sections['primary_asset']!.trim()
-                    : null,
             inScope: SectionTextUtils.resolveInScope(f.sections),
           ),
         if (bIdx == hostIdx)
