@@ -758,6 +758,17 @@ function resolveTargetEpicDocIdJs({
   return reqId;
 }
 
+const UNREAL_UPDATE_VALID_ACTIONS = new Set([
+  "toggle_check",
+  "update_tuning",
+  "set_tuning",
+  "log_fix",
+  "resolve_fix",
+  "pass_epic",
+  "reopen_epic",
+  "sync_uproject",
+]);
+
 function applyUnrealEpicMutationJs({
   epicDoc,
   action,
@@ -1514,20 +1525,12 @@ exports.geminiProxy = onRequest(
 
       const body = parseJsonBody(req);
       const action = String(body.action || "").trim();
-      const validActions = new Set([
-        "toggle_check",
-        "log_fix",
-        "resolve_fix",
-        "pass_epic",
-        "reopen_epic",
-        "sync_uproject",
-      ]);
-      if (!validActions.has(action)) {
+      if (!UNREAL_UPDATE_VALID_ACTIONS.has(action)) {
         res.status(400).json({
           error: {
             code: 400,
             message:
-              "Expected valid action (toggle_check, log_fix, resolve_fix, pass_epic, reopen_epic, or sync_uproject).",
+              "Expected valid action (toggle_check, update_tuning, log_fix, resolve_fix, pass_epic, reopen_epic, or sync_uproject).",
           },
         });
         return;
@@ -1787,6 +1790,7 @@ exports.geminiProxy = onRequest(
 
 exports._testHelpers = {
   hashLinkToken,
+  UNREAL_UPDATE_VALID_ACTIONS,
   normalizeTuningUnitJs,
   parseRootSpecJs,
   parseEpicSpecJs,

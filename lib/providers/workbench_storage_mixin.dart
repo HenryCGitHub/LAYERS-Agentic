@@ -4,10 +4,7 @@ int _docEffectiveTimestampMs(TierDocument doc) {
   final codeTs = int.tryParse(doc.sections['updated_at_ms'] ?? '') ?? 0;
   final unrealSyncTs =
       int.tryParse(doc.sections['last_unreal_sync_ms'] ?? '') ?? 0;
-  final godotSyncTs =
-      int.tryParse(doc.sections['last_godot_sync_ms'] ?? '') ?? 0;
-  final syncTs = unrealSyncTs > godotSyncTs ? unrealSyncTs : godotSyncTs;
-  return codeTs > syncTs ? codeTs : syncTs;
+  return codeTs > unrealSyncTs ? codeTs : unrealSyncTs;
 }
 
 int _countCompletedSubtasksRecursive(List<Subtask> tasks) {
@@ -32,20 +29,7 @@ int _countTotalSubtasksRecursive(List<Subtask> tasks) {
   return count;
 }
 
-int _countOccurrences(String haystack, String needle) {
-  if (haystack.isEmpty || needle.isEmpty) return 0;
-  int count = 0;
-  int idx = 0;
-  while (true) {
-    final hit = haystack.indexOf(needle, idx);
-    if (hit < 0) break;
-    count++;
-    idx = hit + needle.length;
-  }
-  return count;
-}
-
-/// Returns `true` when [remoteDoc] carries newer timestamps or further Godot/build
+/// Returns `true` when [remoteDoc] carries newer timestamps or further Unreal/PIE
 /// progress than [localDoc] so startup cloud sync merges instead of overwriting.
 bool shouldPreferRemoteDocumentOnSync(
   TierDocument localDoc,
@@ -63,27 +47,12 @@ bool shouldPreferRemoteDocumentOnSync(
     return remoteCompleted > localCompleted;
   }
 
-  final remoteStates = remoteDoc.sections['states'] ?? '';
-  final localStates = localDoc.sections['states'] ?? '';
-  final remotePlaytestPassed = _countOccurrences(
-    remoteStates,
-    '"playtestPassed":"true"',
-  ) +
-      _countOccurrences(remoteStates, '"playtestPassed": "true"');
-  final localPlaytestPassed = _countOccurrences(
-    localStates,
-    '"playtestPassed":"true"',
-  ) +
-      _countOccurrences(localStates, '"playtestPassed": "true"');
-  if (remotePlaytestPassed != localPlaytestPassed) {
-    return remotePlaytestPassed > localPlaytestPassed;
-  }
-
   int countEpicProgressScore(TierDocument doc) {
     if (doc.tier != TierType.epic) return 0;
     final spec = EpicSpec.fromDocument(doc);
     final resolvedFixes = spec.fixes.where((f) => f.resolved).length;
     return spec.passedChecksCount +
+        spec.fixes.length +
         resolvedFixes +
         (doc.isCompleted ? 1 : 0);
   }
@@ -92,14 +61,6 @@ bool shouldPreferRemoteDocumentOnSync(
   final localSignedGuards = countEpicProgressScore(localDoc);
   if (remoteSignedGuards != localSignedGuards) {
     return remoteSignedGuards > localSignedGuards;
-  }
-
-  final remoteStatesDone = _countOccurrences(remoteStates, '"completed":true') +
-      _countOccurrences(remoteStates, '"completed": true');
-  final localStatesDone = _countOccurrences(localStates, '"completed":true') +
-      _countOccurrences(localStates, '"completed": true');
-  if (remoteStatesDone != localStatesDone) {
-    return remoteStatesDone > localStatesDone;
   }
 
   if (remoteDoc.isCompleted != localDoc.isCompleted) {
@@ -116,15 +77,11 @@ bool shouldPreferRemoteDocumentOnSync(
     return remoteDoc.childrenIds.length > localDoc.childrenIds.length;
   }
 
-  final remotePrimary = (remoteDoc.sections['primary_asset'] ?? '').trim();
-  final localPrimary = (localDoc.sections['primary_asset'] ?? '').trim();
-  if (remotePrimary.isNotEmpty && localPrimary.isEmpty) {
-    return true;
-  }
-
-  final remoteCode = (remoteDoc.sections['content'] ?? '').trim();
-  final localCode = (localDoc.sections['content'] ?? '').trim();
-  if (remoteCode.isNotEmpty && localCode.isEmpty) {
+  final remoteUprojectCtx =
+      (remoteDoc.sections['unreal_live_context_json'] ?? '').trim();
+  final localUprojectCtx =
+      (localDoc.sections['unreal_live_context_json'] ?? '').trim();
+  if (remoteUprojectCtx.isNotEmpty && localUprojectCtx.isEmpty) {
     return true;
   }
 
@@ -310,31 +267,50 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       onSync: (remoteDocs) {
         _lastCloudSyncAt = DateTime.now();
         if (!initialLocalPushDone) return;
-        if (_isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) return;
-        if (remoteDocs.isNotEmpty) {
-          final removedIds = documents.keys
-              .where((localId) => !remoteDocs.containsKey(localId))
-              .toList();
-          for (final removedId in removedIds) {
-            documents.remove(removedId);
-            LocalVaultService.deleteDocument(removedId);
-          }
-        }
-        for (final entry in remoteDocs.entries) {
-          documents[entry.key] = entry.value;
-          LocalVaultService.saveDocument(entry.value);
-        }
-        if (!_tryResolvePendingDeepLink() &&
-            (_activeProjectId == null ||
-                !documents.containsKey(_activeProjectId))) {
-          final projs = savedProjects;
-          if (projs.isNotEmpty) {
-            _restoreProjectState(projs.first.id);
-          }
-        }
-        notifyListeners();
+        applyRemoteDocumentSnapshot(remoteDocs);
       },
     );
+  }
+
+  /// Applies an incoming Firestore snapshot across `documents` while protecting
+  /// active debounced keystrokes and live progressive release drafts.
+  bool applyRemoteDocumentSnapshot(Map<String, TierDocument> remoteDocs) {
+    if (_isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) return false;
+    if (remoteDocs.isNotEmpty) {
+      final removedIds = documents.keys
+          .where(
+            (localId) =>
+                !remoteDocs.containsKey(localId) &&
+                !_persistTimers.containsKey(localId),
+          )
+          .toList();
+      for (final removedId in removedIds) {
+        documents.remove(removedId);
+        LocalVaultService.deleteDocument(removedId);
+      }
+    }
+    for (final entry in remoteDocs.entries) {
+      if (_persistTimers.containsKey(entry.key)) continue;
+      documents[entry.key] = entry.value;
+      LocalVaultService.saveDocument(entry.value);
+    }
+    if (!_tryResolvePendingDeepLink()) {
+      if (_activeProjectId == null ||
+          !documents.containsKey(_activeProjectId)) {
+        final projs = savedProjects;
+        if (projs.isNotEmpty) {
+          _restoreProjectState(projs.first.id);
+        }
+      } else {
+        _restoreProjectState(
+          _activeProjectId!,
+          preserveProgressiveDraft:
+              _isDraftingProgressive || _progressiveDraft != null,
+        );
+      }
+    }
+    notifyListeners();
+    return true;
   }
 
   Future<void> _verifyOrAcceptInvitedLogin(
@@ -591,6 +567,44 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
   }
 
+  ({String projectId, TierDocument epicDoc})? _findEpicDocByIdOrCode(
+    String rawIdOrCode, {
+    String? withinProjectId,
+  }) {
+    final clean = rawIdOrCode.trim();
+    if (clean.isEmpty) return null;
+
+    final projects = withinProjectId != null
+        ? [if (documents[withinProjectId] != null) documents[withinProjectId]!]
+        : savedProjects;
+
+    final direct = documents[clean];
+    if (direct != null && direct.tier == TierType.epic) {
+      for (final proj in projects) {
+        if (_collectProjectDocumentTreeIds(proj.id).contains(direct.id)) {
+          return (projectId: proj.id, epicDoc: direct);
+        }
+      }
+    }
+
+    final lower = clean.toLowerCase();
+    for (final proj in projects) {
+      final treeIds = _collectProjectDocumentTreeIds(proj.id);
+      int idx = 0;
+      for (final id in treeIds) {
+        final doc = documents[id];
+        if (doc == null || doc.tier != TierType.epic) continue;
+        final parsed = EpicSpec.fromDocument(doc, indexHint: idx);
+        idx += 1;
+        if (parsed.code.toLowerCase() == lower ||
+            parsed.lineageKey.toLowerCase() == lower) {
+          return (projectId: proj.id, epicDoc: doc);
+        }
+      }
+    }
+    return null;
+  }
+
   bool _tryResolvePendingDeepLink() {
     final reqProjId = _pendingUrlProjectId;
     final reqEpicId = _pendingUrlEpicId;
@@ -600,16 +614,22 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
 
     String? targetProjId;
+    TierDocument? matchedEpicDoc;
     if (reqProjId != null &&
         reqProjId.isNotEmpty &&
         documents[reqProjId]?.tier == TierType.project) {
       targetProjId = reqProjId;
+      if (reqEpicId != null && reqEpicId.isNotEmpty) {
+        matchedEpicDoc = _findEpicDocByIdOrCode(
+          reqEpicId,
+          withinProjectId: targetProjId,
+        )?.epicDoc;
+      }
     } else if (reqEpicId != null && reqEpicId.isNotEmpty) {
-      for (final proj in savedProjects) {
-        if (_collectProjectDocumentTreeIds(proj.id).contains(reqEpicId)) {
-          targetProjId = proj.id;
-          break;
-        }
+      final found = _findEpicDocByIdOrCode(reqEpicId);
+      if (found != null) {
+        targetProjId = found.projectId;
+        matchedEpicDoc = found.epicDoc;
       }
     }
     if (targetProjId == null) {
@@ -626,17 +646,14 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
 
     bool resolvedEpic = reqEpicId == null || reqEpicId.isEmpty;
-    if (!resolvedEpic) {
-      final targetEpic = documents[reqEpicId];
-      if (targetEpic != null && targetEpic.tier == TierType.epic) {
-        final parentRelId = targetEpic.parentId;
-        if (parentRelId != null && documents[parentRelId]?.tier == TierType.release) {
-          _activeReleaseId = parentRelId;
-          proj?.sections['active_release_id'] = parentRelId;
-        }
-        selectEpic(targetEpic.id);
-        resolvedEpic = true;
+    if (!resolvedEpic && matchedEpicDoc != null) {
+      final parentRelId = matchedEpicDoc.parentId;
+      if (parentRelId != null && documents[parentRelId]?.tier == TierType.release) {
+        _activeReleaseId = parentRelId;
+        proj?.sections['active_release_id'] = parentRelId;
       }
+      selectEpic(matchedEpicDoc.id);
+      resolvedEpic = true;
     }
 
     _pendingUrlProjectId = null;
@@ -1063,11 +1080,16 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
   }
 
-  void _restoreProjectState(String projectId) {
+  void _restoreProjectState(
+    String projectId, {
+    bool preserveProgressiveDraft = false,
+  }) {
     final proj = documents[projectId];
     if (proj == null) return;
-    _executionLog.clear();
-    _progressiveDraft = null;
+    if (!preserveProgressiveDraft) {
+      _executionLog.clear();
+      _progressiveDraft = null;
+    }
     _activeProjectId = projectId;
 
     // Restore Collaborators

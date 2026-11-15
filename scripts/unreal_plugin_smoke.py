@@ -177,6 +177,11 @@ const server = http.createServer((req, res) => {
 
     if (urlPath === "/unrealLink/update") {
       const action = String(body.action || "");
+      if (!helpers.UNREAL_UPDATE_VALID_ACTIONS || !helpers.UNREAL_UPDATE_VALID_ACTIONS.has(action)) {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: { code: 400, message: `Invalid action: ${action}` } }));
+        return;
+      }
       let targetEpicId = String(body.epicId || "").trim();
       if (action !== "sync_uproject") {
         targetEpicId = helpers.resolveTargetEpicDocIdJs({

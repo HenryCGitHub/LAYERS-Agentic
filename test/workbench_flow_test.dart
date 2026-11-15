@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/main.dart';
+import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
@@ -289,6 +290,14 @@ void main() {
         expect(wb.selectedEpicId, equals(targetE02.id));
         expect(wb.currentStage, equals(WorkbenchStage.releaseWorkbench));
 
+        // Epic-code deep-link (`?epic=E02` without `project`)
+        wb.createNewProject();
+        expect(wb.activeProjectId, isNot(equals(p1)));
+        wb.applyDeepLinkParams({'epic': 'E02'});
+        expect(wb.activeProjectId, equals(p1));
+        expect(wb.selectedEpicId, equals(targetE02.id));
+        expect(wb.currentStage, equals(WorkbenchStage.releaseWorkbench));
+
         // Cloud merge conflict test: newer `last_unreal_sync_ms` wins
         final localEpic = wb.documents[targetE02.id]!.copyWith(
           sections: {
@@ -321,6 +330,66 @@ void main() {
           },
         );
         expect(shouldPreferRemoteDocumentOnSync(tiedLocal, tiedRemote), isTrue);
+
+        // Equal timestamps: Unreal `[FIX]` log beats 0-fix local doc; live `.uproject` snapshot beats empty Project doc
+        final fixSpec = EpicSpec.fromDocument(tiedLocal)
+          ..fixes.add(EpicPieFix(id: 'fx_live', text: 'Dash clips stair ramp'));
+        final remoteWithFix = fixSpec.applyToDocument(tiedLocal).copyWith(
+          sections: {
+            ...fixSpec.applyToDocument(tiedLocal).sections,
+            'updated_at_ms': '1000',
+            'last_unreal_sync_ms': '1000',
+          },
+        );
+        expect(shouldPreferRemoteDocumentOnSync(tiedLocal, remoteWithFix), isTrue);
+
+        final localProj = wb.documents[p1]!.copyWith(
+          sections: {
+            ...wb.documents[p1]!.sections,
+            'updated_at_ms': '1000',
+          },
+        );
+        final remoteProjWithCtx = localProj.copyWith(
+          sections: {
+            ...localProj.sections,
+            'unreal_live_context_json': '{"project_name":"ShellbreakerUE5"}',
+          },
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localProj, remoteProjWithCtx),
+          isTrue,
+        );
+
+        // Real-time snapshot sync refreshes currently open active project & Epic selection
+        final e01 = wb.activeReleaseEpics.first;
+        wb.selectEpic(e01.id);
+        expect(wb.selectedEpicId, equals(e01.id));
+
+        final remoteE01Spec = EpicSpec.fromDocument(wb.documents[e01.id]!);
+        remoteE01Spec.tuning.first.value = '999';
+        remoteE01Spec.lifecycle = EpicLifecycle.stable;
+        for (final chk in remoteE01Spec.checks) {
+          chk.passed = true;
+        }
+        final remoteDocs = <String, TierDocument>{
+          for (final entry in wb.documents.entries) entry.key: entry.value,
+        };
+        remoteDocs[e01.id] = remoteE01Spec.applyToDocument(wb.documents[e01.id]!);
+        remoteDocs[p1] = wb.documents[p1]!.copyWith(
+          sections: {
+            ...wb.documents[p1]!.sections,
+            'selected_epic_id': targetE02.id,
+            'unreal_live_context_json': '{"project_name":"ShellbreakerUE5"}',
+          },
+        );
+
+        expect(wb.applyRemoteDocumentSnapshot(remoteDocs), isTrue);
+        expect(wb.selectedEpicId, equals(targetE02.id));
+        expect(wb.activeReleaseEpics.first.tuning.first.value, equals('999'));
+        expect(
+          wb.latestLiveUprojectContext?['project_name'],
+          equals('ShellbreakerUE5'),
+        );
       },
     );
 
