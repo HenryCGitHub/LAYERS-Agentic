@@ -656,7 +656,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     for (final s in steps) {
       if (!s.subtask.completed) rem += s.estimatedMinutes;
     }
-    return rem > 0 ? rem : (cpNode.isBuiltInGodot ? 10 : 30);
+    return rem > 0 ? rem : 30;
   }
 
   int _computeFeatureRemainingMinutes(TierDocument feat) {

@@ -62,11 +62,6 @@ extension _ShellExportersExt on WorkbenchShell {
     final beats = workbench.activeReleaseBeats;
     if (rel != null && beats.isNotEmpty) {
       final relProgress = workbench.getDocumentProgress(rel.id);
-      final draftTech = draft?.techSpec.join(' ').trim() ?? '';
-      final engineHint = draftTech.isNotEmpty
-          ? draftTech
-          : (workbench.activeProject?.sections['tech_spec'] ??
-              workbench.activeProject?.sections['techSpec']);
       sb.writeln('\n## Stage 2: Active Release Workbench (${rel.title} · $relProgress% Verified)');
       for (int bIdx = 0; bIdx < beats.length; bIdx++) {
         final beat = beats[bIdx];
@@ -81,23 +76,20 @@ extension _ShellExportersExt on WorkbenchShell {
             sb.writeln(
               '  - [$cpDone] **${cp.cleanStageTitle} (${cp.releaseVersion})** — *${cp.playtestCondition}*',
             );
+            if (cp.coveredScope.isNotEmpty) {
+              sb.writeln('    - In Scope: ${cp.coveredScope.join(' · ')}');
+            }
             if (cp.tuningParams.isNotEmpty) {
               sb.writeln('    - Tuning: `${cp.tuningParams.join(', ')}`');
             }
             if (cp.edgeCases.isNotEmpty) {
               sb.writeln('    - Guards: ${cp.edgeCases.join(' · ')}');
             }
-            final steps = TaskHowToBlueprint.resolveUnifiedSteps(
-              checkpointNode: cp,
-              engineHint: engineHint,
-              phase: workbench.currentPhase,
-            );
-            for (final step in steps) {
-              final sDone = step.subtask.completed ? 'x' : ' ';
-              final badge = step.resolvedDockStage.badge;
-              sb.writeln(
-                '    - [$sDone] [$badge] **${step.shortTitle}** — ${step.instruction}',
-              );
+            final openFixes = cp.checklist
+                .where((s) => !s.completed && s.text.contains('[FIX]'))
+                .toList();
+            for (final fix in openFixes) {
+              sb.writeln('    - [ ] ${fix.text}');
             }
           }
         }

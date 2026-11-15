@@ -76,20 +76,6 @@ bool shouldPreferRemoteDocumentOnSync(
     return remotePlaytestPassed > localPlaytestPassed;
   }
 
-  final remoteGodotBuilt = _countOccurrences(
-    remoteStates,
-    '"godotBuilt":"true"',
-  ) +
-      _countOccurrences(remoteStates, '"godotBuilt": "true"');
-  final localGodotBuilt = _countOccurrences(
-    localStates,
-    '"godotBuilt":"true"',
-  ) +
-      _countOccurrences(localStates, '"godotBuilt": "true"');
-  if (remoteGodotBuilt != localGodotBuilt) {
-    return remoteGodotBuilt > localGodotBuilt;
-  }
-
   final remoteStatesDone = _countOccurrences(remoteStates, '"completed":true') +
       _countOccurrences(remoteStates, '"completed": true');
   final localStatesDone = _countOccurrences(localStates, '"completed":true') +
@@ -258,7 +244,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
               if (projs.isNotEmpty) {
                 _restoreProjectState(projs.first.id);
               }
-            } else if (_pendingFeatureStepQueue.isEmpty) {
+            } else {
               _restoreProjectState(_activeProjectId!);
             }
             notifyListeners();
@@ -659,8 +645,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
   /// Starts a brand-new Project at Stage 1A (`New Project`) while keeping existing projects in the vault.
   void createNewProject() {
-    _stepQueueGeneration++;
-    _pendingFeatureStepQueue.clear();
     _synthesizingFeatureIds.clear();
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
@@ -933,26 +917,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     String remapClonedId(String id) =>
         mappedRelIds[id] ?? mappedBeatIds[id] ?? mappedFeatIds[id] ?? id;
 
-    // Clone cumulative Cloud-saved Godot code/resource files (`TierType.codeFile`).
-    final codeFiles = documents.values
-        .where((d) => d.tier == TierType.codeFile && d.parentId == projectId)
-        .toList();
-    for (final oldCodeDoc in codeFiles) {
-      final vf = GodotVirtualFile.fromTierDocument(oldCodeDoc);
-      final newCodeId = GodotVirtualFile.stableDocId(newId, vf.resPath);
-      final remappedFeatures =
-          vf.featureIds.map(remapClonedId).toSet().toList();
-      final clonedCodeDoc = vf
-          .copyWith(
-            id: newCodeId,
-            projectId: newId,
-            featureIds: remappedFeatures,
-          )
-          .toTierDocument();
-      documents[newCodeId] = clonedCodeDoc;
-      _persistDocument(clonedCodeDoc);
-    }
-
     for (final newRelId in newReleaseIds) {
       final relDoc = documents[newRelId];
       if (relDoc == null) continue;
@@ -1045,12 +1009,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
       final parsedDocs = <TierDocument>[];
       for (final item in rawDocs) {
-        if (item is Map<String, dynamic>) {
-          parsedDocs.add(TierDocument.fromJson(item));
-        } else if (item is Map) {
-          parsedDocs.add(
-            TierDocument.fromJson(Map<String, dynamic>.from(item)),
-          );
+        if (item is Map) {
+          final map = Map<String, dynamic>.from(item);
+          if (TierDocument.isLegacyIgnoredTier(map)) continue;
+          parsedDocs.add(TierDocument.fromJson(map));
         }
       }
       if (parsedDocs.isEmpty) return null;
@@ -1125,18 +1087,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
             newSections['release_blueprint_json'] =
                 _remapSerializedReleaseBlueprintJson(rawRelBp, remapId);
           }
-        } else if (d.tier == TierType.codeFile) {
-          final rawFeatIds = newSections[GodotVirtualFile.featureIdsKey];
-          if (rawFeatIds != null && rawFeatIds.isNotEmpty) {
-            try {
-              final decoded = jsonDecode(rawFeatIds);
-              if (decoded is List) {
-                newSections[GodotVirtualFile.featureIdsKey] = jsonEncode(
-                  decoded.map((e) => remapId(e.toString())).toSet().toList(),
-                );
-              }
-            } catch (_) {}
-          }
         }
 
         final importedDoc = d.copyWith(
@@ -1189,8 +1139,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final proj = documents[projectId];
     if (proj == null) return;
     final wasSameProject = projectId == _activeProjectId;
-    _stepQueueGeneration++;
-    _pendingFeatureStepQueue.clear();
     if (!wasSameProject) {
       _synthesizingFeatureIds.clear();
     }

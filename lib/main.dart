@@ -487,8 +487,6 @@ class WorkbenchShell extends StatelessWidget {
                               _exportFullProjectSpec(context);
                             } else if (val == 'agents_md') {
                               _exportActiveReleaseAgentsMd(context);
-                            } else if (val == 'godot_contract') {
-                              showGodotContractDialog(context, workbench);
                             } else if (val == 'json_export') {
                               _exportActiveProjectJson(context);
                             } else if (val == 'json_import') {
@@ -509,28 +507,6 @@ class WorkbenchShell extends StatelessWidget {
                                   const SizedBox(width: 8),
                                   Text(
                                     'Connect Godot 4 Plugin',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            PopupMenuItem<String>(
-                              value: 'godot_contract',
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.tune_rounded,
-                                    size: 13,
-                                    color: textSecondary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Godot 4 Project Contract',
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,

@@ -646,10 +646,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
 
     _saveFeatureInboxItems(items);
     selectFeature(materializedFeatId, triggerAiSynthesis: false);
-    await synthesizeFeatureHowToStepsWithAi(
-      materializedFeatId,
-      forceRefresh: true,
-    );
     return materializedFeatId;
   }
 

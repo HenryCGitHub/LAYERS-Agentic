@@ -73,6 +73,7 @@ class FirestoreVaultService {
           for (final docSnap in snapshot.docs) {
             try {
               final data = docSnap.data();
+              if (TierDocument.isLegacyIgnoredTier(data)) continue;
               final doc = TierDocument.fromJson(data);
               docsMap[doc.id] = doc;
             } catch (e) {
@@ -204,6 +205,7 @@ class FirestoreVaultService {
       for (final doc in snap.docs) {
         try {
           final data = Map<String, dynamic>.from(doc.data());
+          if (TierDocument.isLegacyIgnoredTier(data)) continue;
           data.putIfAbsent('id', () => doc.id);
           final parsed = TierDocument.fromJson(data);
           out[parsed.id] = parsed;

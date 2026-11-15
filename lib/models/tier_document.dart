@@ -296,6 +296,13 @@ class TierDocument {
   bool get isFullProductionEpic =>
       sections[actSectionKey] == fullProductionAct;
 
+  /// Returns true if a persisted JSON map belongs to a retired tier (`codeFile` / `godot_file`)
+  /// that must be skipped during load/sync/import rather than falling back to `TierType.project`.
+  static bool isLegacyIgnoredTier(Map<dynamic, dynamic> json) {
+    final raw = (json['tier'] ?? '').toString().trim().toLowerCase();
+    return raw == 'codefile' || raw == 'code_file' || raw == 'godot_file';
+  }
+
   TierDocument({
     required this.id,
     required this.title,

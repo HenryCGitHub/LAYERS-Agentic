@@ -66,6 +66,7 @@ class VaultStorageImpl implements VaultStorageBackend {
             try {
               final raw = await entity.readAsString();
               final json = jsonDecode(raw) as Map<String, dynamic>;
+              if (TierDocument.isLegacyIgnoredTier(json)) continue;
               final doc = TierDocument.fromJson(json);
               docsMap[doc.id] = doc;
             } catch (_) {}

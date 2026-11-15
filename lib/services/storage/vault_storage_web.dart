@@ -42,6 +42,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
         if (raw != null) {
           try {
             final json = jsonDecode(raw) as Map<String, dynamic>;
+            if (TierDocument.isLegacyIgnoredTier(json)) continue;
             final doc = TierDocument.fromJson(json);
             docsMap[doc.id] = doc;
           } catch (_) {}

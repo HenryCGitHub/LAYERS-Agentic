@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -11,12 +10,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/models/feature_state.dart';
-import 'package:layers_agentic/models/godot_project_contract.dart';
-import 'package:layers_agentic/models/godot_virtual_file.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
-import 'package:layers_agentic/screens/widgets/godot_workbench_modals.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
 import 'package:layers_agentic/utils/godot_gdscript_guard.dart';
 
@@ -35,107 +31,8 @@ void main() {
     GeminiAgentClient.testHttpPost = null;
   });
 
-  group('GodotProjectContract', () {
-    test('calculates bitmasks, decodes layer numbers, generates INI & merges project.godot', () {
-      const contract = GodotProjectContract(
-        physicsLayers: {1: 'World', 2: 'Player', 3: 'Enemy', 5: 'Pickup'},
-        inputActions: ['move_left', 'jump'],
-        autoloads: [
-          GodotAutoloadEntry(name: 'Events', resPath: 'res://autoloads/events.gd'),
-        ],
-        groups: ['player', 'damageable'],
-        is3D: false,
-      );
-
-      expect(GodotProjectContract.bitmaskForLayerNumbers([1, 3]), 5);
-      expect(contract.bitmaskForLayerNames(['player', 'Pickup']), 18); // 2 + 16
-      expect(GodotProjectContract.layerNumbersFromBitmask(18), [2, 5]);
-
-      final ini = contract.toProjectGodotIniSnippet();
-      expect(ini, contains('[layer_names]'));
-      expect(ini, contains('2d_physics/layer_1="World"'));
-      expect(ini, contains('Events="*res://autoloads/events.gd"'));
-      expect(ini, contains('jump={'));
-    });
-  });
-
   group('GodotGdscriptGuard', () {
-    test('applies surgical patch hunks while keeping untouched hand-written code intact', () {
-      const starter = '''extends CharacterBody2D
-# Custom developer comment: keep camera shake helper!
-
-@export var move_speed: float = 280.0
-
-func _custom_camera_shake() -> void:
-\tpass
-
-func _physics_process(delta: float) -> void:
-\tvar dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-\tvelocity = dir * move_speed
-\tmove_and_slide()
-''';
-
-      final res = GodotGdscriptGuard.applyPatchHunks(
-        existingContent: starter,
-        hunks: const [
-          GdScriptPatchHunk(
-            targetBlock: '@export var move_speed: float = 280.0',
-            replaceBlock:
-                '@export var move_speed: float = 280.0\n@export var dash_speed: float = 620.0',
-          ),
-          GdScriptPatchHunk(
-            targetBlock: '',
-            replaceBlock: 'func _trigger_dash() -> void:\n\tvelocity = velocity.normalized() * dash_speed',
-          ),
-          GdScriptPatchHunk(
-            targetBlock: 'nonexistent_function_that_user_deleted()',
-            replaceBlock: 'should_not_overwrite()',
-          ),
-        ],
-      );
-
-      expect(res.appliedCount, 2);
-      expect(res.unmatchedHunks.length, 1);
-      expect(res.updatedContent, contains('# Custom developer comment: keep camera shake helper!'));
-      expect(res.updatedContent, contains('func _custom_camera_shake() -> void:'));
-      expect(res.updatedContent, contains('@export var dash_speed: float = 620.0'));
-      expect(res.updatedContent, contains('func _trigger_dash() -> void:'));
-      expect(res.updatedContent, isNot(contains('should_not_overwrite')));
-    });
-
-    test('normalizes Godot 3 idioms, detects dropped methods, updates @export & parses traces', () {
-      const legacy = '''extends CharacterBody2D
-export var speed: float = 10.0
-onready var timer = \$DashTimer
-
-func _ready() -> void:
-\ttimer.connect("timeout", self, "_on_timeout")
-
-func _physics_process(delta: float) -> void:
-\tyield(get_tree().create_timer(0.2), "timeout")
-\tvelocity = move_and_slide(velocity)
-''';
-      final norm = GodotGdscriptGuard.normalizeGodot4Syntax(legacy);
-      expect(norm.code, contains('@export var speed: float = 10.0'));
-      expect(norm.code, contains('@onready var timer = \$DashTimer'));
-      expect(norm.code, contains('timer.timeout.connect(_on_timeout)'));
-      expect(norm.code, contains('await get_tree().create_timer(0.2).timeout'));
-      expect(norm.code, contains('move_and_slide()'));
-      expect(norm.fixes.length, greaterThanOrEqualTo(4));
-
-      final dropped = GodotGdscriptGuard.detectDroppedSymbols(
-        before: 'func _ready():\n\tpass\nfunc _dash():\n\tpass\n',
-        after: 'func _ready():\n\tpass\n',
-      );
-      expect(dropped.single, contains('_dash'));
-
-      final updatedExport = GodotGdscriptGuard.updateExportVarValue(
-        '@export var dash_cooldown: float = 0.45 # seconds',
-        'dash_cooldown',
-        '0.8',
-      );
-      expect(updatedExport, '@export var dash_cooldown: float = 0.8 # seconds');
-
+    test('parses Godot 4 debugger stack traces into script paths, lines, and error kinds', () {
       final trace = GodotGdscriptGuard.parseDebuggerTrace(
         'E 0:00:02:0145   res://scripts/player.gd:42 @ _physics_process(): Invalid assignment of property "velocity" on null instance.',
       );
@@ -146,302 +43,8 @@ func _physics_process(delta: float) -> void:
     });
   });
 
-  group('TierType.codeFile lifecycle, Cloud serialization & Targeted MEDIUM Escalation', () {
-    test('TierType.codeFile persists, duplicates, exports/imports, deletes & never leaks into Epics/Features', () {
-      final provider = WorkbenchProvider();
-      final proj = TierDocument(
-        id: 'proj_1',
-        title: 'Dash Arena',
-        tier: TierType.project,
-        sections: {
-          'tech_spec': 'Godot 4.3 (2D) · GDScript',
-          'active_release_id': 'rel_1',
-        },
-        childrenIds: ['rel_1'],
-      );
-      final rel = TierDocument(
-        id: 'rel_1',
-        title: 'Prototype',
-        tier: TierType.release,
-        parentId: 'proj_1',
-        phase: 'v0.1',
-        childrenIds: ['epic_1'],
-      );
-      final epic = TierDocument(
-        id: 'epic_1',
-        title: 'Player Movement',
-        tier: TierType.epic,
-        parentId: 'rel_1',
-        phase: 'v0.1',
-        childrenIds: ['feat_1'],
-      );
-      final cp = FeatureStateNode(
-        id: 'cp_1',
-        name: '01 · PROTOTYPE',
-        parameters: {'releaseVersion': 'v0.1'},
-        tuningParams: ['dash_speed: 600'],
-        checklist: [Subtask(id: 't1', text: 'Dash Impulse')],
-      );
-      final feat = TierDocument(
-        id: 'feat_1',
-        title: 'Player Dash',
-        tier: TierType.feature,
-        parentId: 'epic_1',
-        phase: 'v0.1',
-        sections: {
-          'primary_asset': 'res://scenes/player.tscn · res://scripts/player.gd',
-        },
-      );
-      FeatureStateNode.saveStatesToDocument(feat, [cp]);
-
-      provider.documents[proj.id] = proj;
-      provider.documents[rel.id] = rel;
-      provider.documents[epic.id] = epic;
-      provider.documents[feat.id] = feat;
-      provider.switchProject(proj.id);
-
-      final vf = provider.upsertGodotVirtualFile(
-        resPath: 'res://scripts/player.gd',
-        content: 'extends CharacterBody2D\n@export var dash_speed: float = 600.0\n',
-        featureIds: ['feat_1'],
-      );
-      expect(vf, isNotNull);
-      expect(provider.documents[vf!.id]?.tier, TierType.codeFile);
-      expect(provider.savedProjects.length, 1);
-      expect(provider.activeReleaseBeats.map((b) => b.id), ['epic_1']);
-      expect(provider.featuresForBeat('epic_1').map((f) => f.id), ['feat_1']);
-      expect(provider.activeProjectGodotFiles.length, 1);
-
-      // Update export variable cleanly via syncExportVarToVirtualFile
-      final synced = provider.syncExportVarToVirtualFile(
-        primaryAssetOrResPath: feat.sections['primary_asset'],
-        varName: 'dash_speed',
-        formattedValue: '750.0',
-        featureId: 'feat_1',
-      );
-      expect(synced, isTrue);
-      expect(
-        provider.godotFileForResPath('res://scripts/player.gd')?.content,
-        contains('@export var dash_speed: float = 750.0'),
-      );
-
-      // Export & import bundle retains cumulative TierType.codeFile documents
-      final jsonBundle = provider.exportProjectToJson(proj.id);
-      expect(jsonBundle, contains('CODEFILE'));
-
-      // Duplicate project clones TierType.codeFile to new projectId cleanly
-      final dupId = provider.duplicateProject(proj.id);
-      expect(dupId, isNotNull);
-      expect(provider.activeProjectId, dupId);
-      expect(
-        provider.godotFileForResPath('res://scripts/player.gd')?.content,
-        contains('750.0'),
-      );
-      expect(
-        provider.godotFileForResPath('res://scripts/player.gd')?.projectId,
-        dupId,
-      );
-
-      // Delete original & re-import with collision remaps cleanly
-      provider.deleteProject(proj.id);
-      expect(provider.documents.containsKey(proj.id), isFalse);
-      final importedId = provider.importProjectFromJson(jsonBundle);
-      expect(importedId, isNotNull);
-      expect(
-        provider.godotFileForResPath('res://scripts/player.gd')?.content,
-        contains('750.0'),
-      );
-
-      // AGENTS.md includes Godot 4 Contract + cumulative files
-      final agentsMd = provider.buildActiveReleaseCodingAgentMarkdown();
-      expect(agentsMd, contains('## 1B. Godot 4 Contract'));
-      expect(agentsMd, contains('res://scripts/player.gd'));
-    });
-
-    test('escalates LOW -> MEDIUM on .gd step synthesis and [FIX] debugger triage and applies scriptPatches', () async {
-      final capturedThinkingLevels = <String>[];
-      final fixCompleter = Completer<void>();
-
-      GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
-        final decodedBody = jsonDecode(body as String) as Map<String, dynamic>;
-        final genCfg = decodedBody['generationConfig'] as Map<String, dynamic>?;
-        final thinkCfg = genCfg?['thinkingConfig'] as Map<String, dynamic>?;
-        capturedThinkingLevels.add((thinkCfg?['thinkingLevel'] ?? '').toString());
-
-        final promptText = decodedBody.toString();
-        final isFix = promptText.contains('commit_playtest_fix');
-        final toolArgs = isFix
-            ? {
-                'fixTaskTitle': '[FIX] Dash Null Check',
-                'playtestGuard': '[PLAYTEST GUARD] Early-return if velocity is zero',
-                'scriptPatches': [
-                  {
-                    'resPath': 'res://scripts/player.gd',
-                    'targetBlock': 'func _dash() -> void:\n\tpass',
-                    'replaceBlock': 'func _dash() -> void:\n\tif velocity == Vector2.ZERO:\n\t\treturn',
-                  }
-                ],
-                'steps': [
-                  {
-                    'stepRole': 'script_logic',
-                    'title': 'Add Zero Velocity Guard',
-                    'stepPath': 'res://scripts/player.gd',
-                    'instruction': '- Open `res://scripts/player.gd` → guard zero velocity',
-                    'area1Hierarchy': '',
-                    'area2Inspector': '',
-                    'codeFormula': 'if velocity == Vector2.ZERO:\n\treturn',
-                    'verifyResult': 'Press dash idle → no crash',
-                  }
-                ],
-              }
-            : {
-                'primarySharedScriptOrScene':
-                    'res://scenes/player.tscn · res://scripts/player.gd',
-                'scriptPatches': [
-                  {
-                    'resPath': 'res://scripts/player.gd',
-                    'targetBlock': '',
-                    'replaceBlock':
-                        'extends CharacterBody2D\n\nfunc _dash() -> void:\n\tpass',
-                  }
-                ],
-                'tasks': [
-                  {
-                    'taskIndex': 0,
-                    'taskTitle': 'Player Dash Handler',
-                    'subSteps': [
-                      {
-                        'stepRole': 'script_logic',
-                        'title': 'Add Dash Stub',
-                        'stepPath': 'res://scripts/player.gd',
-                        'instruction': '- Add `_dash()` to player.gd',
-                        'area1Hierarchy': '',
-                        'area2Inspector': '',
-                        'codeFormula': 'func _dash() -> void:\n\tpass',
-                        'verifyMode': 'editor',
-                        'verifyResult': 'Check Script → _dash exists',
-                      }
-                    ],
-                  }
-                ],
-              };
-
-        final apiResponse = {
-          'candidates': [
-            {
-              'content': {
-                'parts': [
-                  {
-                    'functionCall': {
-                      'name': isFix
-                          ? 'commit_playtest_fix'
-                          : 'commit_feature_howto_steps',
-                      'args': toolArgs,
-                    },
-                  }
-                ],
-              },
-            }
-          ],
-          'usageMetadata': {
-            'promptTokenCount': 100,
-            'candidatesTokenCount': 50,
-            'thoughtsTokenCount': 25,
-          },
-        };
-        if (isFix && !fixCompleter.isCompleted) {
-          scheduleMicrotask(() {
-            if (!fixCompleter.isCompleted) fixCompleter.complete();
-          });
-        }
-        return http.Response(
-          jsonEncode(apiResponse),
-          200,
-          headers: const {'content-type': 'application/json; charset=utf-8'},
-        );
-      };
-
-      final provider = WorkbenchProvider();
-      provider.updateAiConfig(
-        apiKey: 'AIzaTestMockKey12345',
-        thinkingLevel: 'LOW',
-      );
-      final proj = TierDocument(
-        id: 'proj_esc',
-        title: 'Dash Game',
-        tier: TierType.project,
-        sections: {
-          'tech_spec': 'Godot 4.3 (2D)',
-          'active_release_id': 'rel_esc',
-        },
-        childrenIds: ['rel_esc'],
-      );
-      final rel = TierDocument(
-        id: 'rel_esc',
-        title: 'Prototype',
-        tier: TierType.release,
-        parentId: 'proj_esc',
-        phase: 'v0.1',
-        childrenIds: ['epic_esc'],
-      );
-      final epic = TierDocument(
-        id: 'epic_esc',
-        title: 'Core Movement',
-        tier: TierType.epic,
-        parentId: 'rel_esc',
-        phase: 'v0.1',
-        childrenIds: ['feat_esc'],
-      );
-      final states = [
-        FeatureStateNode(
-          id: 'cp_esc',
-          name: '01 · PROTOTYPE',
-          parameters: {'releaseVersion': 'v0.1'},
-          checklist: [Subtask(id: 't_esc', text: 'Dash Mechanic')],
-        ),
-      ];
-      final feat = TierDocument(
-        id: 'feat_esc',
-        title: 'Player Dash',
-        tier: TierType.feature,
-        parentId: 'epic_esc',
-        phase: 'v0.1',
-      );
-      FeatureStateNode.saveStatesToDocument(feat, states);
-
-      provider.documents[proj.id] = proj;
-      provider.documents[rel.id] = rel;
-      provider.documents[epic.id] = epic;
-      provider.documents[feat.id] = feat;
-      provider.switchProject(proj.id);
-
-      await provider.synthesizeFeatureHowToStepsWithAi(feat.id, forceRefresh: true);
-      expect(capturedThinkingLevels, ['MEDIUM']);
-      expect(
-        provider.godotFileForResPath('res://scripts/player.gd')?.content,
-        contains('func _dash() -> void:'),
-      );
-
-      final updatedStates = FeatureStateNode.getStatesForDocument(feat);
-      provider.logPlaytestIssueOnCheckpoint(
-        featureId: feat.id,
-        states: updatedStates,
-        checkpointIndex: 0,
-        issueDescription: 'res://scripts/player.gd:3 null instance when idle',
-      );
-      await fixCompleter.future;
-      await Future<void>.delayed(const Duration(milliseconds: 20));
-
-      expect(capturedThinkingLevels, ['MEDIUM', 'MEDIUM']);
-      expect(
-        provider.godotFileForResPath('res://scripts/player.gd')?.content,
-        contains('if velocity == Vector2.ZERO:'),
-      );
-    });
-  });
-
-  group('Feature-First Progress & Contract Modals', () {
-    test('FeatureStateNode & getDocumentProgress treat Built-in-Godot as <100% until Playtest Passed (even with 0 steps)', () {
+  group('Feature-First Progress', () {
+    test('FeatureStateNode & getDocumentProgress stay <100% until Playtest Passed when 0 steps', () {
       final provider = WorkbenchProvider();
       final feat = TierDocument(
         id: 'feat_zero_steps',
@@ -454,69 +57,17 @@ func _physics_process(delta: float) -> void:
         name: '[v0.1] Core Dash',
         checklist: const [],
       );
-      expect(unbuiltCp.isBuiltInGodot, isFalse);
       expect(unbuiltCp.progress, equals(0.0));
       expect(unbuiltCp.isCompleted, isFalse);
 
-      final builtCp = unbuiltCp.copyWith(
-        parameters: {'godotBuilt': 'true', 'playtestPassed': 'false'},
-      );
-      expect(builtCp.isBuiltInGodot, isTrue);
-      expect(builtCp.progress, greaterThan(0.0));
-      expect(builtCp.progress, lessThan(1.0));
-      expect(builtCp.isCompleted, isFalse);
-      FeatureStateNode.saveStatesToDocument(feat, [builtCp]);
-      expect(
-        provider.getDocumentProgress(feat.id),
-        allOf(greaterThan(0), lessThan(100)),
-      );
-
-      final passedCp = builtCp.copyWith(
-        parameters: {'godotBuilt': 'true', 'playtestPassed': 'true'},
+      final passedCp = unbuiltCp.copyWith(
+        parameters: {'playtestPassed': 'true'},
       );
       expect(passedCp.isPlaytestPassed, isTrue);
       expect(passedCp.progress, equals(1.0));
       expect(passedCp.isCompleted, isTrue);
       FeatureStateNode.saveStatesToDocument(feat, [passedCp]);
       expect(provider.getDocumentProgress(feat.id), equals(100));
-    });
-
-    testWidgets('Contract dialog edits and saves Godot 4 Project Contract physics layers', (tester) async {
-      final provider = WorkbenchProvider();
-      final proj = TierDocument(
-        id: 'proj_ui',
-        title: 'Modal Game',
-        tier: TierType.project,
-      );
-      provider.documents[proj.id] = proj;
-      provider.switchProject(proj.id);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (ctx) => Scaffold(
-              body: Center(
-                child: ElevatedButton(
-                  onPressed: () => showGodotContractDialog(ctx, provider),
-                  child: const Text('Open Project Contract'),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Open Project Contract'));
-      await tester.pumpAndSettle();
-      expect(find.text('Godot 4 Project Contract'), findsOneWidget);
-
-      await tester.enterText(
-        find.byKey(const ValueKey('contract_layers_input')),
-        '1: World, 2: Player, 3: Enemy, 4: Loot',
-      );
-      await tester.tap(find.byKey(const ValueKey('contract_save_btn')));
-      await tester.pumpAndSettle();
-      expect(provider.activeGodotContract.physicsLayers[4], 'Loot');
     });
   });
 
@@ -738,12 +289,6 @@ func _physics_process(delta: float) -> void:
       provider.documents[epic.id] = epic;
       provider.documents[feat.id] = feat;
       provider.switchProject(proj.id);
-      provider.upsertGodotVirtualFile(
-        resPath: 'res://scripts/player_dash.gd',
-        content:
-            'extends CharacterBody2D\n@export var dash_speed: float = 640.0\n',
-        featureIds: [feat.id],
-      );
       provider.selectFeature(feat.id, triggerAiSynthesis: false);
       return (provider: provider, feat: feat, cp: cp);
     }
@@ -815,7 +360,7 @@ func _physics_process(delta: float) -> void:
     );
 
     testWidgets(
-      'Full Web Studio renders Connect Godot Dock chip, Built-in-Godot status badge, and Half-Screen 1-click Pass CTA',
+      'Full Web Studio renders Connect Godot Dock chip, Copy Spec chip, Queued status badge, and Half-Screen 1-click Pass CTA',
       (WidgetTester tester) async {
         tester.view.physicalSize = const Size(1440, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -828,9 +373,6 @@ func _physics_process(delta: float) -> void:
         final provider = setup.provider;
         final feat = setup.feat;
         final cp = setup.cp;
-        provider.updateFeatureStates(feat.id, [
-          cp.copyWith(parameters: {...cp.parameters, 'godotBuilt': 'true'}),
-        ]);
 
         await tester.pumpWidget(
           MaterialApp(
@@ -845,12 +387,16 @@ func _physics_process(delta: float) -> void:
         );
         await tester.pumpAndSettle();
 
-        // 1. Desktop Web Studio shows Connect Godot chip, Built in Godot status, and omits Code File tab
+        // 1. Desktop Web Studio shows Connect Godot chip, Copy Spec chip, and Queued status
         expect(
           find.byKey(ValueKey('connect_godot_plugin_chip_${cp.id}')),
           findsOneWidget,
         );
-        expect(find.text('Built in Godot'), findsOneWidget);
+        expect(
+          find.byKey(ValueKey('feature_header_copy_spec_btn_${cp.id}')),
+          findsOneWidget,
+        );
+        expect(find.text('Queued'), findsWidgets);
         expect(
           find.byKey(ValueKey('workspace_mode_code_file_btn_${cp.id}')),
           findsNothing,
@@ -1073,11 +619,15 @@ func _physics_process(delta: float) -> void:
         expect(find.text('✦ Tailor active step'), findsNothing);
         expect(find.text('⇄ Sync code to specs'), findsNothing);
         expect(find.text('⚑ Log Playtest Issue'), findsOneWidget);
-        expect(find.text('⚙ Godot Project Contract'), findsOneWidget);
+        expect(find.text('⚙ Godot Project Contract'), findsNothing);
+        expect(find.text('🔌 Connect Godot 4 Plugin'), findsOneWidget);
 
-        await tester.tap(find.text('⚙ Godot Project Contract'));
+        await tester.tap(find.text('🔌 Connect Godot 4 Plugin'));
         await tester.pumpAndSettle();
-        expect(find.byType(Dialog), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('connect_godot_plugin_dialog')),
+          findsOneWidget,
+        );
       },
     );
 
@@ -1770,38 +1320,8 @@ func _physics_process(delta: float) -> void:
     );
 
     test(
-      'shouldPreferRemoteDocumentOnSync preserves newer remote CODEFILEs, PROJECT sync timestamps, completed subtasks & playtestPassed progress',
+      'shouldPreferRemoteDocumentOnSync preserves PROJECT sync timestamps, completed subtasks & playtestPassed progress',
       () {
-        final localCode = TierDocument(
-          id: 'code_1',
-          title: 'player.gd',
-          tier: TierType.codeFile,
-          sections: {
-            GodotVirtualFile.resPathKey: 'res://scripts/player.gd',
-            GodotVirtualFile.updatedAtMsKey: '1000',
-            GodotVirtualFile.contentKey: 'extends CharacterBody3D\n',
-          },
-        );
-        final remoteNewerCode = TierDocument(
-          id: 'code_1',
-          title: 'player.gd',
-          tier: TierType.codeFile,
-          sections: {
-            GodotVirtualFile.resPathKey: 'res://scripts/player.gd',
-            GodotVirtualFile.updatedAtMsKey: '2500',
-            GodotVirtualFile.contentKey:
-                'extends CharacterBody3D\n@export var dash_speed: float = 16.0\n',
-          },
-        );
-        expect(
-          shouldPreferRemoteDocumentOnSync(localCode, remoteNewerCode),
-          isTrue,
-        );
-        expect(
-          shouldPreferRemoteDocumentOnSync(remoteNewerCode, localCode),
-          isFalse,
-        );
-
         final localProj = TierDocument(
           id: 'proj_sync',
           title: 'Synced Project',
@@ -1813,7 +1333,7 @@ func _physics_process(delta: float) -> void:
           title: 'Synced Project',
           tier: TierType.project,
           sections: {'last_godot_sync_ms': '88888'},
-          childrenIds: ['rel_1', 'code_1'],
+          childrenIds: ['rel_1'],
         );
         expect(
           shouldPreferRemoteDocumentOnSync(localProj, remoteProj),
@@ -1857,121 +1377,6 @@ func _physics_process(delta: float) -> void:
           shouldPreferRemoteDocumentOnSync(localPlay, remotePlay),
           isTrue,
         );
-
-        final localUnbuilt = TierDocument(
-          id: 'feat_built',
-          title: 'Dash',
-          tier: TierType.feature,
-          sections: {'states': '[{"id":"cp1","parameters":{"godotBuilt":"false"}}]'},
-        );
-        final remoteBuilt = TierDocument(
-          id: 'feat_built',
-          title: 'Dash',
-          tier: TierType.feature,
-          sections: {'states': '[{"id":"cp1","parameters":{"godotBuilt":"true"}}]'},
-        );
-        expect(
-          shouldPreferRemoteDocumentOnSync(localUnbuilt, remoteBuilt),
-          isTrue,
-        );
-      },
-    );
-
-    test(
-      'Stage 1 2D vs 3D game_spec resolution overrides ambiguous Forward+/Greybox tech_spec defaults cleanly',
-      () {
-        final provider = WorkbenchProvider(enableAutoLoad: false);
-        final proj3d = TierDocument(
-          id: 'proj_3d',
-          title: '3D Action Game',
-          tier: TierType.project,
-          sections: {
-            'game_spec': '3D Third-Person Action · PC/Console',
-            'tech_spec': 'Godot 4 Greybox (2D / Forward+)',
-          },
-        );
-        provider.documents[proj3d.id] = proj3d;
-        provider.switchProject(proj3d.id);
-        expect(provider.activeGodotContract.is3D, isTrue);
-
-        final proj2d = TierDocument(
-          id: 'proj_2d',
-          title: '2D Top-Down Game',
-          tier: TierType.project,
-          sections: {
-            'game_spec': '2D Top-Down Arena · Web/PC',
-            'tech_spec': 'Godot 4 Greybox (Forward+)',
-          },
-        );
-        provider.documents[proj2d.id] = proj2d;
-        provider.switchProject(proj2d.id);
-        expect(provider.activeGodotContract.is3D, isFalse);
-      },
-    );
-
-    test(
-      'activeProjectGodotFiles deduplicates duplicate CODEFILE docs by res_path keeping newest updatedAtMs, unions featureIds, and builds planner summary',
-      () {
-        final provider = WorkbenchProvider(enableAutoLoad: false);
-        final proj = TierDocument(
-          id: 'proj_dedup',
-          title: 'Crab Arena',
-          tier: TierType.project,
-        );
-        final olderDoc = GodotVirtualFile(
-          id: 'proj_dedup_code_crab_player_gd_111111',
-          projectId: proj.id,
-          resPath: 'res://scripts/crab_player.gd',
-          content: 'extends Node\n@export var legacy_speed: float = 1.0\n',
-          language: 'gdscript',
-          releaseVersion: 'v0.1',
-          featureIds: const ['feat_a'],
-          updatedAtMs: 1000,
-        ).toTierDocument();
-        final newerDoc = GodotVirtualFile(
-          id: 'proj_dedup_code_scripts_crab_player_gd_111111',
-          projectId: proj.id,
-          resPath: 'res://scripts/crab_player.gd',
-          content:
-              'extends CharacterBody3D\n@export var move_speed: float = 8.5\nfunc _physics_process(delta: float) -> void:\n\tpass\n',
-          language: 'gdscript',
-          releaseVersion: 'v0.1',
-          featureIds: const ['feat_b'],
-          updatedAtMs: 2500,
-        ).toTierDocument();
-        provider.documents[proj.id] = proj;
-        provider.documents[olderDoc.id] = olderDoc;
-        provider.documents[newerDoc.id] = newerDoc;
-        provider.switchProject(proj.id);
-
-        final files = provider.activeProjectGodotFiles;
-        expect(files, hasLength(1));
-        final resolved = provider.godotFileForResPath('res://scripts/crab_player.gd');
-        expect(resolved, isNotNull);
-        expect(resolved!.content, contains('move_speed'));
-        expect(resolved.content, isNot(contains('legacy_speed')));
-        expect(resolved.featureIds, containsAll(const ['feat_a', 'feat_b']));
-
-        final summary = provider.buildGodotCodebaseSummaryForPlanner(
-          featureIds: const ['feat_a'],
-        );
-        expect(summary, contains('res://scripts/crab_player.gd'));
-        expect(summary, contains('@export var move_speed: float = 8.5'));
-        expect(summary, contains('func _physics_process(delta: float)'));
-
-        final tombstonedDoc = GodotVirtualFile(
-          id: 'proj_dedup_code_scripts_crab_player_gd_111111',
-          projectId: proj.id,
-          resPath: 'res://scripts/crab_player.gd',
-          content: '',
-          language: 'gdscript',
-          releaseVersion: 'v0.1',
-          featureIds: const ['feat_b'],
-          updatedAtMs: 3500,
-        ).toTierDocument();
-        provider.documents[tombstonedDoc.id] = tombstonedDoc;
-        expect(provider.activeProjectGodotFiles, isEmpty);
-        expect(provider.godotFileForResPath('res://scripts/crab_player.gd'), isNull);
       },
     );
 
@@ -2149,6 +1554,217 @@ func _physics_process(delta: float) -> void:
             .join('\n');
         expect(dashDump, contains('Input Map | dash | Shift'));
         expect(dashDump, contains('Input.is_action_just_pressed("dash")'));
+      },
+    );
+  });
+
+  group('SEA Round 2 · Producer Spec & Pure Playtest Gates', () {
+    test(
+      'TierDocument.isLegacyIgnoredTier matches CODEFILE variants and importProjectFromJson skips them',
+      () {
+        expect(TierDocument.isLegacyIgnoredTier({'tier': 'CODEFILE'}), isTrue);
+        expect(TierDocument.isLegacyIgnoredTier({'tier': 'code_file'}), isTrue);
+        expect(TierDocument.isLegacyIgnoredTier({'tier': 'godot_file'}), isTrue);
+        expect(TierDocument.isLegacyIgnoredTier({'tier': 'feature'}), isFalse);
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final legacyBundle = jsonEncode({
+          'version': 1,
+          'projectId': 'proj_legacy',
+          'documents': [
+            {
+              'id': 'proj_legacy',
+              'title': 'Legacy Project',
+              'tier': 'PROJECT',
+              'childrenIds': ['rel_legacy', 'code_legacy'],
+            },
+            {
+              'id': 'rel_legacy',
+              'title': 'v0.1 Prototype',
+              'tier': 'RELEASE',
+              'parentId': 'proj_legacy',
+              'phase': 'v0.1',
+              'childrenIds': [],
+            },
+            {
+              'id': 'code_legacy',
+              'title': 'player.gd',
+              'tier': 'CODEFILE',
+              'parentId': 'proj_legacy',
+              'phase': 'v0.1',
+              'childrenIds': [],
+            },
+          ],
+        });
+
+        final importedProjId = provider.importProjectFromJson(legacyBundle);
+        expect(importedProjId, isNotNull);
+        expect(provider.savedProjects, hasLength(1));
+        expect(provider.documents.values.any((d) => d.title == 'player.gd'), isFalse);
+      },
+    );
+
+    test(
+      'logPlaytestIssueOnCheckpoint synchronously logs [FIX] + [PLAYTEST GUARD] with 0 AI calls and clears playtestPassed',
+      () {
+        GeminiAgentClient.testMockResponder = (_, __) async {
+          throw StateError('AI must not be called when logging a playtest issue');
+        };
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final proj = TierDocument(
+          id: 'proj_fix',
+          title: 'Dash Game',
+          tier: TierType.project,
+          sections: {'active_release_id': 'rel_fix'},
+          childrenIds: ['rel_fix'],
+        );
+        final rel = TierDocument(
+          id: 'rel_fix',
+          title: 'Prototype',
+          tier: TierType.release,
+          parentId: 'proj_fix',
+          phase: 'v0.1',
+          childrenIds: ['epic_fix'],
+        );
+        final epic = TierDocument(
+          id: 'epic_fix',
+          title: 'Core Movement',
+          tier: TierType.epic,
+          parentId: 'rel_fix',
+          phase: 'v0.1',
+          childrenIds: ['feat_fix'],
+        );
+        final cp = FeatureStateNode(
+          id: 'cp_fix',
+          name: '01 · PROTOTYPE',
+          parameters: {'releaseVersion': 'v0.1', 'playtestPassed': 'true'},
+          checklist: [Subtask(id: 's1', text: 'Dash moves forward', completed: true)],
+          coveredScope: const ['Directional burst'],
+          edgeCases: const ['Cancel dash into jump'],
+        );
+        final feat = TierDocument(
+          id: 'feat_fix',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          parentId: 'epic_fix',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+
+        provider.documents[proj.id] = proj;
+        provider.documents[rel.id] = rel;
+        provider.documents[epic.id] = epic;
+        provider.documents[feat.id] = feat;
+        provider.switchProject(proj.id);
+
+        provider.logPlaytestIssueOnCheckpoint(
+          featureId: feat.id,
+          states: FeatureStateNode.getStatesForDocument(feat),
+          checkpointIndex: 0,
+          issueDescription: 'Dash clips into corner geometry',
+        );
+
+        final updated = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(updated.isPlaytestPassed, isFalse);
+        expect(
+          updated.checklist.any(
+            (s) => !s.completed && s.text == '[FIX] Dash clips into corner geometry',
+          ),
+          isTrue,
+        );
+        expect(
+          updated.edgeCases,
+          contains('[PLAYTEST GUARD] Dash clips into corner geometry'),
+        );
+      },
+    );
+
+    test(
+      'buildActiveFeatureCodingAgentPrompt & buildActiveReleaseCodingAgentMarkdown emit clean Producer specs without contract, codeFile, or build queue',
+      () {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final proj = TierDocument(
+          id: 'proj_spec',
+          title: 'Mech Salvage',
+          tier: TierType.project,
+          sections: {
+            'goal': 'Pilot a salvage mech through flooded ruins and extract cores.',
+            'active_release_id': 'rel_spec',
+          },
+          childrenIds: ['rel_spec'],
+        );
+        final rel = TierDocument(
+          id: 'rel_spec',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_spec',
+          phase: 'v0.1',
+          childrenIds: ['epic_spec'],
+        );
+        final epic = TierDocument(
+          id: 'epic_spec',
+          title: 'Grapple Winch',
+          tier: TierType.epic,
+          parentId: 'rel_spec',
+          phase: 'v0.1',
+          childrenIds: ['feat_spec'],
+        );
+        final cp = FeatureStateNode(
+          id: 'cp_spec',
+          name: '01 · PROTOTYPE',
+          trigger: 'Hook latches onto salvage crate and reels it in.',
+          parameters: {'releaseVersion': 'v0.1', 'playtestPassed': 'false'},
+          coveredScope: const ['+winch launch', '+crate reel-in'],
+          tuningParams: const ['winch_range: 14.0', 'reel_speed: 9.0'],
+          edgeCases: const ['Release hook when obstructed', 'No negative slack'],
+          checklist: [
+            Subtask(id: 'fix_1', text: '[FIX] Rope snaps on underwater crate', completed: false),
+          ],
+        )..setGuardSignedOff(0, 'Release hook when obstructed', true);
+
+        final feat = TierDocument(
+          id: 'feat_spec',
+          title: 'Tow Cable',
+          tier: TierType.feature,
+          parentId: 'epic_spec',
+          phase: 'v0.1',
+          sections: {
+            'scope': 'Goal: Reel heavy salvage crates across arena hazards.',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+
+        provider.documents[proj.id] = proj;
+        provider.documents[rel.id] = rel;
+        provider.documents[epic.id] = epic;
+        provider.documents[feat.id] = feat;
+        provider.switchProject(proj.id);
+
+        final featurePrompt = provider.buildActiveFeatureCodingAgentPrompt(feat.id);
+        expect(featurePrompt, contains('# FEATURE SPECIFICATION — Tow Cable'));
+        expect(featurePrompt, contains('Reel heavy salvage crates across arena hazards.'));
+        expect(featurePrompt, contains('+winch launch'));
+        expect(featurePrompt, contains('winch_range: 14.0'));
+        expect(featurePrompt, contains('- [x] `Release hook when obstructed`'));
+        expect(featurePrompt, contains('- [ ] `No negative slack`'));
+        expect(featurePrompt, contains('[FIX] Rope snaps on underwater crate'));
+        expect(featurePrompt, isNot(contains('Godot Dock Build Queue')));
+        expect(featurePrompt, isNot(contains('Godot 4 Contract')));
+
+        final releaseMd = provider.buildActiveReleaseCodingAgentMarkdown();
+        expect(releaseMd, contains('## 5. Feature Specifications & Playtest Gates'));
+        expect(releaseMd, contains('- **Status**: Queued'));
+        expect(releaseMd, contains('- **In Scope**:'));
+        expect(releaseMd, contains('- **Playtest Guards**:'));
+        expect(releaseMd, contains('  - [x] Release hook when obstructed'));
+        expect(releaseMd, contains('  - [ ] No negative slack'));
+        expect(releaseMd, contains('Open Playtest Issues (`[FIX]`)'));
+        expect(releaseMd, isNot(contains('Godot 4 Contract')));
+        expect(releaseMd, isNot(contains('TierType.codeFile')));
+        expect(releaseMd, isNot(contains('3-Area Engine Implementation Blueprint')));
       },
     );
   });

@@ -1806,10 +1806,8 @@ Concept Blueprint:
     if (relDoc == null) return;
     _syncCurrentPhaseFromRelease(relDoc);
 
-    _stepQueueGeneration++;
     _progressivePlanGeneration++;
     final int planGeneration = _progressivePlanGeneration;
-    _pendingFeatureStepQueue.clear();
     final verTag = releaseVersionTagFor(relDoc);
     relDoc.sections['versionTag'] = verTag;
 
@@ -2106,9 +2104,6 @@ Concept Blueprint:
         section1DoneWhen: workingBp.doneWhen,
         missingGaps: workingBp.missingGaps,
         alreadyPlannedChanges: alreadyPlannedChanges,
-        godotCodebaseSummary: buildGodotCodebaseSummaryForPlanner(
-          featureIds: beatExistingFeatures.map((f) => f.id),
-        ),
         apiKey: _apiKey,
         modelName: _conversationModel,
         thinkingLevel: 'LOW',

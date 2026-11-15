@@ -4,8 +4,7 @@ enum TierType {
   project,
   release,
   epic,
-  feature,
-  codeFile;
+  feature;
 
   String get id => name.toUpperCase();
 
@@ -14,7 +13,6 @@ enum TierType {
         TierType.release => 'Release',
         TierType.epic => 'Epic',
         TierType.feature => 'Feature',
-        TierType.codeFile => 'Code File',
       };
 
   String get pluralDisplayName => switch (this) {
@@ -22,7 +20,6 @@ enum TierType {
         TierType.release => 'Releases',
         TierType.epic => 'Epics',
         TierType.feature => 'Features',
-        TierType.codeFile => 'Code Files',
       };
 
   int get level => switch (this) {
@@ -30,7 +27,6 @@ enum TierType {
         TierType.release => 2,
         TierType.epic => 3,
         TierType.feature => 4,
-        TierType.codeFile => 5,
       };
 
   String get shortTag => switch (this) {
@@ -38,7 +34,6 @@ enum TierType {
         TierType.release => 'REL',
         TierType.epic => 'EPIC',
         TierType.feature => 'FEAT',
-        TierType.codeFile => 'FILE',
       };
 
   String get letterBadge => switch (this) {
@@ -46,7 +41,6 @@ enum TierType {
         TierType.release => 'R',
         TierType.epic => 'E',
         TierType.feature => 'F',
-        TierType.codeFile => 'C',
       };
 
   String get emoji => letterBadge;
@@ -56,7 +50,6 @@ enum TierType {
         TierType.release => Icons.rocket_launch_outlined,
         TierType.epic => Icons.layers_outlined,
         TierType.feature => Icons.widgets_outlined,
-        TierType.codeFile => Icons.code_outlined,
       };
 
   String get descriptionTooltip => switch (this) {
@@ -64,7 +57,6 @@ enum TierType {
         TierType.release => 'Release: Target ship milestone',
         TierType.epic => 'Epic: Core Gameplay Loop Epic',
         TierType.feature => 'Feature: Playable mechanic & deliverable',
-        TierType.codeFile => 'Code File: Cumulative res:// script or resource',
       };
 
   Color colorFor(bool isDark) => switch (this) {
@@ -76,8 +68,6 @@ enum TierType {
           isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
         TierType.feature =>
           isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
-        TierType.codeFile =>
-          isDark ? const Color(0xFF60A5FA) : const Color(0xFF2563EB),
       };
 
   Color get color => colorFor(true);
@@ -87,7 +77,6 @@ enum TierType {
         TierType.release => TierType.epic,
         TierType.epic => TierType.feature,
         TierType.feature => null,
-        TierType.codeFile => null,
       };
 
   TierType? get parentTier => switch (this) {
@@ -95,7 +84,6 @@ enum TierType {
         TierType.release => TierType.project,
         TierType.epic => TierType.release,
         TierType.feature => TierType.epic,
-        TierType.codeFile => TierType.project,
       };
 
   static TierType fromString(String val) {
@@ -104,9 +92,6 @@ enum TierType {
     if (lower == 'phase' || lower == 'release') return TierType.release;
     if (lower == 'epic') return TierType.epic;
     if (lower == 'task' || lower == 'feature') return TierType.feature;
-    if (lower == 'code_file' || lower == 'codefile' || lower == 'godot_file') {
-      return TierType.codeFile;
-    }
     return TierType.values.firstWhere(
       (e) => e.name.toLowerCase() == lower,
       orElse: () => TierType.project,

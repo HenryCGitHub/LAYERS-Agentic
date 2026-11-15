@@ -164,8 +164,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           });
         } else if (action == 'connect_godot') {
           showConnectGodotPluginDialog(context, widget.workbench);
-        } else if (action == 'godot_contract') {
-          showGodotContractDialog(context, widget.workbench);
         } else if (action == 'rename_feature') {
           _startStage2InlineEdit('rename_header_feat_${feat.id}', feat.title);
         } else if (action == 'feature_inbox') {
@@ -234,14 +232,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
             ),
           ),
         ),
-        PopupMenuItem<String>(
-          value: 'godot_contract',
-          height: 34,
-          child: Text(
-            '⚙ Godot Project Contract',
-            style: GoogleFonts.inter(fontSize: 12.5, color: textSecondary),
-          ),
-        ),
         const PopupMenuDivider(height: 8),
         PopupMenuItem<String>(
           value: 'toggle_complete_all',
@@ -308,14 +298,11 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
         _activeStage2InlineEditKey == 'rename_header_feat_${feat.id}';
     final bool isDrawerOpen = _inlineBugDrawerNodeId == node.id;
     final bool isPassed = node.isPlaytestPassed || node.isCompleted;
-    final bool isBuiltInGodot = !isPassed && node.isBuiltInGodot;
 
-    final String statusLabel = isPassed
-        ? 'Passed ✓'
-        : (isBuiltInGodot ? 'Built in Godot' : 'Queued');
+    final String statusLabel = isPassed ? 'Passed ✓' : 'Queued';
     final Color statusColor = isPassed
         ? accentEmerald
-        : (isBuiltInGodot ? const Color(0xFF38BDF8) : const Color(0xFF94A3B8));
+        : const Color(0xFF94A3B8);
 
     return Container(
       key: ValueKey('unified_header_${node.id}'),
@@ -497,6 +484,32 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                           fontSize: 9.5,
                           fontWeight: weightSemi,
                           color: const Color(0xFF7DD3FC),
+                        ),
+                      ),
+                    ),
+                  ),
+                  InkWell(
+                    key: ValueKey('feature_header_copy_spec_btn_${node.id}'),
+                    borderRadius: BorderRadius.circular(5),
+                    onTap: () => _copyActiveFeaturePrompt(feat),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF07090E),
+                        borderRadius: BorderRadius.circular(5),
+                        border: Border.all(
+                          color: const Color(0xFF334155),
+                        ),
+                      ),
+                      child: Text(
+                        '⧉ Copy Spec',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 9.5,
+                          fontWeight: weightSemi,
+                          color: const Color(0xFFCBD5E1),
                         ),
                       ),
                     ),
@@ -967,34 +980,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
                 doneBtn: doneBtn,
                 featureActionsMenu: featureActionsMenu,
               ),
-              if (widget.workbench.hasFailedStepSynthesis(feat.id))
-                InkWell(
-                  key: ValueKey('retry_ai_steps_banner_${feat.id}'),
-                  onTap: () => widget.workbench.synthesizeFeatureHowToStepsWithAi(
-                    feat.id,
-                    forceRefresh: true,
-                  ),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 8,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF1F1611),
-                      border: Border(
-                        bottom: BorderSide(color: Color(0x59F59E0B)),
-                      ),
-                    ),
-                    child: Text(
-                      '⚠ AI synthesis timed out — Tap to retry',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFFFBBF24),
-                      ),
-                    ),
-                  ),
-                ),
               if (isDrawerOpen)
                 _buildInlinePlaytestBugDrawer(
                   feat: feat,

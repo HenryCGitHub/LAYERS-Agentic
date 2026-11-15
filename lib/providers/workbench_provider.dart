@@ -9,8 +9,6 @@ import '../constants/text_style_guide.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/feature_state.dart';
-import '../models/godot_project_contract.dart';
-import '../models/godot_virtual_file.dart';
 import '../models/tier_document.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_vault_service.dart';
@@ -275,14 +273,7 @@ class WorkbenchProvider extends ChangeNotifier {
   Map<String, String?>? _preModalFeatureLifecycles;
   String? _initialProgressiveTrack0BlueprintJson;
 
-  final Set<String> _aiSynthesizedFeatureSteps = <String>{};
   final Set<String> _synthesizingFeatureIds = <String>{};
-  final Set<String> _failedStepSynthesisFeatureIds = <String>{};
-  bool hasFailedStepSynthesis(String featureId) =>
-      _failedStepSynthesisFeatureIds.contains(featureId);
-  final List<String> _pendingFeatureStepQueue = <String>[];
-  int _stepQueueGeneration = 0;
-  bool _isDrainingStepQueue = false;
   int? _activeConceptSectionBuildIndex;
   int? get activeConceptSectionBuildIndex => _activeConceptSectionBuildIndex;
   bool isSynthesizingConceptSection(int sectionIdx) =>
@@ -304,8 +295,6 @@ class WorkbenchProvider extends ChangeNotifier {
       _synthesizingProgressiveBeatId == beatId;
   bool isQueuedProgressiveBeat(String beatId) =>
       _queuedProgressiveBeatIds.contains(beatId);
-  List<String> get pendingFeatureStepQueue =>
-      List.unmodifiable(_pendingFeatureStepQueue);
 
   String? _cachedInboxProjectId;
   int? _cachedInboxRawHash;

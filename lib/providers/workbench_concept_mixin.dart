@@ -584,8 +584,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         }
         _persistDocument(r);
       }
-      _aiSynthesizedFeatureSteps.clear();
-      _failedStepSynthesisFeatureIds.clear();
       TaskHowToBlueprint.clearCache();
 
       final projectFeatureIds = <String>{};
@@ -632,13 +630,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
               jsonEncode(_releaseBlueprint!.toJson());
           _persistDocument(ownerRel);
         }
-      }
-      if (_selectedFeatureId != null &&
-          GeminiAgentClient.testMockResponder != null) {
-        synthesizeFeatureHowToStepsWithAi(
-          _selectedFeatureId!,
-          forceRefresh: true,
-        );
       }
     } else {
       for (final r in releases) {

@@ -77,9 +77,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         border: Border.all(
           color: isPassed
               ? accentEmerald.withValues(alpha: 0.5)
-              : (node.isBuiltInGodot
-                  ? const Color(0xFF38BDF8).withValues(alpha: 0.42)
-                  : borderSubtle),
+              : borderSubtle,
         ),
       ),
       child: Column(
