@@ -24,7 +24,7 @@
 ## 1. Composable `Auto-Goal`, `Auto-Grill`, and 2-Step `Auto GG` Workflows
 - **Standalone Continuous `Auto-Goal` (`/auto-goal [focus]`)**:
   - Launches [`.agents/skills/auto-goal/SKILL.md`](.agents/skills/auto-goal/SKILL.md) + [`.agents/hooks/auto_gg_hook.py`](.agents/hooks/auto_gg_hook.py) (`mode: "goal"`).
-  - Runs [`discover_signals.py`](.agents/skills/auto-goal/scripts/discover_signals.py), auto-locks the `#1` safest high-impact 3-part Goal Contract without pitching alternatives, calls `ask_question` *only* if a real UX fork exists, runs `Red → ./scripts/verify_loop.sh → Commit`, and calls `enter_plan_mode(reason='[round-complete] ...')` to loop continuously until told `stop`.
+  - Runs [`discover_signals.py`](.agents/skills/auto-goal/scripts/discover_signals.py), presents **1 Goal Choice menu (`3–4` ranked goals via `ask_question`, `(Recommended)` first — enforced by `PreToolUse` before `exit_plan_mode`)** on every round, executes `Red → ./scripts/verify_loop.sh → Commit` directly on the chosen goal, and calls `enter_plan_mode(reason='[round-complete] ...')` to loop continuously until told `stop`, `pause`, or `"finish ... and pause"`.
 - **Standalone Targeted `Auto-Grill` (`/auto-grill <target>`)**:
   - Launches [`.agents/skills/auto-grill/SKILL.md`](.agents/skills/auto-grill/SKILL.md) (`mode: "grill"`).
   - Skips `discover_signals.py`, inspects affected files directly, asks `1–3` high-signal UX/scope questions via `ask_question` (`(Recommended)` first, or skips if zero UX ambiguity), locks the Goal Contract, executes & verifies once, and stops cleanly.

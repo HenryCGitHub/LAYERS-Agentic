@@ -18,6 +18,11 @@ STOP_RE = re.compile(
     r"\b(?:stop|pause|exit|end|quit|disable)\s+(?:auto[\s_-]*(?:gg|goal|grill)|loop)\b)",
     re.IGNORECASE,
 )
+FINISH_AND_PAUSE_RE = re.compile(
+    r"(?:\bfini?sh\b.*\b(?:pause|stop|done|exit)\b|"
+    r"\blast\s+(?:loop|round)\b.*\b(?:pause|stop|done|exit)\b)",
+    re.IGNORECASE,
+)
 SLASH_TRIGGER_RE = re.compile(
     r"^\s*/auto[-_]?(gg|goal|grill)\b(.*)$",
     re.IGNORECASE | re.DOTALL,
@@ -66,6 +71,7 @@ def _default_state() -> dict:
       "focus": "",
       "lastSeenInput": "",
       "injectedRound": 0,
+      "pauseAfterRound": False,
       "grillRetries": 0,
       "planExitRetries": 0,
       "handoffRetries": 0,
@@ -73,8 +79,6 @@ def _default_state() -> dict:
 
 
 def _start_phase_for_mode(mode: str) -> str:
-  if mode == "goal":
-    return "discovering"
   if mode == "grill":
     return "grilling_ux"
   return "select_goal"
@@ -151,10 +155,11 @@ def _build_pre_invocation_message(state: dict) -> str:
         "1) Run `PYTHONDONTWRITEBYTECODE=1 python3 "
         f".agents/skills/auto-goal/scripts/discover_signals.py{discover_arg}` "
         "and inspect top candidate files; "
-        "2) Auto-lock the #1 safest high-impact 3-part Goal Contract "
-        "(call `ask_question` ONLY if a real UX fork exists); "
-        "3) Execute `Red -> ./scripts/verify_loop.sh -> Commit` and call "
-        f"`enter_plan_mode(reason='[round-complete] ...')` to launch Round {cur_round + 1}."
+        "2) Call `ask_question` with 1 Goal Choice question listing 3-4 concrete "
+        "ranked goals (`(Recommended)` first, each stating what changes and why) "
+        "so the user chooses what to work on next; "
+        "3) Lock the chosen 3-part Goal Contract, execute `Red -> ./scripts/verify_loop.sh -> Commit`, "
+        f"and call `enter_plan_mode(reason='[round-complete] ...')` for Round {cur_round + 1}."
     )
 
   if mode == "grill":
@@ -190,6 +195,12 @@ def _handle_pre_invocation(payload: dict) -> dict:
     if STOP_RE.search(last_input):
       state["active"] = False
       state["phase"] = "idle"
+      state["pauseAfterRound"] = False
+      _save_state(state_path, state)
+      return {}
+
+    if state.get("active") and FINISH_AND_PAUSE_RE.search(last_input):
+      state["pauseAfterRound"] = True
       _save_state(state_path, state)
       return {}
 
@@ -204,6 +215,7 @@ def _handle_pre_invocation(payload: dict) -> dict:
       state["round"] = max(1, prev_round + 1) if was_same_active else 1
       state["focus"] = focus
       state["injectedRound"] = 0
+      state["pauseAfterRound"] = False
       state["grillRetries"] = 0
       state["planExitRetries"] = 0
       state["handoffRetries"] = 0
@@ -260,6 +272,31 @@ def _reset_retries(state: dict) -> None:
   state["handoffRetries"] = 0
 
 
+def _handle_pre_tool(payload: dict) -> dict:
+  state_path = _resolve_state_path(payload)
+  state = _load_state(state_path)
+  if not state.get("active"):
+    return {"decision": "allow"}
+
+  tool_call = payload.get("toolCall")
+  if not isinstance(tool_call, dict):
+    tool_call = {}
+  name = str(tool_call.get("name", "")).lower()
+  mode = str(state.get("mode", "gg"))
+  phase = str(state.get("phase", "idle"))
+
+  if name == "exit_plan_mode" and mode in ("goal", "gg") and phase == "select_goal":
+    return {
+        "decision": "deny",
+        "reason": (
+            "Goal selection required first: call `ask_question` presenting "
+            "3-4 ranked Goal options (`(Recommended)` first) so the user can "
+            "choose which goal to work on next before calling `exit_plan_mode`."
+        ),
+    }
+  return {"decision": "allow"}
+
+
 def _handle_post_tool(payload: dict) -> dict:
   state_path = _resolve_state_path(payload)
   state = _load_state(state_path)
@@ -282,6 +319,7 @@ def _handle_post_tool(payload: dict) -> dict:
     if err:
       state["active"] = False
       state["phase"] = "idle"
+      state["pauseAfterRound"] = False
     elif mode == "gg" and phase == "select_goal":
       state["phase"] = "grill_chosen"
       _reset_retries(state)
@@ -296,6 +334,13 @@ def _handle_post_tool(payload: dict) -> dict:
   elif name == "enter_plan_mode":
     reason = str(args.get("reason", ""))
     is_round_complete = "[round-complete]" in reason.lower()
+    if is_round_complete and state.get("pauseAfterRound"):
+      state["active"] = False
+      state["phase"] = "idle"
+      state["pauseAfterRound"] = False
+      _reset_retries(state)
+      _save_state(state_path, state)
+      return {}
     if not is_round_complete and _has_unverified_watched_dirty_code():
       state["phase"] = "reviewing"
       state["planExitRetries"] = 0
@@ -365,9 +410,28 @@ def _handle_stop(payload: dict) -> dict:
       }
     return {"decision": "allow"}
 
+  if mode in ("goal", "gg") and phase == "building" and state.get("pauseAfterRound"):
+    state["active"] = False
+    state["phase"] = "idle"
+    state["pauseAfterRound"] = False
+    _reset_retries(state)
+    _save_state(state_path, state)
+    return {"decision": "allow"}
+
   if mode == "goal":
+    if phase == "select_goal" and int(state.get("grillRetries", 0)) < 1:
+      state["grillRetries"] = 1
+      _save_state(state_path, state)
+      return {
+          "decision": "continue",
+          "reason": (
+              f"[Auto-Goal — Round {cur_round}] Call `ask_question` presenting "
+              "3-4 ranked Goal options (`(Recommended)` first) so the user can "
+              "choose which goal to work on next."
+          ),
+      }
     if (
-        phase in ("discovering", "answered", "reviewing")
+        phase in ("answered", "reviewing")
         and int(state.get("planExitRetries", 0)) < 1
     ):
       state["planExitRetries"] = 1
@@ -375,14 +439,14 @@ def _handle_stop(payload: dict) -> dict:
       return {
           "decision": "continue",
           "reason": (
-              f"[Auto-Goal — Round {cur_round}] Lock the #1 safest Goal Contract "
-              "and call `exit_plan_mode` (or `ask_question` only if a UX fork exists)."
+              f"[Auto-Goal — Round {cur_round}] Lock the chosen Goal Contract "
+              "and call `exit_plan_mode` now to build it."
           ),
       }
     if phase == "building" and int(state.get("handoffRetries", 0)) < 1:
       next_round = cur_round + 1
       state["round"] = next_round
-      state["phase"] = "discovering"
+      state["phase"] = "select_goal"
       state["injectedRound"] = 0
       _reset_retries(state)
       state["handoffRetries"] = 1
@@ -449,11 +513,11 @@ def main() -> int:
   parser.add_argument(
       "--event",
       required=True,
-      choices=("pre_invocation", "post_tool", "stop"),
+      choices=("pre_invocation", "pre_tool", "post_tool", "stop"),
   )
   args = parser.parse_args()
 
-  fallback = {"decision": "allow"} if args.event == "stop" else {}
+  fallback = {"decision": "allow"} if args.event in ("stop", "pre_tool") else {}
   raw = sys.stdin.read().strip()
   if not raw:
     print(json.dumps(fallback))
@@ -472,6 +536,8 @@ def main() -> int:
   try:
     if args.event == "pre_invocation":
       out = _handle_pre_invocation(payload)
+    elif args.event == "pre_tool":
+      out = _handle_pre_tool(payload)
     elif args.event == "post_tool":
       out = _handle_post_tool(payload)
     else:
