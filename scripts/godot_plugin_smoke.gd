@@ -107,6 +107,14 @@ func _collect_checkboxes(node: Node, out: Array[CheckBox]) -> void:
 			_collect_checkboxes(ch as Node, out)
 
 
+func _collect_labels_text(node: Node, out: PackedStringArray) -> void:
+	if node is Label:
+		out.append((node as Label).text)
+	for ch in node.get_children():
+		if ch is Node:
+			_collect_labels_text(ch as Node, out)
+
+
 func _run_smoke_suite() -> bool:
 	# 1. Compile-check all 4 addon GDScripts cleanly with CACHE_MODE_REPLACE
 	var plugin_scr: Variant = ResourceLoader.load(
@@ -141,6 +149,7 @@ func _run_smoke_suite() -> bool:
 		"primaryAsset": SMOKE_SCENE_PATH,
 		"scriptPaths": [SMOKE_SCRIPT_PATH],
 		"coveredScope": ["WASD movement", "Jump impulse"],
+		"tuningParams": ["move_speed = 8.0 m/s", "jump_impulse = 6.5 m/s"],
 		"edgeCases": [
 			{
 				"index": 0,
@@ -239,6 +248,8 @@ func _run_smoke_suite() -> bool:
 	for required_md in [
 		"Smoke Player",
 		"Goal:",
+		"Tuning Variables",
+		"move_speed = 8.0 m/s",
 		"Playtest Guards",
 		"[ ] Clamp sprint speed",
 		"[x] Reset jump on floor",
@@ -335,13 +346,21 @@ func _run_smoke_suite() -> bool:
 		_fail("Primary CTA button invalid on unpassed feature.")
 		return false
 
-	# Playtest guards render as CheckBox items
+	# Playtest guards render as CheckBox items, and Tuning Variables render inline
 	var body_container: Node = dock.get("_body_container") as Node
 	var guard_boxes: Array[CheckBox] = []
 	_collect_checkboxes(body_container, guard_boxes)
 	if guard_boxes.size() != 2:
 		dock.free()
 		_fail("Expected 2 CheckBox guards, got %d" % guard_boxes.size())
+		return false
+
+	var label_texts := PackedStringArray()
+	_collect_labels_text(body_container, label_texts)
+	var all_labels_joined: String = "\n".join(label_texts)
+	if all_labels_joined.find("Tuning Variables") == -1 or all_labels_joined.find("move_speed = 8.0 m/s") == -1:
+		dock.free()
+		_fail("Expected Tuning Variables rendered inline in Godot Dock: %s" % all_labels_joined)
 		return false
 
 	# Resolve button exists for open [FIX] issue
@@ -352,7 +371,7 @@ func _run_smoke_suite() -> bool:
 		_fail("Expected 'Resolve' button for open [FIX] issue.")
 		return false
 
-	# Optimistic local guard toggle, issue log, issue resolve & cache invalidation
+	# Optimistic local guard toggle, issue log, issue resolve, 1-click pass & reopen gate
 	dock.call("_on_guard_toggled", true, feat_probe, 0, "[STATE GUARD] Clamp sprint speed")
 	var guards_arr: Array = feat_probe.get("edgeCases", [])
 	if not bool((guards_arr[0] as Dictionary).get("signedOff", false)):
@@ -366,6 +385,11 @@ func _run_smoke_suite() -> bool:
 		dock.free()
 		_fail("_submit_log_issue did not append optimistic issue.")
 		return false
+	var guards_after_log: Array = feat_probe.get("edgeCases", [])
+	if guards_after_log.size() != 3:
+		dock.free()
+		_fail("_submit_log_issue did not append [PLAYTEST GUARD] entry to edgeCases.")
+		return false
 
 	dock.call("_on_resolve_issue_pressed", feat_probe, "iss_1")
 	var issues_after_resolve: Array = feat_probe.get("openIssues", [])
@@ -373,6 +397,48 @@ func _run_smoke_suite() -> bool:
 		dock.free()
 		_fail("_on_resolve_issue_pressed did not remove iss_1.")
 		return false
+
+	var sync_probe: Variant = sync_scr.new()
+	dock.set("_sync", sync_probe)
+	dock.call("_on_primary_cta_pressed")
+	if not bool(feat_probe.get("isPlaytestPassed", false)):
+		sync_probe.free()
+		dock.free()
+		_fail("_on_primary_cta_pressed did not mark isPlaytestPassed=true.")
+		return false
+	var issues_after_pass: Array = feat_probe.get("openIssues", [])
+	if not issues_after_pass.is_empty():
+		sync_probe.free()
+		dock.free()
+		_fail("_on_primary_cta_pressed did not clear openIssues.")
+		return false
+	for g_pass in (feat_probe.get("edgeCases", []) as Array):
+		if typeof(g_pass) == TYPE_DICTIONARY and not bool((g_pass as Dictionary).get("signedOff", false)):
+			sync_probe.free()
+			dock.free()
+			_fail("_on_primary_cta_pressed did not sign off all edgeCases.")
+			return false
+
+	dock.call("_on_reopen_gate_pressed", feat_probe)
+	if bool(feat_probe.get("isPlaytestPassed", true)):
+		sync_probe.free()
+		dock.free()
+		_fail("_on_reopen_gate_pressed did not clear isPlaytestPassed.")
+		return false
+	var issues_after_reopen: Array = feat_probe.get("openIssues", [])
+	if not issues_after_reopen.is_empty():
+		sync_probe.free()
+		dock.free()
+		_fail("_on_reopen_gate_pressed resurrected resolved openIssues.")
+		return false
+	for g_reopen in (feat_probe.get("edgeCases", []) as Array):
+		if typeof(g_reopen) == TYPE_DICTIONARY and not bool((g_reopen as Dictionary).get("signedOff", false)):
+			sync_probe.free()
+			dock.free()
+			_fail("_on_reopen_gate_pressed unexpectedly wiped signedOff guards.")
+			return false
+	sync_probe.free()
+	dock.set("_sync", null)
 
 	dock.call("on_editor_scene_saved", SMOKE_SCENE_PATH)
 

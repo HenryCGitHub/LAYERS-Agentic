@@ -544,8 +544,16 @@ class FeatureStateNode {
 
   static int _computeDocStatesSignature(TierDocument doc) {
     final rawJson = doc.sections['states'] ?? '';
-    final baseHash =
-        Object.hash(doc.id, doc.title, rawJson, doc.subtasks.length);
+    final syncMs = doc.sections['last_godot_sync_ms'] ?? '';
+    final updatedMs = doc.sections['updated_at_ms'] ?? '';
+    final baseHash = Object.hash(
+      doc.id,
+      doc.title,
+      rawJson,
+      doc.subtasks.length,
+      syncMs,
+      updatedMs,
+    );
     return _hashSubtasks(baseHash, doc.subtasks);
   }
 

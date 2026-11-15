@@ -2158,9 +2158,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     }
 
     if (cpNode != null) {
-      final openFixes = cpNode.checklist
-          .where((s) => !s.completed && s.text.contains('[FIX]'))
-          .toList();
+      final openFixes = cpNode.openFixItems;
       sb.writeln('\n## 4. Open Playtest Issues ([FIX])');
       if (openFixes.isEmpty) {
         sb.writeln('- *(No open playtest issues)*');

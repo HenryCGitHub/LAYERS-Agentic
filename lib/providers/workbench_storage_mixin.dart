@@ -76,6 +76,20 @@ bool shouldPreferRemoteDocumentOnSync(
     return remotePlaytestPassed > localPlaytestPassed;
   }
 
+  int countSignedOffGuards(TierDocument doc) {
+    int total = 0;
+    for (final state in FeatureStateNode.getStatesForDocument(doc)) {
+      total += state.signedOffGuardsCount;
+    }
+    return total;
+  }
+
+  final remoteSignedGuards = countSignedOffGuards(remoteDoc);
+  final localSignedGuards = countSignedOffGuards(localDoc);
+  if (remoteSignedGuards != localSignedGuards) {
+    return remoteSignedGuards > localSignedGuards;
+  }
+
   final remoteStatesDone = _countOccurrences(remoteStates, '"completed":true') +
       _countOccurrences(remoteStates, '"completed": true');
   final localStatesDone = _countOccurrences(localStates, '"completed":true') +
@@ -301,6 +315,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           documents[entry.key] = entry.value;
           LocalVaultService.saveDocument(entry.value);
         }
+        FeatureStateNode.clearCache();
         if (_activeProjectId == null ||
             !documents.containsKey(_activeProjectId)) {
           final projs = savedProjects;
@@ -1351,6 +1366,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
   void _persistDocument(TierDocument doc, {bool debounce = false}) {
     _persistTimers.remove(doc.id)?.cancel();
+    doc.sections['updated_at_ms'] =
+        DateTime.now().millisecondsSinceEpoch.toString();
     void writeNow() {
       LocalVaultService.saveDocument(doc);
       final user = _authService.currentUser;

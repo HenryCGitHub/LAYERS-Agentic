@@ -390,7 +390,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.0")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.1")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -721,6 +721,14 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	var raw_issues: Variant = feat.get("openIssues", [])
 	var open_issues: Array = raw_issues if typeof(raw_issues) == TYPE_ARRAY else []
 
+	var raw_guards: Variant = feat.get("edgeCases", [])
+	var guard_items: Array = raw_guards if typeof(raw_guards) == TYPE_ARRAY else []
+	var checked_guards: int = 0
+	for g_raw in guard_items:
+		if typeof(g_raw) == TYPE_DICTIONARY and bool((g_raw as Dictionary).get("signedOff", false)):
+			checked_guards += 1
+	var live_pct: int = _recompute_feature_progress(feat)
+
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, arena_scene) if _executor != null else {
 		"primary_scene": str(feat.get("primaryAsset", "")), "arena_scene": arena_scene, "script_paths": feat.get("scriptPaths", [])
@@ -756,7 +764,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		state_lbl.text = "Issues (%d)" % open_issues.size()
 		state_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
 	else:
-		state_lbl.text = "In Progress"
+		state_lbl.text = ("In Progress · %d%%" % live_pct) if live_pct > 0 else "In Progress"
 		state_lbl.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.45, 0.78, 0.98)))
 	hdr_row.add_child(state_lbl)
 
@@ -802,13 +810,33 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 			s_lbl.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.72, 0.76, 0.82)))
 			scope_box.add_child(s_lbl)
 
-	var raw_guards: Variant = feat.get("edgeCases", [])
-	var guard_items: Array = raw_guards if typeof(raw_guards) == TYPE_ARRAY else []
+	var raw_tuning: Variant = feat.get("tuningParams", [])
+	var tuning_items: Array = raw_tuning if typeof(raw_tuning) == TYPE_ARRAY else []
+	if not tuning_items.is_empty():
+		var tuning_hdr := Label.new()
+		tuning_hdr.text = "Tuning Variables"
+		tuning_hdr.add_theme_color_override("font_color", _editor_color("accent_color", Color(0.56, 0.78, 0.98)))
+		if bold_font != null:
+			tuning_hdr.add_theme_font_override("font", bold_font)
+		brief_vb.add_child(tuning_hdr)
+
+		var tuning_box := VBoxContainer.new()
+		tuning_box.add_theme_constant_override("separation", _S(2))
+		brief_vb.add_child(tuning_box)
+		var tuning_cap: int = mini(tuning_items.size(), 8)
+		for idx in range(tuning_cap):
+			var tuning_txt: String = str(tuning_items[idx]).strip_edges()
+			if tuning_txt.is_empty():
+				continue
+			var t_lbl := Label.new()
+			t_lbl.text = "•  %s" % tuning_txt
+			t_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			if mono_font != null:
+				t_lbl.add_theme_font_override("font", mono_font)
+			t_lbl.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.76, 0.82, 0.88)))
+			tuning_box.add_child(t_lbl)
+
 	if not guard_items.is_empty():
-		var checked_guards: int = 0
-		for g_raw in guard_items:
-			if typeof(g_raw) == TYPE_DICTIONARY and bool((g_raw as Dictionary).get("signedOff", false)):
-				checked_guards += 1
 		var guards_hdr := Label.new()
 		guards_hdr.text = "Playtest Guards (%d/%d)" % [checked_guards, guard_items.size()]
 		guards_hdr.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
@@ -1195,6 +1223,24 @@ func _on_fix_input_gui_input(event: InputEvent, feat: Dictionary) -> void:
 	_on_log_issue_pressed(feat)
 
 
+func _recompute_feature_progress(feat: Dictionary) -> int:
+	if bool(feat.get("isPlaytestPassed", false)) or bool(feat.get("isCompleted", false)):
+		feat["progress"] = 100
+		return 100
+	var raw_guards: Variant = feat.get("edgeCases", [])
+	if typeof(raw_guards) == TYPE_ARRAY and not (raw_guards as Array).is_empty():
+		var arr: Array = raw_guards as Array
+		var checked_cnt: int = 0
+		for g_raw in arr:
+			if typeof(g_raw) == TYPE_DICTIONARY and bool((g_raw as Dictionary).get("signedOff", false)):
+				checked_cnt += 1
+		var pct: int = int(round(float(checked_cnt) / float(arr.size()) * 50.0))
+		feat["progress"] = pct
+		return pct
+	feat["progress"] = 0
+	return 0
+
+
 func _on_guard_toggled(toggled_on: bool, feat: Dictionary, guard_idx: int, raw_guard_text: String) -> void:
 	if feat.is_empty():
 		return
@@ -1209,6 +1255,7 @@ func _on_guard_toggled(toggled_on: bool, feat: Dictionary, guard_idx: int, raw_g
 				if int(d.get("index", i)) == guard_idx:
 					d["signedOff"] = toggled_on
 					break
+	_recompute_feature_progress(feat)
 	if _sync != null and not _payload.is_empty():
 		_sync.save_cached_epic(_payload)
 	_render_active_feature_workspace(feat)
@@ -1258,6 +1305,29 @@ func _submit_log_issue(feat: Dictionary, issue_text: String) -> void:
 	feat["openIssues"] = next_issues
 	feat["isPlaytestPassed"] = false
 	feat["isCompleted"] = false
+	var raw_guards: Variant = feat.get("edgeCases", [])
+	var next_guards: Array = (raw_guards as Array).duplicate() if typeof(raw_guards) == TYPE_ARRAY else []
+	var lower_clean: String = clean_txt.to_lower()
+	var has_guard: bool = false
+	for g_raw in next_guards:
+		var g_str: String = ""
+		if typeof(g_raw) == TYPE_DICTIONARY:
+			var gd: Dictionary = g_raw as Dictionary
+			g_str = str(gd.get("rawText", gd.get("text", ""))).to_lower()
+		else:
+			g_str = str(g_raw).to_lower()
+		if g_str.find(lower_clean) != -1:
+			has_guard = true
+			break
+	if not has_guard:
+		var next_idx: int = next_guards.size()
+		next_guards.append({
+			"index": next_idx,
+			"rawText": "[PLAYTEST GUARD] %s" % clean_txt,
+			"text": clean_txt,
+			"signedOff": false,
+		})
+		feat["edgeCases"] = next_guards
 	_fix_draft_text = ""
 	if _fix_input != null:
 		_fix_input.text = ""
@@ -1379,6 +1449,13 @@ func _on_primary_cta_pressed() -> void:
 	var cp_id: String = str(feat.get("checkpointId", ""))
 	feat["isPlaytestPassed"] = true
 	feat["isCompleted"] = true
+	feat["progress"] = 100
+	feat["openIssues"] = []
+	var raw_guards: Variant = feat.get("edgeCases", [])
+	if typeof(raw_guards) == TYPE_ARRAY:
+		for g_raw in (raw_guards as Array):
+			if typeof(g_raw) == TYPE_DICTIONARY:
+				(g_raw as Dictionary)["signedOff"] = true
 
 	var epic_raw: Variant = _payload.get("activeEpic", null)
 	if typeof(epic_raw) == TYPE_DICTIONARY:
@@ -1390,6 +1467,8 @@ func _on_primary_cta_pressed() -> void:
 					_selected_feature_id = str(fd.get("id", ""))
 					break
 
+	if not _payload.is_empty():
+		_sync.save_cached_epic(_payload)
 	_set_status("Playtest passed — advancing to next feature...", false)
 	_refresh_view()
 	_sync.set_playtest_passed(feat_id, cp_id, true)
@@ -1402,6 +1481,9 @@ func _on_reopen_gate_pressed(feat: Dictionary) -> void:
 	var cp_id: String = str(feat.get("checkpointId", ""))
 	feat["isPlaytestPassed"] = false
 	feat["isCompleted"] = false
+	_recompute_feature_progress(feat)
+	if _sync != null and not _payload.is_empty():
+		_sync.save_cached_epic(_payload)
 	_set_status("Playtest gate reopened — iterate & re-verify when ready.", false)
 	_refresh_view()
 	if _sync != null and _sync.has_link_token() and not feat_id.is_empty():

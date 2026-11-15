@@ -1081,7 +1081,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.0"'));
+        expect(cfgText, contains('version="3.0.1"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1818,5 +1818,289 @@ void main() {
         equals('Pressing Shift → The player dashes forward.'),
       );
     });
+
+    test(
+      'Web Studio stamps updated_at_ms on mutations and shouldPreferRemoteDocumentOnSync respects bidirectional timestamps & signedOffGuards',
+      () async {
+        final provider = WorkbenchProvider();
+        final cp = FeatureStateNode(
+          id: 'cp_sync_local',
+          name: '01 · PROTOTYPE',
+          tuningParams: ['dash_speed: 640.0'],
+          edgeCases: ['[STATE GUARD] Lock move while dash_timer active'],
+          parameters: {'releaseVersion': 'v0.1'},
+        );
+        final feat = TierDocument(
+          id: 'feat_sync_local',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          parentId: 'epic_sync_local',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+        final epic = TierDocument(
+          id: 'epic_sync_local',
+          title: 'Movement Core',
+          tier: TierType.epic,
+          parentId: 'rel_sync_local',
+          phase: 'v0.1',
+          childrenIds: [feat.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_sync_local',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_sync_local',
+          phase: 'v0.1',
+          childrenIds: [epic.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj = TierDocument(
+          id: 'proj_sync_local',
+          title: 'Dash Arena',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+        for (final doc in [proj, rel, epic, feat]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+
+        expect(feat.sections.containsKey('updated_at_ms'), isFalse);
+        provider.updateFeatureStates(feat.id, [cp]);
+        final stampedMs = int.tryParse(feat.sections['updated_at_ms'] ?? '') ?? 0;
+        expect(stampedMs, greaterThan(0));
+
+        // 1. Newer Web Studio reopen (`updated_at_ms` > `last_godot_sync_ms`) must win over stale passed Godot doc
+        final localReopened = TierDocument(
+          id: 'feat_sync',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          sections: {
+            'updated_at_ms': '2000',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(
+          localReopened,
+          [
+            FeatureStateNode(
+              id: 'cp_sync',
+              name: '01 · PROTOTYPE',
+              edgeCases: ['Guard A', 'Guard B'],
+              parameters: {'releaseVersion': 'v0.1'},
+            ),
+          ],
+        );
+
+        final remoteOlderPassed = TierDocument(
+          id: 'feat_sync',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          sections: {
+            'last_godot_sync_ms': '1500',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(
+          remoteOlderPassed,
+          [
+            FeatureStateNode(
+              id: 'cp_sync',
+              name: '01 · PROTOTYPE',
+              edgeCases: ['Guard A', 'Guard B'],
+              parameters: {'releaseVersion': 'v0.1', 'playtestPassed': 'true'},
+            ),
+          ],
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localReopened, remoteOlderPassed),
+          isFalse,
+        );
+
+        // 2. Newer Godot sync (`last_godot_sync_ms` > `updated_at_ms`) wins over older Web Studio doc
+        final remoteNewer = TierDocument(
+          id: 'feat_sync',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          sections: {
+            'last_godot_sync_ms': '2500',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(
+          remoteNewer,
+          [
+            FeatureStateNode(
+              id: 'cp_sync',
+              name: '01 · PROTOTYPE',
+              edgeCases: ['Guard A', 'Guard B'],
+              parameters: {'releaseVersion': 'v0.1'},
+            ),
+          ],
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localReopened, remoteNewer),
+          isTrue,
+        );
+
+        // 3. Equal-timestamp tie-break prefers higher signedOffGuardsCount
+        final localNoGuards = TierDocument(
+          id: 'feat_tie',
+          title: 'Dash',
+          tier: TierType.feature,
+          sections: {'updated_at_ms': '3000'},
+        );
+        FeatureStateNode.saveStatesToDocument(
+          localNoGuards,
+          [
+            FeatureStateNode(
+              id: 'cp_tie',
+              name: '01',
+              edgeCases: ['Guard A', 'Guard B'],
+              parameters: {'releaseVersion': 'v0.1'},
+            ),
+          ],
+        );
+        final remoteOneGuardCp = FeatureStateNode(
+          id: 'cp_tie',
+          name: '01',
+          edgeCases: ['Guard A', 'Guard B'],
+          parameters: {'releaseVersion': 'v0.1'},
+        )..setGuardSignedOff(0, 'Guard A', true);
+        final remoteOneGuard = TierDocument(
+          id: 'feat_tie',
+          title: 'Dash',
+          tier: TierType.feature,
+          sections: {'last_godot_sync_ms': '3000'},
+        );
+        FeatureStateNode.saveStatesToDocument(
+          remoteOneGuard,
+          [remoteOneGuardCp],
+        );
+        expect(
+          shouldPreferRemoteDocumentOnSync(localNoGuards, remoteOneGuard),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      '1-Click Pass signs off Guards & resolves open [FIX] issues while Reopen Gate keeps past fixes resolved',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 920);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider();
+        final cp = FeatureStateNode(
+          id: 'cp_reopen_test',
+          name: '01 · PROTOTYPE',
+          tuningParams: ['dash_speed: 640.0'],
+          edgeCases: [
+            '[STATE GUARD] Lock move while dash_timer active',
+            '[PLAYTEST GUARD] Reset stamina cleanly',
+          ],
+          parameters: {'releaseVersion': 'v0.1'},
+          checklist: [
+            Subtask(
+              id: 'fix_open',
+              text: '[FIX] Stamina negative after dash',
+              completed: false,
+              codeLanguage: 'fix',
+              codeTargetFile: 'playtest_fix',
+            ),
+          ],
+        );
+        final feat = TierDocument(
+          id: 'feat_reopen_test',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          parentId: 'epic_reopen_test',
+          phase: 'v0.1',
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+        final epic = TierDocument(
+          id: 'epic_reopen_test',
+          title: 'Movement Core',
+          tier: TierType.epic,
+          parentId: 'rel_reopen_test',
+          phase: 'v0.1',
+          childrenIds: [feat.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_reopen_test',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_reopen_test',
+          phase: 'v0.1',
+          childrenIds: [epic.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj = TierDocument(
+          id: 'proj_reopen_test',
+          title: 'Dash Arena',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+        for (final doc in [proj, rel, epic, feat]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+        provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final passBtn =
+            find.byKey(ValueKey('one_click_complete_next_btn_${cp.id}'));
+        expect(passBtn, findsOneWidget);
+        await tester.ensureVisible(passBtn);
+        await tester.tap(passBtn);
+        await tester.pumpAndSettle();
+
+        var afterPass = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(afterPass.isPlaytestPassed, isTrue);
+        expect(afterPass.openFixCount, equals(0));
+        expect(afterPass.checklist.first.completed, isTrue);
+        expect(afterPass.signedOffGuardsCount, equals(2));
+        expect(provider.getDocumentProgress(feat.id), equals(100));
+
+        // Tap Pass button again to Reopen Gate -> past fixes stay resolved & signed-off guards stay intact
+        await tester.tap(passBtn);
+        await tester.pumpAndSettle();
+
+        final afterReopen = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(afterReopen.isPlaytestPassed, isFalse);
+        expect(afterReopen.openFixCount, equals(0));
+        expect(afterReopen.checklist.first.completed, isTrue);
+        expect(afterReopen.signedOffGuardsCount, equals(2));
+        expect(provider.getDocumentProgress(feat.id), equals(50));
+      },
+    );
   });
 }

@@ -123,40 +123,6 @@ function parseFeatureStates(featDoc) {
   }
 }
 
-function collectLeafChecklistItems(items, out = []) {
-  if (!Array.isArray(items)) return out;
-  for (const item of items) {
-    if (!item || typeof item !== "object") continue;
-    const children = Array.isArray(item.children) ? item.children : [];
-    if (children.length === 0) {
-      out.push(item);
-    } else {
-      collectLeafChecklistItems(children, out);
-    }
-  }
-  return out;
-}
-
-function countLeafChecklist(item) {
-  const children = Array.isArray(item?.children) ? item.children : [];
-  if (children.length === 0) {
-    return { total: 1, done: item?.completed ? 1 : 0 };
-  }
-  let total = 0;
-  let done = 0;
-  for (const c of children) {
-    const counts = countLeafChecklist(c);
-    total += counts.total;
-    done += counts.done;
-  }
-  return { total, done };
-}
-
-function isCheckpointStepsDone(cp) {
-  const leaves = collectLeafChecklistItems(cp?.checklist || []);
-  return leaves.length > 0 && leaves.every((s) => Boolean(s.completed));
-}
-
 function selectActiveCheckpoint(states, activeVer) {
   if (!Array.isArray(states) || states.length === 0) return null;
   const matching = states.filter(
@@ -166,9 +132,7 @@ function selectActiveCheckpoint(states, activeVer) {
     return matching[matching.length - 1];
   }
   const firstIncomplete = states.find(
-    (s) =>
-      !isCheckpointStepsDone(s) ||
-      String(s?.parameters?.playtestPassed || "") !== "true"
+    (s) => String(s?.parameters?.playtestPassed || "") !== "true"
   );
   return firstIncomplete || states[states.length - 1];
 }
@@ -385,13 +349,6 @@ function isFeatureActiveInReleaseJs(featDoc, activeVer, totalReleasesCount) {
 
 function rebuildDocSubtasksFromStates(states) {
   return (Array.isArray(states) ? states : []).map((s) => {
-    let total = 0;
-    let done = 0;
-    for (const item of Array.isArray(s.checklist) ? s.checklist : []) {
-      const counts = countLeafChecklist(item);
-      total += counts.total;
-      done += counts.done;
-    }
     const meta = {};
     meta.trigger = String(s.trigger || "");
     if (s.guard) meta.guard = s.guard;
@@ -411,12 +368,120 @@ function rebuildDocSubtasksFromStates(states) {
     return {
       id: String(s.id || ""),
       text: String(s.name || "Checkpoint"),
-      completed: total > 0 && done === total,
+      completed: String(s?.parameters?.playtestPassed || "") === "true",
       children: Array.isArray(s.checklist) ? s.checklist : [],
       isExpanded: true,
       specNotes: JSON.stringify(meta),
     };
   });
+}
+
+function applyGodotFeatureMutationJs({ sections, states, cp, action, body }) {
+  cp.parameters =
+    cp.parameters && typeof cp.parameters === "object"
+      ? { ...cp.parameters }
+      : {};
+
+  if (action === "set_playtest") {
+    const nextPassed = Boolean(body?.passed);
+    if (nextPassed) {
+      cp.parameters.playtestPassed = "true";
+      setAllChecklistItemsCompleted(cp.checklist, true);
+      const rawArr = Array.isArray(cp.edgeCases) ? cp.edgeCases : [];
+      const signedOffSet = parseSignedOffGuardsSetJs(cp);
+      for (let idx = 0; idx < rawArr.length; idx += 1) {
+        const rawGuard = String(rawArr[idx] || "").trim();
+        if (!rawGuard) continue;
+        signedOffSet.add(guardStorageKeyJs(idx, rawGuard));
+      }
+      if (signedOffSet.size > 0) {
+        cp.parameters.signedOffGuards = JSON.stringify(
+          Array.from(signedOffSet)
+        );
+      }
+    } else {
+      delete cp.parameters.playtestPassed;
+      if (String(sections?.lifecycle || "").trim() === "stable") {
+        sections.lifecycle =
+          Array.isArray(states) && states.length > 1 ? "upgrade" : "newFeature";
+      }
+    }
+    return;
+  }
+
+  if (action === "toggle_guard") {
+    const guardIdx = Number.isInteger(Number(body?.guardIndex))
+      ? Number(body.guardIndex)
+      : 0;
+    const rawArr = Array.isArray(cp.edgeCases) ? cp.edgeCases : [];
+    const rawFromArr =
+      guardIdx >= 0 && guardIdx < rawArr.length
+        ? String(rawArr[guardIdx] || "").trim()
+        : "";
+    const rawGuard = rawFromArr || String(body?.guardText || "").trim();
+    const key = guardStorageKeyJs(guardIdx, rawGuard);
+    const signedOffSet = parseSignedOffGuardsSetJs(cp);
+    if (Boolean(body?.signedOff)) {
+      signedOffSet.add(key);
+    } else {
+      signedOffSet.delete(key);
+      signedOffSet.delete(`#${guardIdx}`);
+      const bodyKey = String(body?.guardText || "").trim();
+      if (bodyKey) signedOffSet.delete(bodyKey);
+    }
+    if (signedOffSet.size === 0) {
+      delete cp.parameters.signedOffGuards;
+    } else {
+      cp.parameters.signedOffGuards = JSON.stringify(
+        Array.from(signedOffSet)
+      );
+    }
+    return;
+  }
+
+  if (action === "log_issue") {
+    const rawText = String(body?.issueText || "").trim();
+    const cleanIssue = rawText.replace(/^\[FIX\]\s*/i, "").trim();
+    const fixText = cleanIssue ? `[FIX] ${cleanIssue}` : rawText;
+    const gdPaths = extractResPathsListJs(rawText, ".gd");
+    cp.checklist = Array.isArray(cp.checklist) ? [...cp.checklist] : [];
+    cp.checklist.push({
+      id: `fix_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      text: fixText,
+      completed: false,
+      children: [],
+      isExpanded: true,
+      codeTargetFile: "playtest_fix",
+      codeLanguage: gdPaths[0] || "fix",
+      verification: `Re-test: ${cleanIssue || rawText} is resolved with 0 console errors.`,
+    });
+    cp.edgeCases = Array.isArray(cp.edgeCases) ? [...cp.edgeCases] : [];
+    if (cleanIssue) {
+      const lowerIssue = cleanIssue.toLowerCase();
+      if (
+        !cp.edgeCases.some((g) =>
+          String(g || "").toLowerCase().includes(lowerIssue)
+        )
+      ) {
+        cp.edgeCases.push(`[PLAYTEST GUARD] ${cleanIssue}`);
+      }
+    }
+    if (cp.edgeCases.length > 0 && sections && typeof sections === "object") {
+      sections.edge_cases = cp.edgeCases.map((e) => `• ${e}`).join("\n");
+    }
+    delete cp.parameters.playtestPassed;
+    if (String(sections?.lifecycle || "").trim() === "stable") {
+      sections.lifecycle =
+        Array.isArray(states) && states.length > 1 ? "upgrade" : "newFeature";
+    }
+    return;
+  }
+
+  if (action === "resolve_issue") {
+    const targetId = String(body?.issueId || "").trim();
+    cp.checklist = Array.isArray(cp.checklist) ? cp.checklist : [];
+    markChecklistItemCompletedByIdJs(cp.checklist, targetId);
+  }
 }
 
 function setAllChecklistItemsCompleted(items, completed) {
@@ -562,6 +627,17 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
               .map((l) => l.replace(/^[-*•]\s*/, "").trim())
               .filter(Boolean)
               .slice(0, 6);
+      const tuningParams =
+        Array.isArray(cp?.tuningParams) && cp.tuningParams.length > 0
+          ? cp.tuningParams
+              .map((x) => String(x || "").trim())
+              .filter(Boolean)
+              .slice(0, 8)
+          : String(feat?.sections?.tuning || feat?.sections?.variables || "")
+              .split("\n")
+              .map((l) => l.replace(/^[-*•]\s*/, "").trim())
+              .filter(Boolean)
+              .slice(0, 8);
       const signedOffSet = parseSignedOffGuardsSetJs(cp);
       const rawEdgeCases = Array.isArray(cp?.edgeCases) ? cp.edgeCases : [];
       const edgeCases = rawEdgeCases
@@ -579,6 +655,12 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
           };
         })
         .filter(Boolean);
+      const signedOffCount = edgeCases.filter((g) => Boolean(g.signedOff)).length;
+      const progress = isPlaytestPassed
+        ? 100
+        : edgeCases.length === 0
+          ? 0
+          : Math.round((signedOffCount / edgeCases.length) * 50);
       const openIssues = collectOpenPlaytestIssuesJs(cp);
       const doneWhen = String(
         cp?.parameters?.playtestGoal ||
@@ -595,12 +677,14 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
         primaryAsset: extractResPath(feat?.sections?.primary_asset || ""),
         scriptPaths: collectFeatureGdScriptPathsJs(feat, cp),
         coveredScope,
+        tuningParams,
         edgeCases,
         openIssues,
         doneWhen,
         checkpointId: String(cp?.id || ""),
         isPlaytestPassed,
         isCompleted: isPlaytestPassed,
+        progress,
       };
     });
 
@@ -1299,64 +1383,13 @@ exports.geminiProxy = onRequest(
             : null;
           if (!cp) cp = states[states.length - 1];
 
-          cp.parameters =
-            cp.parameters && typeof cp.parameters === "object"
-              ? { ...cp.parameters }
-              : {};
-
-          if (action === "set_playtest") {
-            const nextPassed = Boolean(body.passed);
-            cp.parameters.playtestPassed = nextPassed ? "true" : "false";
-            if (nextPassed) {
-              setAllChecklistItemsCompleted(cp.checklist, true);
-            }
-          } else if (action === "toggle_guard") {
-            const guardIdx = Number.isInteger(Number(body.guardIndex))
-              ? Number(body.guardIndex)
-              : 0;
-            const rawArr = Array.isArray(cp.edgeCases) ? cp.edgeCases : [];
-            const rawFromArr =
-              guardIdx >= 0 && guardIdx < rawArr.length
-                ? String(rawArr[guardIdx] || "").trim()
-                : "";
-            const rawGuard = rawFromArr || String(body.guardText || "").trim();
-            const key = guardStorageKeyJs(guardIdx, rawGuard);
-            const signedOffSet = parseSignedOffGuardsSetJs(cp);
-            if (Boolean(body.signedOff)) {
-              signedOffSet.add(key);
-            } else {
-              signedOffSet.delete(key);
-              signedOffSet.delete(`#${guardIdx}`);
-              const bodyKey = String(body.guardText || "").trim();
-              if (bodyKey) signedOffSet.delete(bodyKey);
-            }
-            if (signedOffSet.size === 0) {
-              delete cp.parameters.signedOffGuards;
-            } else {
-              cp.parameters.signedOffGuards = JSON.stringify(
-                Array.from(signedOffSet)
-              );
-            }
-          } else if (action === "log_issue") {
-            const rawText = String(body.issueText || "").trim();
-            const fixText = rawText.toUpperCase().startsWith("[FIX]")
-              ? rawText
-              : `[FIX] ${rawText}`;
-            cp.checklist = Array.isArray(cp.checklist) ? [...cp.checklist] : [];
-            cp.checklist.push({
-              id: `fix_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
-              text: fixText,
-              completed: false,
-              children: [],
-              isExpanded: true,
-              codeLanguage: "fix",
-            });
-            cp.parameters.playtestPassed = "false";
-          } else if (action === "resolve_issue") {
-            const targetId = String(body.issueId || "").trim();
-            cp.checklist = Array.isArray(cp.checklist) ? cp.checklist : [];
-            markChecklistItemCompletedByIdJs(cp.checklist, targetId);
-          }
+          applyGodotFeatureMutationJs({
+            sections,
+            states,
+            cp,
+            action,
+            body,
+          });
 
           sections.states = JSON.stringify(states);
           sections.last_godot_sync_ms = String(Date.now());
@@ -1520,12 +1553,21 @@ exports.geminiProxy = onRequest(
         .type("application/json")
         .send(responseText);
     } catch (err) {
-      res.status(502).json({
-        error: {
-          code: 502,
-          message: `Upstream Gemini request failed: ${err.message || err}`,
-        },
-      });
+      res
+        .status(502)
+        .json({
+          error: {
+            code: 502,
+            message: `Upstream Gemini request failed: ${err.message || err}`,
+          },
+        });
     }
   }
 );
+
+exports._testHelpers = {
+  rebuildDocSubtasksFromStates,
+  selectActiveCheckpoint,
+  computeActiveEpicPayload,
+  applyGodotFeatureMutationJs,
+};

@@ -271,22 +271,27 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                         cpNode.flattenLegacyNestedChecklistIfNeeded();
                                                         cpNode.isPlaytestPassed =
                                                             targetDone;
-                                                        for (final entry
-                                                            in cpNode.flatSteps) {
-                                                          entry.completed =
-                                                              targetDone;
-                                                        }
-                                                        for (int gIdx = 0;
-                                                            gIdx <
-                                                                cpNode.edgeCases
-                                                                    .length;
-                                                            gIdx++) {
-                                                          cpNode.setGuardSignedOff(
-                                                            gIdx,
-                                                            cpNode.edgeCases[
-                                                                gIdx],
-                                                            targetDone,
-                                                          );
+                                                        if (targetDone) {
+                                                          for (final entry
+                                                              in cpNode
+                                                                  .flatSteps) {
+                                                            entry.completed =
+                                                                true;
+                                                          }
+                                                          for (int gIdx = 0;
+                                                              gIdx <
+                                                                  cpNode
+                                                                      .edgeCases
+                                                                      .length;
+                                                              gIdx++) {
+                                                            cpNode
+                                                                .setGuardSignedOff(
+                                                              gIdx,
+                                                              cpNode.edgeCases[
+                                                                  gIdx],
+                                                              true,
+                                                            );
+                                                          }
                                                         }
                                                         _rebuild(() {
                                                           _awaitingPlaytestVerification

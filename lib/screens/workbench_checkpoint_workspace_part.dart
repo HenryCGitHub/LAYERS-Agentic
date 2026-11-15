@@ -22,12 +22,6 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
   ) {
     if (node.isPlaytestPassed || node.isCompleted) {
       node.isPlaytestPassed = false;
-      for (final task in node.checklist) {
-        task.completed = false;
-        for (final child in task.children) {
-          child.completed = false;
-        }
-      }
       _rebuild(() {
         _awaitingPlaytestVerification.remove(node.id);
         _inlineBugDrawerNodeId = null;
@@ -153,14 +147,16 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           final targetPassed = !isPassed;
           node.flattenLegacyNestedChecklistIfNeeded();
           node.isPlaytestPassed = targetPassed;
-          for (final task in node.checklist) {
-            task.completed = targetPassed;
-            for (final child in task.children) {
-              child.completed = targetPassed;
+          if (targetPassed) {
+            for (final task in node.checklist) {
+              task.completed = true;
+              for (final child in task.children) {
+                child.completed = true;
+              }
             }
-          }
-          for (int gIdx = 0; gIdx < node.edgeCases.length; gIdx++) {
-            node.setGuardSignedOff(gIdx, node.edgeCases[gIdx], targetPassed);
+            for (int gIdx = 0; gIdx < node.edgeCases.length; gIdx++) {
+              node.setGuardSignedOff(gIdx, node.edgeCases[gIdx], true);
+            }
           }
           _rebuild(() {
             _awaitingPlaytestVerification.remove(node.id);

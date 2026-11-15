@@ -986,6 +986,17 @@ func format_feature_context_markdown(
 				out.append("- In Scope:")
 				for ci in covered_items:
 					out.append("  - %s" % ci)
+		var tuning_raw: Variant = feat.get("tuningParams", [])
+		if typeof(tuning_raw) == TYPE_ARRAY or typeof(tuning_raw) == TYPE_PACKED_STRING_ARRAY:
+			var tuning_lines := PackedStringArray()
+			for t_item in tuning_raw:
+				var ts := str(t_item).strip_edges()
+				if not ts.is_empty():
+					tuning_lines.append(ts)
+			if not tuning_lines.is_empty():
+				out.append("- Tuning Variables:")
+				for tl in tuning_lines:
+					out.append("  - %s" % tl)
 		if typeof(guards_raw) == TYPE_ARRAY:
 			var guard_lines := PackedStringArray()
 			for g_raw in (guards_raw as Array):
