@@ -886,6 +886,10 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                         isOverlayDrawer: isOverlayDrawer,
                         isGodotActiveEpic: !godotEpicSnap.allEpicsCompleted &&
                             godotEpicSnap.activeEpicId == beats[bIdx].id,
+                        activeGodotFeatureId: !godotEpicSnap.allEpicsCompleted &&
+                                godotEpicSnap.activeEpicId == beats[bIdx].id
+                            ? godotEpicSnap.activeFeatureId
+                            : null,
                       ),
                   ],
                 );
@@ -1398,6 +1402,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     required bool showAllLiveFeatures,
     required bool isOverlayDrawer,
     required bool isGodotActiveEpic,
+    String? activeGodotFeatureId,
   }) {
     final beat = beats[beatIndex];
     final allBeatFeats = widget.workbench.featuresForBeat(beat.id);
@@ -1709,6 +1714,8 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
               beatTitle: beat.title,
               beatIndex: beatIndex,
               isOverlayDrawer: isOverlayDrawer,
+              isGodotActiveFeature: activeGodotFeatureId != null &&
+                  activeGodotFeatureId == beatFeats[fIdx].id,
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(8, 1, 8, 2),
@@ -1948,6 +1955,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     String? beatTitle,
     int beatIndex = 0,
     bool isOverlayDrawer = false,
+    bool isGodotActiveFeature = false,
   }) {
     final isConceptActive =
         widget.workbench.currentStage == WorkbenchStage.projectPitch;
@@ -2103,6 +2111,28 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                               ],
                             ),
                     ),
+                    if (isGodotActiveFeature) ...[
+                      const SizedBox(width: 6),
+                      Tooltip(
+                        message: widget.workbench.isActiveProjectSyncedWithGodot
+                            ? 'Focused in Godot 4 Dock · ${widget.workbench.formatGodotSyncStatusLabel()}'
+                            : 'Active Godot 4 Dock target feature',
+                        child: Container(
+                          key: ValueKey(
+                            'outliner_godot_active_feature_dot_${feat.id}',
+                          ),
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color:
+                                widget.workbench.isActiveProjectSyncedWithGodot
+                                    ? const Color(0xFF34D399)
+                                    : const Color(0xFF38BDF8),
+                          ),
+                        ),
+                      ),
+                    ],
                     // Strictly 1 clean status slot on the right of each Feature row
                     if (feat.sections['lifecycle'] ==
                         FeatureLifecycleStatus.superseded.name) ...[

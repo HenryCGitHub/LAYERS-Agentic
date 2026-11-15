@@ -2054,6 +2054,8 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     final proj = activeProject;
     if (proj != null) {
       proj.sections['selected_feature_id'] = featureId;
+      proj.sections['selected_feature_ms'] =
+          DateTime.now().millisecondsSinceEpoch.toString();
       if (_selectedBeatId != null) {
         proj.sections['selected_beat_id'] = _selectedBeatId!;
       }

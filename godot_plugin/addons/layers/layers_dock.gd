@@ -72,6 +72,8 @@ var _sync: Node
 var _executor: RefCounted
 var _payload: Dictionary = {}
 var _selected_feature_id: String = ""
+var _last_synced_web_selected_id: String = ""
+var _pull_sync_pending: bool = false
 var _fix_draft_text: String = ""
 var _issue_composer_expanded: bool = false
 var _show_token_editor: bool = false
@@ -195,6 +197,8 @@ func _ready() -> void:
 		var cached: Dictionary = _sync.load_cached_epic()
 		if not cached.is_empty():
 			_payload = cached
+			_last_synced_web_selected_id = str(cached.get("webSelectedFeatureId", "")).strip_edges()
+		_pull_sync_pending = true
 		_refresh_view()
 		_sync.fetch_active_epic()
 	else:
@@ -213,6 +217,7 @@ func _exit_tree() -> void:
 
 func refresh_from_focus() -> void:
 	if _sync != null and _sync.has_link_token() and not _show_token_editor:
+		_pull_sync_pending = true
 		_sync.fetch_active_epic()
 	notify_editor_state_changed()
 
@@ -391,7 +396,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.6")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.7")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -619,7 +624,9 @@ func _refresh_view() -> void:
 		_body_container.add_child(empty_lbl)
 		return
 
+	var payload_sel_id: String = str(_payload.get("selectedFeatureId", "")).strip_edges()
 	var chosen_idx: int = -1
+	var payload_sel_idx: int = -1
 	var first_incomplete_idx: int = -1
 	var passed_count: int = 0
 	for i in range(features.size()):
@@ -640,13 +647,18 @@ func _refresh_view() -> void:
 			_feature_picker.set_item_icon(i, f_icon)
 		if f_id == _selected_feature_id:
 			chosen_idx = i
+		if not payload_sel_id.is_empty() and f_id == payload_sel_id:
+			payload_sel_idx = i
 		if first_incomplete_idx == -1 and not f_done:
 			first_incomplete_idx = i
 
 	_meta_label.text = _format_epic_meta_line(ver, epic_code, pos, total, passed_count, features.size())
 
 	if chosen_idx == -1:
-		chosen_idx = first_incomplete_idx if first_incomplete_idx != -1 else 0
+		if payload_sel_idx != -1:
+			chosen_idx = payload_sel_idx
+		else:
+			chosen_idx = first_incomplete_idx if first_incomplete_idx != -1 else 0
 	_feature_picker.select(chosen_idx)
 	var active_feat: Dictionary = features[chosen_idx]
 	_selected_feature_id = str(active_feat.get("id", ""))
@@ -1644,14 +1656,27 @@ func _on_copy_context_pressed(feat: Dictionary) -> void:
 func _on_epic_updated(payload: Dictionary) -> void:
 	var prev_epic_id := str((_payload.get("activeEpic", {}) as Dictionary).get("id", "")) if typeof(_payload.get("activeEpic", null)) == TYPE_DICTIONARY else ""
 	var next_epic_id := str((payload.get("activeEpic", {}) as Dictionary).get("id", "")) if typeof(payload.get("activeEpic", null)) == TYPE_DICTIONARY else ""
+	var remote_focus_id := str(payload.get("selectedFeatureId", "")).strip_edges()
+	var remote_web_sel := str(payload.get("webSelectedFeatureId", "")).strip_edges()
+	var web_sel_changed := (not remote_web_sel.is_empty()) and remote_web_sel != _last_synced_web_selected_id
 	if prev_epic_id != next_epic_id:
 		_issue_composer_expanded = false
+	if _selected_feature_id.is_empty() or prev_epic_id != next_epic_id:
+		if not remote_focus_id.is_empty():
+			_selected_feature_id = remote_focus_id
+		elif prev_epic_id != next_epic_id:
+			_selected_feature_id = ""
+	elif _pull_sync_pending and web_sel_changed:
+		_selected_feature_id = remote_web_sel
+	_last_synced_web_selected_id = remote_web_sel
+	_pull_sync_pending = false
 	_payload = payload
 	_set_status("Synced", false)
 	_refresh_view()
 
 
 func _on_sync_failed(message: String) -> void:
+	_pull_sync_pending = false
 	_set_status(message, true)
 	var feat: Dictionary = _get_active_feature()
 	if not feat.is_empty() and _workspace_panel != null and _workspace_panel.visible:
@@ -1781,6 +1806,8 @@ func _on_connect_pressed() -> void:
 	_show_token_editor = false
 	_payload = {}
 	_selected_feature_id = ""
+	_last_synced_web_selected_id = ""
+	_pull_sync_pending = true
 	_refresh_view()
 	_sync.fetch_active_epic()
 	if _sync.has_method("check_for_plugin_update"):
@@ -1798,6 +1825,8 @@ func _on_disconnect_pressed() -> void:
 	_sync.clear_link_token()
 	_payload = {}
 	_selected_feature_id = ""
+	_last_synced_web_selected_id = ""
+	_pull_sync_pending = false
 	_show_token_editor = true
 	if _status_label != null:
 		_status_label.text = "Disconnected"
@@ -1809,6 +1838,7 @@ func _on_sync_pressed() -> void:
 	if _executor != null:
 		_executor.call("invalidate_eval_cache")
 	if _sync != null:
+		_pull_sync_pending = true
 		_sync.fetch_active_epic()
 		if _sync.has_method("check_for_plugin_update"):
 			_sync.check_for_plugin_update(true)

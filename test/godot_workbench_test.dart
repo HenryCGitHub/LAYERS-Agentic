@@ -1084,7 +1084,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.6"'));
+        expect(cfgText, contains('version="3.0.7"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -2592,6 +2592,30 @@ assert.strictEqual(featDash.goal, "+air dash");
 assert.strictEqual(featDash.doneWhen, "Press Shift → player dashes 6m");
 const featWave = payload.activeEpic.features[2];
 assert.strictEqual(featWave.doneWhen, "Release charge → wave fires");
+assert.strictEqual(payload.selectedFeatureId, "f_stagger");
+assert.strictEqual(payload.webSelectedFeatureId, "");
+
+docsById.get("proj_1").sections = {
+  ...docsById.get("proj_1").sections,
+  selected_feature_id: "f_dash",
+  selected_feature_ms: "2000",
+  last_godot_feature_id: "f_stagger",
+  last_godot_feature_ms: "1000",
+};
+const payloadWebNewer = computeActiveEpicPayload({ docsById, projectId: "proj_1", webStudioUrl: "https://example.com" });
+assert.strictEqual(payloadWebNewer.selectedFeatureId, "f_dash");
+assert.strictEqual(payloadWebNewer.webSelectedFeatureId, "f_dash");
+
+docsById.get("proj_1").sections = {
+  ...docsById.get("proj_1").sections,
+  selected_feature_id: "f_dash",
+  selected_feature_ms: "2000",
+  last_godot_feature_id: "f_wave",
+  last_godot_feature_ms: "3000",
+};
+const payloadGodotNewer = computeActiveEpicPayload({ docsById, projectId: "proj_1", webStudioUrl: "https://example.com" });
+assert.strictEqual(payloadGodotNewer.selectedFeatureId, "f_wave");
+assert.strictEqual(payloadGodotNewer.webSelectedFeatureId, "f_dash");
 
 const parsedWithOutOfScope = parseStructuredScopeFieldsJs(
   "Goal: Deflect melee strikes\n\nIn Scope:\n• Shield spark VFX\n\nOut of Scope:\n• No co-op revive\n\nDone When: Press Space -> shield sparks"
@@ -3063,6 +3087,159 @@ process.stdout.write("JS_SCOPE_PARSE_OK\n");
           contains('Done When: Tap Q → parry counter lands'),
         );
         expect(find.text('Tap Q → parry counter lands'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Bidirectional Active Feature Focus Sync tracks last_godot_feature_id, stamps selected_feature_ms, and renders Outliner active Godot Feature dot',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final cpParry = FeatureStateNode(
+          id: 'cp_focus_parry',
+          name: '01 · PROTOTYPE',
+          trigger: 'Playtest: Press F -> parry sparks',
+          coveredScope: ['Parry timing window'],
+          parameters: {'releaseVersion': 'v0.1'},
+        );
+        final featParry = TierDocument(
+          id: 'feat_parry',
+          title: 'Shield Parry',
+          tier: TierType.feature,
+          parentId: 'beat_e01',
+          phase: 'v0.1',
+          sections: {'goal': 'Deflect strikes with shield parry'},
+        );
+        FeatureStateNode.saveStatesToDocument(featParry, [cpParry]);
+
+        final cpDash = FeatureStateNode(
+          id: 'cp_focus_dash',
+          name: '01 · PROTOTYPE',
+          trigger: 'Playtest: Press Shift -> player dashes',
+          coveredScope: ['Dash impulse'],
+          parameters: {'releaseVersion': 'v0.1'},
+        );
+        final featDash = TierDocument(
+          id: 'feat_dash',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          parentId: 'beat_e01',
+          phase: 'v0.1',
+          sections: {'goal': 'Burst forward with invulnerability frames'},
+        );
+        FeatureStateNode.saveStatesToDocument(featDash, [cpDash]);
+
+        final beat = TierDocument(
+          id: 'beat_e01',
+          title: 'Combat Core',
+          tier: TierType.epic,
+          parentId: 'rel_v01',
+          phase: 'v0.1',
+          childrenIds: [featParry.id, featDash.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_v01',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_focus',
+          phase: 'v0.1',
+          childrenIds: [beat.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj = TierDocument(
+          id: 'proj_focus',
+          title: 'Focus Sync Game',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+            'last_godot_feature_id': featDash.id,
+            'last_godot_sync_ms':
+                DateTime.now().millisecondsSinceEpoch.toString(),
+          },
+        );
+        for (final doc in [proj, rel, beat, featParry, featDash]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+        provider.selectFeature(featParry.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        // 1. Snapshot and Outliner dot track last_godot_feature_id (feat_dash)
+        expect(
+          provider.computeActiveGodotEpicSnapshot().activeFeatureId,
+          equals(featDash.id),
+        );
+        expect(
+          find.byKey(
+            ValueKey('outliner_godot_active_feature_dot_${featDash.id}'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            ValueKey('outliner_godot_active_feature_dot_${featParry.id}'),
+          ),
+          findsNothing,
+        );
+
+        // 2. Selecting feat_parry locally stamps selected_feature_id & selected_feature_ms
+        // while keeping Godot's active feature snapshot on feat_dash until synced
+        provider.selectFeature(featParry.id, triggerAiSynthesis: false);
+        expect(
+          provider.activeProject!.sections['selected_feature_id'],
+          equals(featParry.id),
+        );
+        final selMs = int.tryParse(
+          provider.activeProject!.sections['selected_feature_ms'] ?? '',
+        );
+        expect(selMs, isNotNull);
+        expect(selMs!, greaterThan(0));
+        expect(
+          provider.computeActiveGodotEpicSnapshot().activeFeatureId,
+          equals(featDash.id),
+        );
+
+        // 3. focusActiveGodotFeature jumps back to feat_dash
+        provider.focusActiveGodotFeature();
+        expect(provider.selectedFeatureId, equals(featDash.id));
+
+        // 4. Marking feat_dash passed falls back active Godot dot to feat_parry
+        final passedDashCp = cpDash.copyWith(
+          parameters: {
+            ...cpDash.parameters,
+            'playtestPassed': 'true',
+          },
+        );
+        provider.updateFeatureStates(featDash.id, [passedDashCp]);
+        await tester.pumpAndSettle();
+
+        expect(
+          provider.computeActiveGodotEpicSnapshot().activeFeatureId,
+          equals(featParry.id),
+        );
+        expect(
+          find.byKey(
+            ValueKey('outliner_godot_active_feature_dot_${featParry.id}'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(
+            ValueKey('outliner_godot_active_feature_dot_${featDash.id}'),
+          ),
+          findsNothing,
+        );
       },
     );
   });

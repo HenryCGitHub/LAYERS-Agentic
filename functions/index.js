@@ -713,6 +713,8 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       designPillars,
       tradeOffs,
       webStudioUrl,
+      selectedFeatureId: "",
+      webSelectedFeatureId: "",
       activeEpic: null,
     };
   }
@@ -884,8 +886,56 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       tradeOffs,
       webStudioUrl,
       arenaScenePath,
+      selectedFeatureId: "",
+      webSelectedFeatureId: "",
       activeEpic: null,
     };
+  }
+
+  const projSections =
+    projectDoc.sections && typeof projectDoc.sections === "object"
+      ? projectDoc.sections
+      : {};
+  const rawWebSelId = String(projSections.selected_feature_id || "").trim();
+  const webSelMs = Number(projSections.selected_feature_ms || 0) || 0;
+  const rawGodotFeatId = String(
+    projSections.last_godot_feature_id || ""
+  ).trim();
+  const godotFeatMs = Number(projSections.last_godot_feature_ms || 0) || 0;
+
+  const activeEpic = activeIdx >= 0 ? candidateEpics[activeIdx] : null;
+  let webSelectedFeatureId = "";
+  let selectedFeatureId = "";
+  if (
+    activeEpic &&
+    Array.isArray(activeEpic.features) &&
+    activeEpic.features.length > 0
+  ) {
+    const featsInEpic = activeEpic.features;
+    const webFeat = rawWebSelId
+      ? featsInEpic.find((f) => f.id === rawWebSelId) || null
+      : null;
+    if (webFeat) {
+      webSelectedFeatureId = webFeat.id;
+    }
+    const godotFeat = rawGodotFeatId
+      ? featsInEpic.find((f) => f.id === rawGodotFeatId) || null
+      : null;
+    const webIncomplete = webFeat && !webFeat.isCompleted ? webFeat : null;
+    const godotIncomplete =
+      godotFeat && !godotFeat.isCompleted ? godotFeat : null;
+
+    if (webIncomplete && webSelMs > godotFeatMs) {
+      selectedFeatureId = webIncomplete.id;
+    } else if (godotIncomplete) {
+      selectedFeatureId = godotIncomplete.id;
+    } else if (webIncomplete && !rawGodotFeatId && godotFeatMs === 0) {
+      selectedFeatureId = webIncomplete.id;
+    } else {
+      const firstIncomplete =
+        featsInEpic.find((f) => !f.isCompleted) || featsInEpic[0];
+      selectedFeatureId = firstIncomplete ? firstIncomplete.id : "";
+    }
   }
 
   return {
@@ -901,7 +951,9 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     tradeOffs,
     webStudioUrl,
     arenaScenePath,
-    activeEpic: activeIdx >= 0 ? candidateEpics[activeIdx] : null,
+    selectedFeatureId,
+    webSelectedFeatureId,
+    activeEpic,
   };
 }
 
@@ -1435,22 +1487,46 @@ exports.geminiProxy = onRequest(
       for (const d of docsSnap.docs) {
         docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
       }
-      linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
-      db.collection("users")
-        .doc(linkAuth.uid)
-        .collection("documents")
-        .doc(linkAuth.projectId)
-        .set(
-          { sections: { last_godot_sync_ms: String(Date.now()) } },
-          { merge: true }
-        )
-        .catch(() => {});
-
       const payload = computeActiveEpicPayload({
         docsById,
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
       });
+      const nowMs = String(Date.now());
+      const projDoc = docsById.get(linkAuth.projectId);
+      const projSec =
+        projDoc?.sections && typeof projDoc.sections === "object"
+          ? projDoc.sections
+          : {};
+      const webSelMs = Number(projSec.selected_feature_ms || 0) || 0;
+      const godotFeatMs = Number(projSec.last_godot_feature_ms || 0) || 0;
+      const existingGodotFeat = String(
+        projSec.last_godot_feature_id || ""
+      ).trim();
+      const existingStillIncomplete = Boolean(
+        existingGodotFeat &&
+          Array.isArray(payload.activeEpic?.features) &&
+          payload.activeEpic.features.some(
+            (f) => f.id === existingGodotFeat && !f.isCompleted
+          )
+      );
+      const nextProjSections = { last_godot_sync_ms: nowMs };
+      if (
+        payload.selectedFeatureId &&
+        (!existingStillIncomplete || webSelMs > godotFeatMs)
+      ) {
+        nextProjSections.last_godot_feature_id = payload.selectedFeatureId;
+        nextProjSections.last_godot_feature_ms = nowMs;
+      }
+
+      linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
+      db.collection("users")
+        .doc(linkAuth.uid)
+        .collection("documents")
+        .doc(linkAuth.projectId)
+        .set({ sections: nextProjSections }, { merge: true })
+        .catch(() => {});
+
       res.status(200).json(payload);
       return;
     }
@@ -1572,22 +1648,44 @@ exports.geminiProxy = onRequest(
       for (const d of docsSnap.docs) {
         docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
       }
+      const nowMs = String(Date.now());
+      const passedJustNow = action === "set_playtest" && Boolean(body.passed);
+      const inMemProj = docsById.get(linkAuth.projectId);
+      if (inMemProj) {
+        inMemProj.sections = {
+          ...(inMemProj.sections && typeof inMemProj.sections === "object"
+            ? inMemProj.sections
+            : {}),
+          last_godot_sync_ms: nowMs,
+          last_godot_feature_id: passedJustNow ? "" : featureId,
+          last_godot_feature_ms: nowMs,
+        };
+      }
+      const payload = computeActiveEpicPayload({
+        docsById,
+        projectId: linkAuth.projectId,
+        webStudioUrl: linkAuth.webStudioUrl,
+      });
+      const resolvedGodotFeatId = passedJustNow
+        ? String(payload.selectedFeatureId || "")
+        : featureId;
       linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
       db.collection("users")
         .doc(linkAuth.uid)
         .collection("documents")
         .doc(linkAuth.projectId)
         .set(
-          { sections: { last_godot_sync_ms: String(Date.now()) } },
+          {
+            sections: {
+              last_godot_sync_ms: nowMs,
+              last_godot_feature_id: resolvedGodotFeatId,
+              last_godot_feature_ms: nowMs,
+            },
+          },
           { merge: true }
         )
         .catch(() => {});
 
-      const payload = computeActiveEpicPayload({
-        docsById,
-        projectId: linkAuth.projectId,
-        webStudioUrl: linkAuth.webStudioUrl,
-      });
       res.status(200).json(payload);
       return;
     }

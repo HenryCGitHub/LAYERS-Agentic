@@ -12,7 +12,7 @@ class _SyncSpy extends Node:
 		return "lyr_spy_1234567890123456"
 
 	func get_local_plugin_version() -> String:
-		return "3.0.6"
+		return "3.0.7"
 
 	func fetch_active_epic() -> void:
 		fetched_count += 1
@@ -733,6 +733,115 @@ func _run_smoke_suite() -> bool:
 		_fail("_on_sync_pressed did not trigger fetch + silent check_for_plugin_update(true): fetched=%d checks=%s" % [spy.fetched_count, str(spy.update_checked_silent)])
 		return false
 	spy.free()
+	dock.set("_sync", sync_v03)
+
+	# 7. Verify Bidirectional Active Feature Focus Sync (v3.0.7)
+	var focus_payload: Dictionary = {
+		"ok": true,
+		"projectId": "p_focus",
+		"projectTitle": "Focus Sync Test",
+		"releaseVersion": "v0.1",
+		"epicPosition": 1,
+		"totalEpics": 1,
+		"allEpicsCompleted": false,
+		"selectedFeatureId": "f_2",
+		"webSelectedFeatureId": "f_2",
+		"activeEpic": {
+			"id": "e_focus",
+			"code": "E01",
+			"title": "Combat Loop",
+			"features": [
+				{
+					"id": "f_1",
+					"checkpointId": "cp_1",
+					"title": "Parry",
+					"goal": "Parry incoming hits",
+					"isCompleted": false,
+					"isPlaytestPassed": false,
+					"openIssues": [],
+					"edgeCases": [],
+					"tuningParams": [],
+				},
+				{
+					"id": "f_2",
+					"checkpointId": "cp_2",
+					"title": "Dash",
+					"goal": "Dash across arena",
+					"isCompleted": false,
+					"isPlaytestPassed": false,
+					"openIssues": [],
+					"edgeCases": [],
+					"tuningParams": [],
+				},
+				{
+					"id": "f_3",
+					"checkpointId": "cp_3",
+					"title": "Wave",
+					"goal": "Fire charged wave",
+					"isCompleted": false,
+					"isPlaytestPassed": false,
+					"openIssues": [],
+					"edgeCases": [],
+					"tuningParams": [],
+				},
+			],
+		},
+	}
+	dock.set("_payload", {})
+	dock.set("_selected_feature_id", "")
+	dock.set("_last_synced_web_selected_id", "")
+	dock.set("_pull_sync_pending", true)
+	dock.call("_on_epic_updated", focus_payload)
+	var actual_focus_init: String = str(dock.get("_selected_feature_id"))
+	if actual_focus_init != "f_2":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected initial sync to honor selectedFeatureId 'f_2', got: %s" % actual_focus_init)
+		return false
+
+	# Local Godot dropdown pick switches to f_1
+	dock.call("_on_feature_selected", 0)
+	var actual_focus_pick: String = str(dock.get("_selected_feature_id"))
+	if actual_focus_pick != "f_1":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected _on_feature_selected(0) to set _selected_feature_id='f_1', got: %s" % actual_focus_pick)
+		return false
+
+	# Manual Sync when Web Studio selection did NOT change preserves Godot's f_1
+	var spy_keep: _SyncSpy = _SyncSpy.new()
+	dock.set("_sync", spy_keep)
+	dock.call("_on_sync_pressed")
+	dock.call("_on_epic_updated", focus_payload.duplicate(true))
+	dock.set("_sync", sync_v03)
+	spy_keep.free()
+	var actual_focus_keep: String = str(dock.get("_selected_feature_id"))
+	if actual_focus_keep != "f_1":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected sync without webSelectedFeatureId change to preserve 'f_1', got: %s" % actual_focus_keep)
+		return false
+
+	# Manual Sync when Web Studio newly selects f_3 switches Godot Dock to f_3
+	var focus_payload_web_changed: Dictionary = focus_payload.duplicate(true)
+	focus_payload_web_changed["selectedFeatureId"] = "f_3"
+	focus_payload_web_changed["webSelectedFeatureId"] = "f_3"
+	var spy_follow: _SyncSpy = _SyncSpy.new()
+	dock.set("_sync", spy_follow)
+	dock.call("_on_sync_pressed")
+	dock.call("_on_epic_updated", focus_payload_web_changed)
+	dock.set("_sync", sync_v03)
+	spy_follow.free()
+	var actual_focus_follow: String = str(dock.get("_selected_feature_id"))
+	if actual_focus_follow != "f_3":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected sync with changed webSelectedFeatureId='f_3' to follow Web Studio, got: %s" % actual_focus_follow)
+		return false
 
 	sync_v03.free()
 	dock.set("_sync", null)

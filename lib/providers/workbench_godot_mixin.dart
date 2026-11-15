@@ -128,6 +128,9 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       TierDocument? nextFeature,
     })>[];
 
+    final godotFeatId =
+        (activeProject?.sections['last_godot_feature_id'] ?? '').trim();
+
     for (int i = 0; i < beats.length; i++) {
       final beat = beats[i];
       final allFeats = featuresForBeat(beat.id);
@@ -139,10 +142,20 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       }
       final doneCount = scopedFeats.where(isFeatureFinishedForGodot).length;
       TierDocument? nextFeat;
-      for (final f in scopedFeats) {
-        if (!isFeatureFinishedForGodot(f)) {
-          nextFeat = f;
-          break;
+      if (godotFeatId.isNotEmpty) {
+        for (final f in scopedFeats) {
+          if (f.id == godotFeatId && !isFeatureFinishedForGodot(f)) {
+            nextFeat = f;
+            break;
+          }
+        }
+      }
+      if (nextFeat == null) {
+        for (final f in scopedFeats) {
+          if (!isFeatureFinishedForGodot(f)) {
+            nextFeat = f;
+            break;
+          }
         }
       }
       nextFeat ??= scopedFeats.isNotEmpty ? scopedFeats.first : null;
