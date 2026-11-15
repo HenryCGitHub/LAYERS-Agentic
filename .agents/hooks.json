@@ -21,5 +21,33 @@
         "timeout": 120
       }
     ]
+  },
+  "auto-gg-workflow": {
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/auto_gg_hook.py --event pre_invocation",
+        "timeout": 10
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ./hooks/auto_gg_hook.py --event post_tool",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "python3 ./hooks/auto_gg_hook.py --event stop",
+        "timeout": 10
+      }
+    ]
   }
 }
