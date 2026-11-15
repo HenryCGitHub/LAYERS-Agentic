@@ -12,7 +12,7 @@ class _SyncSpy extends Node:
 		return "lyr_spy_1234567890123456"
 
 	func get_local_plugin_version() -> String:
-		return "3.0.4"
+		return "3.0.5"
 
 	func fetch_active_epic() -> void:
 		fetched_count += 1
@@ -264,6 +264,32 @@ func _run_smoke_suite() -> bool:
 	)
 	if str(jump_target.get("path", "")) != SMOKE_SCRIPT_PATH or int(jump_target.get("line", -1)) != 3:
 		_fail("extract_issue_jump_target failed: %s" % str(jump_target))
+		return false
+
+	var spec_fallback: Dictionary = exec.call(
+		"resolve_clean_feature_spec",
+		{
+			"title": "Parry",
+			"goal": "Goal: +parry window\nDone When: Land parry -> enemy flashes white",
+			"doneWhen": "Verify stage deliverables and checklist criteria in game viewport.",
+		},
+		"v0.3"
+	)
+	if str(spec_fallback.get("done_when", "")) != "Land parry → enemy flashes white":
+		_fail("resolve_clean_feature_spec placeholder fallback failed: %s" % str(spec_fallback))
+		return false
+
+	var spec_playtest_prefix: Dictionary = exec.call(
+		"resolve_clean_feature_spec",
+		{
+			"title": "Parry",
+			"goal": "Goal: +parry window",
+			"doneWhen": "Playtest: Tap Space -> shield sparks",
+		},
+		"v0.3"
+	)
+	if str(spec_playtest_prefix.get("done_when", "")) != "Tap Space → shield sparks":
+		_fail("resolve_clean_feature_spec Playtest prefix strip failed: %s" % str(spec_playtest_prefix))
 		return false
 
 	var md: String = exec.call(

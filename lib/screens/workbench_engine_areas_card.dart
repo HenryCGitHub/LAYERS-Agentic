@@ -8,6 +8,10 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
   static final RegExp _scopeInlineAssignRegex = RegExp(
     r'\s*[@`]?[a-z_][a-z0-9_]*\s*[:=]\s*[-+]?\d+(?:\.\d+)?[a-zA-Z%/]*',
   );
+  static final RegExp _tuningBulletStripRegex = RegExp(r'^[•\*\-\s]+');
+  static final RegExp _tuningIdPrefixRegex = RegExp(
+    r'^([a-zA-Z_][a-zA-Z0-9_]*)\s*:',
+  );
 
   String _formatPlainEnglishScopeBullet(String raw) {
     var cleaned = raw.trim().replaceFirst(RegExp(r'^[•\*\-\s]+'), '').trim();
@@ -45,9 +49,16 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
           _formatPlainEnglishScopeBullet(item),
     ];
 
-    final endGoal = node.playtestCondition.trim().isNotEmpty
-        ? node.playtestCondition.trim()
-        : SectionTextUtils.resolveDoneWhen(feat.sections).trim();
+    final endGoal = SectionTextUtils.resolveCheckpointDoneWhen(
+      playtestGoalParam: node.parameters['playtestGoal'],
+      checkpointTrigger: node.trigger,
+      checkpointFeedback: node.feedback,
+      sections: feat.sections,
+      fallback: node.playtestCondition,
+    );
+    final tuningItems = node.tuningParams.isNotEmpty
+        ? List<String>.from(node.tuningParams)
+        : SectionTextUtils.resolveTuningParams(feat.sections);
 
     node.flattenLegacyNestedChecklistIfNeeded();
     final openFixEntries = node.openFixItems;
@@ -166,6 +177,178 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   ],
                 ),
               ),
+          ],
+
+          // 2B. TUNING VARIABLES (Scannable + 1-Click Inline Editable)
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'TUNING VARIABLES',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: fontMicro,
+                  fontWeight: weightBold,
+                  letterSpacing: 0.7,
+                  color: const Color(0xFF7DD3FC),
+                ),
+              ),
+              InkWell(
+                key: ValueKey('add_tuning_var_btn_${node.id}'),
+                borderRadius: BorderRadius.circular(5),
+                onTap: () => _startStage2InlineEdit('add_tuning_${node.id}', ''),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  child: Text(
+                    '+ Add Variable',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: weightSemi,
+                      color: const Color(0xFF7DD3FC),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (tuningItems.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                for (int tIdx = 0; tIdx < tuningItems.length; tIdx++)
+                  if (_activeStage2InlineEditKey ==
+                      'edit_tuning_${node.id}_$tIdx')
+                    SizedBox(
+                      width: 280,
+                      child: _buildStage2InlineEditor(
+                        editKey: 'edit_tuning_${node.id}_$tIdx',
+                        inputKey: ValueKey(
+                          'edit_tuning_var_input_${node.id}_$tIdx',
+                        ),
+                        saveBtnKey: ValueKey(
+                          'save_tuning_var_btn_${node.id}_$tIdx',
+                        ),
+                        deleteBtnKey: ValueKey(
+                          'delete_tuning_var_btn_${node.id}_$tIdx',
+                        ),
+                        cancelBtnKey: ValueKey(
+                          'cancel_tuning_var_btn_${node.id}_$tIdx',
+                        ),
+                        hintText: 'paramName: 1.0 unit',
+                        onSave: (val) {
+                          final oldRaw = tuningItems[tIdx];
+                          final cleaned = val
+                              .replaceFirst(_tuningBulletStripRegex, '')
+                              .trim();
+                          if (cleaned.isEmpty) return;
+                          final nextList = List<String>.from(tuningItems)
+                            ..[tIdx] = cleaned;
+                          node.tuningParams = nextList;
+                          widget.workbench.updateFeatureStates(feat.id, states);
+                          final oldIdMatch =
+                              _tuningIdPrefixRegex.firstMatch(oldRaw);
+                          final newIdMatch =
+                              _tuningIdPrefixRegex.firstMatch(cleaned);
+                          if (oldIdMatch != null && newIdMatch != null) {
+                            final oldId = oldIdMatch.group(1)!;
+                            final newId = newIdMatch.group(1)!;
+                            if (oldId != newId) {
+                              widget.workbench
+                                  .propagateVariableRenameAcrossProject(
+                                oldId,
+                                newId,
+                              );
+                            }
+                          }
+                          _rebuild();
+                        },
+                        onDelete: () {
+                          final nextList = List<String>.from(tuningItems)
+                            ..removeAt(tIdx);
+                          node.tuningParams = nextList;
+                          widget.workbench.updateFeatureStates(feat.id, states);
+                          _rebuild();
+                        },
+                      ),
+                    )
+                  else
+                    InkWell(
+                      key: ValueKey('tuning_var_item_${node.id}_$tIdx'),
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => _startStage2InlineEdit(
+                        'edit_tuning_${node.id}_$tIdx',
+                        tuningItems[tIdx],
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 9,
+                          vertical: 5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark ? const Color(0xFF0B1320) : bgRecessed,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: const Color(0xFF38BDF8)
+                                .withValues(alpha: 0.25),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              tuningItems[tIdx],
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11.5,
+                                color: const Color(0xFFBAE6FD),
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              '✎',
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                color: const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+              ],
+            ),
+          ] else if (_activeStage2InlineEditKey != 'add_tuning_${node.id}') ...[
+            const SizedBox(height: 4),
+            Text(
+              'No tuning variables registered — click + Add Variable to add one.',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: textMuted,
+              ),
+            ),
+          ],
+          if (_activeStage2InlineEditKey == 'add_tuning_${node.id}') ...[
+            const SizedBox(height: 8),
+            _buildStage2InlineEditor(
+              editKey: 'add_tuning_${node.id}',
+              inputKey: ValueKey('add_tuning_var_input_${node.id}'),
+              saveBtnKey: ValueKey('confirm_add_tuning_var_btn_${node.id}'),
+              cancelBtnKey: ValueKey('cancel_add_tuning_var_btn_${node.id}'),
+              hintText: 'paramName: 1.0 unit (e.g. dashSpeed: 12.0 m/s)',
+              onSave: (val) {
+                final cleaned =
+                    val.replaceFirst(_tuningBulletStripRegex, '').trim();
+                if (cleaned.isEmpty) return;
+                final nextList = List<String>.from(tuningItems)..add(cleaned);
+                node.tuningParams = nextList;
+                widget.workbench.updateFeatureStates(feat.id, states);
+                _rebuild();
+              },
+            ),
           ],
 
           // 3. DONE WHEN (Playtest Check)

@@ -1177,13 +1177,23 @@ func resolve_clean_feature_spec(feat: Dictionary, release_ver: String = "v0.1") 
 	var scope_header: String = ("In Scope (%s)" % release_ver) if (not release_ver.is_empty() and release_ver != "v0.1" and has_plus_delta) else "In Scope"
 
 	var raw_done: String = str(feat.get("doneWhen", feat.get("playtestCriteria", ""))).strip_edges()
-	if raw_done.to_lower().begins_with("done when:"):
+	var lower_done: String = raw_done.to_lower()
+	if lower_done.begins_with("done when:"):
 		raw_done = raw_done.substr("done when:".length()).strip_edges()
+	elif lower_done.begins_with("playtest:"):
+		raw_done = raw_done.substr("playtest:".length()).strip_edges()
 	raw_done = _normalize_causal_arrow(raw_done)
+	var clean_lower_done: String = raw_done.to_lower()
+	var is_generic_done: bool = (
+		raw_done.is_empty() or
+		raw_done.begins_with("+") or
+		clean_lower_done.begins_with("press f6 and verify ") or
+		clean_lower_done.begins_with("verify stage deliverables and checklist criteria")
+	)
 	var parsed_done: String = str(parsed.get("done_when", "")).strip_edges()
-	if (raw_done.is_empty() or raw_done.begins_with("Press F6 and verify ")) and not parsed_done.is_empty():
+	if is_generic_done and not parsed_done.is_empty():
 		raw_done = parsed_done
-	if raw_done.is_empty():
+	elif is_generic_done:
 		raw_done = "Press F6 and verify %s works with 0 console errors." % (feat_title if not feat_title.is_empty() else "this feature")
 
 	return {

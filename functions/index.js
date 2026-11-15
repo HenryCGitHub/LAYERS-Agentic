@@ -319,6 +319,24 @@ function parseBulletLinesJs(rawText, maxItems = 6) {
     .slice(0, maxItems);
 }
 
+function cleanCheckpointDoneWhenJs(rawText) {
+  const stripped = String(rawText || "")
+    .trim()
+    .replace(/^(?:playtest|done\s+when)\s*:\s*/i, "")
+    .replace(/\s*->\s*/g, " → ")
+    .trim();
+  if (!stripped) return "";
+  if (stripped.startsWith("+")) return "";
+  if (
+    /^(?:Verify stage deliverables and checklist criteria|Press F6 and verify\b)/i.test(
+      stripped
+    )
+  ) {
+    return "";
+  }
+  return stripped;
+}
+
 function markChecklistItemCompletedByIdJs(items, targetId) {
   const cleanTarget = String(targetId || "").trim();
   if (!cleanTarget || !Array.isArray(items)) return false;
@@ -726,10 +744,17 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
         String(cp?.parameters?.playtestPassed || "") === "true";
       const parsedScope = parseStructuredScopeFieldsJs(feat?.sections?.scope || "");
       const parsedGoal = parseStructuredScopeFieldsJs(feat?.sections?.goal || "");
+      const rawTriggerGoalFallback =
+        cp?.trigger &&
+        !/^(?:playtest|done\s+when)\s*:/i.test(String(cp.trigger).trim()) &&
+        !String(cp.trigger).includes("->") &&
+        !String(cp.trigger).includes("→")
+          ? String(cp.trigger).trim()
+          : "";
       const goal = String(
         parsedGoal.goal ||
           parsedScope.goal ||
-          cp?.trigger ||
+          rawTriggerGoalFallback ||
           feat?.sections?.summary ||
           ""
       ).trim();
@@ -774,27 +799,18 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
           ? 0
           : Math.round((signedOffCount / edgeCases.length) * 50);
       const openIssues = collectOpenPlaytestIssuesJs(cp);
-      const rawDoneWhen = String(
-        cp?.parameters?.playtestGoal ||
-          cp?.feedback ||
-          feat?.sections?.done_when ||
-          feat?.sections?.doneWhen ||
-          feat?.sections?.playtest_criteria ||
-          parsedScope.doneWhen ||
-          parsedGoal.doneWhen ||
-          ""
-      )
-        .trim()
-        .replace(/^done\s+when\s*:\s*/i, "")
-        .replace(/\s*->\s*/g, " → ")
-        .trim();
-      const fallbackDoneWhen = parsedScope.doneWhen || parsedGoal.doneWhen;
       const doneWhen =
-        (!rawDoneWhen || rawDoneWhen.startsWith("Press F6 and verify ")) &&
-        fallbackDoneWhen
-          ? String(fallbackDoneWhen).trim()
-          : rawDoneWhen ||
-            `Press F6 and verify ${feat.title || "this feature"} works with 0 console errors.`;
+        cleanCheckpointDoneWhenJs(cp?.parameters?.playtestGoal) ||
+        cleanCheckpointDoneWhenJs(cp?.trigger) ||
+        cleanCheckpointDoneWhenJs(cp?.feedback) ||
+        cleanCheckpointDoneWhenJs(
+          feat?.sections?.done_when ||
+            feat?.sections?.doneWhen ||
+            feat?.sections?.playtest_criteria
+        ) ||
+        cleanCheckpointDoneWhenJs(parsedScope.doneWhen) ||
+        cleanCheckpointDoneWhenJs(parsedGoal.doneWhen) ||
+        `Press F6 and verify ${feat.title || "this feature"} works with 0 console errors.`;
       return {
         id: String(feat.id),
         title: String(feat.title || "Feature"),
@@ -1701,4 +1717,5 @@ exports._testHelpers = {
   applyGodotFeatureMutationJs,
   parseStructuredScopeFieldsJs,
   dedupeScopeBulletsJs,
+  cleanCheckpointDoneWhenJs,
 };

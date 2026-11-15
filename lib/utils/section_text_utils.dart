@@ -36,6 +36,15 @@ class SectionTextUtils {
     r'Done When:\s*',
     caseSensitive: false,
   );
+  static final RegExp _checkpointDonePrefixRegex = RegExp(
+    r'^(?:playtest|done\s+when)\s*:\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _genericDonePlaceholderRegex = RegExp(
+    r'^(?:Verify stage deliverables and checklist criteria|Press F6 and verify\b)',
+    caseSensitive: false,
+  );
+  static final RegExp _causalArrowNormalizeRegex = RegExp(r'\s*->\s*');
   static final RegExp _whitespaceRegex = RegExp(r'\s+');
   static final RegExp _leadingBracketTagRegex = RegExp(r'^\[[^\]]+\]\s*');
   static final RegExp _inlineArticlesRegex = RegExp(
@@ -337,6 +346,53 @@ class SectionTextUtils {
       }
     }
     return '';
+  }
+
+  /// Resolves the canonical `Done When` gate across checkpoint fields (`playtestGoal`,
+  /// `trigger`, `feedback`) and `sections` (`Done When:`), stripping leading `Playtest:` /
+  /// `Done When:` labels, normalizing arrows (`->` → `→`), and ignoring `+delta` tags
+  /// or generic placeholder strings.
+  static String resolveCheckpointDoneWhen({
+    String? playtestGoalParam,
+    String? checkpointTrigger,
+    String? checkpointFeedback,
+    required Map<String, String> sections,
+    String fallback = '',
+  }) {
+    String cleanCandidate(String? raw) {
+      if (raw == null) return '';
+      final stripped = raw
+          .trim()
+          .replaceFirst(_checkpointDonePrefixRegex, '')
+          .replaceAll(_causalArrowNormalizeRegex, ' → ')
+          .trim();
+      if (stripped.isEmpty || stripped.startsWith('+')) return '';
+      if (_genericDonePlaceholderRegex.hasMatch(stripped)) return '';
+      return stripped;
+    }
+
+    for (final cand in [
+      playtestGoalParam,
+      checkpointTrigger,
+      checkpointFeedback,
+      resolveDoneWhen(sections),
+    ]) {
+      final cleaned = cleanCandidate(cand);
+      if (cleaned.isNotEmpty) return cleaned;
+    }
+    return fallback.replaceAll(_causalArrowNormalizeRegex, ' → ').trim();
+  }
+
+  /// Resolves bulleted tuning variables from `sections['tuning']` or `sections['variables']`.
+  static List<String> resolveTuningParams(Map<String, String> sections) {
+    final raw = (sections['tuning'] ?? sections['variables'] ?? '').trim();
+    if (raw.isEmpty) return const [];
+    return raw
+        .replaceAll('\r\n', '\n')
+        .split('\n')
+        .map((l) => l.replaceAll(_bulletPrefixStripRegex, '').trim())
+        .where((l) => l.isNotEmpty && !l.startsWith('#'))
+        .toList();
   }
 }
 

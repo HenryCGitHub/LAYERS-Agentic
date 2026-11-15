@@ -1084,7 +1084,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.4"'));
+        expect(cfgText, contains('version="3.0.5"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -2535,7 +2535,7 @@ assert.deepStrictEqual(deduped, ["+60ms hitstop freeze frame", "+stagger flash s
 const docsById = new Map([
   ["proj_1", { id: "proj_1", tier: "PROJECT", title: "Shell", childrenIds: ["rel_3"], sections: { active_release_id: "rel_3", design_pillars: "• Every parry feels weighty\n• Read enemy tells cleanly", trade_offs: "• Arcade responsiveness over realism" } }],
   ["rel_3", { id: "rel_3", tier: "RELEASE", parentId: "proj_1", title: "v0.3 Vertical Slice", childrenIds: ["ep_3"], sections: { version: "v0.3" } }],
-  ["ep_3", { id: "ep_3", tier: "EPIC", parentId: "rel_3", title: "Claw & Shell Parry", childrenIds: ["f_stagger"] }],
+  ["ep_3", { id: "ep_3", tier: "EPIC", parentId: "rel_3", title: "Claw & Shell Parry", childrenIds: ["f_stagger", "f_dash", "f_wave"] }],
   ["f_stagger", {
     id: "f_stagger",
     tier: "FEATURE",
@@ -2550,6 +2550,34 @@ const docsById = new Map([
         parameters: { releaseVersion: "v0.3", playtestPassed: "false" }
       }])
     }
+  }],
+  ["f_dash", {
+    id: "f_dash",
+    tier: "FEATURE",
+    parentId: "ep_3",
+    title: "Air Dash",
+    sections: {
+      scope: "Goal: +air dash",
+      states: JSON.stringify([{
+        id: "cp_dash",
+        trigger: "Playtest: Press Shift -> player dashes 6m",
+        parameters: { releaseVersion: "v0.3", playtestPassed: "false" }
+      }])
+    }
+  }],
+  ["f_wave", {
+    id: "f_wave",
+    tier: "FEATURE",
+    parentId: "ep_3",
+    title: "Charge Wave",
+    sections: {
+      scope: "Goal: +charge wave\n\nIn Scope:\n• Charged crescent slash\n\nDone When: Release charge -> wave fires",
+      states: JSON.stringify([{
+        id: "cp_wave",
+        trigger: "Verify stage deliverables and checklist criteria in game viewport.",
+        parameters: { releaseVersion: "v0.3", playtestPassed: "false" }
+      }])
+    }
   }]
 ]);
 const payload = computeActiveEpicPayload({ docsById, projectId: "proj_1", webStudioUrl: "https://example.com" });
@@ -2559,6 +2587,11 @@ const feat = payload.activeEpic.features[0];
 assert.strictEqual(feat.goal, "+hitstop freeze frame, +stagger flash material, +wall bounce slam");
 assert.deepStrictEqual(feat.coveredScope, ["+60ms hitstop freeze frame", "+stagger flash shader"]);
 assert.strictEqual(feat.doneWhen, "Land parry or finisher → enemy flashes white, pauses 60ms");
+const featDash = payload.activeEpic.features[1];
+assert.strictEqual(featDash.goal, "+air dash");
+assert.strictEqual(featDash.doneWhen, "Press Shift → player dashes 6m");
+const featWave = payload.activeEpic.features[2];
+assert.strictEqual(featWave.doneWhen, "Release charge → wave fires");
 process.stdout.write("JS_SCOPE_PARSE_OK\n");
 ''';
         final result = Process.runSync('node', ['-e', script]);
@@ -2642,6 +2675,114 @@ process.stdout.write("JS_SCOPE_PARSE_OK\n");
             '- **Playtest Gate (Done When)**: Land parry → enemy flashes white',
           ),
         );
+      },
+    );
+
+    testWidgets(
+      'Feature Card resolves Done When fallback without placeholder & supports inline Tuning Variables add/edit',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final cp = FeatureStateNode(
+          id: 'cp_ui_tuning_1',
+          name: '01 · VERTICAL SLICE',
+          tuningParams: ['staggerDuration: 1.8 s'],
+          edgeCases: ['[STATE GUARD] Ignore attack input while staggered'],
+          parameters: {'releaseVersion': 'v0.3'},
+        );
+        final feat = TierDocument(
+          id: 'feat_ui_tuning_1',
+          title: 'Enemy Stagger State',
+          tier: TierType.feature,
+          parentId: 'epic_ui_tuning_1',
+          phase: 'v0.3',
+          sections: {
+            'scope':
+                'Goal: +stagger\n\nIn Scope:\n• Hitstop\n\nDone When: Land parry -> enemy flashes white',
+            'tuning': '• staggerDuration: 1.8 s',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+        final epic = TierDocument(
+          id: 'epic_ui_tuning_1',
+          title: 'Claw & Shell Parry',
+          tier: TierType.epic,
+          parentId: 'rel_ui_tuning_1',
+          phase: 'v0.3',
+          childrenIds: [feat.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_ui_tuning_1',
+          title: 'v0.3 Vertical Slice',
+          tier: TierType.release,
+          parentId: 'proj_ui_tuning_1',
+          phase: 'v0.3',
+          childrenIds: [epic.id],
+          sections: {'version': 'v0.3'},
+        );
+        final proj = TierDocument(
+          id: 'proj_ui_tuning_1',
+          title: 'Shell Combat',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+        for (final doc in [proj, rel, epic, feat]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+        provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Land parry → enemy flashes white'), findsOneWidget);
+        expect(find.textContaining('Verify stage deliverables'), findsNothing);
+        expect(find.text('TUNING VARIABLES'), findsOneWidget);
+        expect(find.text('staggerDuration: 1.8 s'), findsOneWidget);
+        expect(find.text('@EXPORT VARS:'), findsNothing);
+
+        final varFinder = find.byKey(ValueKey('tuning_var_item_${cp.id}_0'));
+        await tester.ensureVisible(varFinder);
+        await tester.tap(varFinder);
+        await tester.pumpAndSettle();
+
+        final editInput = find.byKey(ValueKey('edit_tuning_var_input_${cp.id}_0'));
+        await tester.enterText(editInput, 'staggerDuration: 2.2 s');
+        await tester.tap(find.byKey(ValueKey('save_tuning_var_btn_${cp.id}_0')));
+        await tester.pumpAndSettle();
+
+        expect(
+          provider.documents[feat.id]!.sections['tuning'],
+          contains('staggerDuration: 2.2 s'),
+        );
+        expect(find.text('staggerDuration: 2.2 s'), findsOneWidget);
+
+        final addBtn = find.byKey(ValueKey('add_tuning_var_btn_${cp.id}'));
+        await tester.ensureVisible(addBtn);
+        await tester.tap(addBtn);
+        await tester.pumpAndSettle();
+
+        final addInput = find.byKey(ValueKey('add_tuning_var_input_${cp.id}'));
+        await tester.enterText(addInput, 'wallSlamDamage: 15.0 hp');
+        await tester.tap(find.byKey(ValueKey('confirm_add_tuning_var_btn_${cp.id}')));
+        await tester.pumpAndSettle();
+
+        final updatedCp = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(updatedCp.tuningParams, contains('wallSlamDamage: 15.0 hp'));
+        expect(find.text('wallSlamDamage: 15.0 hp'), findsOneWidget);
       },
     );
   });

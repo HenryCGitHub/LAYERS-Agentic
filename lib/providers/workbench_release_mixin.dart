@@ -1952,16 +1952,13 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         }
       }
     }
-    final hasExplicitCondition = cpNode != null &&
-        (cpNode.trigger.trim().isNotEmpty ||
-            (cpNode.feedback?.trim().isNotEmpty ?? false));
-    final sectionDoneWhen = SectionTextUtils.resolveDoneWhen(feat.sections).trim();
-    final rawDone = hasExplicitCondition
-        ? cpNode.playtestCondition.trim()
-        : (sectionDoneWhen.isNotEmpty
-            ? sectionDoneWhen
-            : (cpNode?.playtestCondition.trim() ?? ''));
-    final cleanDone = rawDone.replaceAll(' -> ', ' → ').trim();
+    final cleanDone = SectionTextUtils.resolveCheckpointDoneWhen(
+      playtestGoalParam: cpNode?.parameters['playtestGoal'],
+      checkpointTrigger: cpNode?.trigger,
+      checkpointFeedback: cpNode?.feedback,
+      sections: feat.sections,
+      fallback: cpNode?.playtestCondition ?? '',
+    );
     if (cleanDone.isNotEmpty) {
       sb.writeln('- **Playtest Gate (Done When)**: $cleanDone');
     }
@@ -1987,11 +1984,14 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     }
 
     sb.writeln('\n## 2. Canonical Tuning Variables & Sibling Context');
-    if (cpNode == null || cpNode.tuningParams.isEmpty) {
+    final activeTuning = (cpNode != null && cpNode.tuningParams.isNotEmpty)
+        ? cpNode.tuningParams
+        : SectionTextUtils.resolveTuningParams(feat.sections);
+    if (activeTuning.isEmpty) {
       sb.writeln('- *(No numeric tuning variables registered)*');
     } else {
       sb.writeln('### Active Feature Variables (`${feat.title}`)');
-      for (final param in cpNode.tuningParams) {
+      for (final param in activeTuning) {
         sb.writeln('- `$param`');
       }
     }
@@ -2104,6 +2104,9 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
             activeCp.tuningParams.map((p) => '• $p').join('\n');
         feat.sections['tuning'] = formattedTuning;
         feat.sections['variables'] = formattedTuning;
+      } else {
+        feat.sections.remove('tuning');
+        feat.sections.remove('variables');
       }
       if (activeCp.edgeCases.isNotEmpty) {
         feat.sections['edge_cases'] =
@@ -2117,9 +2120,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
                 (f.title.toLowerCase().trim() ==
                         feat.title.toLowerCase().trim() &&
                     b.id == feat.parentId)) {
-              if (activeCp.tuningParams.isNotEmpty) {
-                f.tuningParams = List<String>.from(activeCp.tuningParams);
-              }
+              f.tuningParams = List<String>.from(activeCp.tuningParams);
               if (activeCp.edgeCases.isNotEmpty) {
                 f.edgeCases = List<String>.from(activeCp.edgeCases);
               }

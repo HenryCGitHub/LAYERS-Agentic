@@ -134,7 +134,7 @@ class _ConnectGodotPluginDialogState extends State<_ConnectGodotPluginDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'GODOT DOCK v3.0.4 · SPEC, PLAYTEST & 2-WAY SYNC',
+                      'GODOT DOCK v3.0.5 · SPEC, PLAYTEST & 2-WAY SYNC',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,
