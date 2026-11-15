@@ -221,6 +221,95 @@ function collectOpenPlaytestIssuesJs(cp) {
   return out;
 }
 
+function parseStructuredScopeFieldsJs(rawText) {
+  const lines = String(rawText || "").replace(/\r\n/g, "\n").split("\n");
+  let section = "goal";
+  const goalLines = [];
+  const inScopeLines = [];
+  const doneWhenLines = [];
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    const goalMatch = trimmed.match(/^goal\s*:\s*(.*)$/i);
+    if (goalMatch) {
+      section = "goal";
+      const rest = String(goalMatch[1] || "").trim();
+      if (rest) goalLines.push(rest);
+      continue;
+    }
+
+    const inScopeMatch = trimmed.match(/^in\s+scope(?:\s*\([^)]*\))?\s*:\s*(.*)$/i);
+    if (inScopeMatch) {
+      section = "in_scope";
+      const rest = String(inScopeMatch[1] || "")
+        .replace(/^[-*•]\s*/, "")
+        .trim();
+      if (rest) inScopeLines.push(rest);
+      continue;
+    }
+
+    const doneMatch = trimmed.match(/^(?:done\s+when|playtest\s+gate|end\s+goal)\s*:\s*(.*)$/i);
+    if (doneMatch) {
+      section = "done_when";
+      const rest = String(doneMatch[1] || "").trim();
+      if (rest) doneWhenLines.push(rest);
+      continue;
+    }
+
+    if (section === "goal") {
+      if (/^[-*•]\s+/.test(trimmed) && goalLines.length > 0) {
+        section = "in_scope";
+        const bullet = trimmed.replace(/^[-*•]\s*/, "").trim();
+        if (bullet) inScopeLines.push(bullet);
+      } else {
+        goalLines.push(trimmed);
+      }
+    } else if (section === "in_scope") {
+      const bullet = trimmed.replace(/^[-*•]\s*/, "").trim();
+      if (bullet) inScopeLines.push(bullet);
+    } else {
+      const donePart = trimmed.replace(/^[-*•]\s*/, "").trim();
+      if (donePart) doneWhenLines.push(donePart);
+    }
+  }
+
+  return {
+    goal: goalLines.join(" ").trim(),
+    inScope: inScopeLines,
+    doneWhen: doneWhenLines
+      .join(" ")
+      .replace(/\s*->\s*/g, " → ")
+      .trim(),
+  };
+}
+
+function dedupeScopeBulletsJs(items, maxItems = 6) {
+  if (!Array.isArray(items)) return [];
+  const out = [];
+  const keyToIdx = new Map();
+  for (const raw of items) {
+    const clean = String(raw || "")
+      .replace(/^[-*•]\s*/, "")
+      .trim();
+    if (!clean) continue;
+    const normKey = clean.replace(/^\+\s*/, "").trim().toLowerCase();
+    if (!normKey) continue;
+    if (keyToIdx.has(normKey)) {
+      const existingIdx = keyToIdx.get(normKey);
+      if (clean.startsWith("+") && !out[existingIdx].startsWith("+")) {
+        out[existingIdx] = clean;
+      }
+      continue;
+    }
+    if (out.length >= maxItems) continue;
+    keyToIdx.set(normKey, out.length);
+    out.push(clean);
+  }
+  return out;
+}
+
 function markChecklistItemCompletedByIdJs(items, targetId) {
   const cleanTarget = String(targetId || "").trim();
   if (!cleanTarget || !Array.isArray(items)) return false;
@@ -609,24 +698,21 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       const cp = selectActiveCheckpoint(states, activeVer);
       const isPlaytestPassed =
         String(cp?.parameters?.playtestPassed || "") === "true";
+      const parsedScope = parseStructuredScopeFieldsJs(feat?.sections?.scope || "");
+      const parsedGoal = parseStructuredScopeFieldsJs(feat?.sections?.goal || "");
       const goal = String(
-        feat?.sections?.scope ||
-          feat?.sections?.goal ||
+        parsedGoal.goal ||
+          parsedScope.goal ||
           cp?.trigger ||
           feat?.sections?.summary ||
           ""
       ).trim();
       const coveredScope =
         Array.isArray(cp?.coveredScope) && cp.coveredScope.length > 0
-          ? cp.coveredScope
-              .map((x) => String(x || "").trim())
-              .filter(Boolean)
-              .slice(0, 6)
-          : String(feat?.sections?.in_scope || "")
-              .split("\n")
-              .map((l) => l.replace(/^[-*•]\s*/, "").trim())
-              .filter(Boolean)
-              .slice(0, 6);
+          ? dedupeScopeBulletsJs(cp.coveredScope, 6)
+          : String(feat?.sections?.in_scope || "").trim()
+            ? dedupeScopeBulletsJs(String(feat.sections.in_scope).split("\n"), 6)
+            : dedupeScopeBulletsJs(parsedScope.inScope, 6);
       const tuningParams =
         Array.isArray(cp?.tuningParams) && cp.tuningParams.length > 0
           ? cp.tuningParams
@@ -662,14 +748,27 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
           ? 0
           : Math.round((signedOffCount / edgeCases.length) * 50);
       const openIssues = collectOpenPlaytestIssuesJs(cp);
-      const doneWhen = String(
+      const rawDoneWhen = String(
         cp?.parameters?.playtestGoal ||
           cp?.feedback ||
           feat?.sections?.done_when ||
           feat?.sections?.doneWhen ||
           feat?.sections?.playtest_criteria ||
-          `Press F6 and verify ${feat.title || "this feature"} works with 0 console errors.`
-      ).trim();
+          parsedScope.doneWhen ||
+          parsedGoal.doneWhen ||
+          ""
+      )
+        .trim()
+        .replace(/^done\s+when\s*:\s*/i, "")
+        .replace(/\s*->\s*/g, " → ")
+        .trim();
+      const fallbackDoneWhen = parsedScope.doneWhen || parsedGoal.doneWhen;
+      const doneWhen =
+        (!rawDoneWhen || rawDoneWhen.startsWith("Press F6 and verify ")) &&
+        fallbackDoneWhen
+          ? String(fallbackDoneWhen).trim()
+          : rawDoneWhen ||
+            `Press F6 and verify ${feat.title || "this feature"} works with 0 console errors.`;
       return {
         id: String(feat.id),
         title: String(feat.title || "Feature"),
@@ -1570,4 +1669,6 @@ exports._testHelpers = {
   selectActiveCheckpoint,
   computeActiveEpicPayload,
   applyGodotFeatureMutationJs,
+  parseStructuredScopeFieldsJs,
+  dedupeScopeBulletsJs,
 };

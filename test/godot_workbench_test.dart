@@ -1084,7 +1084,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.2"'));
+        expect(cfgText, contains('version="3.0.3"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1216,6 +1216,8 @@ void main() {
         expect(fnText, contains('"log_issue"'));
         expect(fnText, contains('"resolve_issue"'));
         expect(fnText, contains('signedOffGuards'));
+        expect(fnText, contains('parseStructuredScopeFieldsJs'));
+        expect(fnText, contains('dedupeScopeBulletsJs'));
         expect(fnText, isNot(contains('build_feature')));
         expect(fnText, isNot(contains('direct_agent')));
         expect(fnText, isNot(contains('diagnose_fix')));
@@ -2511,6 +2513,59 @@ void main() {
           find.byKey(ValueKey('rail_queued_badge_${feat.id}')),
           findsNothing,
         );
+      },
+    );
+
+    test(
+      'Cloud Functions parseStructuredScopeFieldsJs extracts 1-line goal, deltas & Done When',
+      () {
+        final script = r'''
+const assert = require("assert");
+const { parseStructuredScopeFieldsJs, dedupeScopeBulletsJs, computeActiveEpicPayload } = require("./functions/index.js")._testHelpers;
+
+const rawScope = "Goal: +hitstop freeze frame, +stagger flash material, +wall bounce slam\n\nIn Scope:\n• Staggered vulnerability state\n• +60ms hitstop freeze frame\n• +stagger flash shader\n\nDone When: Land parry or finisher -> enemy flashes white, pauses 60ms";
+const parsed = parseStructuredScopeFieldsJs(rawScope);
+assert.strictEqual(parsed.goal, "+hitstop freeze frame, +stagger flash material, +wall bounce slam");
+assert.deepStrictEqual(parsed.inScope, ["Staggered vulnerability state", "+60ms hitstop freeze frame", "+stagger flash shader"]);
+assert.strictEqual(parsed.doneWhen, "Land parry or finisher → enemy flashes white, pauses 60ms");
+
+const deduped = dedupeScopeBulletsJs(["60ms hitstop freeze frame", "+60ms hitstop freeze frame", "• +stagger flash shader"]);
+assert.deepStrictEqual(deduped, ["+60ms hitstop freeze frame", "+stagger flash shader"]);
+
+const docsById = new Map([
+  ["proj_1", { id: "proj_1", tier: "PROJECT", title: "Shell", childrenIds: ["rel_3"], sections: { active_release_id: "rel_3" } }],
+  ["rel_3", { id: "rel_3", tier: "RELEASE", parentId: "proj_1", title: "v0.3 Vertical Slice", childrenIds: ["ep_3"], sections: { version: "v0.3" } }],
+  ["ep_3", { id: "ep_3", tier: "EPIC", parentId: "rel_3", title: "Claw & Shell Parry", childrenIds: ["f_stagger"] }],
+  ["f_stagger", {
+    id: "f_stagger",
+    tier: "FEATURE",
+    parentId: "ep_3",
+    title: "Enemy Stagger State",
+    sections: {
+      scope: rawScope,
+      states: JSON.stringify([{
+        id: "cp_3",
+        trigger: "+hitstop upgrade",
+        coveredScope: ["+60ms hitstop freeze frame", "+stagger flash shader"],
+        parameters: { releaseVersion: "v0.3", playtestPassed: "false" }
+      }])
+    }
+  }]
+]);
+const payload = computeActiveEpicPayload({ docsById, projectId: "proj_1", webStudioUrl: "https://example.com" });
+const feat = payload.activeEpic.features[0];
+assert.strictEqual(feat.goal, "+hitstop freeze frame, +stagger flash material, +wall bounce slam");
+assert.deepStrictEqual(feat.coveredScope, ["+60ms hitstop freeze frame", "+stagger flash shader"]);
+assert.strictEqual(feat.doneWhen, "Land parry or finisher → enemy flashes white, pauses 60ms");
+process.stdout.write("JS_SCOPE_PARSE_OK\n");
+''';
+        final result = Process.runSync('node', ['-e', script]);
+        expect(
+          result.exitCode,
+          0,
+          reason: 'stderr: ${result.stderr}\nstdout: ${result.stdout}',
+        );
+        expect(result.stdout.toString(), contains('JS_SCOPE_PARSE_OK'));
       },
     );
   });

@@ -1059,6 +1059,141 @@ func capture_input_map_snapshot() -> Dictionary:
 	return out
 
 
+func _strip_scope_bullet_prefix(raw: String) -> String:
+	var s: String = raw.strip_edges()
+	if s.begins_with("•"):
+		s = s.substr(1).strip_edges()
+	elif s.begins_with("- ") or s.begins_with("* "):
+		s = s.substr(2).strip_edges()
+	return s
+
+
+func _normalize_causal_arrow(raw: String) -> String:
+	return raw.replace(" -> ", " → ").replace("-> ", " → ").replace(" ->", " → ").replace("->", " → ").strip_edges()
+
+
+func parse_structured_scope_fields(raw_text: String) -> Dictionary:
+	var lines: PackedStringArray = raw_text.replace("\r\n", "\n").split("\n")
+	var section: String = "goal"
+	var goal_lines := PackedStringArray()
+	var in_scope_lines := PackedStringArray()
+	var done_lines := PackedStringArray()
+
+	for raw_line in lines:
+		var trimmed: String = raw_line.strip_edges()
+		if trimmed.is_empty():
+			continue
+		var colon_idx: int = trimmed.find(":")
+		if colon_idx != -1:
+			var hdr: String = trimmed.substr(0, colon_idx).strip_edges().to_lower()
+			var rest: String = trimmed.substr(colon_idx + 1).strip_edges()
+			if hdr == "goal":
+				section = "goal"
+				if not rest.is_empty():
+					goal_lines.append(rest)
+				continue
+			elif hdr == "in scope" or (hdr.begins_with("in scope (") and hdr.ends_with(")")):
+				section = "in_scope"
+				var b_rest: String = _strip_scope_bullet_prefix(rest)
+				if not b_rest.is_empty():
+					in_scope_lines.append(b_rest)
+				continue
+			elif hdr == "done when" or hdr == "playtest gate" or hdr == "end goal":
+				section = "done_when"
+				if not rest.is_empty():
+					done_lines.append(rest)
+				continue
+
+		if section == "goal":
+			if (trimmed.begins_with("•") or trimmed.begins_with("- ") or trimmed.begins_with("* ")) and not goal_lines.is_empty():
+				section = "in_scope"
+				var b_line: String = _strip_scope_bullet_prefix(trimmed)
+				if not b_line.is_empty():
+					in_scope_lines.append(b_line)
+			else:
+				goal_lines.append(trimmed)
+		elif section == "in_scope":
+			var bullet: String = _strip_scope_bullet_prefix(trimmed)
+			if not bullet.is_empty():
+				in_scope_lines.append(bullet)
+		else:
+			var done_part: String = _strip_scope_bullet_prefix(trimmed)
+			if not done_part.is_empty():
+				done_lines.append(done_part)
+
+	return {
+		"goal": " ".join(goal_lines).strip_edges(),
+		"in_scope": in_scope_lines,
+		"done_when": _normalize_causal_arrow(" ".join(done_lines).strip_edges()),
+	}
+
+
+func dedupe_scope_items(raw_items: Variant, max_items: int = 6) -> PackedStringArray:
+	if typeof(raw_items) != TYPE_ARRAY and typeof(raw_items) != TYPE_PACKED_STRING_ARRAY:
+		return PackedStringArray()
+	var out: Array[String] = []
+	var key_to_idx: Dictionary = {}
+	for raw_entry in raw_items:
+		var clean: String = _strip_scope_bullet_prefix(str(raw_entry))
+		if clean.is_empty():
+			continue
+		var norm_key: String = clean.trim_prefix("+").strip_edges().to_lower()
+		if norm_key.is_empty():
+			continue
+		if key_to_idx.has(norm_key):
+			var existing_idx: int = int(key_to_idx[norm_key])
+			if clean.begins_with("+") and not out[existing_idx].begins_with("+"):
+				out[existing_idx] = clean
+			continue
+		if out.size() >= max_items:
+			continue
+		key_to_idx[norm_key] = out.size()
+		out.append(clean)
+	return PackedStringArray(out)
+
+
+func resolve_clean_feature_spec(feat: Dictionary, release_ver: String = "v0.1") -> Dictionary:
+	var feat_title: String = str(feat.get("title", "Feature")).strip_edges()
+	var parsed: Dictionary = parse_structured_scope_fields(str(feat.get("goal", "")))
+	var clean_goal: String = str(parsed.get("goal", "")).strip_edges()
+
+	var scope_items: PackedStringArray = dedupe_scope_items(feat.get("coveredScope", feat.get("inScope", [])), 6)
+	if scope_items.is_empty():
+		var parsed_in_scope: PackedStringArray = parsed.get("in_scope", PackedStringArray())
+		if not release_ver.is_empty() and release_ver != "v0.1":
+			var plus_only: Array[String] = []
+			for item in parsed_in_scope:
+				if item.begins_with("+"):
+					plus_only.append(item)
+			scope_items = dedupe_scope_items(plus_only, 6) if not plus_only.is_empty() else dedupe_scope_items(parsed_in_scope, 6)
+		else:
+			scope_items = dedupe_scope_items(parsed_in_scope, 6)
+
+	var has_plus_delta: bool = false
+	for si in scope_items:
+		if si.begins_with("+"):
+			has_plus_delta = true
+			break
+	var scope_header: String = ("In Scope (%s)" % release_ver) if (not release_ver.is_empty() and release_ver != "v0.1" and has_plus_delta) else "In Scope"
+
+	var raw_done: String = str(feat.get("doneWhen", feat.get("playtestCriteria", ""))).strip_edges()
+	if raw_done.to_lower().begins_with("done when:"):
+		raw_done = raw_done.substr("done when:".length()).strip_edges()
+	raw_done = _normalize_causal_arrow(raw_done)
+	var parsed_done: String = str(parsed.get("done_when", "")).strip_edges()
+	if (raw_done.is_empty() or raw_done.begins_with("Press F6 and verify ")) and not parsed_done.is_empty():
+		raw_done = parsed_done
+	if raw_done.is_empty():
+		raw_done = "Press F6 and verify %s works with 0 console errors." % (feat_title if not feat_title.is_empty() else "this feature")
+
+	return {
+		"goal": clean_goal,
+		"scope_items": scope_items,
+		"scope_header": scope_header,
+		"done_when": raw_done,
+	}
+
+
 func format_feature_context_markdown(
 	feat: Dictionary,
 	live_scripts: Dictionary,
@@ -1069,11 +1204,12 @@ func format_feature_context_markdown(
 	var out := PackedStringArray()
 	out.append("## LAYERS Godot Context")
 	var feat_title: String = str(feat.get("title", "")).strip_edges()
-	var feat_goal: String = str(feat.get("goal", "")).strip_edges()
-	var covered_raw: Variant = feat.get("coveredScope", feat.get("inScope", []))
+	var clean_spec: Dictionary = resolve_clean_feature_spec(feat, str(feat.get("releaseVersion", "")))
+	var feat_goal: String = str(clean_spec.get("goal", "")).strip_edges()
+	var covered_items: PackedStringArray = clean_spec.get("scope_items", PackedStringArray())
 	var guards_raw: Variant = feat.get("edgeCases", [])
 	var issues_raw: Variant = feat.get("openIssues", [])
-	var done_when: String = str(feat.get("doneWhen", feat.get("playtestCriteria", ""))).strip_edges()
+	var done_when: String = str(clean_spec.get("done_when", "")).strip_edges()
 
 	if not feat_title.is_empty() or not feat_goal.is_empty() or not done_when.is_empty():
 		out.append("")
@@ -1082,16 +1218,10 @@ func format_feature_context_markdown(
 			out.append("- Title: %s" % feat_title)
 		if not feat_goal.is_empty() and feat_goal != feat_title:
 			out.append("- Goal: %s" % feat_goal)
-		if typeof(covered_raw) == TYPE_ARRAY or typeof(covered_raw) == TYPE_PACKED_STRING_ARRAY:
-			var covered_items := PackedStringArray()
-			for c_item in covered_raw:
-				var cs := str(c_item).strip_edges()
-				if not cs.is_empty():
-					covered_items.append(cs)
-			if not covered_items.is_empty():
-				out.append("- In Scope:")
-				for ci in covered_items:
-					out.append("  - %s" % ci)
+		if not covered_items.is_empty():
+			out.append("- In Scope:")
+			for ci in covered_items:
+				out.append("  - %s" % ci)
 		var tuning_raw: Variant = feat.get("tuningParams", [])
 		if typeof(tuning_raw) == TYPE_ARRAY or typeof(tuning_raw) == TYPE_PACKED_STRING_ARRAY:
 			var tuning_lines := PackedStringArray()

@@ -115,6 +115,14 @@ func _collect_labels_text(node: Node, out: PackedStringArray) -> void:
 			_collect_labels_text(ch as Node, out)
 
 
+func _collect_richtext_text(node: Node, out: PackedStringArray) -> void:
+	if node is RichTextLabel:
+		out.append((node as RichTextLabel).text)
+	for ch in node.get_children():
+		if ch is Node:
+			_collect_richtext_text(ch as Node, out)
+
+
 func _run_smoke_suite() -> bool:
 	# 1. Compile-check all 4 addon GDScripts cleanly with CACHE_MODE_REPLACE
 	var plugin_scr: Variant = ResourceLoader.load(
@@ -520,6 +528,108 @@ func _run_smoke_suite() -> bool:
 		dock.free()
 		_fail("Expected untouched feature in Godot Dock to render 'Queued' status: %s" % ("\n".join(queued_labels)))
 		return false
+	if dock.get("_fix_input") != null:
+		dock.free()
+		_fail("Expected clean feature to collapse _fix_input console composer until expanded.")
+		return false
+	var expand_issue_btns: Array[Button] = []
+	_collect_buttons_by_text(body_container, "+ Log Playtest Issue", expand_issue_btns)
+	if expand_issue_btns.is_empty():
+		dock.free()
+		_fail("Expected compact '+ Log Playtest Issue' toggle button on clean feature.")
+		return false
 
+	# 6. Verify v0.3 structured 3-part scope cleanup, In Scope (v0.3), causal Done When upgrade & meta line
+	var sync_v03: Variant = sync_scr.new()
+	sync_v03.set("_link_token", "lyr_smoke_1234567890123456")
+	dock.set("_sync", sync_v03)
+	var v03_feat: Dictionary = {
+		"id": "f_stagger_v03",
+		"title": "Enemy Stagger State",
+		"goal": "Goal: +hitstop freeze frame, +stagger flash material\n\nIn Scope:\n• Staggered vulnerability state\n• +60ms hitstop freeze frame\n\nDone When: Land parry -> enemy flashes white",
+		"coveredScope": ["+60ms hitstop freeze frame", "+stagger flash shader"],
+		"tuningParams": ["staggerDuration: 1.8 s"],
+		"edgeCases": [
+			{"index": 0, "rawText": "[STATE GUARD] Ignore attack input while staggered", "text": "Ignore attack input while staggered", "signedOff": false}
+		],
+		"openIssues": [],
+		"doneWhen": "Press F6 and verify Enemy Stagger State works with 0 console errors.",
+		"checkpointId": "cp_v03",
+		"isPlaytestPassed": false,
+		"isCompleted": false,
+	}
+	var v03_payload: Dictionary = {
+		"ok": true,
+		"projectTitle": "Shell Combat",
+		"releaseVersion": "v0.3",
+		"epicPosition": 1,
+		"totalEpics": 2,
+		"activeEpic": {
+			"id": "ep_shell",
+			"code": "E03",
+			"title": "Claw & Shell Parry",
+			"features": [v03_feat],
+		},
+	}
+	dock.set("_selected_feature_id", "")
+	dock.set("_payload", v03_payload)
+	dock.call("_refresh_view")
+	var meta_lbl: Label = dock.get("_meta_label") as Label
+	var actual_meta: String = meta_lbl.text if meta_lbl != null else "<null>"
+	if actual_meta != "v0.3 · E03 (1/2 active) · 0/1 Passed":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected cleaner v0.3 meta label, got: %s" % actual_meta)
+		return false
+	var v03_labels := PackedStringArray()
+	_collect_labels_text(body_container, v03_labels)
+	var v03_joined: String = "\n".join(v03_labels)
+	if v03_joined.find("+hitstop freeze frame, +stagger flash material") == -1:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected clean 1-line Goal subtitle in v0.3 dock: %s" % v03_joined)
+		return false
+	if v03_joined.find("In Scope (v0.3)") == -1:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected 'In Scope (v0.3)' section header in v0.3 dock: %s" % v03_joined)
+		return false
+	if v03_joined.find("Staggered vulnerability state") != -1:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Raw 3-part baseline In Scope leaked into v0.3 dock: %s" % v03_joined)
+		return false
+	if v03_joined.find("Enemy Stagger State") != -1 or v03_joined.find("Done When: Land parry") != -1:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Duplicate feature title or raw Done When leaked into dock Labels: %s" % v03_joined)
+		return false
+	var v03_rtls := PackedStringArray()
+	_collect_richtext_text(body_container, v03_rtls)
+	var v03_rtl_joined: String = "\n".join(v03_rtls)
+	if v03_rtl_joined.find("Land parry → enemy flashes white") == -1 or v03_rtl_joined.find("Press F6 and verify") != -1:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected causal Done When upgrade without generic F6 fallback, got: %s" % v03_rtl_joined)
+		return false
+
+	# Verify expanding clean issue composer creates _fix_input
+	dock.set("_issue_composer_expanded", true)
+	dock.call("_render_active_feature_workspace", v03_feat)
+	if dock.get("_fix_input") == null:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected _fix_input when _issue_composer_expanded is true.")
+		return false
+
+	sync_v03.free()
+	dock.set("_sync", null)
 	dock.free()
 	return true
