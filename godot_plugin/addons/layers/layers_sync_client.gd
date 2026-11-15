@@ -31,15 +31,14 @@ var _link_token: String = ""
 var _sync_base_url: String = DEFAULT_SYNC_BASE_URL
 var _is_busy: bool = false
 var _pending_request: Dictionary = {}
-var _active_request_kind: String = ""
 var _update_busy: bool = false
 var _update_mode: String = ""
 var _update_silent: bool = true
 var _update_zip_attempt_idx: int = 0
-var _latest_known_remote_ver: String = ""
 var _script_sync_busy: bool = false
 var _pending_live_scripts: Dictionary = {}
 var _script_sync_in_flight: Dictionary = {}
+var _script_sync_retried_paths: Dictionary = {}
 
 
 func _ready() -> void:
@@ -96,6 +95,8 @@ func save_link_token(token: String, base_url: String = DEFAULT_SYNC_BASE_URL) ->
 func clear_link_token() -> void:
 	_link_token = ""
 	_pending_request = {}
+	_pending_live_scripts.clear()
+	_script_sync_retried_paths.clear()
 	if FileAccess.file_exists(LINK_CFG_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(LINK_CFG_PATH))
 	if FileAccess.file_exists(CACHE_JSON_PATH):
@@ -117,7 +118,7 @@ func load_cached_epic() -> Dictionary:
 
 
 func fetch_active_epic() -> void:
-	if not has_link_token():
+	if not has_link_token() or _agent_busy:
 		return
 	_dispatch_or_queue({
 		"kind": "get_epic",
@@ -170,10 +171,13 @@ func _dispatch_or_queue(req: Dictionary) -> void:
 	_start_request(req)
 
 
+func _emit_busy_state() -> void:
+	busy_changed.emit(_is_busy or _agent_busy)
+
+
 func _start_request(req: Dictionary) -> void:
 	_is_busy = true
-	_active_request_kind = str(req.get("kind", ""))
-	busy_changed.emit(true)
+	_emit_busy_state()
 
 	var url := "%s%s" % [_sync_base_url, str(req.get("path", ""))]
 	var headers := PackedStringArray([
@@ -186,14 +190,13 @@ func _start_request(req: Dictionary) -> void:
 	var err := _http.request(url, headers, method, body)
 	if err != OK:
 		_is_busy = false
-		_active_request_kind = ""
-		busy_changed.emit(false)
+		_emit_busy_state()
 		sync_failed.emit("HTTP request failed (%s)" % error_string(err))
 
 
 func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_is_busy = false
-	busy_changed.emit(false)
+	_emit_busy_state()
 
 	var text := body.get_string_from_utf8()
 	var parsed = JSON.parse_string(text)
@@ -208,10 +211,14 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 				err_msg = str(err_obj["message"])
 		sync_failed.emit(err_msg)
 	elif typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
-		_write_cache(parsed)
-		if parsed.has("agentBundle") and typeof(parsed.get("agentBundle")) == TYPE_DICTIONARY:
+		var has_bundle: bool = parsed.has("agentBundle") and typeof(parsed.get("agentBundle")) == TYPE_DICTIONARY
+		if _agent_busy and not has_bundle:
+			pass
+		elif has_bundle:
+			_write_cache(parsed)
 			agent_bundle_received.emit(parsed.get("agentBundle"), parsed)
 		else:
+			_write_cache(parsed)
 			epic_updated.emit(parsed)
 	else:
 		sync_failed.emit("Unexpected sync response.")
@@ -346,7 +353,6 @@ func _on_update_http_completed(result: int, response_code: int, _headers: Packed
 			if not _update_silent:
 				update_failed.emit("Could not check GitHub for plugin updates.")
 			return
-		_latest_known_remote_ver = remote_ver
 		if _is_newer_version(local_ver, remote_ver):
 			update_available.emit(local_ver, remote_ver)
 			update_check_finished.emit(false, local_ver, remote_ver)
@@ -513,6 +519,7 @@ func sync_live_scripts(live_scripts: Dictionary) -> void:
 		if p.begins_with("res://") and p.ends_with(".gd"):
 			var code := str(live_scripts[raw_path])
 			if not code.strip_edges().is_empty():
+				_script_sync_retried_paths.erase(p)
 				_pending_live_scripts[p] = code
 	if _pending_live_scripts.is_empty():
 		return
@@ -555,11 +562,22 @@ func _on_script_sync_http_completed(
 	var synced_snapshot: Dictionary = _script_sync_in_flight.duplicate()
 	_script_sync_in_flight.clear()
 
+	var synced_ok := false
 	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
 		var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
 		if typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
+			synced_ok = true
+			for rk in synced_snapshot.keys():
+				_script_sync_retried_paths.erase(str(rk))
 			_update_cached_code_files(synced_snapshot)
 			scripts_synced.emit(int(parsed.get("syncedCount", synced_snapshot.size())))
+
+	if not synced_ok:
+		for rk in synced_snapshot.keys():
+			var rp := str(rk)
+			if not _pending_live_scripts.has(rp) and not _script_sync_retried_paths.has(rp):
+				_script_sync_retried_paths[rp] = true
+				_pending_live_scripts[rp] = synced_snapshot[rk]
 
 	if not _pending_live_scripts.is_empty():
 		_flush_pending_script_sync()
@@ -594,16 +612,29 @@ func _update_cached_code_files(live_scripts: Dictionary) -> void:
 	_write_cache(cached)
 
 
+func has_active_agent_request() -> bool:
+	return _agent_busy
+
+
+func cancel_agent_request() -> bool:
+	if not _agent_busy:
+		return false
+	if _agent_http != null and is_instance_valid(_agent_http):
+		_agent_http.cancel_request()
+	_agent_busy = false
+	_emit_busy_state()
+	return true
+
+
 func _post_agent_update(payload_body: Dictionary) -> void:
 	if _link_token.is_empty():
 		sync_failed.emit("Link token not configured. Open Settings to paste your Project Link Token.")
 		return
 	if _agent_busy:
-		sync_failed.emit("Agent is already applying a change. Please wait a moment.")
 		return
 	_ensure_agent_http()
 	_agent_busy = true
-	busy_changed.emit(true)
+	_emit_busy_state()
 
 	var url := "%s/godotLink/update" % _sync_base_url.trim_suffix("/")
 	var headers := PackedStringArray([
@@ -614,7 +645,7 @@ func _post_agent_update(payload_body: Dictionary) -> void:
 	var err := _agent_http.request(url, headers, HTTPClient.METHOD_POST, json_str)
 	if err != OK:
 		_agent_busy = false
-		busy_changed.emit(_is_busy)
+		_emit_busy_state()
 		sync_failed.emit("Failed to send Agent request (HTTPRequest error %d)." % err)
 
 
@@ -624,8 +655,10 @@ func _on_agent_http_completed(
 	_headers: PackedStringArray,
 	body: PackedByteArray
 ) -> void:
+	if not _agent_busy:
+		return
 	_agent_busy = false
-	busy_changed.emit(_is_busy)
+	_emit_busy_state()
 	if result != HTTPRequest.RESULT_SUCCESS:
 		sync_failed.emit("Network error communicating with LAYERS Agent (code %d)." % result)
 		return

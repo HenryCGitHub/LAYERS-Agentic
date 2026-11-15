@@ -317,5 +317,55 @@ func take_damage(amount: float) -> void:
 			quit(1)
 			return
 
+	exec.call("invalidate_eval_cache")
+	var eval_built: Dictionary = exec.call("evaluate_feature", {"id": "f1", "primaryAsset": "res://scenes/smoke_fighter.tscn"}, null, {}, "")
+	if not bool(eval_built.get("has_built_artifacts", false)) or not (eval_built.get("script_paths", []) as Array).has("res://scripts/smoke_fighter.gd"):
+		printerr("FAIL: evaluate_feature did not detect built scene + attached script from disk: ", eval_built)
+		quit(1)
+		return
+	var eval_unbuilt: Dictionary = exec.call("evaluate_feature", {"id": "f2", "isBuiltInGodot": false, "primaryAsset": "res://scenes/smoke_fighter.tscn"}, null, {}, "")
+	if bool(eval_unbuilt.get("has_built_artifacts", true)):
+		printerr("FAIL: evaluate_feature should return has_built_artifacts=false when isBuiltInGodot=false")
+		quit(1)
+		return
+
+	var sync_probe: Node = sync_scr.new()
+	sync_probe.set("_link_token", "lyr_smoke_test_token_1234567890")
+	sync_probe.set("_agent_busy", true)
+	if not bool(sync_probe.call("has_active_agent_request")):
+		sync_probe.free()
+		printerr("FAIL: has_active_agent_request did not reflect _agent_busy=true")
+		quit(1)
+		return
+	sync_probe.call("fetch_active_epic")
+	if bool(sync_probe.get("_is_busy")):
+		sync_probe.free()
+		printerr("FAIL: fetch_active_epic should be suppressed while _agent_busy=true")
+		quit(1)
+		return
+	if not bool(sync_probe.call("cancel_agent_request")) or bool(sync_probe.call("has_active_agent_request")):
+		sync_probe.free()
+		printerr("FAIL: cancel_agent_request did not reset _agent_busy")
+		quit(1)
+		return
+	sync_probe.set("_script_sync_in_flight", {"res://scripts/smoke_fighter.gd": orig_fighter_disk})
+	sync_probe.set("_script_sync_busy", true)
+	sync_probe.call("_on_script_sync_http_completed", HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
+	if not (sync_probe.get("_pending_live_scripts") as Dictionary).has("res://scripts/smoke_fighter.gd"):
+		sync_probe.free()
+		printerr("FAIL: failed script sync was not re-queued for retry")
+		quit(1)
+		return
+	sync_probe.set("_pending_live_scripts", {})
+	sync_probe.set("_script_sync_in_flight", {"res://scripts/smoke_fighter.gd": orig_fighter_disk})
+	sync_probe.set("_script_sync_busy", true)
+	sync_probe.call("_on_script_sync_http_completed", HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
+	if not (sync_probe.get("_pending_live_scripts") as Dictionary).is_empty():
+		sync_probe.free()
+		printerr("FAIL: failed script sync retry was not bounded to 1 attempt")
+		quit(1)
+		return
+	sync_probe.free()
+
 	print("GODOT_SMOKE_OK")
 	quit(0)

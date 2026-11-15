@@ -46,13 +46,6 @@ func _build_eval_cache_key(
 ) -> String:
 	var feat_id := String(feat.get("id", feat.get("title", "")))
 	var cp_id := String(feat.get("checkpointId", ""))
-	var steps_raw: Variant = feat.get("steps", [])
-	var steps: Array = steps_raw if typeof(steps_raw) == TYPE_ARRAY else []
-	var step_done_bits := PackedStringArray()
-	for st_raw in steps:
-		if typeof(st_raw) == TYPE_DICTIONARY:
-			var st: Dictionary = st_raw
-			step_done_bits.append("1" if bool(st.get("completed", false)) else "0")
 
 	var scene_mtime: int = 0
 	if not primary_scene.is_empty() and FileAccess.file_exists(primary_scene):
@@ -72,11 +65,10 @@ func _build_eval_cache_key(
 	var has_built_flag := 1 if feat.has("isBuiltInGodot") else 0
 	var is_built_remote := 1 if bool(feat.get("isBuiltInGodot", false)) else 0
 	var is_gate_passed := 1 if bool(feat.get("isPlaytestPassed", false)) else 0
-	return "%d|%s|%s|%s|%s|%d|%d|%d|%d|%d|%d|%s|%s|%s" % [
+	return "%d|%s|%s|%s|%d|%d|%d|%d|%d|%d|%s|%s|%s" % [
 		_eval_cache_epoch,
 		feat_id,
 		cp_id,
-		"".join(step_done_bits),
 		primary_scene,
 		scene_mtime,
 		proj_mtime,
@@ -218,575 +210,8 @@ func strip_diff_prefixes(raw: String) -> String:
 
 
 # ---------------------------------------------------------------------------
-# Hierarchy-Aware Scene Parser & Pipe-Table Enrichment
+# Vector Literal Parsers
 # ---------------------------------------------------------------------------
-
-func parse_scene_node_specs(step: Dictionary) -> Array:
-	var specs: Array = []
-	var seen_paths: Dictionary = {}
-	var area1: String = str(step.get("area1Hierarchy", "")).strip_edges()
-
-	if not area1.is_empty():
-		var stack: Array = []
-		var raw_lines: PackedStringArray = area1.replace("\r\n", "\n").split("\n")
-		for raw_line in raw_lines:
-			var line: String = raw_line.strip_edges(false, true)
-			if line.strip_edges().is_empty():
-				continue
-			var first_alpha: int = _find_first_ident_col(line)
-			if first_alpha < 0:
-				continue
-			var clean: String = line.substr(first_alpha).strip_edges()
-
-			while not stack.is_empty():
-				var top: Dictionary = stack[stack.size() - 1]
-				if int(top.get("col", 0)) >= first_alpha:
-					stack.pop_back()
-				else:
-					break
-
-			var parsed: Dictionary = _parse_node_line(clean)
-			var node_name: String = str(parsed.get("name", ""))
-			if node_name.is_empty():
-				continue
-
-			var is_root: bool = stack.is_empty() and specs.is_empty()
-			var parent_path: String = ""
-			var rel_path: String = "."
-			var depth: int = stack.size()
-
-			if not is_root:
-				if stack.is_empty():
-					parent_path = "."
-					rel_path = node_name
-					depth = 1
-				else:
-					var parent_entry: Dictionary = stack[stack.size() - 1]
-					parent_path = str(parent_entry.get("path", "."))
-					rel_path = node_name if parent_path == "." else "%s/%s" % [parent_path, node_name]
-					depth = stack.size()
-
-			if seen_paths.has(rel_path):
-				continue
-			seen_paths[rel_path] = true
-
-			var node_class: String = str(parsed.get("nodeClass", "Node3D"))
-			var sub_res: String = str(parsed.get("subResourceClass", ""))
-			var companion_mesh: String = str(parsed.get("companionMeshClass", ""))
-			var spec: Dictionary = {
-				"name": node_name,
-				"path": rel_path,
-				"parentPath": parent_path,
-				"depth": depth,
-				"isRoot": is_root,
-				"type": node_class,
-				"subResourceClass": sub_res,
-				"companionMeshClass": companion_mesh,
-				"displayType": str(parsed.get("displayType", node_class)),
-				"props": {},
-				"subProps": {},
-				"attachScript": "",
-			}
-			specs.append(spec)
-			stack.append({"col": first_alpha, "path": rel_path})
-
-	if specs.is_empty():
-		var combined_fb: String = "%s\n%s\n%s" % [
-			str(step.get("title", "")),
-			str(step.get("instruction", "")),
-			str(step.get("codeSnippet", "")),
-		]
-		var re := RegEx.new()
-		re.compile("\\b([A-Z][A-Za-z0-9_]{2,32})\\s*(?:\\(|>)\\s*([A-Z][A-Za-z0-9_]*3D|[A-Z][A-Za-z0-9_]*2D|Timer|Control|Node|CanvasLayer|RigidBody[23]D|CharacterBody[23]D|StaticBody[23]D|Area[23]D|CollisionShape[23]D|Marker[23]D|RayCast[23]D|AudioStreamPlayer(?:[23]D)?|AnimationPlayer|Panel|Label|Button)")
-		var matches: Array[RegExMatch] = re.search_all(combined_fb)
-		for m in matches:
-			var n_name: String = m.get_string(1)
-			var n_type: String = m.get_string(2)
-			var p_rel: String = "." if specs.is_empty() else n_name
-			if seen_paths.has(p_rel):
-				continue
-			seen_paths[p_rel] = true
-			specs.append({
-				"name": n_name,
-				"path": p_rel,
-				"parentPath": "" if specs.is_empty() else ".",
-				"depth": 0 if specs.is_empty() else 1,
-				"isRoot": specs.is_empty(),
-				"type": n_type,
-				"subResourceClass": "",
-				"companionMeshClass": "",
-				"displayType": n_type,
-				"props": {},
-				"subProps": {},
-				"attachScript": "",
-			})
-
-	_enrich_scene_specs_from_tables(specs, step)
-	return specs
-
-
-func _find_first_ident_col(line: String) -> int:
-	for idx in range(line.length()):
-		var ch: int = line.unicode_at(idx)
-		if (ch >= 65 and ch <= 90) or (ch >= 97 and ch <= 122) or (ch >= 48 and ch <= 57) or ch == 95:
-			return idx
-	return -1
-
-
-func _parse_node_line(clean: String) -> Dictionary:
-	var node_name: String = clean
-	var meta: String = ""
-	var paren_open: int = clean.find("(")
-	var paren_close: int = clean.find(")", paren_open + 1)
-	if paren_open > 0 and paren_close > paren_open:
-		node_name = clean.substr(0, paren_open).strip_edges()
-		meta = clean.substr(paren_open + 1, paren_close - paren_open - 1).strip_edges()
-	elif ">" in clean:
-		var parts: PackedStringArray = clean.split(">", false, 1)
-		node_name = parts[0].strip_edges()
-		if parts.size() > 1:
-			meta = parts[1].strip_edges()
-
-	node_name = node_name.split(" ", false, 1)[0].strip_edges()
-	if node_name.is_empty():
-		return {}
-
-	var node_class: String = ""
-	var sub_res: String = ""
-	var companion_mesh: String = ""
-	var display_type: String = ""
-
-	# Compound shorthand: e.g. RockNorth (CollisionShape3D + MeshInstance3D)
-	if "+" in meta:
-		var segs: PackedStringArray = meta.split("+", false)
-		var has_col: bool = false
-		var has_mesh: bool = false
-		for s in segs:
-			var t: String = s.strip_edges().split(" ", false, 1)[0]
-			if "CollisionShape3D" in t:
-				has_col = true
-			elif "MeshInstance3D" in t:
-				has_mesh = true
-			elif ClassDB.class_exists(t) and ClassDB.is_parent_class(t, "Shape3D"):
-				has_col = true
-				sub_res = t
-			elif ClassDB.class_exists(t) and ClassDB.is_parent_class(t, "Mesh"):
-				has_mesh = true
-				companion_mesh = t
-		if has_col:
-			node_class = "CollisionShape3D"
-			if sub_res.is_empty():
-				sub_res = "BoxShape3D"
-			if has_mesh and companion_mesh.is_empty():
-				companion_mesh = "BoxMesh"
-			display_type = "%s + %s" % [sub_res, companion_mesh] if has_mesh else sub_res
-	elif not meta.is_empty():
-		var meta_tok: String = meta.split(" ", false, 1)[0].strip_edges()
-		if ClassDB.class_exists(meta_tok):
-			if ClassDB.is_parent_class(meta_tok, "Node"):
-				node_class = meta_tok
-				display_type = meta_tok
-			elif ClassDB.is_parent_class(meta_tok, "Shape3D"):
-				node_class = "CollisionShape3D"
-				sub_res = meta_tok
-				display_type = meta_tok
-			elif ClassDB.is_parent_class(meta_tok, "Shape2D"):
-				node_class = "CollisionShape2D"
-				sub_res = meta_tok
-				display_type = meta_tok
-			elif ClassDB.is_parent_class(meta_tok, "Mesh"):
-				node_class = "MeshInstance3D"
-				sub_res = meta_tok
-				display_type = meta_tok
-
-	if node_class.is_empty():
-		node_class = resolve_node_class(node_name)
-	if display_type.is_empty():
-		display_type = sub_res if not sub_res.is_empty() else node_class
-
-	return {
-		"name": node_name,
-		"nodeClass": node_class,
-		"subResourceClass": sub_res,
-		"companionMeshClass": companion_mesh,
-		"displayType": display_type,
-	}
-
-
-func resolve_node_class(node_name: String) -> String:
-	# Check Godot ClassDB BEFORE heuristics so DirectionalLight3D, SpringArm3D, etc. keep real classes.
-	if ClassDB.class_exists(node_name) and ClassDB.is_parent_class(node_name, "Node"):
-		return node_name
-	var lower: String = node_name.to_lower()
-	if "timer" in lower or "cooldown" in lower:
-		return "Timer"
-	if "spring" in lower and "arm" in lower:
-		return "SpringArm3D"
-	if "mesh" in lower or "plane" in lower:
-		return "MeshInstance3D"
-	if "shape" in lower or "collider" in lower:
-		return "CollisionShape3D"
-	if "zone" in lower or "area" in lower or "hitbox" in lower or "trigger" in lower or "boundary" in lower:
-		return "Area3D"
-	if "floor" in lower or "wall" in lower or "ground" in lower or "perimeter" in lower:
-		return "StaticBody3D"
-	if "marker" in lower or "spawn" in lower:
-		return "Marker3D"
-	if "light" in lower:
-		return "DirectionalLight3D"
-	if "camera" in lower:
-		return "Camera3D"
-	if "player" in lower:
-		return "CharacterBody3D"
-	return "Node3D"
-
-
-func _enrich_scene_specs_from_tables(specs: Array, step: Dictionary) -> void:
-	if specs.is_empty():
-		return
-	var code: String = str(step.get("codeSnippet", "")).strip_edges()
-	var area2: String = str(step.get("area2Inspector", "")).strip_edges()
-	var instr: String = str(step.get("instruction", "")).strip_edges()
-
-	# 1. Pipe-table rows: | Node (Type) | Prop1 / Prop2 | Val1 / Val2 |
-	for raw_line in code.replace("\r\n", "\n").split("\n"):
-		var line: String = raw_line.strip_edges()
-		if not line.begins_with("|"):
-			continue
-		var cols: PackedStringArray = line.split("|", false)
-		if cols.size() < 3:
-			continue
-		var target_col: String = cols[0].strip_edges()
-		var prop_col: String = cols[1].strip_edges()
-		var val_col: String = cols[2].strip_edges()
-		if target_col.is_empty() or target_col.begins_with("-") or target_col.begins_with(":"):
-			continue
-		var tl: String = target_col.to_lower()
-		if tl.begins_with("node") or "input map" in tl:
-			continue
-
-		var matched_spec: Dictionary = _match_spec_for_table_target(specs, target_col)
-		if matched_spec.is_empty():
-			continue
-
-		_apply_paired_prop_values(matched_spec, prop_col, val_col)
-
-	# 2. area2Inspector segments (pipe-delimited)
-	if not area2.is_empty():
-		var shared_radius: float = -1.0
-		var shared_height: float = -1.0
-		for seg_raw in area2.split("|"):
-			var seg: String = seg_raw.strip_edges()
-			if seg.is_empty() or not (":" in seg):
-				continue
-			var kv: PackedStringArray = seg.split(":", false, 1)
-			var lhs: String = kv[0].strip_edges()
-			var rhs: String = kv[1].strip_edges()
-			if "radius" in rhs.to_lower():
-				var rad_val: float = _extract_named_float(rhs, "radius")
-				if rad_val > 0.0:
-					shared_radius = rad_val
-			if "height" in rhs.to_lower():
-				var h_val: float = _extract_named_float(rhs, "height")
-				if h_val > 0.0:
-					shared_height = h_val
-			if "." in lhs:
-				var dp: PackedStringArray = lhs.split(".", false, 1)
-				var sp_dot: Dictionary = _match_spec_for_table_target(specs, dp[0].strip_edges())
-				if not sp_dot.is_empty():
-					_assign_single_prop(sp_dot, dp[1].strip_edges(), rhs)
-			else:
-				var sp_lhs: Dictionary = _match_spec_for_table_target(specs, lhs)
-				if not sp_lhs.is_empty():
-					_assign_rhs_clauses(sp_lhs, rhs)
-				elif "CylinderMesh" in lhs or "CylinderShape3D" in lhs or "BoxShape3D" in lhs or "CapsuleShape3D" in lhs or "BoxMesh" in lhs:
-					for sp_any in specs:
-						var s_dict: Dictionary = sp_any
-						if str(s_dict.get("subResourceClass", "")) == lhs or lhs in str(s_dict.get("displayType", "")):
-							_assign_rhs_clauses(s_dict, rhs)
-
-		# Sync SandFloor CylinderMesh height if CylinderShape3D had height and Mesh didn't
-		if shared_radius > 0.0 or shared_height > 0.0:
-			for sp_any2 in specs:
-				var s2: Dictionary = sp_any2
-				if str(s2.get("subResourceClass", "")) == "CylinderMesh":
-					var subp: Dictionary = s2.get("subProps", {})
-					if shared_height > 0.0 and not subp.has("height"):
-						subp["height"] = shared_height
-					if shared_radius > 0.0 and not subp.has("top_radius"):
-						subp["top_radius"] = shared_radius
-						subp["bottom_radius"] = shared_radius
-
-	# 3. Also check instruction for `(r=18.0, h=0.5)` or `r=18.0` hints if missing
-	if not instr.is_empty():
-		var attach_re := RegEx.new()
-		attach_re.compile("(res://[A-Za-z0-9_./-]+\\.gd)\\s*(?:to|on)\\s*`?([A-Za-z0-9_]+)`?")
-		var am: RegExMatch = attach_re.search(instr)
-		if am != null:
-			var sp_at: Dictionary = _match_spec_for_table_target(specs, am.get_string(2))
-			if not sp_at.is_empty() and str(sp_at.get("attachScript", "")).is_empty():
-				sp_at["attachScript"] = am.get_string(1)
-
-
-func _match_spec_for_table_target(specs: Array, raw_target: String) -> Dictionary:
-	var cleaned: String = raw_target.strip_edges()
-	var paren_idx: int = cleaned.find("(")
-	if paren_idx > 0:
-		cleaned = cleaned.substr(0, paren_idx).strip_edges()
-
-	var path_segs: PackedStringArray = []
-	for seg in cleaned.split(">", false):
-		var st: String = seg.strip_edges()
-		if not st.is_empty():
-			path_segs.append(st)
-	if path_segs.is_empty():
-		return {}
-
-	var last_name: String = path_segs[path_segs.size() - 1]
-	var parent_hint: String = path_segs[path_segs.size() - 2] if path_segs.size() >= 2 else ""
-
-	# Handle `Node > Script` / `CollisionShape3D > Shape` / `CrabMesh > Mesh` property category suffix
-	var category_suffixes := PackedStringArray([
-		"script", "shape", "mesh", "material", "timer", "transform", "floor",
-		"collision", "collider", "physics", "signals", "signal", "property", "inspector",
-		"characterbody3d", "characterbody2d", "staticbody3d", "rigidbody3d",
-		"area3d", "area2d", "meshinstance3d", "collisionshape3d", "collisionshape2d",
-		"navigationagent3d", "sprite3d", "sprite2d", "node3d", "node2d", "control", "raycast3d"
-	])
-	if (last_name.to_lower() in category_suffixes) and not parent_hint.is_empty():
-		last_name = parent_hint
-		parent_hint = path_segs[path_segs.size() - 3] if path_segs.size() >= 3 else ""
-
-	# Exact parent + name match first
-	if not parent_hint.is_empty():
-		for sp_raw in specs:
-			var sp: Dictionary = sp_raw
-			if str(sp.get("name", "")).to_lower() == last_name.to_lower() and parent_hint.to_lower() in str(sp.get("path", "")).to_lower():
-				return sp
-
-	# Exact name match
-	for sp_raw in specs:
-		var sp: Dictionary = sp_raw
-		if str(sp.get("name", "")).to_lower() == last_name.to_lower():
-			return sp
-
-	# Sub-resource class match (e.g. CylinderShape3D)
-	for sp_raw in specs:
-		var sp: Dictionary = sp_raw
-		if str(sp.get("subResourceClass", "")).to_lower() == last_name.to_lower():
-			return sp
-
-	return {}
-
-
-func _apply_paired_prop_values(spec: Dictionary, prop_col: String, val_col: String) -> void:
-	# Handle rows where middle column IS a concrete Resource class: `| CrabMesh > Mesh | BoxMesh | Size (1.1, 0.6, 0.9) |`
-	var prop_tok: String = prop_col.strip_edges().split(" ", false, 1)[0]
-	var is_abstract_res: bool = (prop_tok == "Mesh" or prop_tok == "Shape3D" or prop_tok == "Shape2D")
-	if not ("/" in prop_col) and not is_abstract_res and ClassDB.class_exists(prop_tok) and ClassDB.can_instantiate(prop_tok) and (ClassDB.is_parent_class(prop_tok, "Shape3D") or ClassDB.is_parent_class(prop_tok, "Shape2D") or ClassDB.is_parent_class(prop_tok, "Mesh")):
-		spec["subResourceClass"] = prop_tok
-		_assign_rhs_clauses(spec, val_col)
-		return
-
-	var props_raw: PackedStringArray = prop_col.split("/", false)
-	var vals_raw: PackedStringArray = val_col.split("/", false)
-
-	if props_raw.size() > 1 and props_raw.size() == vals_raw.size():
-		for i in range(props_raw.size()):
-			_assign_single_prop(spec, props_raw[i].strip_edges(), vals_raw[i].strip_edges())
-		return
-
-	# Special multi-prop single value like `Mesh / Top & Bottom Radius | CylinderMesh / 18.0`
-	if vals_raw.size() >= 2 and ("mesh" in prop_col.to_lower() or "shape" in prop_col.to_lower()):
-		var first_v: String = vals_raw[0].strip_edges()
-		if ClassDB.class_exists(first_v):
-			_assign_single_prop(spec, "Shape", first_v)
-		if "radius" in prop_col.to_lower() and vals_raw.size() >= 2:
-			_assign_single_prop(spec, "Radius", vals_raw[1].strip_edges())
-		if "height" in prop_col.to_lower() and vals_raw.size() >= 3:
-			_assign_single_prop(spec, "Height", vals_raw[2].strip_edges())
-		if "size" in prop_col.to_lower() and vals_raw.size() >= 2:
-			_assign_single_prop(spec, "Size", vals_raw[1].strip_edges())
-		if "position" in prop_col.to_lower() and vals_raw.size() >= 3:
-			_assign_single_prop(spec, "Position", vals_raw[2].strip_edges())
-		return
-
-	_assign_single_prop(spec, prop_col, val_col)
-
-
-func _assign_rhs_clauses(spec: Dictionary, rhs: String) -> void:
-	for clause in _split_top_level_commas(rhs):
-		var c: String = clause.strip_edges()
-		if c.is_empty():
-			continue
-		if "radius" in c.to_lower():
-			_assign_single_prop(spec, "Radius", c)
-		elif "height" in c.to_lower():
-			_assign_single_prop(spec, "Height", c)
-		elif "size" in c.to_lower():
-			_assign_single_prop(spec, "Size", c)
-		elif "position" in c.to_lower():
-			_assign_single_prop(spec, "Position", c)
-
-
-func _split_top_level_commas(raw: String) -> PackedStringArray:
-	var out := PackedStringArray()
-	var depth: int = 0
-	var start: int = 0
-	for i in range(raw.length()):
-		var ch: String = raw.substr(i, 1)
-		if ch == "(":
-			depth += 1
-		elif ch == ")" and depth > 0:
-			depth -= 1
-		elif ch == "," and depth == 0:
-			out.append(raw.substr(start, i - start))
-			start = i + 1
-	out.append(raw.substr(start))
-	return out
-
-
-func _assign_single_prop(spec: Dictionary, raw_prop: String, raw_val: String) -> void:
-	var p: String = raw_prop.to_lower().strip_edges()
-	var v: String = raw_val.strip_edges()
-	var props: Dictionary = spec.get("props", {})
-	var sub_props: Dictionary = spec.get("subProps", {})
-
-	if "attach script" in p or p == "script":
-		if v.begins_with("res://") and v.ends_with(".gd"):
-			spec["attachScript"] = v
-		return
-
-	if p == "shape" or p == "mesh":
-		var parsed_sr := _parse_subresource_decl(v, p)
-		var sr_cls := String(parsed_sr.get("class", ""))
-		if not sr_cls.is_empty():
-			spec["subResourceClass"] = sr_cls
-			var sr_props: Dictionary = parsed_sr.get("props", {})
-			if not sr_props.is_empty():
-				var existing_sr_props: Dictionary = spec.get("subResourceProps", {})
-				var existing_sub_props: Dictionary = spec.get("subProps", {})
-				for k in sr_props.keys():
-					existing_sr_props[k] = sr_props[k]
-					existing_sub_props[k] = sr_props[k]
-				spec["subResourceProps"] = existing_sr_props
-				spec["subProps"] = existing_sub_props
-		return
-	if p == "material" or p == "material_override" or p == "surface_material_override/0" or p == "surface_material":
-		var mat_props := _parse_standard_material_decl(v)
-		if not mat_props.is_empty():
-			spec["materialProps"] = mat_props
-		return
-	if p == "snap length" or p == "snap_length" or p == "floor_snap_length":
-		if not spec.has("props"):
-			spec["props"] = {}
-		spec["props"]["floor_snap_length"] = _extract_first_float(v)
-		return
-	if p == "monitoring" or p == "monitorable" or p == "one shot" or p == "one_shot" or p == "autostart":
-		if not spec.has("props"):
-			spec["props"] = {}
-		var key_norm := p.replace(" ", "_")
-		var v_low := v.to_lower()
-		spec["props"][key_norm] = (v_low == "true" or v_low == "on" or v_low == "yes" or v_low == "1" or v_low == "enabled")
-		return
-	if p == "wait time" or p == "wait_time":
-		if not spec.has("props"):
-			spec["props"] = {}
-		spec["props"]["wait_time"] = maxf(0.01, _extract_first_float(v))
-		return
-
-	if "position" in p:
-		var vec: Variant = _parse_vector3_literal(v)
-		if vec is Vector3:
-			props["position"] = vec
-		return
-
-	if "rotation" in p:
-		var vec_rot: Variant = _parse_vector3_literal(v)
-		if vec_rot is Vector3:
-			props["rotation_degrees"] = vec_rot
-		return
-
-	if "spring length" in p or p == "spring_length":
-		var fl: float = _extract_first_float(v)
-		if not is_nan(fl):
-			props["spring_length"] = fl
-		return
-
-	if "margin" in p:
-		var fm: float = _extract_first_float(v)
-		if not is_nan(fm):
-			props["margin"] = fm
-		return
-
-	if "wait time" in p or p == "wait_time":
-		var fw: float = _extract_first_float(v)
-		if not is_nan(fw):
-			props["wait_time"] = fw
-		return
-
-	if "one shot" in p or p == "one_shot":
-		var vl: String = v.to_lower()
-		props["one_shot"] = (vl == "true" or vl == "on" or vl == "yes" or vl == "1")
-		return
-
-	if p == "current":
-		var vl2: String = v.to_lower()
-		props["current"] = (vl2 == "true" or vl2 == "on" or vl2 == "yes" or vl2 == "1")
-		return
-
-	if "collision mask" in p or "collision layer" in p:
-		var layer_re := RegEx.new()
-		layer_re.compile("([0-9]+)")
-		var m_layer: RegExMatch = layer_re.search(v)
-		if m_layer != null:
-			var bit_idx: int = maxi(1, m_layer.get_string(1).to_int())
-			var mask_val: int = 1 << (bit_idx - 1) if "layer" in v.to_lower() else m_layer.get_string(1).to_int()
-			var key_name: String = "collision_mask" if "mask" in p else "collision_layer"
-			props[key_name] = mask_val
-		return
-
-	if "radius" in p:
-		var fr: float = _extract_first_float(v)
-		if not is_nan(fr):
-			sub_props["radius"] = fr
-			sub_props["top_radius"] = fr
-			sub_props["bottom_radius"] = fr
-		return
-
-	if "height" in p:
-		var fh: float = _extract_first_float(v)
-		if not is_nan(fh):
-			sub_props["height"] = fh
-		return
-
-	if "size" in p:
-		var v3: Variant = _parse_vector3_literal(v)
-		if v3 is Vector3:
-			sub_props["size"] = v3
-			return
-		var v2: Variant = _parse_vector2_literal(v)
-		if v2 is Vector2:
-			sub_props["size"] = v2
-
-
-func _extract_named_float(text: String, keyword: String) -> float:
-	var re := RegEx.new()
-	re.compile("(?i)%s\\s*[:=]?\\s*(-?[0-9]+(?:\\.[0-9]+)?)" % keyword)
-	var m: RegExMatch = re.search(text)
-	if m != null:
-		return m.get_string(1).to_float()
-	return -1.0
-
-
-func _extract_first_float(raw: String) -> float:
-	var re := RegEx.new()
-	re.compile("(-?[0-9]+(?:\\.[0-9]+)?)")
-	var m: RegExMatch = re.search(raw)
-	if m != null:
-		return m.get_string(1).to_float()
-	return NAN
-
 
 func _parse_vector3_literal(raw: String) -> Variant:
 	var re := RegEx.new()
@@ -816,7 +241,7 @@ func _parse_vector2_literal(raw: String) -> Variant:
 
 
 # ---------------------------------------------------------------------------
-# InputMap & Multi-Signal Parsers
+# InputMap Parsers
 # ---------------------------------------------------------------------------
 
 func parse_input_specs(step: Dictionary) -> Array:
@@ -859,74 +284,6 @@ func parse_input_specs(step: Dictionary) -> Array:
 	return specs
 
 
-func parse_signal_specs(step: Dictionary, scene_root: Node = null) -> Array:
-	var specs: Array = []
-	var seen: Dictionary = {}
-	var code: String = str(step.get("codeSnippet", "")).strip_edges()
-	var instr: String = str(step.get("instruction", "")).strip_edges()
-	var combined: String = "%s\n%s" % [code, instr]
-
-	var sig_re := RegEx.new()
-	sig_re.compile("\\[?([A-Za-z][A-Za-z0-9_]*)\\.([a-z][a-z0-9_]*)\\]?(?:\\([^)]*\\))?\\s*(?:-->|──►|─►|->)\\s*\\[?(?:([A-Za-z][A-Za-z0-9_]*)\\.)?([a-zA-Z_][A-Za-z0-9_]*)(?:\\(([^)]*)\\))?\\]?")
-	var matches: Array[RegExMatch] = sig_re.search_all(combined)
-
-	var default_target: String = _infer_signal_target_name(step, scene_root)
-
-	for m in matches:
-		var src: String = m.get_string(1).strip_edges()
-		var sig: String = m.get_string(2).strip_edges()
-		var dst: String = m.get_string(3).strip_edges()
-		var method: String = m.get_string(4).strip_edges()
-		var bound_args: String = m.get_string(5).strip_edges()
-		if not bound_args.is_empty():
-			continue
-		if sig in PackedStringArray(["tscn", "gd", "scn", "tres", "cfg", "json"]):
-			continue
-		if dst.is_empty():
-			dst = default_target
-		if src.is_empty() or sig.is_empty() or method.is_empty():
-			continue
-		var k: String = "%s.%s->%s.%s" % [src, sig, dst, method]
-		if seen.has(k):
-			continue
-		seen[k] = true
-		specs.append({
-			"source": src,
-			"signalName": sig,
-			"target": dst,
-			"method": method,
-			"label": "%s.%s -> %s.%s()" % [src, sig, dst, method] if not dst.is_empty() else "%s.%s -> %s()" % [src, sig, method],
-		})
-
-	return specs
-
-
-func _infer_signal_target_name(step: Dictionary, scene_root: Node) -> String:
-	var loc: String = str(step.get("locationLabel", ""))
-	var instr: String = str(step.get("instruction", ""))
-	var to_re := RegEx.new()
-	to_re.compile("(?i)to\\s+`?([A-Z][A-Za-z0-9_]*)\\.[a-zA-Z_]|to\\s+`?([A-Z][A-Za-z0-9_]*)`?\\b")
-	var tm: RegExMatch = to_re.search(instr)
-	if tm != null:
-		var g1: String = tm.get_string(1)
-		if not g1.is_empty():
-			return g1
-		var g2: String = tm.get_string(2)
-		if not g2.is_empty():
-			return g2
-	# Ignore "Node > Signals > <EmitterNode>" breadcrumbs (the last segment is the emitter, not the receiver).
-	var loc_low := loc.to_lower()
-	if not ("signals" in loc_low):
-		for seg in loc.split(">", false):
-			var s: String = seg.strip_edges()
-			if s.is_valid_identifier() and not (s in PackedStringArray(["Node", "Signals", "Scene", "Tree"])):
-				if scene_root == null or _find_node_recursive(scene_root, s) != null:
-					return s
-	if scene_root != null:
-		return scene_root.name
-	return ""
-
-
 func open_res_path(editor_interface: EditorInterface, res_path: String) -> String:
 	if editor_interface == null:
 		return "EditorInterface unavailable."
@@ -950,31 +307,6 @@ func open_res_path(editor_interface: EditorInterface, res_path: String) -> Strin
 # ---------------------------------------------------------------------------
 # Internal Helpers
 # ---------------------------------------------------------------------------
-
-func _resolve_spec_node(root: Node, sp: Dictionary) -> Node:
-	if root == null:
-		return null
-	if bool(sp.get("isRoot", false)):
-		var expected_type: String = str(sp.get("type", "Node"))
-		if expected_type == "Node3D" or expected_type == "Node" or root.get_class() == expected_type or root.is_class(expected_type):
-			return root
-		return null
-	var rel_path: String = str(sp.get("path", ""))
-	if not rel_path.is_empty():
-		var direct: Node = root.get_node_or_null(NodePath(rel_path))
-		if direct != null:
-			return direct
-	var parent_path: String = str(sp.get("parentPath", ""))
-	var n_name: String = str(sp.get("name", ""))
-	if parent_path == "." or parent_path.is_empty():
-		return _find_node_recursive(root, n_name)
-	var p_node: Node = _resolve_node_by_rel_path(root, parent_path)
-	if p_node != null:
-		for child in p_node.get_children():
-			if child.name.to_lower() == n_name.to_lower():
-				return child
-	return null
-
 
 func _resolve_node_by_rel_path(root: Node, rel_path: String) -> Node:
 	if root == null:
@@ -1770,128 +1102,6 @@ func _is_abstract_subresource_class(cls_name: String) -> bool:
 	])
 
 
-func _parse_subresource_decl(raw_val: String, prop_hint: String = "") -> Dictionary:
-	var raw := raw_val.strip_edges()
-	var cls_part := raw
-	var inner_params := ""
-	var open_idx := raw.find("(")
-	if open_idx > 0:
-		cls_part = raw.substr(0, open_idx).strip_edges()
-		var close_idx := raw.rfind(")")
-		if close_idx > open_idx:
-			inner_params = raw.substr(open_idx + 1, close_idx - open_idx - 1).strip_edges()
-
-	# Normalize bare abstract hints to concrete subclasses (Godot 4.7.2 allows ClassDB.can_instantiate on Mesh!).
-	if cls_part == "Shape3D":
-		if "radius" in inner_params.to_lower() and "height" in inner_params.to_lower():
-			cls_part = "CapsuleShape3D" if "capsule" in raw.to_lower() else "CylinderShape3D"
-		elif "radius" in inner_params.to_lower():
-			cls_part = "SphereShape3D"
-		else:
-			cls_part = "BoxShape3D"
-	elif cls_part == "Shape2D":
-		cls_part = "CircleShape2D" if "radius" in inner_params.to_lower() else "RectangleShape2D"
-	elif cls_part == "Mesh":
-		cls_part = "SphereMesh" if "radius" in inner_params.to_lower() else "BoxMesh"
-
-	if not ClassDB.class_exists(cls_part) or _is_abstract_subresource_class(cls_part) or not ClassDB.can_instantiate(cls_part):
-		if prop_hint == "shape":
-			cls_part = "BoxShape3D"
-		elif prop_hint == "mesh":
-			cls_part = "BoxMesh"
-		else:
-			return {}
-
-	var props := {}
-	if not inner_params.is_empty():
-		var parts := _split_top_level_commas(inner_params)
-		var bare_floats: Array[float] = []
-		var all_bare := parts.size() > 0
-		for seg in parts:
-			var t := seg.strip_edges()
-			if not t.is_valid_float():
-				all_bare = false
-				break
-			bare_floats.append(t.to_float())
-
-		if all_bare:
-			if bare_floats.size() == 3 and (cls_part == "BoxMesh" or cls_part == "BoxShape3D"):
-				props["size"] = Vector3(bare_floats[0], bare_floats[1], bare_floats[2])
-			elif bare_floats.size() == 2 and (cls_part == "RectangleShape2D"):
-				props["size"] = Vector2(bare_floats[0], bare_floats[1])
-			elif bare_floats.size() == 2 and cls_part in PackedStringArray(["CapsuleShape3D", "CapsuleMesh", "CylinderShape3D", "CylinderMesh"]):
-				if cls_part == "CylinderMesh":
-					props["top_radius"] = bare_floats[0]
-					props["bottom_radius"] = bare_floats[0]
-				else:
-					props["radius"] = bare_floats[0]
-				props["height"] = bare_floats[1]
-			elif bare_floats.size() == 1 and cls_part in PackedStringArray(["SphereShape3D", "SphereMesh", "CircleShape2D"]):
-				props["radius"] = bare_floats[0]
-				if cls_part == "SphereMesh":
-					props["height"] = bare_floats[0] * 2.0
-		else:
-			for seg in parts:
-				var seg_t := seg.strip_edges()
-				var seg_low := seg_t.to_lower()
-				if seg_low.begins_with("top radius") or seg_low.begins_with("top_radius"):
-					props["top_radius"] = _extract_first_float(seg_t)
-				elif seg_low.begins_with("bottom radius") or seg_low.begins_with("bottom_radius"):
-					props["bottom_radius"] = _extract_first_float(seg_t)
-				elif seg_low.begins_with("radius") or seg_low.begins_with("r=") or seg_low.begins_with("r "):
-					var r_val := _extract_first_float(seg_t)
-					if cls_part == "CylinderMesh":
-						props["top_radius"] = r_val
-						props["bottom_radius"] = r_val
-					else:
-						props["radius"] = r_val
-						if cls_part == "SphereMesh" and not props.has("height"):
-							props["height"] = r_val * 2.0
-				elif seg_low.begins_with("height") or seg_low.begins_with("h=") or seg_low.begins_with("h "):
-					props["height"] = _extract_first_float(seg_t)
-				elif "size" in seg_low:
-					var vec := _parse_vector3_literal(seg_t)
-					if typeof(vec) == TYPE_VECTOR3:
-						props["size"] = vec
-					else:
-						var vec2 := _parse_vector2_literal(seg_t)
-						if typeof(vec2) == TYPE_VECTOR2:
-							props["size"] = vec2
-
-	return { "class": cls_part, "props": props }
-
-
-func _parse_standard_material_decl(raw_val: String) -> Dictionary:
-	var low := raw_val.strip_edges().to_lower()
-	if not ("material" in low or "emission" in low or "glow" in low or "color" in low or "orange" in low or "red" in low or "green" in low or "blue" in low or "cyan" in low or "yellow" in low or "sand" in low or "rock" in low or "ocean" in low):
-		return {}
-	var col := Color(0.85, 0.85, 0.88)
-	if "orange" in low:
-		col = Color(1.0, 0.48, 0.08)
-	elif "red" in low:
-		col = Color(0.95, 0.22, 0.2)
-	elif "green" in low:
-		col = Color(0.22, 0.85, 0.35)
-	elif "cyan" in low:
-		col = Color(0.15, 0.85, 0.95)
-	elif "blue" in low or "ocean" in low or "water" in low:
-		col = Color(0.16, 0.48, 0.85)
-	elif "yellow" in low or "gold" in low:
-		col = Color(0.98, 0.82, 0.2)
-	elif "purple" in low or "magenta" in low:
-		col = Color(0.75, 0.3, 0.95)
-	elif "sand" in low or "tan" in low:
-		col = Color(0.84, 0.74, 0.55)
-	elif "rock" in low or "gray" in low or "grey" in low:
-		col = Color(0.45, 0.47, 0.5)
-	var mat := { "albedo_color": col }
-	if "emission" in low or "glow" in low:
-		mat["emission_enabled"] = true
-		mat["emission"] = col
-		mat["emission_energy_multiplier"] = 2.0
-	return mat
-
-
 func _apply_material_dict_to_node(node: Node, mat_props: Dictionary) -> bool:
 	if node == null or mat_props.is_empty():
 		return false
@@ -2446,30 +1656,19 @@ func _collect_attached_script_paths(root_node: Node) -> Dictionary:
 	return attached
 
 
-func _is_signal_connected_in_tree(eval_tree: Node, sig: Dictionary) -> bool:
-	if eval_tree == null:
-		return false
-	var src_hint: String = String(sig.get("source", ""))
-	var sig_n: String = String(sig.get("signalName", sig.get("signal", "")))
-	var want_method: String = String(sig.get("method", ""))
-	if sig_n.is_empty() or want_method.is_empty():
-		return false
-	var src_n: Node = _resolve_node_by_rel_path(eval_tree, src_hint)
-	if src_n == null:
-		src_n = _find_node_recursive(eval_tree, src_hint)
-	if src_n == null and (src_hint.is_empty() or src_hint == "." or src_hint == eval_tree.name):
-		src_n = eval_tree
-	if src_n == null or not src_n.has_signal(sig_n):
-		return false
-	for conn_raw in src_n.get_signal_connection_list(sig_n):
-		var conn: Dictionary = conn_raw
-		var cb: Callable = conn.get("callable", Callable())
-		if not cb.is_valid() or cb.get_object() == src_n:
-			continue
-		var cb_method: String = String(cb.get_method())
-		if cb_method == want_method or (("::" + want_method) in str(cb)):
-			return true
-	return false
+func _collect_tscn_script_paths_from_disk(scene_path: String) -> Dictionary:
+	var attached := {}
+	if scene_path.is_empty() or not FileAccess.file_exists(scene_path):
+		return attached
+	var txt := FileAccess.get_file_as_string(scene_path)
+	var rx := RegEx.new()
+	if rx.compile('path="(res://[^"]+\\.gd)"') != OK:
+		return attached
+	for m in rx.search_all(txt):
+		var rp := m.get_string(1).strip_edges()
+		if not rp.is_empty():
+			attached[rp] = true
+	return attached
 
 
 func evaluate_feature(
@@ -2492,98 +1691,13 @@ func evaluate_feature(
 	var healed_inputs := heal_empty_project_input_actions(feat)
 	if healed_inputs > 0:
 		cache_key = _build_eval_cache_key(feat, primary_scene, script_paths, arena_hint, code_files.size(), editor_root)
-	var items: Array[Dictionary] = []
 
 	var primary_open := editor_root != null and not primary_scene.is_empty() and editor_root.scene_file_path == primary_scene
-	var eval_root: Node = editor_root if primary_open else null
-	var temp_eval_root: Node = null
-	var temp_arena_root: Node = null
-	var checked_arena_load: bool = false
-	if not primary_open and not primary_scene.is_empty() and ResourceLoader.exists(primary_scene):
-		var ps := ResourceLoader.load(primary_scene, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
-		if ps != null:
-			temp_eval_root = ps.instantiate()
-			if temp_eval_root != null:
-				eval_root = temp_eval_root
-
-	if not primary_scene.is_empty():
-		var exists := FileAccess.file_exists(primary_scene)
-		items.append({
-			"ok": exists,
-			"label": "%s on disk" % primary_scene.get_file(),
-			"kind": "scene",
-		})
-
-	var steps: Array = feat.get("steps", [])
-	var seen_nodes := {}
-	var seen_inputs := {}
-	var seen_signals := {}
-	for st in steps:
-		var st_role := String(st.get("role", st.get("stepRole", ""))).strip_edges().to_upper()
-		if st_role == "FIX":
-			continue
-		for sp in parse_scene_node_specs(st):
-			var nname := String(sp.get("name", ""))
-			if nname.is_empty() or seen_nodes.has(nname):
-				continue
-			seen_nodes[nname] = true
-			var ok_n := false
-			if eval_root != null:
-				var found := _resolve_spec_node(eval_root, sp)
-				if found != null:
-					ok_n = true
-					var sr_cls := String(sp.get("subResourceClass", ""))
-					if not sr_cls.is_empty() and (found is CollisionShape3D or found is CollisionShape2D):
-						if found.get("shape") == null:
-							ok_n = false
-					elif not sr_cls.is_empty() and found is MeshInstance3D:
-						if found.get("mesh") == null:
-							ok_n = false
-			items.append({
-				"ok": ok_n,
-				"label": "Node: %s (%s)" % [nname, String(sp.get("type", "Node"))],
-				"kind": "node",
-			})
-
-		for inp in parse_input_specs(st):
-			var act := String(inp.get("action", ""))
-			if act.is_empty() or seen_inputs.has(act):
-				continue
-			seen_inputs[act] = true
-			items.append({
-				"ok": _has_real_input_binding(act, "input/" + act),
-				"label": "Input: %s" % act,
-				"kind": "input",
-			})
-
-		for sig in parse_signal_specs(st, eval_root):
-			var sig_n := String(sig.get("signalName", sig.get("signal", "")))
-			var key := "%s.%s->%s" % [String(sig.get("source", "")), sig_n, String(sig.get("method", ""))]
-			if seen_signals.has(key):
-				continue
-			seen_signals[key] = true
-			var ok_sig := _is_signal_connected_in_tree(eval_root, sig)
-			if not ok_sig and not arena_scene.is_empty() and arena_scene != primary_scene:
-				var arena_eval_root: Node = null
-				if editor_root != null and editor_root.scene_file_path == arena_scene:
-					arena_eval_root = editor_root
-				else:
-					if not checked_arena_load:
-						checked_arena_load = true
-						if ResourceLoader.exists(arena_scene):
-							var aps := ResourceLoader.load(arena_scene, "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
-							if aps != null:
-								temp_arena_root = aps.instantiate()
-					arena_eval_root = temp_arena_root
-				if arena_eval_root != null:
-					ok_sig = _is_signal_connected_in_tree(arena_eval_root, sig)
-			items.append({
-				"ok": ok_sig,
-				"label": "Signal: %s.%s" % [String(sig.get("source", "")), sig_n],
-				"kind": "signal",
-			})
-
-	var attached_in_scene := _collect_attached_script_paths(eval_root)
+	var attached_in_scene: Dictionary = (
+		_collect_attached_script_paths(editor_root)
+		if primary_open
+		else _collect_tscn_script_paths_from_disk(primary_scene)
+	)
 	var valid_scripts := {}
 	var filtered_scripts: Array[String] = []
 	for spath in script_paths:
@@ -2612,11 +1726,6 @@ func evaluate_feature(
 		if is_ghost:
 			continue
 		filtered_scripts.append(sp_str)
-		items.append({
-			"ok": is_valid,
-			"label": "Script: %s" % sp_str.get_file(),
-			"kind": "script",
-		})
 
 	for att_sp in attached_in_scene.keys():
 		var asp := String(att_sp)
@@ -2629,16 +1738,6 @@ func evaluate_feature(
 					fa.close()
 					if not atxt.strip_edges().is_empty() and check_gdscript_compiles(atxt).get("ok", false):
 						valid_scripts[asp] = true
-						items.append({
-							"ok": true,
-							"label": "Script: %s" % asp.get_file(),
-							"kind": "script",
-						})
-
-	if temp_eval_root != null:
-		temp_eval_root.free()
-	if temp_arena_root != null:
-		temp_arena_root.free()
 
 	var arena_ok := arena_scene.is_empty() or FileAccess.file_exists(arena_scene)
 	var any_script_ok := valid_scripts.size() > 0
@@ -2652,32 +1751,11 @@ func evaluate_feature(
 		(primary_scene.is_empty() and not filtered_scripts.is_empty() and any_script_ok) or
 		(primary_scene.is_empty() and filtered_scripts.is_empty() and is_built_remote and arena_ok)
 	)
-
-	if items.is_empty():
-		items.append({
-			"ok": false if unbuilt_remote_checkpoint else (is_gate_passed or disk_artifacts_ok),
-			"label": "Feature checkpoint not built in Godot yet" if unbuilt_remote_checkpoint else "Feature scene & script generated",
-			"kind": "script",
-		})
-
 	var has_built_artifacts := false if unbuilt_remote_checkpoint else (is_gate_passed or disk_artifacts_ok)
 
-	var ready := 0
-	for it in items:
-		if bool(it.get("ok", false)):
-			ready += 1
-	var all_items_ready := (
-		false if unbuilt_remote_checkpoint else (
-			is_gate_passed or (items.size() > 0 and ready == items.size() and (not has_remote_flag or disk_artifacts_ok))
-		)
-	)
 	var result := {
-		"total": items.size(),
-		"ready": ready,
-		"all_ready": all_items_ready,
+		"all_ready": has_built_artifacts,
 		"has_built_artifacts": has_built_artifacts,
-		"missing_count": items.size() - ready,
-		"items": items,
 		"primary_scene": primary_scene,
 		"arena_scene": String(paths.get("arena_scene", "")),
 		"script_paths": filtered_scripts,

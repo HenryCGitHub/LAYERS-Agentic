@@ -1616,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.5"'));
+        expect(cfgText, contains('version="2.7.6"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1648,6 +1648,10 @@ func _physics_process(delta: float) -> void:
         expect(syncText, contains('inputMapSnapshot'));
         expect(syncText, contains('projectDiagnostics'));
         expect(syncText, contains('agent_bundle_received'));
+        expect(syncText, contains('func has_active_agent_request'));
+        expect(syncText, contains('func cancel_agent_request'));
+        expect(syncText, isNot(contains('_active_request_kind')));
+        expect(syncText, isNot(contains('_latest_known_remote_ver')));
         expect(syncText, contains('check_for_plugin_update'));
         expect(syncText, contains('download_and_apply_plugin_update'));
         expect(syncText, contains('layers_step_executor.gd'));
@@ -1677,6 +1681,10 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('Reopen Gate'));
         expect(dockText, contains('save_all_scenes'));
         expect(dockText, isNot(contains('build_feature_local')));
+        expect(dockText, contains('_on_cancel_agent_pressed'));
+        expect(dockText, contains('_sync_feature_picker_lock'));
+        expect(dockText, contains('_maybe_add_open_scene_button'));
+        expect(dockText, contains('_pre_repair_warnings'));
         expect(dockText, contains('_is_feature_checkpoint_built'));
         expect(dockText, contains('OS.add_logger'));
         expect(dockText, contains('Build Feature in Godot'));
@@ -1709,7 +1717,9 @@ func _physics_process(delta: float) -> void:
 
         expect(executorText, contains('ClassDB.class_exists'));
         expect(executorText, contains('save_scene()'));
-        expect(executorText, contains('parse_signal_specs'));
+        expect(executorText, contains('_collect_tscn_script_paths_from_disk'));
+        expect(executorText, isNot(contains('func parse_signal_specs')));
+        expect(executorText, isNot(contains('func parse_scene_node_specs')));
         expect(executorText, contains('undo_redo'));
         expect(executorText, contains('apply_agent_bundle'));
         expect(executorText, contains('preserve_existing_visuals'));

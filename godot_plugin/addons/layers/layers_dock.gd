@@ -81,6 +81,8 @@ var _pending_agent_bundle: Dictionary = {}
 var _pending_bundle_was_initial_build: bool = false
 var _pending_bundle_is_auto_repair: bool = false
 var _auto_repair_attempted_this_op: bool = false
+var _pre_repair_summary: String = ""
+var _pre_repair_warnings: PackedStringArray = PackedStringArray()
 var _playtest_watch_timer: Timer
 var _post_playtest_log_timer: Timer
 var _was_playing_scene: bool = false
@@ -233,7 +235,7 @@ func _exit_tree() -> void:
 
 
 func refresh_from_focus() -> void:
-	if _sync != null and _sync.has_link_token() and not _show_token_editor:
+	if _sync != null and _sync.has_link_token() and not _show_token_editor and not _building_feature and not _diagnosing_fix:
 		_sync.fetch_active_epic()
 	notify_editor_state_changed()
 
@@ -403,7 +405,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.5")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.6")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -651,6 +653,7 @@ func _refresh_view() -> void:
 	if chosen_idx == -1:
 		chosen_idx = first_incomplete_idx if first_incomplete_idx != -1 else 0
 	_feature_picker.select(chosen_idx)
+	_sync_feature_picker_lock()
 	var active_feat: Dictionary = features[chosen_idx]
 	var next_feat_id: String = str(active_feat.get("id", ""))
 	if next_feat_id != _selected_feature_id:
@@ -659,6 +662,11 @@ func _refresh_view() -> void:
 		_last_agent_warnings = PackedStringArray()
 
 	_render_active_feature_workspace(active_feat)
+
+
+func _sync_feature_picker_lock() -> void:
+	if _feature_picker != null:
+		_feature_picker.disabled = _building_feature or _diagnosing_fix
 
 
 func _get_active_feature() -> Dictionary:
@@ -711,7 +719,7 @@ func _is_feature_checkpoint_built(feat: Dictionary, eval_info: Dictionary) -> bo
 		return true
 	if feat.has("isBuiltInGodot") and not bool(feat.get("isBuiltInGodot", false)):
 		return false
-	return bool(eval_info.get("all_ready", false)) or bool(eval_info.get("has_built_artifacts", false))
+	return bool(eval_info.get("has_built_artifacts", eval_info.get("all_ready", false)))
 
 
 func _collect_active_playtest_errors() -> Array:
@@ -742,10 +750,11 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 	var eval_info: Dictionary = _executor.call("evaluate_feature", feat, editor_interface, code_files, arena_scene) if _executor != null else {
-		"total": 0, "ready": 0, "all_ready": false, "has_built_artifacts": false, "items": [], "primary_scene": str(feat.get("primaryAsset", "")), "arena_scene": arena_scene, "script_paths": feat.get("scriptPaths", [])
+		"all_ready": false, "has_built_artifacts": false, "primary_scene": str(feat.get("primaryAsset", "")), "arena_scene": arena_scene, "script_paths": feat.get("scriptPaths", [])
 	}
 	var primary_scene: String = str(eval_info.get("primary_scene", feat.get("primaryAsset", ""))).strip_edges()
 	var can_pass_playtest: bool = _is_feature_checkpoint_built(feat, eval_info)
+	var ai_busy: bool = _building_feature or _diagnosing_fix
 
 	var bold_font: Font = _editor_font("bold")
 	var mono_font: Font = _editor_font("source")
@@ -782,7 +791,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		state_lbl.text = "Not Built"
 		state_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
 	hdr_row.add_child(state_lbl)
-	if gate_passed and not _building_feature and not _diagnosing_fix:
+	if gate_passed and not ai_busy:
 		var reopen_btn := Button.new()
 		reopen_btn.flat = true
 		reopen_btn.theme_type_variation = &"FlatButton"
@@ -849,23 +858,23 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		busy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		busy_btn.disabled = true
 		action_row.add_child(busy_btn)
+
+		var cancel_build_btn := Button.new()
+		cancel_build_btn.text = "Cancel"
+		cancel_build_btn.icon = _editor_icon("Stop", "Close")
+		cancel_build_btn.tooltip_text = "Abort the in-flight AI Feature Build"
+		cancel_build_btn.pressed.connect(_on_cancel_agent_pressed)
+		action_row.add_child(cancel_build_btn)
 	elif not can_pass_playtest:
 		var build_btn := Button.new()
 		build_btn.text = "Build Feature in Godot"
 		build_btn.icon = _editor_icon("Add", "Tools")
 		build_btn.tooltip_text = "Have the AI build this feature's scenes, nodes, InputMap actions, and GDScript directly into Godot."
 		build_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		build_btn.disabled = ai_busy
 		build_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
 		action_row.add_child(build_btn)
-		if not scene_to_open.is_empty():
-			var open_unbuilt_btn := Button.new()
-			open_unbuilt_btn.flat = true
-			open_unbuilt_btn.theme_type_variation = &"FlatButton"
-			open_unbuilt_btn.text = "Open Scene"
-			open_unbuilt_btn.icon = _editor_icon("PackedScene", "File")
-			open_unbuilt_btn.tooltip_text = "Open %s in Godot viewport" % scene_to_open
-			open_unbuilt_btn.pressed.connect(_on_open_res_path_pressed.bind(scene_to_open))
-			action_row.add_child(open_unbuilt_btn)
+		_maybe_add_open_scene_button(action_row, scene_to_open, "Open %s in Godot viewport" % scene_to_open)
 		_maybe_add_open_script_button(action_row, script_to_open)
 	else:
 		var arena_btn := Button.new()
@@ -876,15 +885,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		arena_btn.pressed.connect(_on_playtest_arena_pressed.bind(arena_scene, primary_scene))
 		action_row.add_child(arena_btn)
 
-		if not scene_to_open.is_empty():
-			var open_scene_btn := Button.new()
-			open_scene_btn.flat = true
-			open_scene_btn.theme_type_variation = &"FlatButton"
-			open_scene_btn.text = "Open Scene"
-			open_scene_btn.icon = _editor_icon("PackedScene", "File")
-			open_scene_btn.tooltip_text = "Open %s to arrange visuals or inspect nodes" % scene_to_open
-			open_scene_btn.pressed.connect(_on_open_res_path_pressed.bind(scene_to_open))
-			action_row.add_child(open_scene_btn)
+		_maybe_add_open_scene_button(action_row, scene_to_open, "Open %s to arrange visuals or inspect nodes" % scene_to_open)
 		_maybe_add_open_script_button(action_row, script_to_open)
 
 		var rebuild_btn := Button.new()
@@ -893,6 +894,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		rebuild_btn.text = "Rebuild"
 		rebuild_btn.icon = _editor_icon("Reload", "Tools")
 		rebuild_btn.tooltip_text = "Re-run AI Feature Builder while preserving your scene transforms and meshes."
+		rebuild_btn.disabled = ai_busy
 		rebuild_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
 		action_row.add_child(rebuild_btn)
 
@@ -913,17 +915,17 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		agent_hdr.add_theme_font_override("font", bold_font)
 	agent_hdr_row.add_child(agent_hdr)
 
-	if not _building_feature and not _diagnosing_fix:
+	if not ai_busy:
 		var copy_ctx_btn := Button.new()
 		copy_ctx_btn.flat = true
 		copy_ctx_btn.theme_type_variation = &"FlatButton"
 		copy_ctx_btn.text = "Copy Context"
 		copy_ctx_btn.icon = _editor_icon("ActionCopy", "Copy")
 		copy_ctx_btn.tooltip_text = "Copy active feature, scene trees, scripts, InputMap, errors & diagnostics as Markdown"
-		copy_ctx_btn.pressed.connect(_on_copy_context_pressed.bind(feat, eval_info))
+		copy_ctx_btn.pressed.connect(_on_copy_context_pressed.bind(feat))
 		agent_hdr_row.add_child(copy_ctx_btn)
 
-	if not _last_ai_snapshot.is_empty() and not _building_feature and not _diagnosing_fix:
+	if not _last_ai_snapshot.is_empty() and not ai_busy:
 		var undo_ai_btn := Button.new()
 		undo_ai_btn.flat = true
 		undo_ai_btn.theme_type_variation = &"FlatButton"
@@ -982,7 +984,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 
 	var log_errors: Array = _collect_active_playtest_errors()
 	_last_detected_error_count = log_errors.size()
-	if not log_errors.is_empty() and not _diagnosing_fix:
+	if not log_errors.is_empty() and not ai_busy:
 		var err_row := HBoxContainer.new()
 		err_row.add_theme_constant_override("separation", _S(4))
 		agent_vb.add_child(err_row)
@@ -1014,11 +1016,12 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		var fix_err_btn := Button.new()
 		fix_err_btn.text = "Fix Latest Playtest Error (%d)" % log_errors.size()
 		fix_err_btn.icon = _editor_icon("StatusError", "Tools")
+		fix_err_btn.disabled = ai_busy
 		fix_err_btn.pressed.connect(_on_fix_log_errors_pressed.bind(feat_id, cp_id, log_errors))
 		agent_vb.add_child(fix_err_btn)
 
 	var diag_issues: Array = _get_active_project_diagnostics()
-	if not diag_issues.is_empty() and not _diagnosing_fix:
+	if not diag_issues.is_empty() and not ai_busy:
 		var diag_row := HBoxContainer.new()
 		diag_row.add_theme_constant_override("separation", _S(4))
 		agent_vb.add_child(diag_row)
@@ -1047,6 +1050,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		var fix_diag_btn := Button.new()
 		fix_diag_btn.text = "Fix Detected Issues (%d)" % diag_issues.size()
 		fix_diag_btn.icon = _editor_icon("StatusWarning", "Tools")
+		fix_diag_btn.disabled = ai_busy
 		fix_diag_btn.pressed.connect(_on_fix_detected_diagnostics_pressed.bind(feat_id, cp_id, diag_issues))
 		agent_vb.add_child(fix_diag_btn)
 
@@ -1055,6 +1059,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	_fix_input.wrap_mode = TextEdit.LINE_WRAPPING_BOUNDARY
 	_fix_input.scroll_fit_content_height = true
 	_fix_input.custom_minimum_size = Vector2(0.0, float(_S(52)))
+	_fix_input.editable = not ai_busy
 	_fix_input.text = _fix_draft_text
 	_fix_input.text_changed.connect(func() -> void:
 		if _fix_input != null:
@@ -1063,18 +1068,31 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	_fix_input.gui_input.connect(_on_fix_input_gui_input.bind(feat_id, cp_id))
 	agent_vb.add_child(_fix_input)
 
+	var apply_row := HBoxContainer.new()
+	apply_row.add_theme_constant_override("separation", _S(6))
+	agent_vb.add_child(apply_row)
+
 	var apply_btn := Button.new()
-	apply_btn.text = "Applying Agent Changes..." if _diagnosing_fix else "Apply to Scene & Script"
+	apply_btn.text = ("Auto-Repairing Compile/Wiring..." if _pending_bundle_is_auto_repair else "Applying Agent Changes...") if _diagnosing_fix else "Apply to Scene & Script"
 	apply_btn.icon = _editor_icon("Tools")
-	apply_btn.disabled = _diagnosing_fix
+	apply_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	apply_btn.disabled = ai_busy
 	apply_btn.pressed.connect(_on_direct_agent_pressed.bind(feat_id, cp_id))
-	agent_vb.add_child(apply_btn)
+	apply_row.add_child(apply_btn)
+
+	if _diagnosing_fix:
+		var cancel_fix_btn := Button.new()
+		cancel_fix_btn.text = "Cancel"
+		cancel_fix_btn.icon = _editor_icon("Stop", "Close")
+		cancel_fix_btn.tooltip_text = "Abort the in-flight Agent Director or Auto-Repair request"
+		cancel_fix_btn.pressed.connect(_on_cancel_agent_pressed)
+		apply_row.add_child(cancel_fix_btn)
 
 	_footer_box.visible = can_pass_playtest and not gate_passed
 	if can_pass_playtest and not gate_passed:
-		_primary_cta_btn.disabled = _building_feature or _diagnosing_fix
+		_primary_cta_btn.disabled = ai_busy
 		_primary_cta_btn.text = "Playtest Passed — Next Feature"
-		_primary_cta_btn.icon = _editor_icon("StatusSuccess" if gate_passed else "Forward")
+		_primary_cta_btn.icon = _editor_icon("Forward")
 
 
 # ---------------------------------------------------------------------------
@@ -1137,6 +1155,19 @@ func _collect_full_project_agent_context(feat: Dictionary, code_files: Dictionar
 	}
 
 
+func _maybe_add_open_scene_button(action_row: HBoxContainer, scene_to_open: String, tooltip_text: String) -> void:
+	if scene_to_open.is_empty():
+		return
+	var open_scene_btn := Button.new()
+	open_scene_btn.flat = true
+	open_scene_btn.theme_type_variation = &"FlatButton"
+	open_scene_btn.text = "Open Scene"
+	open_scene_btn.icon = _editor_icon("PackedScene", "File")
+	open_scene_btn.tooltip_text = tooltip_text
+	open_scene_btn.pressed.connect(_on_open_res_path_pressed.bind(scene_to_open))
+	action_row.add_child(open_scene_btn)
+
+
 func _maybe_add_open_script_button(action_row: HBoxContainer, script_to_open: String) -> void:
 	if script_to_open.is_empty():
 		return
@@ -1151,10 +1182,12 @@ func _maybe_add_open_script_button(action_row: HBoxContainer, script_to_open: St
 
 
 func _on_build_feature_pressed(feat: Dictionary) -> void:
-	if _executor == null or _building_feature:
+	if _executor == null or _building_feature or _diagnosing_fix:
 		return
 	_auto_repair_attempted_this_op = false
 	_pending_bundle_is_auto_repair = false
+	_pre_repair_summary = ""
+	_pre_repair_warnings = PackedStringArray()
 	var feat_id: String = str(feat.get("id", ""))
 	var cp_id: String = str(feat.get("checkpointId", ""))
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
@@ -1171,6 +1204,7 @@ func _on_build_feature_pressed(feat: Dictionary) -> void:
 	var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
 	var diag_issues: Array = full_ctx.get("project_diagnostics", [])
 	_building_feature = true
+	_sync_feature_picker_lock()
 	_set_status("Building %s with Gemini 4 Hydrogen..." % str(feat.get("title", "Feature")), false)
 	_render_active_feature_workspace(feat)
 	_sync.build_feature(feat_id, cp_id, scene_snap, live_scripts, arena_scene, primary_scene, input_map_snap, diag_issues)
@@ -1201,7 +1235,7 @@ func _on_fix_input_gui_input(event: InputEvent, feat_id: String, cp_id: String) 
 
 
 func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
-	if _sync == null or _diagnosing_fix:
+	if _sync == null or _building_feature or _diagnosing_fix:
 		return
 	var prompt_txt: String = (_fix_input.text if _fix_input != null else _fix_draft_text).strip_edges()
 	if prompt_txt.is_empty():
@@ -1209,6 +1243,8 @@ func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
 		return
 	_auto_repair_attempted_this_op = false
 	_pending_bundle_is_auto_repair = false
+	_pre_repair_summary = ""
+	_pre_repair_warnings = PackedStringArray()
 	var feat: Dictionary = _get_active_feature()
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
@@ -1220,6 +1256,7 @@ func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
 	var diag_issues: Array = full_ctx.get("project_diagnostics", [])
 
 	_diagnosing_fix = true
+	_sync_feature_picker_lock()
 	_set_status("Agent Director updating Scene & GDScript...", false)
 	if not feat.is_empty():
 		_render_active_feature_workspace(feat)
@@ -1335,6 +1372,13 @@ func _on_bundle_apply_timeout() -> void:
 		if not is_auto_repair and not _auto_repair_attempted_this_op and not feat_id.is_empty() and _sync != null and _sync.has_link_token():
 			_auto_repair_attempted_this_op = true
 			_pending_bundle_is_auto_repair = true
+			var combined_warnings := warnings.duplicate()
+			for ie in integrity_errors:
+				var ies := str(ie).strip_edges()
+				if not ies.is_empty() and not (ies in combined_warnings):
+					combined_warnings.append(ies)
+			_pre_repair_summary = summary
+			_pre_repair_warnings = combined_warnings
 			var full_ctx: Dictionary = _collect_full_project_agent_context(active_feat, code_files, arena_scene)
 			var primary_scene: String = str(full_ctx.get("primary_scene", pref_scene)).strip_edges()
 			var scene_snap: Variant = full_ctx.get("scene_snapshot", {})
@@ -1356,6 +1400,8 @@ func _on_bundle_apply_timeout() -> void:
 			if not ies.is_empty():
 				warnings.append(ies)
 
+	_pre_repair_summary = ""
+	_pre_repair_warnings = PackedStringArray()
 	var overall_ok: bool = apply_ok and integrity_ok and compile_errors.is_empty()
 	_last_agent_summary = summary
 	_last_agent_warnings = warnings
@@ -1496,6 +1542,9 @@ func _on_undo_last_ai_pressed() -> void:
 
 
 func _on_feature_selected(idx: int) -> void:
+	if _building_feature or _diagnosing_fix:
+		_sync_feature_picker_lock()
+		return
 	var epic_raw: Variant = _payload.get("activeEpic", null)
 	if typeof(epic_raw) != TYPE_DICTIONARY:
 		return
@@ -1545,7 +1594,7 @@ func _on_reopen_gate_pressed(feat: Dictionary) -> void:
 		_sync.set_playtest_passed(feat_id, cp_id, false)
 
 
-func _on_copy_context_pressed(feat: Dictionary, _eval_info: Dictionary = {}) -> void:
+func _on_copy_context_pressed(feat: Dictionary) -> void:
 	if _executor == null:
 		return
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
@@ -1569,7 +1618,35 @@ func _on_copy_context_pressed(feat: Dictionary, _eval_info: Dictionary = {}) -> 
 	_set_status("Copied Godot context (%d chars) to clipboard." % md.length(), false)
 
 
+func _on_cancel_agent_pressed() -> void:
+	var was_auto_repair: bool = _pending_bundle_is_auto_repair
+	if _sync != null and _sync.has_method("cancel_agent_request"):
+		_sync.cancel_agent_request()
+	if _bundle_apply_timer != null:
+		_bundle_apply_timer.stop()
+	_pending_agent_bundle = {}
+	_pending_bundle_was_initial_build = false
+	_pending_bundle_is_auto_repair = false
+	_auto_repair_attempted_this_op = false
+	_building_feature = false
+	_diagnosing_fix = false
+	_sync_feature_picker_lock()
+	if was_auto_repair:
+		_last_agent_summary = _pre_repair_summary if not _pre_repair_summary.is_empty() else "Auto-repair canceled — kept applied changes on disk."
+		_last_agent_warnings = _pre_repair_warnings
+		_pre_repair_summary = ""
+		_pre_repair_warnings = PackedStringArray()
+		_set_status("Auto-repair canceled — kept applied changes (%d warning(s))." % _last_agent_warnings.size(), not _last_agent_warnings.is_empty())
+	else:
+		_pre_repair_summary = ""
+		_pre_repair_warnings = PackedStringArray()
+		_set_status("Canceled AI request.", false)
+	_refresh_view()
+
+
 func _on_epic_updated(payload: Dictionary) -> void:
+	if _sync != null and _sync.has_active_agent_request():
+		return
 	_payload = payload
 	_building_feature = false
 	_diagnosing_fix = false
@@ -1583,6 +1660,7 @@ func _on_sync_failed(message: String) -> void:
 	_building_feature = false
 	_diagnosing_fix = false
 	_pending_bundle_is_auto_repair = false
+	_sync_feature_picker_lock()
 	_set_status(message, true)
 	var feat: Dictionary = _get_active_feature()
 	if not feat.is_empty() and _workspace_panel.visible:
