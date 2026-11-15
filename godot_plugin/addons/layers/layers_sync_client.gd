@@ -110,6 +110,8 @@ func load_cached_epic() -> Dictionary:
 		return {}
 	var parsed = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) == TYPE_DICTIONARY:
+		if parsed.has("codeFiles") and typeof(parsed.get("codeFiles")) != TYPE_DICTIONARY:
+			parsed["codeFiles"] = _normalize_code_files_dict(parsed.get("codeFiles"))
 		return parsed
 	return {}
 
@@ -503,14 +505,6 @@ func direct_agent(
 	_post_agent_update(payload)
 
 
-func complete_feature_steps(feature_id: String, checkpoint_id: String) -> void:
-	_post_agent_update({
-		"action": "complete_feature_steps",
-		"featureId": feature_id,
-		"checkpointId": checkpoint_id,
-	})
-
-
 func sync_live_scripts(live_scripts: Dictionary) -> void:
 	if not has_link_token() or live_scripts.is_empty():
 		return
@@ -571,36 +565,31 @@ func _on_script_sync_http_completed(
 		_flush_pending_script_sync()
 
 
+func _normalize_code_files_dict(raw_val: Variant) -> Dictionary:
+	if typeof(raw_val) == TYPE_DICTIONARY:
+		return (raw_val as Dictionary).duplicate()
+	var migrated := {}
+	if typeof(raw_val) == TYPE_ARRAY:
+		for cf in (raw_val as Array):
+			if typeof(cf) == TYPE_DICTIONARY:
+				var d: Dictionary = cf
+				var rp := str(d.get("resPath", d.get("path", ""))).strip_edges()
+				if not rp.is_empty():
+					migrated[rp] = str(d.get("content", ""))
+	return migrated
+
+
 func _update_cached_code_files(live_scripts: Dictionary) -> void:
 	if live_scripts.is_empty():
 		return
 	var cached := load_cached_epic()
 	if cached.is_empty():
 		return
-	var code_files_raw: Variant = cached.get("codeFiles", [])
-	var code_files: Array = code_files_raw if typeof(code_files_raw) == TYPE_ARRAY else []
-	var by_path := {}
-	for i in range(code_files.size()):
-		var cf: Variant = code_files[i]
-		if typeof(cf) == TYPE_DICTIONARY:
-			var rp := str(cf.get("resPath", cf.get("path", ""))).strip_edges()
-			if not rp.is_empty():
-				by_path[rp] = i
+	var code_files := _normalize_code_files_dict(cached.get("codeFiles", {}))
 	for rp_raw in live_scripts.keys():
 		var rp := str(rp_raw).strip_edges()
-		var content := str(live_scripts[rp_raw])
-		if by_path.has(rp):
-			var idx: int = int(by_path[rp])
-			var existing: Dictionary = code_files[idx]
-			existing["content"] = content
-			code_files[idx] = existing
-		else:
-			code_files.append({
-				"resPath": rp,
-				"title": rp.get_file(),
-				"language": "gdscript",
-				"content": content,
-			})
+		if not rp.is_empty():
+			code_files[rp] = str(live_scripts[rp_raw])
 	cached["codeFiles"] = code_files
 	_write_cache(cached)
 

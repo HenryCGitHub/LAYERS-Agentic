@@ -2025,6 +2025,8 @@ func open_res_path(editor_interface: EditorInterface, res_path: String) -> Strin
 	var res: Resource = reload_script_safely(res_path) if res_path.ends_with(".gd") else ResourceLoader.load(res_path, "", ResourceLoader.CACHE_MODE_REPLACE)
 	if res is Script:
 		editor_interface.edit_script(res as Script)
+		if editor_interface.has_method("set_main_screen_editor"):
+			editor_interface.set_main_screen_editor("Script")
 	elif res != null:
 		editor_interface.edit_resource(res)
 	return ""
@@ -4084,7 +4086,7 @@ func restore_bundle_snapshot(
 	snapshot: Dictionary
 ) -> Dictionary:
 	if snapshot.is_empty():
-		return {"ok": false, "restored_count": 0}
+		return {"ok": false, "restored_count": 0, "restored_scripts": PackedStringArray()}
 
 	var files: Dictionary = snapshot.get("files", {}) if typeof(snapshot.get("files", null)) == TYPE_DICTIONARY else {}
 	var ordered_paths := PackedStringArray()
@@ -4110,6 +4112,7 @@ func restore_bundle_snapshot(
 
 	var restored_count := 0
 	var restored_scenes := PackedStringArray()
+	var restored_scripts := PackedStringArray()
 	for rp in ordered_paths:
 		var raw_entry: Variant = files.get(rp, null)
 		if typeof(raw_entry) != TYPE_DICTIONARY:
@@ -4125,6 +4128,7 @@ func restore_bundle_snapshot(
 				restored_count += 1
 				if rp.ends_with(".gd"):
 					reload_script_safely(rp, content)
+					restored_scripts.append(rp)
 				elif rp.ends_with(".tscn"):
 					restored_scenes.append(rp)
 		else:
@@ -4165,7 +4169,7 @@ func restore_bundle_snapshot(
 			editor_interface.open_scene_from_path(init_sc)
 
 	invalidate_eval_cache()
-	return {"ok": true, "restored_count": restored_count}
+	return {"ok": true, "restored_count": restored_count, "restored_scripts": restored_scripts}
 
 
 func apply_agent_bundle(
@@ -5340,27 +5344,6 @@ func capture_rich_scene_snapshot(editor_interface: EditorInterface, extra_scene_
 				}
 				inst.free()
 	return { "scenes": scenes }
-
-
-func read_live_scripts_for_feature(feat: Dictionary, code_files: Dictionary = {}, arena_hint: String = "") -> Dictionary:
-	var out := {}
-	var paths := resolve_feature_paths(feat, code_files, arena_hint)
-	for sp in paths.get("script_paths", []):
-		var sp_str := String(sp)
-		if FileAccess.file_exists(sp_str):
-			var f := FileAccess.open(sp_str, FileAccess.READ)
-			if f != null:
-				out[sp_str] = f.get_as_text()
-				f.close()
-	# Also include any disk scripts under res://scripts/ already referenced in code_files.
-	for cf in code_files.keys():
-		var cfp := String(cf)
-		if not out.has(cfp) and FileAccess.file_exists(cfp):
-			var f2 := FileAccess.open(cfp, FileAccess.READ)
-			if f2 != null:
-				out[cfp] = f2.get_as_text()
-				f2.close()
-	return out
 
 
 func _ensure_dir_for_res_path(res_path: String) -> void:

@@ -1616,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.3"'));
+        expect(cfgText, contains('version="2.7.4"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1638,6 +1638,8 @@ func _physics_process(delta: float) -> void:
         expect(syncText, isNot(contains('func toggle_step')));
         expect(syncText, isNot(contains('func diagnose_fix')));
         expect(syncText, isNot(contains('func is_agent_busy')));
+        expect(syncText, isNot(contains('func complete_feature_steps')));
+        expect(syncText, contains('_normalize_code_files_dict'));
         expect(syncText, contains('"sync_scripts"'));
         expect(syncText, contains('sync_live_scripts'));
         expect(syncText, contains('scripts_synced'));
@@ -1678,6 +1680,8 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('Playtest in Arena'));
         expect(dockText, contains('Stop Playtest (F8)'));
         expect(dockText, contains('Open Scene'));
+        expect(dockText, contains('Open Script'));
+        expect(dockText, contains('_pending_bundle_is_auto_repair'));
         expect(dockText, contains('is_playing_scene'));
         expect(dockText, contains('collect_project_scene_paths'));
         expect(dockText, contains('capture_input_map_snapshot'));
@@ -1711,9 +1715,11 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('sceneFilePath'));
         expect(executorText, isNot(contains('func extract_feature_export_tuners')));
         expect(executorText, isNot(contains('func apply_fix_patch')));
+        expect(executorText, isNot(contains('func read_live_scripts_for_feature')));
         expect(executorText, contains('_unset_subtree_owners'));
         expect(executorText, contains('capture_bundle_snapshot'));
         expect(executorText, contains('restore_bundle_snapshot'));
+        expect(executorText, contains('restored_scripts'));
         expect(executorText, contains('is_likely_gdscript_snippet'));
         expect(executorText, contains('can_attach_script_to_node'));
         expect(executorText, contains('evaluate_feature'));

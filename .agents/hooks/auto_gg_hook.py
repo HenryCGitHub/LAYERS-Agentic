@@ -36,6 +36,8 @@ def _default_state() -> dict:
       "focus": "",
       "lastSeenInput": "",
       "injectedRound": 0,
+      "grillRetries": 0,
+      "planExitRetries": 0,
       "handoffRetries": 0,
   }
 
@@ -103,6 +105,8 @@ def _handle_pre_invocation(payload: dict) -> dict:
       state["round"] = max(1, prev_round + 1) if was_active else 1
       state["focus"] = _extract_focus(last_input)
       state["injectedRound"] = 0
+      state["grillRetries"] = 0
+      state["planExitRetries"] = 0
       state["handoffRetries"] = 0
       _save_state(state_path, state)
     elif state.get("active") or state_path.is_file():
@@ -159,10 +163,14 @@ def _handle_post_tool(payload: dict) -> dict:
       state["phase"] = "idle"
     else:
       state["phase"] = "answered"
+      state["grillRetries"] = 0
+      state["planExitRetries"] = 0
       state["handoffRetries"] = 0
     _save_state(state_path, state)
   elif name == "exit_plan_mode" or ("plan" in args and name != "enter_plan_mode"):
     state["phase"] = "building"
+    state["grillRetries"] = 0
+    state["planExitRetries"] = 0
     state["handoffRetries"] = 0
     _save_state(state_path, state)
   elif name == "enter_plan_mode":
@@ -170,6 +178,8 @@ def _handle_post_tool(payload: dict) -> dict:
       state["round"] = int(state.get("round", 1)) + 1
       state["phase"] = "grilling"
       state["injectedRound"] = 0
+      state["grillRetries"] = 0
+      state["planExitRetries"] = 0
       state["handoffRetries"] = 0
       _save_state(state_path, state)
 
@@ -208,13 +218,39 @@ def _handle_stop(payload: dict) -> dict:
   if _has_unverified_watched_dirty_code():
     return {"decision": "allow"}
 
-  if state.get("phase") in ("building", "answered") and int(
-      state.get("handoffRetries", 0)
-  ) < 1:
-    next_round = int(state.get("round", 1)) + 1
+  cur_round = int(state.get("round", 1))
+  phase = state.get("phase")
+
+  if phase == "grilling" and int(state.get("grillRetries", 0)) < 1:
+    state["grillRetries"] = 1
+    _save_state(state_path, state)
+    return {
+        "decision": "continue",
+        "reason": (
+            f"[Auto GG — Round {cur_round}] Call `ask_question` now to "
+            f"present Round {cur_round}'s Goal + Grill options (`(Recommended)` first)."
+        ),
+    }
+
+  if phase == "answered" and int(state.get("planExitRetries", 0)) < 1:
+    state["planExitRetries"] = 1
+    _save_state(state_path, state)
+    return {
+        "decision": "continue",
+        "reason": (
+            f"[Auto GG — Round {cur_round}] User answered Round {cur_round}'s "
+            "Grill — call `exit_plan_mode` (or execute & verify) now to build "
+            f"Round {cur_round}."
+        ),
+    }
+
+  if phase == "building" and int(state.get("handoffRetries", 0)) < 1:
+    next_round = cur_round + 1
     state["round"] = next_round
     state["phase"] = "grilling"
     state["injectedRound"] = 0
+    state["grillRetries"] = 0
+    state["planExitRetries"] = 0
     state["handoffRetries"] = 1
     _save_state(state_path, state)
     return {

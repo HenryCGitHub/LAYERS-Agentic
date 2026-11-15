@@ -227,6 +227,11 @@ func take_damage(amount: float) -> void:
 		printerr("FAIL: restore_bundle_snapshot returned ok=false")
 		quit(1)
 		return
+	var restored_scripts: PackedStringArray = restore_res.get("restored_scripts", PackedStringArray())
+	if not restored_scripts.has("res://scripts/smoke_fighter.gd") or restored_scripts.has("res://scripts/smoke_new_ai_helper.gd"):
+		printerr("FAIL: restore_bundle_snapshot restored_scripts mismatch: ", restored_scripts)
+		quit(1)
+		return
 	if FileAccess.get_file_as_string("res://scripts/smoke_fighter.gd") != orig_fighter_disk:
 		printerr("FAIL: restore_bundle_snapshot did not restore exact smoke_fighter.gd contents")
 		quit(1)
@@ -237,6 +242,41 @@ func take_damage(amount: float) -> void:
 		return
 	if InputMap.has_action("smoke_ai_jump"):
 		printerr("FAIL: restore_bundle_snapshot did not remove newly registered 'smoke_ai_jump' InputMap action")
+		quit(1)
+		return
+
+	var sync_scr := ResourceLoader.load("res://addons/layers/layers_sync_client.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+	var sync_node: Node = sync_scr.new()
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://.layers"))
+	var legacy_cache_json := JSON.stringify({
+		"ok": true,
+		"codeFiles": [
+			{"resPath": "res://scripts/legacy.gd", "content": "extends Node\n"}
+		]
+	})
+	if not _write_text("res://.layers/epic_cache.json", legacy_cache_json):
+		sync_node.free()
+		printerr("FAIL: could not write temporary legacy epic_cache.json")
+		quit(1)
+		return
+	sync_node.call("_update_cached_code_files", {"res://scripts/smoke_fighter.gd": orig_fighter_disk})
+	var reloaded_cache: Dictionary = sync_node.call("load_cached_epic")
+	sync_node.free()
+	var cache_cf: Variant = reloaded_cache.get("codeFiles", null)
+	var cleanup_ok := true
+	for tmp_f in ["res://.layers/epic_cache.json", "res://.layers/.gdignore", "res://.layers/.gitignore"]:
+		if FileAccess.file_exists(tmp_f):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp_f))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.layers"))
+	if typeof(cache_cf) != TYPE_DICTIONARY:
+		printerr("FAIL: expected reloaded codeFiles to be Dictionary, got type ", typeof(cache_cf))
+		quit(1)
+		return
+	var cache_cf_dict: Dictionary = cache_cf
+	if cache_cf_dict.get("res://scripts/legacy.gd", "") != "extends Node\n" or cache_cf_dict.get("res://scripts/smoke_fighter.gd", "") != orig_fighter_disk:
+		cleanup_ok = false
+	if not cleanup_ok:
+		printerr("FAIL: _update_cached_code_files / load_cached_epic lost migrated or synced script entry")
 		quit(1)
 		return
 
