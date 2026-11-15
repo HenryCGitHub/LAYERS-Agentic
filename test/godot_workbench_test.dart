@@ -1084,7 +1084,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.9"'));
+        expect(cfgText, contains('version="3.0.10"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -3903,7 +3903,7 @@ process.stdout.write("JS_NO_NODE_MODULES_OK\n");
         await tester.pumpAndSettle();
 
         expect(
-          find.text('GODOT DOCK v3.0.9 · SPEC, PLAYTEST & 2-WAY SYNC'),
+          find.text('GODOT DOCK v3.0.10 · SPEC, PLAYTEST & 2-WAY SYNC'),
           findsOneWidget,
         );
         expect(find.text('WHY: Master parry timing'), findsOneWidget);
@@ -4195,6 +4195,240 @@ process.stdout.write("JS_NO_NODE_MODULES_OK\n");
         expect(
           find.byKey(ValueKey('playtest_sheet_issues_badge_${featSheet.id}')),
           findsNothing,
+        );
+      },
+    );
+
+    test(
+      'Round 37: computeActiveEpicPayload exposes releaseGoal, causal releaseDoneWhen, and lastCompletedEpic when all Epics pass',
+      () {
+        final script =
+            buildFunctionsNodeBootstrap('./functions/index.js') +
+            r'''
+const assert = require("assert");
+const { computeActiveEpicPayload } = _testHelpers;
+
+const docs = new Map([
+  ["p_r37", {
+    id: "p_r37",
+    tier: "PROJECT",
+    title: "Shell Combat",
+    childrenIds: ["rel_r37"],
+    sections: { active_release_id: "rel_r37" }
+  }],
+  ["rel_r37", {
+    id: "rel_r37",
+    tier: "RELEASE",
+    parentId: "p_r37",
+    title: "v0.3: Claw & Shell Vertical Slice",
+    childrenIds: ["e_r37_1", "e_r37_2"],
+    sections: {
+      versionTag: "v0.3",
+      release_blueprint_json: JSON.stringify({
+        releaseDocId: "rel_r37",
+        releaseTitle: "v0.3: Claw & Shell Vertical Slice",
+        releaseVersionTag: "v0.3",
+        preset: "verticalSlice",
+        goal: "Playable parry & stagger loop",
+        doneWhen: "Deflect 3 attacks -> stagger boss and clear wave",
+        questions: [],
+        beats: []
+      })
+    }
+  }],
+  ["e_r37_1", {
+    id: "e_r37_1",
+    tier: "EPIC",
+    parentId: "rel_r37",
+    title: "Parry Defense",
+    childrenIds: ["f_r37_1"],
+    sections: { goal: "Deflect enemy melee hits" }
+  }],
+  ["e_r37_2", {
+    id: "e_r37_2",
+    tier: "EPIC",
+    parentId: "rel_r37",
+    title: "Boss Finisher",
+    childrenIds: ["f_r37_2"],
+    sections: { goal: "Finish staggered boss" }
+  }],
+  ["f_r37_1", {
+    id: "f_r37_1",
+    tier: "FEATURE",
+    parentId: "e_r37_1",
+    title: "Shell Parry",
+    sections: {
+      goal: "Block swing on frame",
+      states: JSON.stringify([{ id: "cp_1", parameters: { releaseVersion: "v0.3", playtestPassed: "true" } }])
+    }
+  }],
+  ["f_r37_2", {
+    id: "f_r37_2",
+    tier: "FEATURE",
+    parentId: "e_r37_2",
+    title: "Riposte Strike",
+    sections: {
+      goal: "Execute stagger riposte",
+      states: JSON.stringify([{ id: "cp_2", parameters: { releaseVersion: "v0.3", playtestPassed: "true" } }])
+    }
+  }]
+]);
+
+const payload = computeActiveEpicPayload({
+  docsById: docs,
+  projectId: "p_r37",
+  webStudioUrl: "https://henrycgithub.github.io/LAYERS-Agentic/"
+});
+
+assert.strictEqual(payload.allEpicsCompleted, true);
+assert.strictEqual(payload.activeEpic, null);
+assert.strictEqual(payload.releaseGoal, "Playable parry & stagger loop");
+assert.strictEqual(payload.releaseDoneWhen, "Deflect 3 attacks → stagger boss and clear wave");
+assert(payload.lastCompletedEpic && payload.lastCompletedEpic.code === "E02", "Expected lastCompletedEpic E02");
+assert.strictEqual(payload.lastCompletedEpic.features[0].id, "f_r37_2");
+assert.strictEqual(payload.lastCompletedEpic.features[0].isPlaytestPassed, true);
+
+process.stdout.write("JS_R37_COMPLETE_OK\n");
+''';
+        final result = Process.runSync('node', ['-e', script]);
+        expect(
+          result.exitCode,
+          0,
+          reason: 'stderr: ${result.stderr}\nstdout: ${result.stdout}',
+        );
+        expect(result.stdout.toString(), contains('JS_R37_COMPLETE_OK'));
+      },
+    );
+
+    testWidgets(
+      'Round 37: Web Studio honors ?next_release=1 deep-link upon release completion and displays causal END GOAL inside Connect Godot modal',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final cp = FeatureStateNode(
+          id: 'cp_r37_1',
+          name: '01 · PROTOTYPE',
+          trigger: 'Dash through arena ring -> cooldown resets',
+          edgeCases: const ['[STATE GUARD] Clamp dash charge >= 0'],
+          parameters: {'releaseVersion': 'v0.1', 'playtestPassed': 'false'},
+        );
+        final feat = TierDocument(
+          id: 'feat_r37_1',
+          title: 'Dash Ring',
+          tier: TierType.feature,
+          parentId: 'epic_r37_1',
+          phase: 'v0.1',
+          sections: {
+            'lifecycle': 'newFeature',
+            'originVersion': 'v0.1',
+            'scope':
+                'Goal: Chain air dashes cleanly\n\nIn Scope:\n• Air dash impulse\n\nDone When: Press Shift -> dash clears gap',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+
+        final epic = TierDocument(
+          id: 'epic_r37_1',
+          title: 'Arena Mobility',
+          tier: TierType.epic,
+          parentId: 'rel_r37_v01',
+          phase: 'v0.1',
+          childrenIds: [feat.id],
+          sections: {'goal': 'Move fast through test room'},
+        );
+        final relBp = ReleaseBlueprint(
+          releaseDocId: 'rel_r37_v01',
+          releaseTitle: 'v0.1: Prototype',
+          releaseVersionTag: 'v0.1',
+          preset: ReleaseScope.prototype,
+          goal: 'Playable movement testbed',
+          doneWhen: 'Clear 3 ring gaps -> return to start platform cleanly',
+          questions: const [],
+          beats: const [],
+        );
+        final rel = TierDocument(
+          id: 'rel_r37_v01',
+          title: 'v0.1: Prototype',
+          tier: TierType.release,
+          parentId: 'proj_r37_ui',
+          phase: 'v0.1',
+          childrenIds: [epic.id],
+          sections: {
+            'versionTag': 'v0.1',
+            'release_blueprint_json': jsonEncode(relBp.toJson()),
+          },
+        );
+        final proj = TierDocument(
+          id: 'proj_r37_ui',
+          title: 'Ring Runner',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.projectPitch.name,
+          },
+        );
+        for (final d in [proj, rel, epic, feat]) {
+          provider.documents[d.id] = d;
+        }
+
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        // 1. Apply ?project=<id>&next_release=1 while v0.1 is still incomplete -> opens ReleaseWorkbench without premature modal
+        provider.applyDeepLinkParams({
+          'project': proj.id,
+          'next_release': '1',
+        });
+        await tester.pumpAndSettle();
+
+        expect(
+          provider.currentStage,
+          equals(WorkbenchStage.releaseWorkbench),
+        );
+        expect(
+          find.byKey(const ValueKey('progressive_next_release_modal')),
+          findsNothing,
+        );
+
+        // 2. Completing the final feature satisfies pending ?next_release=1 & auto-opens Progressive Release Co-Pilot
+        final passedCp = cp.copyWith(
+          parameters: {...cp.parameters, 'playtestPassed': 'true'},
+        );
+        provider.updateFeatureStates(feat.id, [passedCp]);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('progressive_next_release_modal')),
+          findsOneWidget,
+        );
+
+        // 3. Canceling planner returns to completed release; Connect Godot Modal shows causal END GOAL
+        await tester.tap(find.text('Cancel'));
+        await tester.pumpAndSettle();
+
+        final snap = provider.computeActiveGodotEpicSnapshot();
+        expect(snap.allEpicsCompleted, isTrue);
+        expect(
+          snap.releaseDoneWhen,
+          equals('Clear 3 ring gaps → return to start platform cleanly'),
+        );
+
+        final chip = find.byKey(ValueKey('connect_godot_plugin_chip_${cp.id}'));
+        expect(chip, findsOneWidget);
+        await tester.tap(chip);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('END GOAL: Clear 3 ring gaps → return to start platform cleanly'),
+          findsOneWidget,
         );
       },
     );

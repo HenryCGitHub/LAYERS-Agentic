@@ -113,7 +113,12 @@ var _sync_btn: Button
 var _web_btn: Button
 var _settings_btn: Button
 var _feature_picker: OptionButton
-var _complete_card: VBoxContainer
+var _complete_card: PanelContainer
+var _complete_title_lbl: Label
+var _complete_goal_lbl: Label
+var _complete_done_lbl: Label
+var _complete_playtest_btn: Button
+var _complete_web_btn: Button
 var _step_scroll: ScrollContainer
 var _body_container: VBoxContainer
 var _footer_box: VBoxContainer
@@ -396,7 +401,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.9")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.10")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -467,35 +472,82 @@ func _build_ui() -> void:
 	_settings_btn.pressed.connect(_on_settings_pressed)
 	top_bar.add_child(_settings_btn)
 
+	_complete_card = PanelContainer.new()
+	_complete_card.visible = false
+	var complete_sb: StyleBox = _editor_stylebox("panel", "Tree")
+	if complete_sb != null:
+		_complete_card.add_theme_stylebox_override("panel", complete_sb)
+	_workspace_panel.add_child(_complete_card)
+
+	var complete_margin := MarginContainer.new()
+	complete_margin.add_theme_constant_override("margin_left", _S(8))
+	complete_margin.add_theme_constant_override("margin_right", _S(8))
+	complete_margin.add_theme_constant_override("margin_top", _S(6))
+	complete_margin.add_theme_constant_override("margin_bottom", _S(6))
+	_complete_card.add_child(complete_margin)
+
+	var complete_vb := VBoxContainer.new()
+	complete_vb.add_theme_constant_override("separation", _S(6))
+	complete_margin.add_child(complete_vb)
+
+	_complete_title_lbl = Label.new()
+	_complete_title_lbl.text = "Release Complete ✓"
+	_complete_title_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	if bold_font != null:
+		_complete_title_lbl.add_theme_font_override("font", bold_font)
+	_complete_title_lbl.add_theme_color_override("font_color", _editor_color("success_color", Color(0.36, 0.85, 0.56)))
+	complete_vb.add_child(_complete_title_lbl)
+
+	_complete_goal_lbl = Label.new()
+	_complete_goal_lbl.visible = false
+	_complete_goal_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_complete_goal_lbl.add_theme_color_override("font_color", _editor_color("font_color", Color(0.88, 0.90, 0.94)))
+	complete_vb.add_child(_complete_goal_lbl)
+
+	var complete_done_panel := PanelContainer.new()
+	var done_sb: StyleBox = _editor_stylebox("normal", "LineEdit")
+	if done_sb == null:
+		done_sb = _editor_stylebox("bg", "Tree")
+	if done_sb != null:
+		complete_done_panel.add_theme_stylebox_override("panel", done_sb)
+	complete_vb.add_child(complete_done_panel)
+
+	var complete_done_margin := MarginContainer.new()
+	complete_done_margin.add_theme_constant_override("margin_left", _S(6))
+	complete_done_margin.add_theme_constant_override("margin_right", _S(6))
+	complete_done_margin.add_theme_constant_override("margin_top", _S(5))
+	complete_done_margin.add_theme_constant_override("margin_bottom", _S(5))
+	complete_done_panel.add_child(complete_done_margin)
+
+	_complete_done_lbl = Label.new()
+	_complete_done_lbl.text = "End Goal: Press F6 and verify all features work together with 0 console errors."
+	_complete_done_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_complete_done_lbl.add_theme_color_override("font_color", _editor_color("font_color", Color(0.88, 0.90, 0.94)))
+	complete_done_margin.add_child(_complete_done_lbl)
+
+	var complete_btn_flow := HFlowContainer.new()
+	complete_btn_flow.add_theme_constant_override("h_separation", _S(6))
+	complete_btn_flow.add_theme_constant_override("v_separation", _S(4))
+	complete_vb.add_child(complete_btn_flow)
+
+	_complete_playtest_btn = Button.new()
+	_complete_playtest_btn.text = "Playtest Release (F6)"
+	_complete_playtest_btn.icon = _editor_icon("PlayScene", "Play")
+	_complete_playtest_btn.pressed.connect(_on_complete_playtest_pressed)
+	complete_btn_flow.add_child(_complete_playtest_btn)
+
+	_complete_web_btn = Button.new()
+	_complete_web_btn.text = "Plan Next Release in Web Studio"
+	_complete_web_btn.icon = _editor_icon("ExternalLink")
+	_complete_web_btn.pressed.connect(_on_open_next_release_web_pressed)
+	complete_btn_flow.add_child(_complete_web_btn)
+
 	_feature_picker = OptionButton.new()
 	_feature_picker.clip_text = true
 	_feature_picker.item_selected.connect(_on_feature_selected)
 	_workspace_panel.add_child(_feature_picker)
 
 	_workspace_panel.add_child(HSeparator.new())
-
-	_complete_card = VBoxContainer.new()
-	_complete_card.visible = false
-	_complete_card.add_theme_constant_override("separation", _S(8))
-	_workspace_panel.add_child(_complete_card)
-
-	var done_title := Label.new()
-	done_title.text = "All Epics Complete"
-	if bold_font != null:
-		done_title.add_theme_font_override("font", bold_font)
-	done_title.add_theme_color_override("font_color", _editor_color("success_color", Color(0.36, 0.85, 0.56)))
-	_complete_card.add_child(done_title)
-
-	var done_hint := Label.new()
-	done_hint.text = "Open LAYERS Web Studio to generate the next Release."
-	done_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_complete_card.add_child(done_hint)
-
-	var done_web_btn := Button.new()
-	done_web_btn.text = "Open Web Studio"
-	done_web_btn.icon = _editor_icon("ExternalLink")
-	done_web_btn.pressed.connect(_on_open_web_pressed)
-	_complete_card.add_child(done_web_btn)
 
 	_step_scroll = ScrollContainer.new()
 	_step_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -539,14 +591,73 @@ func _refresh_update_banner() -> void:
 		_update_now_btn.text = "Updating..." if _updating_plugin else "Update Now"
 
 
+func _resolve_display_epic(payload_dict: Dictionary = _payload) -> Dictionary:
+	var active_raw: Variant = payload_dict.get("activeEpic", null)
+	if typeof(active_raw) == TYPE_DICTIONARY and not (active_raw as Dictionary).is_empty():
+		return active_raw as Dictionary
+	var last_raw: Variant = payload_dict.get("lastCompletedEpic", null)
+	if typeof(last_raw) == TYPE_DICTIONARY and not (last_raw as Dictionary).is_empty():
+		return last_raw as Dictionary
+	return {}
+
+
+func _mark_release_incomplete_locally() -> void:
+	if bool(_payload.get("allEpicsCompleted", false)):
+		_payload["allEpicsCompleted"] = false
+	var active_raw: Variant = _payload.get("activeEpic", null)
+	if typeof(active_raw) != TYPE_DICTIONARY or (active_raw as Dictionary).is_empty():
+		var last_raw: Variant = _payload.get("lastCompletedEpic", null)
+		if typeof(last_raw) == TYPE_DICTIONARY and not (last_raw as Dictionary).is_empty():
+			_payload["activeEpic"] = last_raw
+
+
+func _refresh_complete_card(ver: String) -> void:
+	if _complete_title_lbl != null:
+		_complete_title_lbl.text = "Release %s Complete ✓" % ver
+	var rel_goal: String = str(_payload.get("releaseGoal", "")).strip_edges()
+	if _complete_goal_lbl != null:
+		_complete_goal_lbl.visible = not rel_goal.is_empty()
+		if not rel_goal.is_empty():
+			_complete_goal_lbl.text = "Goal: %s" % rel_goal
+	var rel_done: String = str(_payload.get("releaseDoneWhen", "")).strip_edges()
+	rel_done = rel_done.replace(" -> ", " → ").replace("-> ", " → ").replace(" ->", " → ").replace("->", " → ").strip_edges()
+	if rel_done.is_empty():
+		rel_done = "Press F6 and verify all Release %s features work together with 0 console errors." % ver
+	if _complete_done_lbl != null:
+		_complete_done_lbl.text = "End Goal: %s" % rel_done
+	if _complete_playtest_btn != null:
+		var is_playing := _is_editor_playing()
+		_complete_playtest_btn.text = "Stop Playtest (F8)" if is_playing else "Playtest Release (F6)"
+		_complete_playtest_btn.icon = _editor_icon("Stop" if is_playing else "PlayScene", "Play")
+
+
+func _on_complete_playtest_pressed() -> void:
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+	var primary_scene: String = str(_get_active_feature().get("primaryAsset", "")).strip_edges()
+	_on_playtest_arena_pressed(arena_scene, primary_scene)
+
+
+func _on_open_next_release_web_pressed() -> void:
+	var base_url: String = str(_payload.get("webStudioUrl", DEFAULT_WEB_STUDIO_URL)).strip_edges()
+	var project_id: String = str(_payload.get("projectId", "")).strip_edges()
+	OS.shell_open(build_web_studio_deep_link(base_url, project_id, "", true))
+
+
 func _format_epic_meta_line(
 	ver: String,
 	epic_code: String,
 	pos: int,
 	total: int,
 	passed_count: int = -1,
-	feat_total: int = 0
+	feat_total: int = 0,
+	all_done: bool = false
 ) -> String:
+	if all_done:
+		if total == 1:
+			return "%s · 1/1 Epic Complete ✓" % ver
+		if total > 1:
+			return "%s · %d/%d Epics Complete ✓" % [ver, total, total]
+		return "%s · Release Complete ✓" % ver
 	var epic_part: String = ("%s (%d/%d active)" % [epic_code, maxi(pos, 1), total]) if total > 1 else epic_code
 	if passed_count >= 0 and feat_total > 0:
 		return "%s · %s · %d/%d Passed" % [ver, epic_part, passed_count, feat_total]
@@ -586,37 +697,34 @@ func _refresh_view() -> void:
 	var pos: int = int(_payload.get("epicPosition", 0))
 	var total: int = int(_payload.get("totalEpics", 0))
 	var all_done: bool = bool(_payload.get("allEpicsCompleted", false))
-	var epic_raw: Variant = _payload.get("activeEpic", null)
-	var epic_code: String = "E01"
-	if typeof(epic_raw) == TYPE_DICTIONARY:
-		var epic_dict_tmp: Dictionary = epic_raw as Dictionary
-		if epic_dict_tmp.has("code"):
-			epic_code = str(epic_dict_tmp.get("code", "E01"))
-	_meta_label.text = _format_epic_meta_line(ver, epic_code, pos, total)
+	var epic: Dictionary = _resolve_display_epic(_payload)
+	var epic_code: String = str(epic.get("code", "E01")) if not epic.is_empty() else "E01"
+	_meta_label.text = _format_epic_meta_line(ver, epic_code, pos, total, -1, 0, all_done)
 
 	if all_done:
-		_epic_label.text = str(_payload.get("releaseTitle", ver))
+		var rel_title := str(_payload.get("releaseTitle", "")).strip_edges()
+		_epic_label.text = rel_title if (not rel_title.is_empty() and rel_title != ver) else ("Release %s Complete" % ver)
 		_epic_label.tooltip_text = ""
-		_feature_picker.visible = false
 		_complete_card.visible = true
+		_refresh_complete_card(ver)
 		_footer_box.visible = false
-		_clear_body()
-		return
-
-	_complete_card.visible = false
-	if typeof(epic_raw) != TYPE_DICTIONARY or (epic_raw as Dictionary).is_empty():
-		_epic_label.text = "No active Epic yet — plan in Web Studio."
-		_epic_label.tooltip_text = ""
-		_feature_picker.visible = false
-		_footer_box.visible = false
-		_clear_body()
-		return
-
-	var epic: Dictionary = epic_raw as Dictionary
-	var epic_title_txt: String = str(epic.get("title", "Epic"))
-	var epic_goal_txt: String = str(epic.get("goal", "")).strip_edges()
-	_epic_label.text = epic_title_txt
-	_epic_label.tooltip_text = ("%s\nGoal: %s" % [epic_title_txt, epic_goal_txt]) if not epic_goal_txt.is_empty() else epic_title_txt
+		if epic.is_empty() or (epic.get("features", []) as Array).is_empty():
+			_feature_picker.visible = false
+			_clear_body()
+			return
+	else:
+		_complete_card.visible = false
+		if epic.is_empty():
+			_epic_label.text = "No active Epic yet — plan in Web Studio."
+			_epic_label.tooltip_text = ""
+			_feature_picker.visible = false
+			_footer_box.visible = false
+			_clear_body()
+			return
+		var epic_title_txt: String = str(epic.get("title", "Epic"))
+		var epic_goal_txt: String = str(epic.get("goal", "")).strip_edges()
+		_epic_label.text = epic_title_txt
+		_epic_label.tooltip_text = ("%s\nGoal: %s" % [epic_title_txt, epic_goal_txt]) if not epic_goal_txt.is_empty() else epic_title_txt
 
 	var features: Array = epic.get("features", [])
 	_feature_picker.clear()
@@ -659,7 +767,8 @@ func _refresh_view() -> void:
 		if first_incomplete_idx == -1 and not f_done:
 			first_incomplete_idx = i
 
-	_meta_label.text = _format_epic_meta_line(ver, epic_code, pos, total, passed_count, features.size())
+	if not all_done:
+		_meta_label.text = _format_epic_meta_line(ver, epic_code, pos, total, passed_count, features.size())
 
 	if chosen_idx == -1:
 		if payload_sel_idx != -1:
@@ -675,10 +784,10 @@ func _refresh_view() -> void:
 func _get_feature_by_id(feat_id: String) -> Dictionary:
 	if feat_id.is_empty():
 		return {}
-	var epic_raw: Variant = _payload.get("activeEpic", null)
-	if typeof(epic_raw) != TYPE_DICTIONARY:
+	var epic: Dictionary = _resolve_display_epic(_payload)
+	if epic.is_empty():
 		return {}
-	for f_raw in (epic_raw as Dictionary).get("features", []):
+	for f_raw in epic.get("features", []):
 		if typeof(f_raw) == TYPE_DICTIONARY and str((f_raw as Dictionary).get("id", "")) == feat_id:
 			return f_raw as Dictionary
 	return {}
@@ -688,10 +797,10 @@ func _get_active_feature() -> Dictionary:
 	var by_id := _get_feature_by_id(_selected_feature_id)
 	if not by_id.is_empty():
 		return by_id
-	var epic_raw: Variant = _payload.get("activeEpic", null)
-	if typeof(epic_raw) != TYPE_DICTIONARY:
+	var epic: Dictionary = _resolve_display_epic(_payload)
+	if epic.is_empty():
 		return {}
-	var features: Array = (epic_raw as Dictionary).get("features", [])
+	var features: Array = epic.get("features", [])
 	return (features[0] as Dictionary) if not features.is_empty() and typeof(features[0]) == TYPE_DICTIONARY else {}
 
 
@@ -1164,7 +1273,10 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		issue_vb.add_child(log_btn)
 
 	if _footer_box != null:
-		_footer_box.visible = true
+		if bool(_payload.get("allEpicsCompleted", false)):
+			_footer_box.visible = false
+		else:
+			_footer_box.visible = true
 		if _primary_cta_btn != null:
 			if gate_passed:
 				_primary_cta_btn.disabled = true
@@ -1459,6 +1571,7 @@ func _submit_log_issue(feat: Dictionary, issue_text: String) -> void:
 	_issue_composer_expanded = false
 	if _fix_input != null:
 		_fix_input.text = ""
+	_mark_release_incomplete_locally()
 	if _sync != null and not _payload.is_empty():
 		_sync.save_cached_epic(_payload)
 	_set_status("Logged playtest issue.", false)
@@ -1501,6 +1614,8 @@ func _on_playtest_watch_tick() -> void:
 				_executor.call("invalidate_eval_cache")
 			if is_inside_tree() and _post_playtest_log_timer != null:
 				_post_playtest_log_timer.start()
+		if _complete_card != null and _complete_card.visible:
+			_refresh_complete_card(str(_payload.get("releaseVersion", "v0.1")))
 		var feat := _get_active_feature()
 		if not _show_token_editor and _workspace_panel != null and _workspace_panel.visible and not feat.is_empty():
 			_render_active_feature_workspace(feat)
@@ -1559,10 +1674,10 @@ func _on_open_res_path_pressed(res_path: String, line_number: int = -1) -> void:
 
 
 func _on_feature_selected(idx: int) -> void:
-	var epic_raw: Variant = _payload.get("activeEpic", null)
-	if typeof(epic_raw) != TYPE_DICTIONARY:
+	var epic: Dictionary = _resolve_display_epic(_payload)
+	if epic.is_empty():
 		return
-	var features: Array = (epic_raw as Dictionary).get("features", [])
+	var features: Array = epic.get("features", [])
 	if idx >= 0 and idx < features.size():
 		var f: Dictionary = features[idx]
 		var next_id := str(f.get("id", ""))
@@ -1598,15 +1713,21 @@ func _on_primary_cta_pressed() -> void:
 			if typeof(g_raw) == TYPE_DICTIONARY:
 				(g_raw as Dictionary)["signedOff"] = true
 
-	var epic_raw: Variant = _payload.get("activeEpic", null)
-	if typeof(epic_raw) == TYPE_DICTIONARY:
-		var features: Array = (epic_raw as Dictionary).get("features", [])
+	var has_remaining_incomplete: bool = false
+	var epic_dict: Dictionary = _resolve_display_epic(_payload)
+	if not epic_dict.is_empty():
+		var features: Array = epic_dict.get("features", [])
 		for f_raw in features:
 			if typeof(f_raw) == TYPE_DICTIONARY:
 				var fd: Dictionary = f_raw as Dictionary
-				if str(fd.get("id", "")) != feat_id and not bool(fd.get("isCompleted", false)):
-					_selected_feature_id = str(fd.get("id", ""))
-					break
+				if str(fd.get("id", "")) != feat_id and not bool(fd.get("isCompleted", false)) and not bool(fd.get("isPlaytestPassed", false)):
+					if not has_remaining_incomplete:
+						_selected_feature_id = str(fd.get("id", ""))
+					has_remaining_incomplete = true
+		if not has_remaining_incomplete and int(_payload.get("epicPosition", 1)) >= maxi(int(_payload.get("totalEpics", 1)), 1):
+			_payload["lastCompletedEpic"] = epic_dict
+			_payload["activeEpic"] = null
+			_payload["allEpicsCompleted"] = true
 
 	if not _payload.is_empty():
 		_sync.save_cached_epic(_payload)
@@ -1623,6 +1744,7 @@ func _on_reopen_gate_pressed(feat: Dictionary) -> void:
 	feat["isPlaytestPassed"] = false
 	feat["isCompleted"] = false
 	_recompute_feature_progress(feat)
+	_mark_release_incomplete_locally()
 	if _sync != null and not _payload.is_empty():
 		_sync.save_cached_epic(_payload)
 	_set_status("Playtest gate reopened — iterate & re-verify when ready.", false)
@@ -1653,8 +1775,7 @@ func _on_copy_context_pressed(feat: Dictionary) -> void:
 	var ctx_feat: Dictionary = feat.duplicate()
 	if not ctx_feat.has("releaseVersion"):
 		ctx_feat["releaseVersion"] = str(_payload.get("releaseVersion", "v0.1"))
-	var epic_raw: Variant = _payload.get("activeEpic", {})
-	var epic_dict: Dictionary = epic_raw if typeof(epic_raw) == TYPE_DICTIONARY else {}
+	var epic_dict: Dictionary = _resolve_display_epic(_payload)
 	var sibling_tuning: Array = []
 	var cur_feat_id: String = str(feat.get("id", "")).strip_edges()
 	var epic_feats: Variant = epic_dict.get("features", [])
@@ -1701,8 +1822,8 @@ func _on_copy_context_pressed(feat: Dictionary) -> void:
 
 
 func _on_epic_updated(payload: Dictionary) -> void:
-	var prev_epic_id := str((_payload.get("activeEpic", {}) as Dictionary).get("id", "")) if typeof(_payload.get("activeEpic", null)) == TYPE_DICTIONARY else ""
-	var next_epic_id := str((payload.get("activeEpic", {}) as Dictionary).get("id", "")) if typeof(payload.get("activeEpic", null)) == TYPE_DICTIONARY else ""
+	var prev_epic_id := str(_resolve_display_epic(_payload).get("id", ""))
+	var next_epic_id := str(_resolve_display_epic(payload).get("id", ""))
 	var remote_focus_id := str(payload.get("selectedFeatureId", "")).strip_edges()
 	var remote_web_sel := str(payload.get("webSelectedFeatureId", "")).strip_edges()
 	var web_sel_changed := (not remote_web_sel.is_empty()) and remote_web_sel != _last_synced_web_selected_id
@@ -1893,7 +2014,7 @@ func _on_sync_pressed() -> void:
 		_refresh_view()
 
 
-func build_web_studio_deep_link(base_url: String, project_id: String, feature_id: String) -> String:
+func build_web_studio_deep_link(base_url: String, project_id: String, feature_id: String, open_next_release: bool = false) -> String:
 	var url := base_url.strip_edges()
 	if url.is_empty():
 		url = DEFAULT_WEB_STUDIO_URL
@@ -1909,6 +2030,8 @@ func build_web_studio_deep_link(base_url: String, project_id: String, feature_id
 		params.append("project=%s" % clean_proj.uri_encode())
 	if not clean_feat.is_empty():
 		params.append("feature=%s" % clean_feat.uri_encode())
+	if open_next_release:
+		params.append("next_release=1")
 	if not params.is_empty():
 		var sep := "&" if url.contains("?") else "?"
 		url = "%s%s%s" % [url, sep, "&".join(params)]

@@ -14,6 +14,8 @@ class ActiveGodotEpicSnapshot {
   final int completedFeaturesInActiveEpic;
   final int totalFeaturesInActiveEpic;
   final bool allEpicsCompleted;
+  final String releaseGoal;
+  final String releaseDoneWhen;
 
   const ActiveGodotEpicSnapshot({
     required this.releaseVersion,
@@ -28,6 +30,8 @@ class ActiveGodotEpicSnapshot {
     required this.completedFeaturesInActiveEpic,
     required this.totalFeaturesInActiveEpic,
     required this.allEpicsCompleted,
+    this.releaseGoal = '',
+    this.releaseDoneWhen = '',
   });
 }
 
@@ -79,6 +83,24 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
   ActiveGodotEpicSnapshot computeActiveGodotEpicSnapshot() {
     final activeVer = activeReleaseVersionTag;
     final beats = activeReleaseBeats;
+    final activeRel = activeRelease;
+    final relBp = activeRel != null ? releaseBlueprintFor(activeRel.id) : null;
+    final rawRelGoal = (relBp?.goal.trim().isNotEmpty ?? false)
+        ? relBp!.goal.trim()
+        : SectionTextUtils.resolveGoal(activeRel?.sections ?? const {});
+    final relGoal = rawRelGoal
+        .replaceFirst(RegExp(r'^Goal:\s*', caseSensitive: false), '')
+        .trim();
+    final rawRelDone = (relBp?.doneWhen.trim().isNotEmpty ?? false)
+        ? relBp!.doneWhen.trim()
+        : SectionTextUtils.resolveDoneWhen(activeRel?.sections ?? const {});
+    final strippedRelDone = rawRelDone
+        .replaceFirst(RegExp(r'^End\s*Goal:\s*', caseSensitive: false), '')
+        .trim();
+    final relDoneWhen = SectionTextUtils.resolveCheckpointDoneWhen(
+      playtestGoalParam: strippedRelDone,
+      sections: activeProject?.sections ?? const {},
+    );
     if (beats.isEmpty) {
       return ActiveGodotEpicSnapshot(
         releaseVersion: activeVer,
@@ -91,6 +113,8 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
         completedFeaturesInActiveEpic: 0,
         totalFeaturesInActiveEpic: 0,
         allEpicsCompleted: false,
+        releaseGoal: relGoal,
+        releaseDoneWhen: relDoneWhen,
       );
     }
 
@@ -189,6 +213,8 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
         completedFeaturesInActiveEpic: 0,
         totalFeaturesInActiveEpic: 0,
         allEpicsCompleted: false,
+        releaseGoal: relGoal,
+        releaseDoneWhen: relDoneWhen,
       );
     }
 
@@ -213,6 +239,8 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
           completedFeaturesInActiveEpic: c.doneCount,
           totalFeaturesInActiveEpic: c.totalCount,
           allEpicsCompleted: false,
+          releaseGoal: relGoal,
+          releaseDoneWhen: relDoneWhen,
         );
       }
     }
@@ -231,6 +259,8 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       completedFeaturesInActiveEpic: last.doneCount,
       totalFeaturesInActiveEpic: last.totalCount,
       allEpicsCompleted: true,
+      releaseGoal: relGoal,
+      releaseDoneWhen: relDoneWhen,
     );
   }
 

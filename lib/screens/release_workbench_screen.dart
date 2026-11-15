@@ -441,6 +441,24 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
   @override
   Widget build(BuildContext context) {
     final rel = widget.workbench.activeRelease;
+    if (widget.workbench.hasPendingOpenNextReleaseModal &&
+        widget.workbench.isActiveReleaseComplete &&
+        !_isProgressiveModalOpen &&
+        !widget.workbench.isAgentBusy &&
+        widget.workbench.currentStage == WorkbenchStage.releaseWorkbench) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (!widget.workbench.isActiveReleaseComplete ||
+            _isProgressiveModalOpen ||
+            widget.workbench.isAgentBusy ||
+            widget.workbench.currentStage != WorkbenchStage.releaseWorkbench) {
+          return;
+        }
+        if (widget.workbench.consumePendingOpenNextReleaseModal()) {
+          _showProgressiveNextReleaseModal(context);
+        }
+      });
+    }
 
     return LayoutBuilder(
       builder: (context, constraints) {

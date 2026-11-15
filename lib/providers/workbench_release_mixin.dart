@@ -2224,6 +2224,10 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       }
     }
     _persistDocument(feat, debounce: true);
+    if (_pendingUrlNextRelease && isActiveReleaseComplete) {
+      _pendingUrlNextRelease = false;
+      _pendingOpenNextReleaseModal = true;
+    }
     notifyListeners();
   }
 

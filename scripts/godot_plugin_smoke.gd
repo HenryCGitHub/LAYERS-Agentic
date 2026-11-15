@@ -13,7 +13,7 @@ class _SyncSpy extends Node:
 		return "lyr_spy_1234567890123456"
 
 	func get_local_plugin_version() -> String:
-		return "3.0.9"
+		return "3.0.10"
 
 	func fetch_active_epic() -> void:
 		fetched_count += 1
@@ -406,7 +406,7 @@ func _run_smoke_suite() -> bool:
 		"projectTitle": "Smoke Test Game",
 		"releaseVersion": "v0.1",
 		"epicPosition": 1,
-		"totalEpics": 1,
+		"totalEpics": 2,
 		"arenaScenePath": SMOKE_SCENE_PATH,
 		"activeEpic": {
 			"id": "ep_1",
@@ -531,9 +531,12 @@ func _run_smoke_suite() -> bool:
 		return false
 	dock.call("_render_active_feature_workspace", feat_probe)
 	if not bool((footer_box as Control).visible) or not cta_btn.disabled or cta_btn.text != "✓ Playtest Passed":
+		var vis_str: String = str((footer_box as Control).visible)
+		var dis_str: String = str(cta_btn.disabled)
+		var txt_str: String = cta_btn.text
 		sync_probe.free()
 		dock.free()
-		_fail("Expected visible disabled '✓ Playtest Passed' footer button on passed feature, got visible=%s disabled=%s text=%s" % [str((footer_box as Control).visible), str(cta_btn.disabled), cta_btn.text])
+		_fail("Expected visible disabled '✓ Playtest Passed' footer button on passed feature, got visible=%s disabled=%s text=%s" % [vis_str, dis_str, txt_str])
 		return false
 	var issues_after_pass: Array = feat_probe.get("openIssues", [])
 	if not issues_after_pass.is_empty():
@@ -629,6 +632,11 @@ func _run_smoke_suite() -> bool:
 	if deep_link != "https://henrycgithub.github.io/LAYERS-Agentic/?project=proj_abc&feature=feat_xyz":
 		dock.free()
 		_fail("build_web_studio_deep_link mismatch: %s" % deep_link)
+		return false
+	var deep_link_next_rel: String = str(dock.call("build_web_studio_deep_link", "https://henrycgithub.github.io/LAYERS-Agentic/", "proj_abc", "", true))
+	if deep_link_next_rel != "https://henrycgithub.github.io/LAYERS-Agentic/?project=proj_abc&next_release=1":
+		dock.free()
+		_fail("build_web_studio_deep_link next_release mismatch: %s" % deep_link_next_rel)
 		return false
 
 	var queued_feat: Dictionary = {
@@ -904,6 +912,118 @@ func _run_smoke_suite() -> bool:
 		dock.set("_sync", null)
 		dock.free()
 		_fail("Expected sync with changed webSelectedFeatureId='f_3' to follow Web Studio, got: %s" % actual_focus_follow)
+		return false
+
+	# 8. Release-Complete Sign-Off & Reopen Parity (v3.0.10)
+	var done_meta_plural: String = str(dock.call("_format_epic_meta_line", "v0.3", "E02", 2, 2, -1, 0, true))
+	if done_meta_plural != "v0.3 · 2/2 Epics Complete ✓":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected plural release-complete meta line, got: %s" % done_meta_plural)
+		return false
+	var done_meta_single: String = str(dock.call("_format_epic_meta_line", "v0.1", "E01", 1, 1, -1, 0, true))
+	if done_meta_single != "v0.1 · 1/1 Epic Complete ✓":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected singular release-complete meta line, got: %s" % done_meta_single)
+		return false
+
+	var complete_payload: Dictionary = {
+		"ok": true,
+		"projectId": "p_fin",
+		"projectTitle": "Shell Combat",
+		"releaseVersion": "v0.3",
+		"releaseTitle": "Claw & Shell Vertical Slice",
+		"epicPosition": 2,
+		"totalEpics": 2,
+		"allEpicsCompleted": true,
+		"releaseGoal": "Playable parry and stagger loop",
+		"releaseDoneWhen": "Deflect 3 attacks -> stagger boss and clear wave",
+		"activeEpic": null,
+		"lastCompletedEpic": {
+			"id": "e_02",
+			"code": "E02",
+			"title": "Boss Finisher",
+			"goal": "Finish staggered boss",
+			"features": [
+				{
+					"id": "f_fin",
+					"checkpointId": "cp_fin",
+					"title": "Riposte Strike",
+					"goal": "Execute stagger riposte",
+					"doneWhen": "Press Attack on staggered foe -> riposte hits",
+					"isPlaytestPassed": true,
+					"isCompleted": true,
+					"progress": 100,
+					"edgeCases": [],
+					"openIssues": [],
+				},
+			],
+		},
+	}
+	dock.set("_payload", {})
+	dock.set("_selected_feature_id", "")
+	dock.set("_pull_sync_pending", true)
+	dock.call("_on_epic_updated", complete_payload)
+	var complete_meta_actual: String = str((dock.get("_meta_label") as Label).text)
+	if complete_meta_actual != "v0.3 · 2/2 Epics Complete ✓":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected complete meta label 'v0.3 · 2/2 Epics Complete ✓', got: %s" % complete_meta_actual)
+		return false
+	var complete_card_ctrl: Control = dock.get("_complete_card") as Control
+	var picker_ctrl: Control = dock.get("_feature_picker") as Control
+	if complete_card_ctrl == null or not complete_card_ctrl.visible or picker_ctrl == null or not picker_ctrl.visible or bool((footer_box as Control).visible):
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected _complete_card=true, _feature_picker=true, _footer_box=false when allEpicsCompleted=true.")
+		return false
+	var cc_labels := PackedStringArray()
+	_collect_labels_text(complete_card_ctrl, cc_labels)
+	var cc_joined: String = "\n".join(cc_labels)
+	if cc_joined.find("Release v0.3 Complete ✓") == -1 or cc_joined.find("Goal: Playable parry and stagger loop") == -1 or cc_joined.find("End Goal: Deflect 3 attacks → stagger boss and clear wave") == -1:
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Missing expected Release Complete card copy: %s" % cc_joined)
+		return false
+	var cc_play_btns: Array[Button] = []
+	_collect_buttons_by_text(complete_card_ctrl, "Playtest Release (F6)", cc_play_btns)
+	var cc_web_btns: Array[Button] = []
+	_collect_buttons_by_text(complete_card_ctrl, "Plan Next Release in Web Studio", cc_web_btns)
+	if cc_play_btns.is_empty() or cc_web_btns.is_empty():
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Missing Playtest Release (F6) or Plan Next Release in Web Studio button on _complete_card.")
+		return false
+	var reopen_btns: Array[Button] = []
+	_collect_buttons_by_text(body_container, "Reopen Gate", reopen_btns)
+	if reopen_btns.is_empty():
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected 'Reopen Gate' button accessible when inspecting completed feature in allEpicsCompleted view.")
+		return false
+	var active_fin_feat: Dictionary = dock.call("_get_active_feature")
+	dock.call("_on_reopen_gate_pressed", active_fin_feat)
+	var reopened_payload: Dictionary = dock.get("_payload")
+	if bool(reopened_payload.get("allEpicsCompleted", true)) or complete_card_ctrl.visible or not bool((footer_box as Control).visible):
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected _on_reopen_gate_pressed from completed release to clear allEpicsCompleted & show footer CTA.")
+		return false
+	var reopened_meta_actual: String = str((dock.get("_meta_label") as Label).text)
+	if reopened_meta_actual != "v0.3 · E02 (2/2 active) · 0/1 Passed":
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("Expected reopened meta label 'v0.3 · E02 (2/2 active) · 0/1 Passed', got: %s" % reopened_meta_actual)
 		return false
 
 	sync_v03.free()

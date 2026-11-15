@@ -78,6 +78,14 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _pendingUrlInvitedEmail;
   String? _pendingUrlProjectId;
   String? _pendingUrlFeatureId;
+  bool _pendingUrlNextRelease = false;
+  bool _pendingOpenNextReleaseModal = false;
+  bool get hasPendingOpenNextReleaseModal => _pendingOpenNextReleaseModal;
+  bool consumePendingOpenNextReleaseModal() {
+    if (!_pendingOpenNextReleaseModal) return false;
+    _pendingOpenNextReleaseModal = false;
+    return true;
+  }
   String? _inviteFeedbackMessage;
   String? get pendingUrlInviteToken => _pendingUrlInviteToken;
   String? get pendingUrlInvitedEmail => _pendingUrlInvitedEmail;

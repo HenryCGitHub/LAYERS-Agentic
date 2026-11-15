@@ -347,12 +347,59 @@ function parseBulletLinesJs(rawText, maxItems = 6) {
     .slice(0, maxItems);
 }
 
-function cleanCheckpointDoneWhenJs(rawText) {
-  const stripped = String(rawText || "")
-    .trim()
-    .replace(/^(?:playtest|done\s+when)\s*:\s*/i, "")
+function normalizeCausalArrowJs(rawText) {
+  return String(rawText || "")
     .replace(/\s*->\s*/g, " → ")
     .trim();
+}
+
+function resolveReleaseGoalAndDoneWhenJs(activeRel, projectDoc, activeVer) {
+  let bpGoal = "";
+  let bpDone = "";
+  const rawBp = String(activeRel?.sections?.release_blueprint_json || "").trim();
+  if (rawBp) {
+    try {
+      const bp = JSON.parse(rawBp);
+      if (bp && typeof bp === "object") {
+        bpGoal = String(bp.goal || "").trim();
+        bpDone = String(bp.doneWhen || "").trim();
+      }
+    } catch (_) {
+      // Ignore malformed legacy release_blueprint_json
+    }
+  }
+  const parsedRel = parseStructuredScopeFieldsJs(
+    activeRel?.sections?.goal ||
+      activeRel?.sections?.scope ||
+      activeRel?.sections?.summary ||
+      ""
+  );
+  const releaseGoal = bpGoal || String(parsedRel.goal || "").trim();
+  const rawDone = String(
+    bpDone ||
+      activeRel?.sections?.done_when ||
+      activeRel?.sections?.doneWhen ||
+      activeRel?.sections?.playtest_criteria ||
+      parsedRel.doneWhen ||
+      projectDoc?.sections?.done_when ||
+      projectDoc?.sections?.doneWhen ||
+      ""
+  )
+    .trim()
+    .replace(/^(?:done\s+when|playtest\s+gate|playtest|end\s+goal)\s*:\s*/i, "");
+  const cleanDone = normalizeCausalArrowJs(rawDone);
+  const releaseDoneWhen =
+    cleanDone ||
+    `Press F6 and verify all Release ${activeVer || "v0.1"} features work together with 0 console errors.`;
+  return { releaseGoal, releaseDoneWhen };
+}
+
+function cleanCheckpointDoneWhenJs(rawText) {
+  const stripped = normalizeCausalArrowJs(
+    String(rawText || "")
+      .trim()
+      .replace(/^(?:playtest|done\s+when)\s*:\s*/i, "")
+  );
   if (!stripped) return "";
   if (stripped.startsWith("+")) return "";
   if (
@@ -900,6 +947,11 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     candidateEpics,
     activeIdx >= 0 ? activeIdx : 0
   );
+  const { releaseGoal, releaseDoneWhen } = resolveReleaseGoalAndDoneWhenJs(
+    activeRel,
+    projectDoc,
+    activeVer
+  );
 
   if (candidateEpics.length > 0 && activeIdx === -1) {
     return {
@@ -908,6 +960,8 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       projectTitle: String(projectDoc.title || "LAYERS Project"),
       releaseVersion: activeVer,
       releaseTitle: String(activeRel.title || activeVer),
+      releaseGoal,
+      releaseDoneWhen,
       epicPosition: candidateEpics.length,
       totalEpics: candidateEpics.length,
       allEpicsCompleted: true,
@@ -918,6 +972,7 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       selectedFeatureId: "",
       webSelectedFeatureId: "",
       activeEpic: null,
+      lastCompletedEpic: candidateEpics[candidateEpics.length - 1] || null,
     };
   }
 
@@ -973,6 +1028,8 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     projectTitle: String(projectDoc.title || "LAYERS Project"),
     releaseVersion: activeVer,
     releaseTitle: String(activeRel.title || activeVer),
+    releaseGoal,
+    releaseDoneWhen,
     epicPosition: activeIdx >= 0 ? activeIdx + 1 : 0,
     totalEpics: candidateEpics.length,
     allEpicsCompleted: false,
@@ -1864,4 +1921,5 @@ exports._testHelpers = {
   parseStructuredScopeFieldsJs,
   dedupeScopeBulletsJs,
   cleanCheckpointDoneWhenJs,
+  resolveReleaseGoalAndDoneWhenJs,
 };

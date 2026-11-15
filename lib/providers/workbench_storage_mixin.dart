@@ -575,13 +575,18 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   void applyDeepLinkParams(Map<String, String> queryParams) {
     final projParam = (queryParams['project'] ?? '').trim();
     final featParam = (queryParams['feature'] ?? '').trim();
+    final nextRelParam = (queryParams['next_release'] ?? '').trim().toLowerCase();
+    final wantsNextRel = nextRelParam == '1' || nextRelParam == 'true';
     if (projParam.isNotEmpty) {
       _pendingUrlProjectId = projParam;
     }
     if (featParam.isNotEmpty) {
       _pendingUrlFeatureId = featParam;
     }
-    if ((projParam.isNotEmpty || featParam.isNotEmpty) &&
+    if (wantsNextRel) {
+      _pendingUrlNextRelease = true;
+    }
+    if ((projParam.isNotEmpty || featParam.isNotEmpty || wantsNextRel) &&
         _tryResolvePendingDeepLink()) {
       notifyListeners();
     }
@@ -590,8 +595,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   bool _tryResolvePendingDeepLink() {
     final reqProjId = _pendingUrlProjectId;
     final reqFeatId = _pendingUrlFeatureId;
+    final reqNextRel = _pendingUrlNextRelease;
     if ((reqProjId == null || reqProjId.isEmpty) &&
-        (reqFeatId == null || reqFeatId.isEmpty)) {
+        (reqFeatId == null || reqFeatId.isEmpty) &&
+        !reqNextRel) {
       return false;
     }
 
@@ -607,6 +614,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           break;
         }
       }
+    }
+    if (targetProjId == null &&
+        reqNextRel &&
+        _activeProjectId != null &&
+        documents.containsKey(_activeProjectId)) {
+      targetProjId = _activeProjectId;
     }
     if (targetProjId == null) {
       return false;
@@ -649,6 +662,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _pendingUrlProjectId = null;
     if (resolvedFeature) {
       _pendingUrlFeatureId = null;
+    }
+    if (_pendingUrlNextRelease && isActiveReleaseComplete) {
+      _pendingUrlNextRelease = false;
+      _pendingOpenNextReleaseModal = true;
     }
     _persistSettings();
     return true;
@@ -744,6 +761,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   /// Switches the active project and restores its Stage 1/2/3 blueprints and selection.
   void switchProject(String projectId) {
     if (!documents.containsKey(projectId)) return;
+    _pendingUrlNextRelease = false;
+    _pendingOpenNextReleaseModal = false;
     _restoreProjectState(projectId);
     _persistSettings();
     notifyListeners();
@@ -752,6 +771,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   /// Starts a brand-new Project at Stage 1A (`New Project`) while keeping existing projects in the vault.
   void createNewProject() {
     _enrichingFeatureIds.clear();
+    _pendingUrlNextRelease = false;
+    _pendingOpenNextReleaseModal = false;
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedBeatId = null;
