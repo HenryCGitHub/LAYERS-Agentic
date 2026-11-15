@@ -2111,9 +2111,17 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       if (activeCp.edgeCases.isNotEmpty) {
         feat.sections['edge_cases'] =
             activeCp.edgeCases.map((e) => '• $e').join('\n');
+      } else {
+        feat.sections.remove('edge_cases');
       }
       final bp = _releaseBlueprint;
       if (bp != null) {
+        final resolvedDone = SectionTextUtils.resolveCheckpointDoneWhen(
+          playtestGoalParam: activeCp.parameters['playtestGoal'],
+          checkpointTrigger: activeCp.trigger,
+          checkpointFeedback: activeCp.feedback,
+          sections: feat.sections,
+        );
         for (final b in bp.beats) {
           for (final f in b.features) {
             if (f.id == featureId ||
@@ -2121,9 +2129,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
                         feat.title.toLowerCase().trim() &&
                     b.id == feat.parentId)) {
               f.tuningParams = List<String>.from(activeCp.tuningParams);
-              if (activeCp.edgeCases.isNotEmpty) {
-                f.edgeCases = List<String>.from(activeCp.edgeCases);
-              }
+              f.edgeCases = List<String>.from(activeCp.edgeCases);
               if (f.checkpoints.isNotEmpty) {
                 final cpIdx = f.checkpoints.lastIndexWhere(
                   (c) => c.releaseVersion == activeCp.releaseVersion,
@@ -2134,13 +2140,13 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
                     List<ProposedCheckpointBlueprint>.from(f.checkpoints);
                 updatedCps[targetIdx] = ProposedCheckpointBlueprint(
                   title: oldCp.title,
-                  playtestCriteria: oldCp.playtestCriteria,
+                  playtestCriteria: resolvedDone.isNotEmpty
+                      ? resolvedDone
+                      : oldCp.playtestCriteria,
                   tasks: activeCp.checklist.isNotEmpty
                       ? [for (final t in activeCp.checklist) t.text]
                       : oldCp.tasks,
-                  coveredScope: activeCp.coveredScope.isNotEmpty
-                      ? List<String>.from(activeCp.coveredScope)
-                      : oldCp.coveredScope,
+                  coveredScope: List<String>.from(activeCp.coveredScope),
                   tuningParams: List<String>.from(activeCp.tuningParams),
                   edgeCases: List<String>.from(activeCp.edgeCases),
                   releaseVersion: oldCp.releaseVersion,
@@ -2621,4 +2627,217 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     await openGateAndRecordRetro(newRelId);
   }
 
+  static final RegExp _guardPrefixStripRegex = RegExp(
+    r'^[•\*\-\s]*(?:\[(?:STATE|PLAYTEST)?\s*GUARD\]\s*)?',
+    caseSensitive: false,
+  );
+  static final RegExp _stateGuardTagRegex = RegExp(
+    r'^\s*\[STATE\s+GUARD\]',
+    caseSensitive: false,
+  );
+  static final RegExp _goalPrefixStripRegex = RegExp(
+    r'^Goal\s*:\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _scopeBulletStripRegex = RegExp(r'^[•\*\-\s]+');
+  static final RegExp _donePrefixStripRegex = RegExp(
+    r'^(?:Done\s*(?:When|If)|Playtest(?:\s+Gate)?|End\s+Goal)\s*:\s*',
+    caseSensitive: false,
+  );
+  static final RegExp _arrowNormalizeRegex = RegExp(r'\s*->\s*');
+
+  void _rebuildSignedOffGuardsByExactKeys(
+    FeatureStateNode activeNode,
+    Set<int> signedOffIndices,
+  ) {
+    final next = <String>[];
+    for (int i = 0; i < activeNode.edgeCases.length; i++) {
+      if (!signedOffIndices.contains(i)) continue;
+      final txt = activeNode.edgeCases[i].trim();
+      if (txt.isNotEmpty) {
+        next.add(txt);
+      }
+    }
+    if (next.isEmpty) {
+      activeNode.parameters.remove('signedOffGuards');
+    } else {
+      activeNode.parameters['signedOffGuards'] = jsonEncode(next);
+    }
+  }
+
+  /// Updates the active Feature's `Goal`, `In Scope`, and `Done When` across
+  /// `FeatureStateNode`, `feat.sections`, and `_releaseBlueprint` so Web Studio
+  /// and Godot Cloud Sync remain 1:1 aligned.
+  void updateActiveFeatureSpec({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required FeatureStateNode activeNode,
+    String? goal,
+    List<String>? inScope,
+    String? doneWhen,
+  }) {
+    final feat = documents[featureId];
+    if (feat == null) return;
+
+    final nextGoal = goal != null
+        ? goal.replaceFirst(_goalPrefixStripRegex, '').trim()
+        : SectionTextUtils.resolveGoal(feat.sections).trim();
+
+    final rawScope = inScope ??
+        (activeNode.coveredScope.isNotEmpty
+            ? List<String>.from(activeNode.coveredScope)
+            : SectionTextUtils.resolveInScope(feat.sections));
+    final nextScope = [
+      for (final s in rawScope)
+        if (s.replaceFirst(_scopeBulletStripRegex, '').trim().isNotEmpty)
+          s.replaceFirst(_scopeBulletStripRegex, '').trim(),
+    ];
+
+    final nextDone = doneWhen != null
+        ? doneWhen
+            .replaceFirst(_donePrefixStripRegex, '')
+            .replaceAll(_arrowNormalizeRegex, ' → ')
+            .trim()
+        : SectionTextUtils.resolveCheckpointDoneWhen(
+            playtestGoalParam: activeNode.parameters['playtestGoal'],
+            checkpointTrigger: activeNode.trigger,
+            checkpointFeedback: activeNode.feedback,
+            sections: feat.sections,
+          );
+
+    final existingExcl = SectionTextUtils.resolveExclusions(
+      feat.sections,
+      splitSingleSentence: false,
+    );
+
+    if (nextGoal.isNotEmpty) {
+      feat.sections['goal'] = nextGoal;
+    }
+
+    if (nextScope.isNotEmpty) {
+      feat.sections['in_scope'] = nextScope.map((s) => '• $s').join('\n');
+    } else {
+      feat.sections.remove('in_scope');
+      feat.sections.remove('inScope');
+    }
+    activeNode.coveredScope = List<String>.from(nextScope);
+
+    if ((doneWhen != null || nextDone.isNotEmpty) && nextDone.isNotEmpty) {
+      feat.sections['done_when'] = nextDone;
+      feat.sections['doneWhen'] = nextDone;
+      feat.sections['playtest_criteria'] = nextDone;
+      activeNode.parameters['playtestGoal'] = nextDone;
+      activeNode.trigger = 'Playtest: $nextDone';
+      if (activeNode.feedback != null) {
+        activeNode.feedback = nextDone;
+      }
+    }
+
+    final composedScope = SectionTextUtils.composeStructuredScopeBlock(
+      goal: nextGoal,
+      inScope: nextScope,
+      exclusions: existingExcl,
+      doneWhen: nextDone,
+    );
+    if (composedScope.isNotEmpty) {
+      feat.sections['scope'] = composedScope;
+    }
+
+    final bp = _releaseBlueprint;
+    if (bp != null) {
+      for (final b in bp.beats) {
+        for (final f in b.features) {
+          if (f.id == featureId ||
+              (f.title.toLowerCase().trim() ==
+                      feat.title.toLowerCase().trim() &&
+                  b.id == feat.parentId)) {
+            if (nextGoal.isNotEmpty) f.goal = nextGoal;
+            f.inScope = List<String>.from(nextScope);
+            if (nextDone.isNotEmpty) f.doneWhen = nextDone;
+            break;
+          }
+        }
+      }
+    }
+
+    updateFeatureStates(featureId, states);
+  }
+
+  /// Appends a `[PLAYTEST GUARD]` to the active checkpoint and syncs it 1:1.
+  void addPlaytestGuard({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required FeatureStateNode activeNode,
+    required String rawText,
+  }) {
+    final clean = rawText.replaceFirst(_guardPrefixStripRegex, '').trim();
+    if (clean.isEmpty) return;
+
+    final checkedIndices = <int>{
+      for (int i = 0; i < activeNode.edgeCases.length; i++)
+        if (activeNode.isGuardSignedOff(i, activeNode.edgeCases[i])) i,
+    };
+    activeNode.edgeCases = [
+      ...activeNode.edgeCases,
+      '[PLAYTEST GUARD] $clean',
+    ];
+    _rebuildSignedOffGuardsByExactKeys(activeNode, checkedIndices);
+    updateFeatureStates(featureId, states);
+  }
+
+  /// Edits a guard in place, resetting ONLY that guard to unchecked if its
+  /// condition text changed while preserving all other checked guards.
+  void editPlaytestGuard({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required FeatureStateNode activeNode,
+    required int guardIndex,
+    required String rawText,
+  }) {
+    if (guardIndex < 0 || guardIndex >= activeNode.edgeCases.length) return;
+    final oldRaw = activeNode.edgeCases[guardIndex];
+    final oldClean = oldRaw.replaceFirst(_guardPrefixStripRegex, '').trim();
+    final newClean = rawText.replaceFirst(_guardPrefixStripRegex, '').trim();
+    if (newClean.isEmpty) return;
+
+    final checkedIndices = <int>{
+      for (int i = 0; i < activeNode.edgeCases.length; i++)
+        if (activeNode.isGuardSignedOff(i, activeNode.edgeCases[i])) i,
+    };
+    final prefix = _stateGuardTagRegex.hasMatch(oldRaw)
+        ? '[STATE GUARD]'
+        : '[PLAYTEST GUARD]';
+    final nextGuards = List<String>.from(activeNode.edgeCases);
+    nextGuards[guardIndex] = '$prefix $newClean';
+    activeNode.edgeCases = nextGuards;
+
+    if (oldClean != newClean) {
+      checkedIndices.remove(guardIndex);
+    }
+    _rebuildSignedOffGuardsByExactKeys(activeNode, checkedIndices);
+    updateFeatureStates(featureId, states);
+  }
+
+  /// Removes a guard at [guardIndex] and rebuilds `signedOffGuards` without
+  /// positional `#index` drift.
+  void deletePlaytestGuard({
+    required String featureId,
+    required List<FeatureStateNode> states,
+    required FeatureStateNode activeNode,
+    required int guardIndex,
+  }) {
+    if (guardIndex < 0 || guardIndex >= activeNode.edgeCases.length) return;
+    final nextGuards = <String>[];
+    final survivingChecked = <int>{};
+    for (int i = 0; i < activeNode.edgeCases.length; i++) {
+      if (i == guardIndex) continue;
+      if (activeNode.isGuardSignedOff(i, activeNode.edgeCases[i])) {
+        survivingChecked.add(nextGuards.length);
+      }
+      nextGuards.add(activeNode.edgeCases[i]);
+    }
+    activeNode.edgeCases = nextGuards;
+    _rebuildSignedOffGuardsByExactKeys(activeNode, survivingChecked);
+    updateFeatureStates(featureId, states);
+  }
 }

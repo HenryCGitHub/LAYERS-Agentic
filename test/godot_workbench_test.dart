@@ -1084,7 +1084,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.5"'));
+        expect(cfgText, contains('version="3.0.6"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -2592,6 +2592,20 @@ assert.strictEqual(featDash.goal, "+air dash");
 assert.strictEqual(featDash.doneWhen, "Press Shift → player dashes 6m");
 const featWave = payload.activeEpic.features[2];
 assert.strictEqual(featWave.doneWhen, "Release charge → wave fires");
+
+const parsedWithOutOfScope = parseStructuredScopeFieldsJs(
+  "Goal: Deflect melee strikes\n\nIn Scope:\n• Shield spark VFX\n\nOut of Scope:\n• No co-op revive\n\nDone When: Press Space -> shield sparks"
+);
+assert.strictEqual(parsedWithOutOfScope.goal, "Deflect melee strikes");
+assert.deepStrictEqual(parsedWithOutOfScope.inScope, ["Shield spark VFX"]);
+assert.strictEqual(parsedWithOutOfScope.doneWhen, "Press Space → shield sparks");
+
+const parsedWithExclusions = parseStructuredScopeFieldsJs(
+  "Goal: Deflect melee strikes\n\nIn Scope:\n• Shield spark VFX\n\nExclusions:\n• No multiplayer netcode\n\nDone When: Press Space -> shield sparks"
+);
+assert.deepStrictEqual(parsedWithExclusions.inScope, ["Shield spark VFX"]);
+assert.strictEqual(parsedWithExclusions.doneWhen, "Press Space → shield sparks");
+
 process.stdout.write("JS_SCOPE_PARSE_OK\n");
 ''';
         final result = Process.runSync('node', ['-e', script]);
@@ -2783,6 +2797,272 @@ process.stdout.write("JS_SCOPE_PARSE_OK\n");
         ).first;
         expect(updatedCp.tuningParams, contains('wallSlamDamage: 15.0 hp'));
         expect(find.text('wallSlamDamage: 15.0 hp'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Feature Card supports 1-click inline editing of Goal, In Scope, Playtest Guards & Done When with guard reset parity',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 960);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final cp = FeatureStateNode(
+          id: 'cp_spec_edit_1',
+          name: '01 · VERTICAL SLICE',
+          trigger: 'Playtest: Press F -> parry sparks',
+          coveredScope: ['Parry timing window', 'Shield spark VFX'],
+          edgeCases: [
+            '[STATE GUARD] Ignore block input during stun',
+            '[PLAYTEST GUARD] Reset parry cooldown on wave restart',
+          ],
+          parameters: {'releaseVersion': 'v0.1'},
+        );
+        final feat = TierDocument(
+          id: 'feat_spec_edit_1',
+          title: 'Shell Parry',
+          tier: TierType.feature,
+          parentId: 'epic_spec_edit_1',
+          phase: 'v0.1',
+          sections: {
+            'goal': 'Deflect incoming melee attacks cleanly',
+            'in_scope': '• Parry timing window\n• Shield spark VFX',
+            'done_when': 'Press F -> parry sparks',
+            'scope':
+                'Goal: Deflect incoming melee attacks cleanly\n\nIn Scope:\n• Parry timing window\n• Shield spark VFX\n\nOut of Scope:\n• No co-op revive\n\nDone When: Press F -> parry sparks',
+            'edge_cases':
+                '• [STATE GUARD] Ignore block input during stun\n• [PLAYTEST GUARD] Reset parry cooldown on wave restart',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+        final epic = TierDocument(
+          id: 'epic_spec_edit_1',
+          title: 'Claw & Shell Parry',
+          tier: TierType.epic,
+          parentId: 'rel_spec_edit_1',
+          phase: 'v0.1',
+          childrenIds: [feat.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_spec_edit_1',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_spec_edit_1',
+          phase: 'v0.1',
+          childrenIds: [epic.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj = TierDocument(
+          id: 'proj_spec_edit_1',
+          title: 'Shell Combat',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+        for (final doc in [proj, rel, epic, feat]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+        provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: provider));
+        await tester.pumpAndSettle();
+
+        // 1. Inline Edit Goal
+        final editGoalBtn = find.byKey(ValueKey('edit_feature_goal_btn_${cp.id}'));
+        await tester.ensureVisible(editGoalBtn);
+        await tester.tap(editGoalBtn);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(ValueKey('edit_feature_goal_input_${cp.id}')),
+          'Deflect melee hits and reflect projectiles cleanly',
+        );
+        await tester.tap(find.byKey(ValueKey('save_feature_goal_btn_${cp.id}')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(ValueKey('task_sheet_feature_goal_${cp.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Deflect melee hits and reflect projectiles cleanly'),
+          findsOneWidget,
+        );
+        final updatedGoalDoc = provider.documents[feat.id]!;
+        expect(
+          updatedGoalDoc.sections['goal'],
+          equals('Deflect melee hits and reflect projectiles cleanly'),
+        );
+        expect(
+          updatedGoalDoc.sections['scope'],
+          contains('Goal: Deflect melee hits and reflect projectiles cleanly'),
+        );
+        expect(
+          updatedGoalDoc.sections['scope'],
+          contains('Out of Scope:\n• No co-op revive'),
+        );
+        expect(
+          provider.buildActiveFeatureCodingAgentPrompt(updatedGoalDoc.id),
+          contains('Deflect melee hits and reflect projectiles cleanly'),
+        );
+
+        // 2. Inline Edit Existing In Scope Bullet + Add New Scope Bullet
+        final scopeItem0 = find.byKey(ValueKey('in_scope_item_${cp.id}_0'));
+        await tester.ensureVisible(scopeItem0);
+        await tester.tap(scopeItem0);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(ValueKey('edit_in_scope_input_${cp.id}_0')),
+          'Tight 180ms parry window',
+        );
+        await tester.tap(find.byKey(ValueKey('save_in_scope_btn_${cp.id}_0')));
+        await tester.pumpAndSettle();
+
+        final addScopeBtn = find.byKey(ValueKey('add_in_scope_btn_${cp.id}'));
+        await tester.ensureVisible(addScopeBtn);
+        await tester.tap(addScopeBtn);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(ValueKey('add_in_scope_input_${cp.id}')),
+          'Reflective clang SFX',
+        );
+        await tester.tap(
+          find.byKey(ValueKey('confirm_add_in_scope_btn_${cp.id}')),
+        );
+        await tester.pumpAndSettle();
+
+        final afterScopeDoc = provider.documents[feat.id]!;
+        final afterScopeCp =
+            FeatureStateNode.getStatesForDocument(afterScopeDoc).first;
+        expect(
+          afterScopeCp.coveredScope,
+          equals([
+            'Tight 180ms parry window',
+            'Shield spark VFX',
+            'Reflective clang SFX',
+          ]),
+        );
+        expect(
+          afterScopeDoc.sections['scope'],
+          contains('• Reflective clang SFX'),
+        );
+        expect(find.text('Tight 180ms parry window'), findsOneWidget);
+        expect(find.text('Reflective clang SFX'), findsOneWidget);
+
+        // 3. Check both Playtest Guards, edit Guard 0 (must reset ONLY Guard 0 to unchecked), then Add Guard 2
+        final guardCheck0 = find.byKey(ValueKey('playtest_guard_check_${cp.id}_0'));
+        await tester.ensureVisible(guardCheck0);
+        await tester.tap(guardCheck0);
+        await tester.pumpAndSettle();
+
+        final guardCheck1 = find.byKey(ValueKey('playtest_guard_check_${cp.id}_1'));
+        await tester.ensureVisible(guardCheck1);
+        await tester.tap(guardCheck1);
+        await tester.pumpAndSettle();
+
+        var guardStateCp = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(
+          guardStateCp.isGuardSignedOff(0, guardStateCp.edgeCases[0]),
+          isTrue,
+        );
+        expect(
+          guardStateCp.isGuardSignedOff(1, guardStateCp.edgeCases[1]),
+          isTrue,
+        );
+
+        final editGuard0Btn =
+            find.byKey(ValueKey('edit_playtest_guard_btn_${cp.id}_0'));
+        await tester.ensureVisible(editGuard0Btn);
+        await tester.tap(editGuard0Btn);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(ValueKey('edit_playtest_guard_input_${cp.id}_0')),
+          'Block parry buffer during hitstun and knockback',
+        );
+        await tester.tap(
+          find.byKey(ValueKey('save_playtest_guard_btn_${cp.id}_0')),
+        );
+        await tester.pumpAndSettle();
+
+        guardStateCp = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(
+          guardStateCp.edgeCases[0],
+          equals(
+            '[STATE GUARD] Block parry buffer during hitstun and knockback',
+          ),
+        );
+        expect(
+          guardStateCp.isGuardSignedOff(0, guardStateCp.edgeCases[0]),
+          isFalse,
+        );
+        expect(
+          guardStateCp.isGuardSignedOff(1, guardStateCp.edgeCases[1]),
+          isTrue,
+        );
+
+        final addGuardBtn = find.byKey(ValueKey('add_playtest_guard_btn_${cp.id}'));
+        await tester.ensureVisible(addGuardBtn);
+        await tester.tap(addGuardBtn);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(ValueKey('add_playtest_guard_input_${cp.id}')),
+          'Clear buffered parry on knockdown',
+        );
+        await tester.tap(
+          find.byKey(ValueKey('confirm_add_playtest_guard_btn_${cp.id}')),
+        );
+        await tester.pumpAndSettle();
+
+        guardStateCp = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(
+          guardStateCp.edgeCases,
+          contains('[PLAYTEST GUARD] Clear buffered parry on knockdown'),
+        );
+
+        // 4. Inline Edit Done When
+        final editDoneBtn = find.byKey(ValueKey('edit_done_when_btn_${cp.id}'));
+        await tester.ensureVisible(editDoneBtn);
+        await tester.tap(editDoneBtn);
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(ValueKey('edit_done_when_input_${cp.id}')),
+          'Tap Q -> parry counter lands',
+        );
+        await tester.tap(find.byKey(ValueKey('save_done_when_btn_${cp.id}')));
+        await tester.pumpAndSettle();
+
+        final finalDoc = provider.documents[feat.id]!;
+        final finalCp = FeatureStateNode.getStatesForDocument(finalDoc).first;
+        expect(
+          finalCp.parameters['playtestGoal'],
+          equals('Tap Q → parry counter lands'),
+        );
+        expect(finalCp.trigger, equals('Playtest: Tap Q → parry counter lands'));
+        expect(
+          finalDoc.sections['scope'],
+          contains('Done When: Tap Q → parry counter lands'),
+        );
+        expect(find.text('Tap Q → parry counter lands'), findsOneWidget);
       },
     );
   });

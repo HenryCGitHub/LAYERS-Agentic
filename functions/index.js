@@ -250,6 +250,14 @@ function parseStructuredScopeFieldsJs(rawText) {
       continue;
     }
 
+    const outOfScopeMatch = trimmed.match(
+      /^(?:out\s+of\s+scope|exclusions)(?:\s*\([^)]*\))?\s*:\s*(.*)$/i
+    );
+    if (outOfScopeMatch) {
+      section = "out_of_scope";
+      continue;
+    }
+
     const doneMatch = trimmed.match(/^(?:done\s+when|playtest\s+gate|end\s+goal)\s*:\s*(.*)$/i);
     if (doneMatch) {
       section = "done_when";
@@ -269,6 +277,8 @@ function parseStructuredScopeFieldsJs(rawText) {
     } else if (section === "in_scope") {
       const bullet = trimmed.replace(/^[-*•]\s*/, "").trim();
       if (bullet) inScopeLines.push(bullet);
+    } else if (section === "out_of_scope") {
+      continue;
     } else {
       const donePart = trimmed.replace(/^[-*•]\s*/, "").trim();
       if (donePart) doneWhenLines.push(donePart);

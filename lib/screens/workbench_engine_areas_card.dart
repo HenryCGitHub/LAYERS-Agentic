@@ -121,62 +121,227 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             ],
           ),
           const SizedBox(height: 6),
-          Text(
-            conciseGoal,
-            key: ValueKey('task_sheet_feature_goal_${node.id}'),
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: weightSemi,
-              height: 1.45,
-              color: textPrimary,
-            ),
-          ),
-
-          // 2. IN SCOPE
-          if (inScopeBullets.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'IN SCOPE',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: fontMicro,
-                fontWeight: weightBold,
-                letterSpacing: 0.7,
-                color: textMuted,
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (int i = 0; i < inScopeBullets.length; i++)
-              Padding(
-                padding: EdgeInsets.only(
-                  bottom: i == inScopeBullets.length - 1 ? 0 : 6,
-                ),
+          if (_activeStage2InlineEditKey == 'edit_goal_${node.id}')
+            _buildStage2InlineEditor(
+              editKey: 'edit_goal_${node.id}',
+              inputKey: ValueKey('edit_feature_goal_input_${node.id}'),
+              saveBtnKey: ValueKey('save_feature_goal_btn_${node.id}'),
+              cancelBtnKey: ValueKey('cancel_feature_goal_btn_${node.id}'),
+              hintText: 'One-sentence feature goal or +delta...',
+              onSave: (val) {
+                widget.workbench.updateActiveFeatureSpec(
+                  featureId: feat.id,
+                  states: states,
+                  activeNode: node,
+                  goal: val,
+                );
+                _rebuild();
+              },
+            )
+          else
+            InkWell(
+              key: ValueKey('edit_feature_goal_btn_${node.id}'),
+              borderRadius: BorderRadius.circular(5),
+              onTap: () =>
+                  _startStage2InlineEdit('edit_goal_${node.id}', conciseGoal),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: const EdgeInsets.only(top: 5, right: 9),
-                      child: Container(
-                        width: 5,
-                        height: 5,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF38BDF8).withValues(alpha: 0.8),
-                          shape: BoxShape.circle,
+                    Expanded(
+                      child: Text(
+                        conciseGoal,
+                        key: ValueKey('task_sheet_feature_goal_${node.id}'),
+                        style: GoogleFonts.inter(
+                          fontSize: 14,
+                          fontWeight: weightSemi,
+                          height: 1.45,
+                          color: textPrimary,
                         ),
                       ),
                     ),
-                    Expanded(
+                    const SizedBox(width: 8),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
                       child: Text(
-                        inScopeBullets[i],
+                        '✎',
                         style: GoogleFonts.inter(
-                          fontSize: fontItem,
-                          height: 1.42,
-                          color: textSecondary,
+                          fontSize: 11,
+                          color: const Color(0xFF64748B),
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
+            ),
+
+          // 2. IN SCOPE (Scannable + 1-Click Inline Editable)
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'IN SCOPE',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: fontMicro,
+                  fontWeight: weightBold,
+                  letterSpacing: 0.7,
+                  color: textMuted,
+                ),
+              ),
+              InkWell(
+                key: ValueKey('add_in_scope_btn_${node.id}'),
+                borderRadius: BorderRadius.circular(5),
+                onTap: () => _startStage2InlineEdit('add_scope_${node.id}', ''),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  child: Text(
+                    '+ Add Scope',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: weightSemi,
+                      color: const Color(0xFF7DD3FC),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (inScopeBullets.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            for (int i = 0; i < inScopeBullets.length; i++)
+              Padding(
+                padding: EdgeInsets.only(
+                  bottom: i == inScopeBullets.length - 1 ? 0 : 4,
+                ),
+                child: _activeStage2InlineEditKey ==
+                        'edit_scope_${node.id}_$i'
+                    ? _buildStage2InlineEditor(
+                        editKey: 'edit_scope_${node.id}_$i',
+                        inputKey: ValueKey('edit_in_scope_input_${node.id}_$i'),
+                        saveBtnKey: ValueKey('save_in_scope_btn_${node.id}_$i'),
+                        deleteBtnKey:
+                            ValueKey('delete_in_scope_btn_${node.id}_$i'),
+                        cancelBtnKey:
+                            ValueKey('cancel_in_scope_btn_${node.id}_$i'),
+                        hintText: 'Scope deliverable or +delta...',
+                        onSave: (val) {
+                          final cleaned = val
+                              .replaceFirst(_tuningBulletStripRegex, '')
+                              .trim();
+                          if (cleaned.isEmpty) return;
+                          final nextList = List<String>.from(inScopeBullets)
+                            ..[i] = cleaned;
+                          widget.workbench.updateActiveFeatureSpec(
+                            featureId: feat.id,
+                            states: states,
+                            activeNode: node,
+                            inScope: nextList,
+                          );
+                          _rebuild();
+                        },
+                        onDelete: () {
+                          final nextList = List<String>.from(inScopeBullets)
+                            ..removeAt(i);
+                          widget.workbench.updateActiveFeatureSpec(
+                            featureId: feat.id,
+                            states: states,
+                            activeNode: node,
+                            inScope: nextList,
+                          );
+                          _rebuild();
+                        },
+                      )
+                    : InkWell(
+                        key: ValueKey('in_scope_item_${node.id}_$i'),
+                        borderRadius: BorderRadius.circular(5),
+                        onTap: () => _startStage2InlineEdit(
+                          'edit_scope_${node.id}_$i',
+                          inScopeBullets[i],
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 2,
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6, right: 9),
+                                child: Container(
+                                  width: 5,
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF38BDF8)
+                                        .withValues(alpha: 0.8),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  inScopeBullets[i],
+                                  style: GoogleFonts.inter(
+                                    fontSize: fontItem,
+                                    height: 1.42,
+                                    color: textSecondary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  '✎',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: const Color(0xFF64748B),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+              ),
+          ] else if (_activeStage2InlineEditKey != 'add_scope_${node.id}') ...[
+            const SizedBox(height: 4),
+            Text(
+              'No scope items listed — click + Add Scope to add one.',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: textMuted,
+              ),
+            ),
+          ],
+          if (_activeStage2InlineEditKey == 'add_scope_${node.id}') ...[
+            const SizedBox(height: 8),
+            _buildStage2InlineEditor(
+              editKey: 'add_scope_${node.id}',
+              inputKey: ValueKey('add_in_scope_input_${node.id}'),
+              saveBtnKey: ValueKey('confirm_add_in_scope_btn_${node.id}'),
+              cancelBtnKey: ValueKey('cancel_add_in_scope_btn_${node.id}'),
+              hintText: 'Scope deliverable or +delta...',
+              onSave: (val) {
+                final cleaned =
+                    val.replaceFirst(_tuningBulletStripRegex, '').trim();
+                if (cleaned.isEmpty) return;
+                final nextList = List<String>.from(inScopeBullets)..add(cleaned);
+                widget.workbench.updateActiveFeatureSpec(
+                  featureId: feat.id,
+                  states: states,
+                  activeNode: node,
+                  inScope: nextList,
+                );
+                _rebuild();
+              },
+            ),
           ],
 
           // 2B. TUNING VARIABLES (Scannable + 1-Click Inline Editable)
@@ -351,8 +516,9 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             ),
           ],
 
-          // 3. DONE WHEN (Playtest Check)
-          if (endGoal.isNotEmpty) ...[
+          // 3. DONE WHEN (Playtest Check — 1-Click Inline Editable)
+          if (endGoal.isNotEmpty ||
+              _activeStage2InlineEditKey == 'edit_done_when_${node.id}') ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(13),
@@ -365,30 +531,84 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                       : const Color(0xFF1E3A34),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '✓ DONE WHEN (PLAYTEST IN GODOT)',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: fontMicro,
-                      fontWeight: weightBold,
-                      letterSpacing: 0.6,
-                      color: const Color(0xFF34D399),
+              child: _activeStage2InlineEditKey == 'edit_done_when_${node.id}'
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '✓ DONE WHEN (PLAYTEST IN GODOT)',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: fontMicro,
+                            fontWeight: weightBold,
+                            letterSpacing: 0.6,
+                            color: const Color(0xFF34D399),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildStage2InlineEditor(
+                          editKey: 'edit_done_when_${node.id}',
+                          inputKey: ValueKey('edit_done_when_input_${node.id}'),
+                          saveBtnKey: ValueKey('save_done_when_btn_${node.id}'),
+                          cancelBtnKey:
+                              ValueKey('cancel_done_when_btn_${node.id}'),
+                          hintText:
+                              'Player action -> observable screen result...',
+                          onSave: (val) {
+                            widget.workbench.updateActiveFeatureSpec(
+                              featureId: feat.id,
+                              states: states,
+                              activeNode: node,
+                              doneWhen: val,
+                            );
+                            _rebuild();
+                          },
+                        ),
+                      ],
+                    )
+                  : InkWell(
+                      key: ValueKey('edit_done_when_btn_${node.id}'),
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => _startStage2InlineEdit(
+                        'edit_done_when_${node.id}',
+                        endGoal,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '✓ DONE WHEN (PLAYTEST IN GODOT)',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: fontMicro,
+                                  fontWeight: weightBold,
+                                  letterSpacing: 0.6,
+                                  color: const Color(0xFF34D399),
+                                ),
+                              ),
+                              Text(
+                                '✎',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            endGoal,
+                            style: GoogleFonts.inter(
+                              fontSize: fontItem,
+                              fontWeight: weightSemi,
+                              height: 1.45,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    endGoal,
-                    style: GoogleFonts.inter(
-                      fontSize: fontItem,
-                      fontWeight: weightSemi,
-                      height: 1.45,
-                      color: textPrimary,
-                    ),
-                  ),
-                ],
-              ),
             ),
           ],
 
@@ -471,31 +691,58 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
               ),
           ],
 
-          // Optional: Plain-English State & Boundary Guards
+          // Optional: Plain-English State & Boundary Guards (Checkable + 1-Click Inline Editable)
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'PLAYTEST GUARDS',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: fontMicro,
+                      fontWeight: weightBold,
+                      letterSpacing: 0.6,
+                      color: const Color(0xFFFBBF24),
+                    ),
+                  ),
+                  if (edgeItems.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '$signedOffGuards/${edgeItems.length} Checked',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: fontMicro,
+                        fontWeight: weightBold,
+                        color: const Color(0xFFFCD34D),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              InkWell(
+                key: ValueKey('add_playtest_guard_btn_${node.id}'),
+                borderRadius: BorderRadius.circular(5),
+                onTap: () => _startStage2InlineEdit('add_guard_${node.id}', ''),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  child: Text(
+                    '+ Add Guard',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 9.5,
+                      fontWeight: weightSemi,
+                      color: const Color(0xFFFBBF24),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           if (edgeItems.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'PLAYTEST GUARDS',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: fontMicro,
-                    fontWeight: weightBold,
-                    letterSpacing: 0.6,
-                    color: const Color(0xFFFBBF24),
-                  ),
-                ),
-                Text(
-                  '$signedOffGuards/${edgeItems.length} Checked',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: fontMicro,
-                    fontWeight: weightBold,
-                    color: const Color(0xFFFCD34D),
-                  ),
-                ),
-              ],
-            ),
             const SizedBox(height: 8),
             for (int gIdx = 0; gIdx < edgeItems.length; gIdx++)
               Builder(
@@ -511,79 +758,180 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                         '',
                       )
                       .trim();
-                  return InkWell(
-                    key: ValueKey('playtest_guard_check_${node.id}_$gIdx'),
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: () {
-                      node.setGuardSignedOff(gIdx, rawGuard, !isChecked);
-                      widget.workbench.updateFeatureStates(feat.id, states);
-                      _rebuild();
-                    },
-                    child: Container(
-                      margin: EdgeInsets.only(
+                  if (_activeStage2InlineEditKey ==
+                      'edit_guard_${node.id}_$gIdx') {
+                    return Padding(
+                      padding: EdgeInsets.only(
                         bottom: gIdx == edgeItems.length - 1 ? 0 : 6,
                       ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
+                      child: _buildStage2InlineEditor(
+                        editKey: 'edit_guard_${node.id}_$gIdx',
+                        inputKey:
+                            ValueKey('edit_playtest_guard_input_${node.id}_$gIdx'),
+                        saveBtnKey:
+                            ValueKey('save_playtest_guard_btn_${node.id}_$gIdx'),
+                        deleteBtnKey:
+                            ValueKey('delete_playtest_guard_btn_${node.id}_$gIdx'),
+                        cancelBtnKey:
+                            ValueKey('cancel_playtest_guard_btn_${node.id}_$gIdx'),
+                        hintText: 'State or boundary guard condition...',
+                        onSave: (val) {
+                          widget.workbench.editPlaytestGuard(
+                            featureId: feat.id,
+                            states: states,
+                            activeNode: node,
+                            guardIndex: gIdx,
+                            rawText: val,
+                          );
+                          _rebuild();
+                        },
+                        onDelete: () {
+                          widget.workbench.deletePlaytestGuard(
+                            featureId: feat.id,
+                            states: states,
+                            activeNode: node,
+                            guardIndex: gIdx,
+                          );
+                          _rebuild();
+                        },
                       ),
-                      decoration: BoxDecoration(
+                    );
+                  }
+                  return Container(
+                    margin: EdgeInsets.only(
+                      bottom: gIdx == edgeItems.length - 1 ? 0 : 6,
+                    ),
+                    padding: const EdgeInsets.only(
+                      left: 10,
+                      right: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isChecked
+                          ? const Color(0xFF0A1F18)
+                          : const Color(0xFF0B0E17),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
                         color: isChecked
-                            ? const Color(0xFF0A1F18)
-                            : const Color(0xFF0B0E17),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: isChecked
-                              ? const Color(0xFF34D399).withValues(alpha: 0.4)
-                              : const Color(0xFF1F2A3F),
+                            ? const Color(0xFF34D399).withValues(alpha: 0.4)
+                            : const Color(0xFF1F2A3F),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            key: ValueKey('playtest_guard_check_${node.id}_$gIdx'),
+                            borderRadius: BorderRadius.circular(6),
+                            onTap: () {
+                              node.setGuardSignedOff(gIdx, rawGuard, !isChecked);
+                              widget.workbench.updateFeatureStates(feat.id, states);
+                              _rebuild();
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 17,
+                                    height: 17,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: isChecked
+                                          ? const Color(0xFF10B981)
+                                          : const Color(0xFF07090E),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color: isChecked
+                                            ? const Color(0xFF10B981)
+                                            : const Color(0xFFF59E0B)
+                                                .withValues(alpha: 0.6),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      isChecked ? '✓' : '',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 10,
+                                        fontWeight: weightBold,
+                                        color: const Color(0xFF05101A),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 9),
+                                  Expanded(
+                                    child: Text(
+                                      cleanGuard,
+                                      style: GoogleFonts.inter(
+                                        fontSize: fontBody,
+                                        fontWeight: weightRegular,
+                                        color: isChecked
+                                            ? textSecondary
+                                            : const Color(0xFFFDE68A),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 17,
-                            height: 17,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: isChecked
-                                  ? const Color(0xFF10B981)
-                                  : const Color(0xFF07090E),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                color: isChecked
-                                    ? const Color(0xFF10B981)
-                                    : const Color(0xFFF59E0B)
-                                        .withValues(alpha: 0.6),
-                              ),
-                            ),
-                            child: Text(
-                              isChecked ? '✓' : '',
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 10,
-                                fontWeight: weightBold,
-                                color: const Color(0xFF05101A),
-                              ),
-                            ),
+                        const SizedBox(width: 6),
+                        InkWell(
+                          key: ValueKey(
+                            'edit_playtest_guard_btn_${node.id}_$gIdx',
                           ),
-                          const SizedBox(width: 9),
-                          Expanded(
+                          borderRadius: BorderRadius.circular(4),
+                          onTap: () => _startStage2InlineEdit(
+                            'edit_guard_${node.id}_$gIdx',
+                            cleanGuard,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 6,
+                            ),
                             child: Text(
-                              cleanGuard,
+                              '✎',
                               style: GoogleFonts.inter(
-                                fontSize: fontBody,
-                                fontWeight: weightRegular,
-                                color: isChecked
-                                    ? textSecondary
-                                    : const Color(0xFFFDE68A),
+                                fontSize: 10,
+                                color: const Color(0xFF64748B),
                               ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   );
                 },
               ),
+          ] else if (_activeStage2InlineEditKey != 'add_guard_${node.id}') ...[
+            const SizedBox(height: 4),
+            Text(
+              'No playtest guards registered — click + Add Guard to add one.',
+              style: GoogleFonts.inter(
+                fontSize: 11,
+                color: textMuted,
+              ),
+            ),
+          ],
+          if (_activeStage2InlineEditKey == 'add_guard_${node.id}') ...[
+            const SizedBox(height: 8),
+            _buildStage2InlineEditor(
+              editKey: 'add_guard_${node.id}',
+              inputKey: ValueKey('add_playtest_guard_input_${node.id}'),
+              saveBtnKey: ValueKey('confirm_add_playtest_guard_btn_${node.id}'),
+              cancelBtnKey:
+                  ValueKey('cancel_add_playtest_guard_btn_${node.id}'),
+              hintText: 'State or boundary guard condition...',
+              onSave: (val) {
+                widget.workbench.addPlaytestGuard(
+                  featureId: feat.id,
+                  states: states,
+                  activeNode: node,
+                  rawText: val,
+                );
+                _rebuild();
+              },
+            ),
           ],
 
           // 1-Click Footer Actions

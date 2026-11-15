@@ -1098,6 +1098,9 @@ func parse_structured_scope_fields(raw_text: String) -> Dictionary:
 				if not b_rest.is_empty():
 					in_scope_lines.append(b_rest)
 				continue
+			elif hdr == "out of scope" or hdr == "exclusions" or hdr.begins_with("out of scope (") or hdr.begins_with("exclusions ("):
+				section = "out_of_scope"
+				continue
 			elif hdr == "done when" or hdr == "playtest gate" or hdr == "end goal":
 				section = "done_when"
 				if not rest.is_empty():
@@ -1116,6 +1119,8 @@ func parse_structured_scope_fields(raw_text: String) -> Dictionary:
 			var bullet: String = _strip_scope_bullet_prefix(trimmed)
 			if not bullet.is_empty():
 				in_scope_lines.append(bullet)
+		elif section == "out_of_scope":
+			continue
 		else:
 			var done_part: String = _strip_scope_bullet_prefix(trimmed)
 			if not done_part.is_empty():

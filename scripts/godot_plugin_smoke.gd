@@ -12,7 +12,7 @@ class _SyncSpy extends Node:
 		return "lyr_spy_1234567890123456"
 
 	func get_local_plugin_version() -> String:
-		return "3.0.5"
+		return "3.0.6"
 
 	func fetch_active_epic() -> void:
 		fetched_count += 1
@@ -290,6 +290,19 @@ func _run_smoke_suite() -> bool:
 	)
 	if str(spec_playtest_prefix.get("done_when", "")) != "Tap Space → shield sparks":
 		_fail("resolve_clean_feature_spec Playtest prefix strip failed: %s" % str(spec_playtest_prefix))
+		return false
+
+	var spec_excl: Dictionary = exec.call(
+		"resolve_clean_feature_spec",
+		{
+			"title": "Parry",
+			"goal": "Goal: Deflect melee strikes\n\nIn Scope:\n• Shield spark VFX\n\nOut of Scope:\n• No co-op revive\n\nDone When: Press Space -> shield sparks",
+		},
+		"v0.1"
+	)
+	var excl_scope: PackedStringArray = spec_excl.get("scope_items", PackedStringArray())
+	if excl_scope.size() != 1 or excl_scope[0] != "Shield spark VFX" or str(spec_excl.get("done_when", "")) != "Press Space → shield sparks":
+		_fail("resolve_clean_feature_spec Out of Scope exclusion failed: %s" % str(spec_excl))
 		return false
 
 	var md: String = exec.call(

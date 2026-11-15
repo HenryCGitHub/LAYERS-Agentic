@@ -348,6 +348,39 @@ class SectionTextUtils {
     return '';
   }
 
+  /// Composes a canonical 3-part `Goal / In Scope / (Out of Scope) / Done When` markdown block.
+  static String composeStructuredScopeBlock({
+    required String goal,
+    required List<String> inScope,
+    List<String> exclusions = const [],
+    required String doneWhen,
+  }) {
+    final parts = <String>[];
+    final cleanGoal = goal.trim();
+    if (cleanGoal.isNotEmpty) {
+      parts.add('Goal: $cleanGoal');
+    }
+    final cleanScope = [
+      for (final s in inScope)
+        if (s.trim().isNotEmpty) s.trim(),
+    ];
+    if (cleanScope.isNotEmpty) {
+      parts.add('In Scope:\n${cleanScope.map((s) => '• $s').join('\n')}');
+    }
+    final cleanExcl = [
+      for (final e in exclusions)
+        if (e.trim().isNotEmpty) e.trim(),
+    ];
+    if (cleanExcl.isNotEmpty) {
+      parts.add('Out of Scope:\n${cleanExcl.map((e) => '• $e').join('\n')}');
+    }
+    final cleanDone = doneWhen.trim();
+    if (cleanDone.isNotEmpty) {
+      parts.add('Done When: $cleanDone');
+    }
+    return parts.join('\n\n');
+  }
+
   /// Resolves the canonical `Done When` gate across checkpoint fields (`playtestGoal`,
   /// `trigger`, `feedback`) and `sections` (`Done When:`), stripping leading `Playtest:` /
   /// `Done When:` labels, normalizing arrows (`->` → `→`), and ignoring `+delta` tags
