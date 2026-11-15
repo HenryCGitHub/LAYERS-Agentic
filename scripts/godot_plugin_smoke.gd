@@ -162,6 +162,11 @@ func take_damage(amount: float) -> void:
 		printerr("FAIL: reparent_node did not move ClawPivot under VisualRig")
 		quit(1)
 		return
+	if moved_cs.owner != inst:
+		inst.free()
+		printerr("FAIL: reparent_node left inconsistent child owner on CollisionShape3D")
+		quit(1)
+		return
 
 	var ps_fixed := PackedScene.new()
 	ps_fixed.pack(inst)
@@ -195,6 +200,43 @@ func take_damage(amount: float) -> void:
 	exec.call("apply_input_ops", [{"action": "dash", "remove": true}])
 	if InputMap.has_action("dash"):
 		printerr("FAIL: apply_input_ops remove=true did not erase 'dash'")
+		quit(1)
+		return
+
+	var orig_fighter_disk := FileAccess.get_file_as_string("res://scripts/smoke_fighter.gd")
+	var undo_bundle := {
+		"mode": "direct_agent",
+		"summary": "Temp AI tweak for snapshot test",
+		"scriptUpdates": [
+			{"resPath": "res://scripts/smoke_fighter.gd", "content": "extends CharacterBody3D\n\nvar tweaked_speed: float = 99.0\n"},
+			{"resPath": "res://scripts/smoke_new_ai_helper.gd", "content": "extends Node\n\nvar created_by_ai: bool = true\n"},
+		],
+		"inputOps": [
+			{"action": "smoke_ai_jump", "keys": ["Space"]},
+		],
+		"sceneOps": [],
+	}
+	var pre_snap: Dictionary = exec.call("capture_bundle_snapshot", null, undo_bundle, "res://scenes/smoke_fighter.tscn")
+	var bundle_res: Dictionary = exec.call("apply_agent_bundle", null, null, undo_bundle, "res://scenes/smoke_fighter.tscn")
+	if not bool(bundle_res.get("ok", false)) or not FileAccess.file_exists("res://scripts/smoke_new_ai_helper.gd") or not InputMap.has_action("smoke_ai_jump"):
+		printerr("FAIL: apply_agent_bundle did not apply scriptUpdates/inputOps in smoke probe")
+		quit(1)
+		return
+	var restore_res: Dictionary = exec.call("restore_bundle_snapshot", null, pre_snap)
+	if not bool(restore_res.get("ok", false)):
+		printerr("FAIL: restore_bundle_snapshot returned ok=false")
+		quit(1)
+		return
+	if FileAccess.get_file_as_string("res://scripts/smoke_fighter.gd") != orig_fighter_disk:
+		printerr("FAIL: restore_bundle_snapshot did not restore exact smoke_fighter.gd contents")
+		quit(1)
+		return
+	if FileAccess.file_exists("res://scripts/smoke_new_ai_helper.gd"):
+		printerr("FAIL: restore_bundle_snapshot did not remove newly created smoke_new_ai_helper.gd")
+		quit(1)
+		return
+	if InputMap.has_action("smoke_ai_jump"):
+		printerr("FAIL: restore_bundle_snapshot did not remove newly registered 'smoke_ai_jump' InputMap action")
 		quit(1)
 		return
 

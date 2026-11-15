@@ -125,23 +125,6 @@ func fetch_active_epic() -> void:
 	})
 
 
-func toggle_step(feature_id: String, checkpoint_id: String, step_id: String, completed: bool) -> void:
-	if not has_link_token():
-		return
-	_dispatch_or_queue({
-		"kind": "update",
-		"method": HTTPClient.METHOD_POST,
-		"path": "/godotLink/update",
-		"body": JSON.stringify({
-			"featureId": feature_id,
-			"checkpointId": checkpoint_id,
-			"action": "toggle_step",
-			"stepId": step_id,
-			"completed": completed,
-		}),
-	})
-
-
 func set_playtest_passed(feature_id: String, checkpoint_id: String, passed: bool) -> void:
 	if not has_link_token():
 		return
@@ -154,30 +137,6 @@ func set_playtest_passed(feature_id: String, checkpoint_id: String, passed: bool
 			"checkpointId": checkpoint_id,
 			"action": "set_playtest",
 			"passed": passed,
-		}),
-	})
-
-
-func diagnose_fix(
-	feature_id: String,
-	checkpoint_id: String,
-	issue: String,
-	scene_snapshot: String,
-	scripts_snapshot: String
-) -> void:
-	if not has_link_token():
-		return
-	_dispatch_or_queue({
-		"kind": "update",
-		"method": HTTPClient.METHOD_POST,
-		"path": "/godotLink/update",
-		"body": JSON.stringify({
-			"featureId": feature_id,
-			"checkpointId": checkpoint_id,
-			"action": "diagnose_fix",
-			"issue": issue,
-			"sceneSnapshot": scene_snapshot,
-			"scriptsSnapshot": scripts_snapshot,
 		}),
 	})
 
@@ -486,10 +445,6 @@ func _ensure_agent_http() -> void:
 	_agent_http.timeout = 95.0
 	add_child(_agent_http)
 	_agent_http.request_completed.connect(_on_agent_http_completed)
-
-
-func is_agent_busy() -> bool:
-	return _agent_busy
 
 
 func build_feature(

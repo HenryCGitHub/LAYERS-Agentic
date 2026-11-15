@@ -1616,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.2"'));
+        expect(cfgText, contains('version="2.7.3"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1635,7 +1635,9 @@ func _physics_process(delta: float) -> void:
         expect(syncText, contains('.gitignore'));
         expect(syncText, contains('/godotLink/epic'));
         expect(syncText, contains('/godotLink/update'));
-        expect(syncText, contains('"diagnose_fix"'));
+        expect(syncText, isNot(contains('func toggle_step')));
+        expect(syncText, isNot(contains('func diagnose_fix')));
+        expect(syncText, isNot(contains('func is_agent_busy')));
         expect(syncText, contains('"sync_scripts"'));
         expect(syncText, contains('sync_live_scripts'));
         expect(syncText, contains('scripts_synced'));
@@ -1665,8 +1667,10 @@ func _physics_process(delta: float) -> void:
         expect(dockText, isNot(contains('Tree.new()')));
         expect(dockText, isNot(contains('CodeEdit.new()')));
         expect(dockText, contains('layers_step_executor.gd'));
-        expect(dockText, contains('Broken? Ask Agent to Fix'));
-        expect(dockText, contains('Fix Latest Playtest Error (0)'));
+        expect(dockText, isNot(contains('Broken? Ask Agent to Fix')));
+        expect(dockText, isNot(contains('Fix Latest Playtest Error (0)')));
+        expect(dockText, contains('Undo Last AI'));
+        expect(dockText, contains('_footer_box.visible = can_pass_playtest'));
         expect(dockText, contains('_is_feature_checkpoint_built'));
         expect(dockText, contains('OS.add_logger'));
         expect(dockText, contains('Build Feature in Godot'));
@@ -1705,7 +1709,11 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('preserve_existing_visuals'));
         expect(executorText, contains('verify_built_feature_integrity'));
         expect(executorText, contains('sceneFilePath'));
-        expect(executorText, contains('extract_feature_export_tuners'));
+        expect(executorText, isNot(contains('func extract_feature_export_tuners')));
+        expect(executorText, isNot(contains('func apply_fix_patch')));
+        expect(executorText, contains('_unset_subtree_owners'));
+        expect(executorText, contains('capture_bundle_snapshot'));
+        expect(executorText, contains('restore_bundle_snapshot'));
         expect(executorText, contains('is_likely_gdscript_snippet'));
         expect(executorText, contains('can_attach_script_to_node'));
         expect(executorText, contains('evaluate_feature'));

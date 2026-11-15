@@ -92,6 +92,7 @@ var _last_detected_error_count: int = 0
 var _cached_diagnostics: PackedStringArray = PackedStringArray()
 var _diagnostics_dirty: bool = true
 var _ignored_diagnostic_signatures: Dictionary = {}
+var _last_ai_snapshot: Dictionary = {}
 
 # Slim Top Self-Update Banner
 var _update_banner: PanelContainer
@@ -401,7 +402,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.2")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.3")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -527,7 +528,7 @@ func _build_ui() -> void:
 	_footer_box.add_child(_primary_cta_btn)
 
 	_status_label = Label.new()
-	_status_label.text = "Ready · Ctrl+Z supported on scene actions"
+	_status_label.text = "Ready"
 	_status_label.clip_text = true
 	_status_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.66, 0.70, 0.76)))
 	add_child(_status_label)
@@ -875,17 +876,26 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	var agent_card := _create_native_card()
 	var agent_vb: VBoxContainer = agent_card["vb"]
 
+	var agent_hdr_row := HBoxContainer.new()
+	agent_hdr_row.add_theme_constant_override("separation", _S(4))
+	agent_vb.add_child(agent_hdr_row)
+
 	var agent_hdr := Label.new()
 	agent_hdr.text = "Agent Director · Tweak or Fix"
+	agent_hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	if bold_font != null:
 		agent_hdr.add_theme_font_override("font", bold_font)
-	agent_vb.add_child(agent_hdr)
+	agent_hdr_row.add_child(agent_hdr)
 
-	var agent_sub := Label.new()
-	agent_sub.text = "Describe any gameplay tweak or Broken? Ask Agent to Fix — edits .gd + .tscn directly."
-	agent_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	agent_sub.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
-	agent_vb.add_child(agent_sub)
+	if not _last_ai_snapshot.is_empty() and not _building_feature and not _diagnosing_fix:
+		var undo_ai_btn := Button.new()
+		undo_ai_btn.flat = true
+		undo_ai_btn.theme_type_variation = &"FlatButton"
+		undo_ai_btn.text = "Undo Last AI"
+		undo_ai_btn.icon = _editor_icon("UndoRedo", "Reload")
+		undo_ai_btn.tooltip_text = "Restore files on disk from before the last AI build or tweak"
+		undo_ai_btn.pressed.connect(_on_undo_last_ai_pressed)
+		agent_hdr_row.add_child(undo_ai_btn)
 
 	if not _last_agent_summary.is_empty():
 		var res_panel := PanelContainer.new()
@@ -1024,21 +1034,9 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	apply_btn.pressed.connect(_on_direct_agent_pressed.bind(feat_id, cp_id))
 	agent_vb.add_child(apply_btn)
 
-	if log_errors.is_empty():
-		var fix_zero_btn := Button.new()
-		fix_zero_btn.text = "Fix Latest Playtest Error (0)"
-		fix_zero_btn.icon = _editor_icon("StatusSuccess")
-		fix_zero_btn.disabled = true
-		fix_zero_btn.tooltip_text = "No playtest or GDScript errors detected right now. Activates automatically when Godot's Debugger or Output catches an error."
-		agent_vb.add_child(fix_zero_btn)
-
-	# Sticky Footer CTA
-	_footer_box.visible = true
-	_primary_cta_btn.disabled = _building_feature
-	if not can_pass_playtest:
-		_primary_cta_btn.text = "Build Feature in Godot"
-		_primary_cta_btn.icon = _editor_icon("Add", "Tools")
-	else:
+	_footer_box.visible = can_pass_playtest
+	if can_pass_playtest:
+		_primary_cta_btn.disabled = _building_feature or _diagnosing_fix
 		_primary_cta_btn.text = "Playtest Passed — Next Feature"
 		_primary_cta_btn.icon = _editor_icon("StatusSuccess" if gate_passed else "Forward")
 
@@ -1239,7 +1237,17 @@ func _on_bundle_apply_timeout() -> void:
 		return
 	var active_feat: Dictionary = _get_active_feature()
 	var pref_scene: String = str(active_feat.get("primaryAsset", "")).strip_edges()
+	var pre_snap: Dictionary = _executor.call("capture_bundle_snapshot", editor_interface, bundle, pref_scene)
+	pre_snap["was_initial_build"] = was_initial_build
+	pre_snap["checkpoint_key"] = _make_checkpoint_build_key(active_feat) if not active_feat.is_empty() else ""
 	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle, pref_scene)
+	if bool(apply_res.get("ok", false)):
+		_last_ai_snapshot = pre_snap
+		var applied_scripts: PackedStringArray = apply_res.get("applied_scripts", PackedStringArray())
+		for sp in applied_scripts:
+			var sp_str := str(sp).strip_edges()
+			if sp_str.begins_with("res://") and sp_str.ends_with(".gd"):
+				_queue_live_script_sync(sp_str)
 	_executor.call("invalidate_eval_cache")
 	_diagnostics_dirty = true
 	if editor_interface != null and editor_interface.get_resource_filesystem() != null:
@@ -1388,15 +1396,25 @@ func _on_open_res_path_pressed(res_path: String) -> void:
 		_set_status(err_msg, true)
 
 
-func _on_run_scene_pressed(target_scene_path: String = "") -> void:
-	if editor_interface == null:
+func _on_undo_last_ai_pressed() -> void:
+	if _executor == null or _last_ai_snapshot.is_empty():
 		return
-	if not target_scene_path.is_empty() and target_scene_path.ends_with(".tscn") and FileAccess.file_exists(target_scene_path):
-		var cur_root: Node = editor_interface.get_edited_scene_root()
-		if cur_root == null or cur_root.scene_file_path != target_scene_path:
-			editor_interface.play_custom_scene(target_scene_path)
-			return
-	editor_interface.play_current_scene()
+	var snap := _last_ai_snapshot
+	_last_ai_snapshot = {}
+	var res: Dictionary = _executor.call("restore_bundle_snapshot", editor_interface, snap)
+	var active_feat: Dictionary = _get_active_feature()
+	if bool(snap.get("was_initial_build", false)):
+		var cp_key := str(snap.get("checkpoint_key", ""))
+		if not cp_key.is_empty():
+			_locally_built_keys.erase(cp_key)
+		if not active_feat.is_empty():
+			active_feat["isBuiltInGodot"] = false
+	_diagnostics_dirty = true
+	_last_agent_summary = ""
+	_last_agent_warnings = PackedStringArray()
+	_queue_live_script_sync()
+	_set_status("Reverted last AI change on disk." if bool(res.get("ok", false)) else "Could not revert last AI change.", not bool(res.get("ok", false)))
+	_refresh_view()
 
 
 func _on_feature_selected(idx: int) -> void:
@@ -1588,6 +1606,7 @@ func _on_connect_pressed() -> void:
 	_payload = {}
 	_selected_feature_id = ""
 	_last_agent_summary = ""
+	_last_ai_snapshot = {}
 	_refresh_view()
 	_sync.fetch_active_epic()
 
@@ -1604,6 +1623,7 @@ func _on_disconnect_pressed() -> void:
 	_payload = {}
 	_selected_feature_id = ""
 	_last_agent_summary = ""
+	_last_ai_snapshot = {}
 	_show_token_editor = true
 	_status_label.text = "Disconnected"
 	_status_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.66, 0.70, 0.76)))

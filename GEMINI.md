@@ -20,6 +20,8 @@
 ## 1. Default Auto-Goal & Auto-Grill Loop Workflow
 - **Automated `Auto GG` Continuous Loop (`/auto-gg` or `"Auto GG"`)**:
   - Typing `/auto-gg [optional focus]` or `"Auto GG"` launches [SKILL.md](.agents/skills/auto-gg/SKILL.md) + [auto_gg_hook.py](.agents/hooks/auto_gg_hook.py), which automatically scans live repo/Godot signals (`discover_signals.py`), pitches top concrete Goals + grills UX forks via `ask_question`, builds & verifies (`./scripts/verify_loop.sh`), commits, and auto-advances to the next Goal + Grill round until canceled or told `stop` / `pause`.
+- **Opt-In `SEA` Lens (`/sea` or `"SEA"` — Subtract, Enhance, Add)**:
+  - Activate [SKILL.md](.agents/skills/sea/SKILL.md) **only** when `/sea` or `SEA` is explicitly written in the prompt (including `auto gg SEA ...`) to audit, grill, and execute strictly in **Subtract → Enhance → Add** order.
 - **Auto-Goal (Self-Derived Goal Contracts — Always On)**:
   - On any symptom report, audit request, or open-ended prompt, inspect the codebase, tests, and headless Godot probes first to derive a concrete **Goal Contract** (`Goal`, `In Scope`, and machine-verifiable `Done When` checks).
   - When a prompt is open-ended (e.g., *"audit LAYERS"* or a broad symptom with multiple gaps), automatically select the **#1 highest-impact safe goal** and run its verification loop immediately rather than pausing on a backlog menu.
