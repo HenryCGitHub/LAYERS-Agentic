@@ -1,5 +1,26 @@
 extends SceneTree
 
+
+class _SyncSpy extends Node:
+	var fetched_count: int = 0
+	var update_checked_silent: Array = []
+
+	func has_link_token() -> bool:
+		return true
+
+	func get_link_token() -> String:
+		return "lyr_spy_1234567890123456"
+
+	func get_local_plugin_version() -> String:
+		return "3.0.4"
+
+	func fetch_active_epic() -> void:
+		fetched_count += 1
+
+	func check_for_plugin_update(silent: bool = true) -> void:
+		update_checked_silent.append(silent)
+
+
 const SMOKE_SCENE_PATH := "res://scenes/smoke_arena.tscn"
 const SMOKE_SCRIPT_PATH := "res://scripts/smoke_player.gd"
 const CONFIG_PATH := "res://.layers/link_config.cfg"
@@ -269,6 +290,38 @@ func _run_smoke_suite() -> bool:
 	]:
 		if md.find(required_md) == -1:
 			_fail("format_feature_context_markdown missing '%s'" % required_md)
+			return false
+
+	var md_with_ctx: String = exec.call(
+		"format_feature_context_markdown",
+		feat_probe,
+		{SMOKE_SCRIPT_PATH: "extends CharacterBody3D\n"},
+		scene_snap,
+		input_snap,
+		[],
+		{
+			"projectTitle": "Shell Combat",
+			"releaseVersion": "v0.3",
+			"epicCode": "E03",
+			"epicTitle": "Claw & Shell Parry",
+			"designPillars": ["Every parry feels weighty", "Read tells before hits land"],
+			"tradeOffs": ["Snappy input over long windups"],
+			"siblingTuning": [
+				{"title": "Player Dash", "tuningParams": ["dashSpeed: 12.0 m/s", "dashCooldown: 0.4 s"]}
+			],
+		}
+	)
+	for required_ctx in [
+		"### Project & Epic Context",
+		"Project: Shell Combat (v0.3)",
+		"Active Epic: E03 · Claw & Shell Parry",
+		"Design Pillars: Every parry feels weighty · Read tells before hits land",
+		"Trade-Offs: Snappy input over long windups",
+		"Sibling Epic Tuning Variables (Reuse Exact Identifiers):",
+		"Player Dash: dashSpeed: 12.0 m/s, dashCooldown: 0.4 s",
+	]:
+		if md_with_ctx.find(required_ctx) == -1:
+			_fail("format_feature_context_markdown with project_ctx missing '%s'\n%s" % [required_ctx, md_with_ctx])
 			return false
 
 	# 3. Verify 2-way Sync Client v3.0.0 surface + offline cache roundtrip
@@ -628,6 +681,19 @@ func _run_smoke_suite() -> bool:
 		dock.free()
 		_fail("Expected _fix_input when _issue_composer_expanded is true.")
 		return false
+
+	# Verify clicking Sync triggers both fetch_active_epic and silent plugin update check
+	var spy: _SyncSpy = _SyncSpy.new()
+	dock.set("_sync", spy)
+	dock.call("_on_sync_pressed")
+	if spy.fetched_count != 1 or spy.update_checked_silent != [true]:
+		spy.free()
+		sync_v03.free()
+		dock.set("_sync", null)
+		dock.free()
+		_fail("_on_sync_pressed did not trigger fetch + silent check_for_plugin_update(true): fetched=%d checks=%s" % [spy.fetched_count, str(spy.update_checked_silent)])
+		return false
+	spy.free()
 
 	sync_v03.free()
 	dock.set("_sync", null)

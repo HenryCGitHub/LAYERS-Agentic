@@ -310,6 +310,15 @@ function dedupeScopeBulletsJs(items, maxItems = 6) {
   return out;
 }
 
+function parseBulletLinesJs(rawText, maxItems = 6) {
+  return String(rawText || "")
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((l) => l.replace(/^[-*•]\s*/, "").trim())
+    .filter((l) => Boolean(l) && !l.startsWith("#"))
+    .slice(0, maxItems);
+}
+
 function markChecklistItemCompletedByIdJs(items, targetId) {
   const cleanTarget = String(targetId || "").trim();
   if (!cleanTarget || !Array.isArray(items)) return false;
@@ -604,10 +613,25 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       epicPosition: 0,
       totalEpics: 0,
       allEpicsCompleted: false,
+      designPillars: [],
+      tradeOffs: [],
       webStudioUrl,
       activeEpic: null,
     };
   }
+
+  const designPillars = parseBulletLinesJs(
+    projectDoc?.sections?.design_pillars ||
+      projectDoc?.sections?.designPillars ||
+      "",
+    6
+  );
+  const tradeOffs = parseBulletLinesJs(
+    projectDoc?.sections?.trade_offs ||
+      projectDoc?.sections?.tradeOffs ||
+      "",
+    6
+  );
 
   let releases = (Array.isArray(projectDoc.childrenIds) ? projectDoc.childrenIds : [])
     .map((id) => docsById.get(id))
@@ -658,6 +682,8 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       epicPosition: 0,
       totalEpics: 0,
       allEpicsCompleted: false,
+      designPillars,
+      tradeOffs,
       webStudioUrl,
       activeEpic: null,
     };
@@ -828,6 +854,8 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
       epicPosition: candidateEpics.length,
       totalEpics: candidateEpics.length,
       allEpicsCompleted: true,
+      designPillars,
+      tradeOffs,
       webStudioUrl,
       arenaScenePath,
       activeEpic: null,
@@ -843,6 +871,8 @@ function computeActiveEpicPayload({ docsById, projectId, webStudioUrl }) {
     epicPosition: activeIdx >= 0 ? activeIdx + 1 : 0,
     totalEpics: candidateEpics.length,
     allEpicsCompleted: false,
+    designPillars,
+    tradeOffs,
     webStudioUrl,
     arenaScenePath,
     activeEpic: activeIdx >= 0 ? candidateEpics[activeIdx] : null,

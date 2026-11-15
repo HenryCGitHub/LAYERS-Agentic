@@ -1199,12 +1199,33 @@ func format_feature_context_markdown(
 	live_scripts: Dictionary,
 	scene_snap: Dictionary,
 	input_map_snap: Dictionary,
-	recent_errors: Array = []
+	recent_errors: Array = [],
+	project_ctx: Dictionary = {}
 ) -> String:
 	var out := PackedStringArray()
 	out.append("## LAYERS Godot Context")
+
+	var proj_title: String = str(project_ctx.get("projectTitle", "")).strip_edges()
+	var rel_ver: String = str(project_ctx.get("releaseVersion", feat.get("releaseVersion", ""))).strip_edges()
+	var epic_code: String = str(project_ctx.get("epicCode", "")).strip_edges()
+	var epic_title: String = str(project_ctx.get("epicTitle", "")).strip_edges()
+	var pillars: PackedStringArray = dedupe_scope_items(project_ctx.get("designPillars", []), 6)
+	var tradeoffs: PackedStringArray = dedupe_scope_items(project_ctx.get("tradeOffs", []), 6)
+	if not proj_title.is_empty() or not epic_title.is_empty() or not pillars.is_empty() or not tradeoffs.is_empty():
+		out.append("")
+		out.append("### Project & Epic Context")
+		if not proj_title.is_empty():
+			out.append("- Project: %s%s" % [proj_title, (" (%s)" % rel_ver) if not rel_ver.is_empty() else ""])
+		if not epic_title.is_empty():
+			var epic_prefix := ("%s · " % epic_code) if not epic_code.is_empty() else ""
+			out.append("- Active Epic: %s%s" % [epic_prefix, epic_title])
+		if not pillars.is_empty():
+			out.append("- Design Pillars: %s" % " · ".join(pillars))
+		if not tradeoffs.is_empty():
+			out.append("- Trade-Offs: %s" % " · ".join(tradeoffs))
+
 	var feat_title: String = str(feat.get("title", "")).strip_edges()
-	var clean_spec: Dictionary = resolve_clean_feature_spec(feat, str(feat.get("releaseVersion", "")))
+	var clean_spec: Dictionary = resolve_clean_feature_spec(feat, rel_ver)
 	var feat_goal: String = str(clean_spec.get("goal", "")).strip_edges()
 	var covered_items: PackedStringArray = clean_spec.get("scope_items", PackedStringArray())
 	var guards_raw: Variant = feat.get("edgeCases", [])
@@ -1233,6 +1254,27 @@ func format_feature_context_markdown(
 				out.append("- Tuning Variables:")
 				for tl in tuning_lines:
 					out.append("  - %s" % tl)
+		var sibling_raw: Variant = project_ctx.get("siblingTuning", [])
+		if typeof(sibling_raw) == TYPE_ARRAY:
+			var sibling_lines := PackedStringArray()
+			for sib_entry in (sibling_raw as Array):
+				if typeof(sib_entry) != TYPE_DICTIONARY:
+					continue
+				var sd: Dictionary = sib_entry
+				var sib_title: String = str(sd.get("title", "")).strip_edges()
+				var params_raw: Variant = sd.get("tuningParams", [])
+				var param_parts := PackedStringArray()
+				if typeof(params_raw) == TYPE_ARRAY or typeof(params_raw) == TYPE_PACKED_STRING_ARRAY:
+					for p_item in params_raw:
+						var ps := str(p_item).strip_edges()
+						if not ps.is_empty():
+							param_parts.append(ps)
+				if not sib_title.is_empty() and not param_parts.is_empty():
+					sibling_lines.append("  - %s: %s" % [sib_title, ", ".join(param_parts)])
+			if not sibling_lines.is_empty():
+				out.append("- Sibling Epic Tuning Variables (Reuse Exact Identifiers):")
+				for sl in sibling_lines:
+					out.append(sl)
 		if typeof(guards_raw) == TYPE_ARRAY:
 			var guard_lines := PackedStringArray()
 			for g_raw in (guards_raw as Array):

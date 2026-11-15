@@ -391,7 +391,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.3")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "3.0.4")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -1595,13 +1595,47 @@ func _on_copy_context_pressed(feat: Dictionary) -> void:
 	var ctx_feat: Dictionary = feat.duplicate()
 	if not ctx_feat.has("releaseVersion"):
 		ctx_feat["releaseVersion"] = str(_payload.get("releaseVersion", "v0.1"))
+	var epic_raw: Variant = _payload.get("activeEpic", {})
+	var epic_dict: Dictionary = epic_raw if typeof(epic_raw) == TYPE_DICTIONARY else {}
+	var sibling_tuning: Array = []
+	var cur_feat_id: String = str(feat.get("id", "")).strip_edges()
+	var epic_feats: Variant = epic_dict.get("features", [])
+	if typeof(epic_feats) == TYPE_ARRAY:
+		for sib_raw in (epic_feats as Array):
+			if typeof(sib_raw) != TYPE_DICTIONARY:
+				continue
+			var sib_d: Dictionary = sib_raw as Dictionary
+			if str(sib_d.get("id", "")).strip_edges() == cur_feat_id:
+				continue
+			var sib_params: Variant = sib_d.get("tuningParams", [])
+			var sib_clean_params := PackedStringArray()
+			if typeof(sib_params) == TYPE_ARRAY or typeof(sib_params) == TYPE_PACKED_STRING_ARRAY:
+				for sp_item in sib_params:
+					var sp_str := str(sp_item).strip_edges()
+					if not sp_str.is_empty():
+						sib_clean_params.append(sp_str)
+			if not sib_clean_params.is_empty():
+				sibling_tuning.append({
+					"title": str(sib_d.get("title", "Feature")).strip_edges(),
+					"tuningParams": sib_clean_params,
+				})
+	var project_ctx: Dictionary = {
+		"projectTitle": str(_payload.get("projectTitle", "")).strip_edges(),
+		"releaseVersion": str(_payload.get("releaseVersion", "v0.1")).strip_edges(),
+		"designPillars": _payload.get("designPillars", []),
+		"tradeOffs": _payload.get("tradeOffs", []),
+		"epicCode": str(epic_dict.get("code", "")).strip_edges(),
+		"epicTitle": str(epic_dict.get("title", "")).strip_edges(),
+		"siblingTuning": sibling_tuning,
+	}
 	var md: String = _executor.call(
 		"format_feature_context_markdown",
 		ctx_feat,
 		live_scripts,
 		scene_snap,
 		input_map_snap,
-		recent_errors
+		recent_errors,
+		project_ctx
 	)
 	DisplayServer.clipboard_set(md)
 	_set_status("Copied Godot context (%d chars) to clipboard." % md.length(), false)
@@ -1749,6 +1783,8 @@ func _on_connect_pressed() -> void:
 	_selected_feature_id = ""
 	_refresh_view()
 	_sync.fetch_active_epic()
+	if _sync.has_method("check_for_plugin_update"):
+		_sync.check_for_plugin_update(true)
 
 
 func _on_cancel_token_pressed() -> void:
@@ -1774,6 +1810,8 @@ func _on_sync_pressed() -> void:
 		_executor.call("invalidate_eval_cache")
 	if _sync != null:
 		_sync.fetch_active_epic()
+		if _sync.has_method("check_for_plugin_update"):
+			_sync.check_for_plugin_update(true)
 	if _workspace_panel != null and _workspace_panel.visible and not _payload.is_empty():
 		_refresh_view()
 

@@ -1936,21 +1936,34 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     sb.writeln('- **Epic**: $epicLabel');
     sb.writeln('- **Feature**: ${feat.title}');
     sb.writeln('- **Status**: ${cpNode?.unifiedStatusLabel ?? 'Queued'}');
-    final rawGoal = (feat.sections['scope'] ?? feat.sections['goal'] ?? '').trim();
-    if (rawGoal.isNotEmpty) {
-      sb.writeln('- **Goal**: ${rawGoal.split('\n').first.replaceFirst(_goalPrefixRegex, '').trim()}');
+    final resolvedGoal = SectionTextUtils.resolveGoal(feat.sections).trim();
+    if (resolvedGoal.isNotEmpty) {
+      sb.writeln('- **Goal**: $resolvedGoal');
     }
-    if (cpNode != null && cpNode.coveredScope.isNotEmpty) {
+    final scopeItems = (cpNode != null && cpNode.coveredScope.isNotEmpty)
+        ? cpNode.coveredScope
+        : SectionTextUtils.resolveInScope(feat.sections);
+    if (scopeItems.isNotEmpty) {
       sb.writeln('- **In Scope**:');
-      for (final item in cpNode.coveredScope) {
+      for (final item in scopeItems) {
         final clean = item.trim();
         if (clean.isNotEmpty) {
           sb.writeln('  - $clean');
         }
       }
     }
-    if (cpNode != null && cpNode.playtestCondition.trim().isNotEmpty) {
-      sb.writeln('- **Playtest Gate (Done When)**: ${cpNode.playtestCondition.trim()}');
+    final hasExplicitCondition = cpNode != null &&
+        (cpNode.trigger.trim().isNotEmpty ||
+            (cpNode.feedback?.trim().isNotEmpty ?? false));
+    final sectionDoneWhen = SectionTextUtils.resolveDoneWhen(feat.sections).trim();
+    final rawDone = hasExplicitCondition
+        ? cpNode.playtestCondition.trim()
+        : (sectionDoneWhen.isNotEmpty
+            ? sectionDoneWhen
+            : (cpNode?.playtestCondition.trim() ?? ''));
+    final cleanDone = rawDone.replaceAll(' -> ', ' → ').trim();
+    if (cleanDone.isNotEmpty) {
+      sb.writeln('- **Playtest Gate (Done When)**: $cleanDone');
     }
     final pillarsText = (draft != null && draft.designPillars.isNotEmpty)
         ? draft.designPillars.join(' · ')

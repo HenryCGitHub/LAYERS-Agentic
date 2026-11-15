@@ -1084,7 +1084,7 @@ void main() {
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="3.0.3"'));
+        expect(cfgText, contains('version="3.0.4"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -2533,7 +2533,7 @@ const deduped = dedupeScopeBulletsJs(["60ms hitstop freeze frame", "+60ms hitsto
 assert.deepStrictEqual(deduped, ["+60ms hitstop freeze frame", "+stagger flash shader"]);
 
 const docsById = new Map([
-  ["proj_1", { id: "proj_1", tier: "PROJECT", title: "Shell", childrenIds: ["rel_3"], sections: { active_release_id: "rel_3" } }],
+  ["proj_1", { id: "proj_1", tier: "PROJECT", title: "Shell", childrenIds: ["rel_3"], sections: { active_release_id: "rel_3", design_pillars: "• Every parry feels weighty\n• Read enemy tells cleanly", trade_offs: "• Arcade responsiveness over realism" } }],
   ["rel_3", { id: "rel_3", tier: "RELEASE", parentId: "proj_1", title: "v0.3 Vertical Slice", childrenIds: ["ep_3"], sections: { version: "v0.3" } }],
   ["ep_3", { id: "ep_3", tier: "EPIC", parentId: "rel_3", title: "Claw & Shell Parry", childrenIds: ["f_stagger"] }],
   ["f_stagger", {
@@ -2553,6 +2553,8 @@ const docsById = new Map([
   }]
 ]);
 const payload = computeActiveEpicPayload({ docsById, projectId: "proj_1", webStudioUrl: "https://example.com" });
+assert.deepStrictEqual(payload.designPillars, ["Every parry feels weighty", "Read enemy tells cleanly"]);
+assert.deepStrictEqual(payload.tradeOffs, ["Arcade responsiveness over realism"]);
 const feat = payload.activeEpic.features[0];
 assert.strictEqual(feat.goal, "+hitstop freeze frame, +stagger flash material, +wall bounce slam");
 assert.deepStrictEqual(feat.coveredScope, ["+60ms hitstop freeze frame", "+stagger flash shader"]);
@@ -2566,6 +2568,80 @@ process.stdout.write("JS_SCOPE_PARSE_OK\n");
           reason: 'stderr: ${result.stderr}\nstdout: ${result.stdout}',
         );
         expect(result.stdout.toString(), contains('JS_SCOPE_PARSE_OK'));
+      },
+    );
+
+    test(
+      'buildActiveFeatureCodingAgentPrompt falls back to sections.scope Goal, In Scope & Done When',
+      () {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final cp = FeatureStateNode(
+          id: 'cp_prompt_fallback',
+          name: '01 · VERTICAL SLICE',
+          tuningParams: ['staggerDuration: 1.8 s'],
+          edgeCases: ['[STATE GUARD] Ignore attack input while staggered'],
+          parameters: {'releaseVersion': 'v0.3'},
+        );
+        final feat = TierDocument(
+          id: 'feat_prompt_fallback',
+          title: 'Enemy Stagger State',
+          tier: TierType.feature,
+          parentId: 'epic_prompt_fallback',
+          phase: 'v0.3',
+          sections: {
+            'scope':
+                'Goal: +hitstop freeze frame, +stagger flash material\n\nIn Scope:\n• +60ms hitstop freeze frame\n• +stagger flash shader\n\nDone When: Land parry -> enemy flashes white',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+        final epic = TierDocument(
+          id: 'epic_prompt_fallback',
+          title: 'Claw & Shell Parry',
+          tier: TierType.epic,
+          parentId: 'rel_prompt_fallback',
+          phase: 'v0.3',
+          childrenIds: [feat.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_prompt_fallback',
+          title: 'v0.3 Vertical Slice',
+          tier: TierType.release,
+          parentId: 'proj_prompt_fallback',
+          phase: 'v0.3',
+          childrenIds: [epic.id],
+          sections: {'version': 'v0.3'},
+        );
+        final proj = TierDocument(
+          id: 'proj_prompt_fallback',
+          title: 'Shell Combat',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'design_pillars': '• Every parry feels weighty',
+            'trade_offs': '• Arcade punch over inertia',
+          },
+        );
+        for (final doc in [proj, rel, epic, feat]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+
+        final prompt = provider.buildActiveFeatureCodingAgentPrompt(feat.id);
+        expect(
+          prompt,
+          contains(
+            '- **Goal**: +hitstop freeze frame, +stagger flash material',
+          ),
+        );
+        expect(prompt, contains('- **In Scope**:\n  - +60ms hitstop freeze frame\n  - +stagger flash shader'));
+        expect(
+          prompt,
+          contains(
+            '- **Playtest Gate (Done When)**: Land parry → enemy flashes white',
+          ),
+        );
       },
     );
   });
