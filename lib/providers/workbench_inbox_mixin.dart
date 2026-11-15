@@ -753,11 +753,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
             'primarySharedScriptOrScene': resolvedPrimaryAsset,
         },
       );
-      TaskHowToBlueprint.populateDefaultUnifiedSteps(
-        newCp,
-        engineHint: _activeEngineHint,
-        phase: _currentPhase,
-      );
       states.add(newCp);
       featDoc.sections['activeReleaseVersion'] = activeVer;
       if (featDoc.sections['originVersion'] != activeVer) {
@@ -850,11 +845,6 @@ Invoke `commit_inbox_feature_triage` with the structured triage recommendation.'
         if (inboxPrimaryAsset.isNotEmpty)
           'primarySharedScriptOrScene': inboxPrimaryAsset,
       },
-    );
-    TaskHowToBlueprint.populateDefaultUnifiedSteps(
-      cpNode,
-      engineHint: _activeEngineHint,
-      phase: _currentPhase,
     );
     FeatureStateNode.saveStatesToDocument(featDoc, [cpNode]);
     documents[featId] = featDoc;

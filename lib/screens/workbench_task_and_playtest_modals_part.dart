@@ -421,7 +421,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                           if (cpNode != null) ...[
                                             const SizedBox(height: 8),
                                             Text(
-                                              'Playtest Gate: ${TaskHowToBlueprint.formatConciseVerifySentence(cpNode.playtestCondition)}',
+                                              'Playtest Gate: ${SectionTextUtils.formatConciseVerifySentence(cpNode.playtestCondition)}',
                                               style: GoogleFonts.inter(
                                                 fontSize: 12,
                                                 color: textSecondary,
@@ -436,7 +436,7 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                                   for (final g
                                                       in cpNode.edgeCases)
                                                     Text(
-                                                      '• ${TaskHowToBlueprint.formatTelegraphicGuardChip(g)}',
+                                                      '• ${SectionTextUtils.formatTelegraphicGuardChip(g)}',
                                                       style: GoogleFonts
                                                           .jetBrainsMono(
                                                         fontSize: 9.5,

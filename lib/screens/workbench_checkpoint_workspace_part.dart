@@ -1,35 +1,16 @@
 part of 'release_workbench_screen.dart';
 
 extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
-  void _materializeUnifiedStepsIfNeeded(
-    FeatureStateNode node,
-    List<TaskHowToSubStep> unifiedSteps,
-  ) {
-    node.flattenLegacyNestedChecklistIfNeeded();
-    final needsSync = node.checklist.length != unifiedSteps.length ||
-        [
-          for (int i = 0; i < unifiedSteps.length; i++)
-            !identical(node.checklist[i], unifiedSteps[i].subtask),
-        ].any((mismatch) => mismatch);
-    if (needsSync && unifiedSteps.isNotEmpty) {
-      node.checklist
-        ..clear()
-        ..addAll(unifiedSteps.map((s) => s.subtask));
-    }
-  }
-
   void _completeAllCheckpointTasks(FeatureStateNode node) {
-    final steps = TaskHowToBlueprint.resolveUnifiedSteps(
-      checkpointNode: node,
-      engineHint: _engineHint,
-      phase: widget.workbench.currentPhase,
-    );
-    _materializeUnifiedStepsIfNeeded(node, steps);
+    node.flattenLegacyNestedChecklistIfNeeded();
     for (final task in node.checklist) {
       task.completed = true;
       for (final child in task.children) {
         child.completed = true;
       }
+    }
+    for (int gIdx = 0; gIdx < node.edgeCases.length; gIdx++) {
+      node.setGuardSignedOff(gIdx, node.edgeCases[gIdx], true);
     }
     node.isPlaytestPassed = true;
   }

@@ -362,7 +362,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final existingRel = documents[relId];
     final draftEngineHint = '${draft.gameSpec.join(' ')} ${draft.techSpec.join(' ')}';
     final draftEngineLabel =
-        TaskHowToBlueprint.detectEngineLabel(draftEngineHint);
+        SectionTextUtils.detectEngineLabel(draftEngineHint);
     final draftStackSig =
         _godotTechStackSignature(draftEngineHint);
 
@@ -388,7 +388,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             existingProj?.sections['game_spec'] ?? existingProj?.sections['gameSpec'] ?? '';
         final prevHint = '$prevGameSpec $prevTechSpec'.trim();
         existingRel.sections['synced_engine_label'] ??=
-            TaskHowToBlueprint.detectEngineLabel(prevHint);
+            SectionTextUtils.detectEngineLabel(prevHint);
         existingRel.sections['synced_tech_stack_sig'] ??=
             _godotTechStackSignature(prevHint);
       }
@@ -561,7 +561,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     // invalidate stale engine-specific custom_snippet steps and primary_asset paths across built features.
     final newEngineHint = '${draft.gameSpec.join(' ')} ${draft.techSpec.join(' ')}';
     final currentEngineLabel =
-        TaskHowToBlueprint.detectEngineLabel(newEngineHint);
+        SectionTextUtils.detectEngineLabel(newEngineHint);
     final currentStackSig = _godotTechStackSignature(newEngineHint);
     final previousEngineLabel = rel.sections['synced_engine_label'] ?? '';
     final previousStackSig = rel.sections['synced_tech_stack_sig'] ?? '';
@@ -584,7 +584,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         }
         _persistDocument(r);
       }
-      TaskHowToBlueprint.clearCache();
 
       final projectFeatureIds = <String>{};
       for (final r in releases) {
@@ -609,11 +608,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             (k, _) => k.startsWith('synthesized_') || k.endsWith('_steps_json'),
           );
           cp.checklist = [];
-          TaskHowToBlueprint.populateDefaultUnifiedSteps(
-            cp,
-            engineHint: newEngineHint,
-            phase: _currentPhase,
-          );
         }
         FeatureStateNode.saveStatesToDocument(featDoc, states);
         _persistDocument(featDoc);
@@ -912,11 +906,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             if (starterTasks.isNotEmpty)
               'plannedSlices': starterTasks.join(' | '),
           },
-        );
-        TaskHowToBlueprint.populateDefaultUnifiedSteps(
-          cpNode,
-          engineHint: _activeEngineHint,
-          phase: _currentPhase,
         );
         final newFeatDoc = TierDocument(
           id: newFeatId,

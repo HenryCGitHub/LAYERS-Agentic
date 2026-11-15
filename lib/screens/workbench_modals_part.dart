@@ -19,8 +19,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
             .where((f) => widget.workbench.isFeatureActiveInRelease(f))
             .toList()
         : allUnfilteredFeats;
-    int totalTasks = 0;
-    int totalStepsDone = 0;
+    int passedGates = 0;
+    int totalGates = 0;
+    int checkedGuards = 0;
+    int totalGuards = 0;
     for (final f in allFeats) {
       final allStates = FeatureStateNode.getStatesForDocument(f);
       final activeStates = allStates
@@ -28,13 +30,10 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
           .toList();
       final states = activeStates.isNotEmpty ? activeStates : allStates;
       for (final s in states) {
-        final steps = TaskHowToBlueprint.resolveUnifiedSteps(
-          checkpointNode: s,
-          engineHint: _engineHint,
-          phase: widget.workbench.currentPhase,
-        );
-        totalTasks += steps.length;
-        totalStepsDone += steps.where((c) => c.subtask.completed).length;
+        totalGates++;
+        if (s.isCompleted) passedGates++;
+        totalGuards += s.edgeCases.length;
+        checkedGuards += s.signedOffGuardsCount;
       }
     }
 
@@ -91,7 +90,7 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Every Feature and Step across your Core Loop has been completed and verified:',
+                'Every Epic and Feature Gate across your Release has been playtested and passed:',
                 style: GoogleFonts.inter(fontSize: 12.5, color: textSecondary),
               ),
               const SizedBox(height: 12),
@@ -107,8 +106,16 @@ extension _WorkbenchModalsExt on _ReleaseWorkbenchScreenState {
                   children: [
                     buildStatCol('${beats.length}', 'CORE EPICS', textPrimary),
                     buildStatCol('${allFeats.length}', 'FEATURES', textPrimary),
-                    buildStatCol('$totalTasks', 'TOTAL STEPS', textPrimary),
-                    buildStatCol('$totalStepsDone', 'STEPS DONE', textPrimary),
+                    buildStatCol(
+                      '$checkedGuards/$totalGuards',
+                      'GUARDS CHECKED',
+                      textPrimary,
+                    ),
+                    buildStatCol(
+                      '$passedGates/$totalGates',
+                      'GATES PASSED',
+                      textPrimary,
+                    ),
                   ],
                 ),
               ),

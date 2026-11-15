@@ -814,11 +814,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         'plannedSlices': starterTasks.join(' | '),
       },
     );
-    TaskHowToBlueprint.populateDefaultUnifiedSteps(
-      stateNode,
-      engineHint: _activeEngineHint,
-      phase: _currentPhase,
-    );
 
     final featDoc = TierDocument(
       id: featId,
@@ -970,11 +965,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         'releaseVersion': versionTag,
         'plannedSlices': starterTasks.join(' | '),
       },
-    );
-    TaskHowToBlueprint.populateDefaultUnifiedSteps(
-      stateNode,
-      engineHint: _activeEngineHint,
-      phase: _currentPhase,
     );
 
     FeatureStateNode.saveStatesToDocument(featDoc, [stateNode]);
@@ -1182,143 +1172,12 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         }
       }
       cp.checklist = [];
-      TaskHowToBlueprint.populateDefaultUnifiedSteps(
-        cp,
-        engineHint: _activeEngineHint,
-        phase: _currentPhase,
-      );
       updateFeatureStates(featureId, states);
       }
     } finally {
       _synthesizingFeatureIds.remove(featureId);
       notifyListeners();
     }
-  }
-
-  /// Appends a single flat Unified Step onto a Checkpoint's Build Queue (`cpNode.checklist`),
-  /// optionally tailoring ONLY that step via AI when online without disturbing existing steps.
-  int addUnifiedStepToCheckpoint({
-    required String featureId,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
-    required String title,
-    GodotDockStage dockStage = GodotDockStage.code,
-    String? instruction,
-    String? stepPath,
-    String? codeSnippet,
-    String? verifyResult,
-    bool tailorWithAi = true,
-  }) {
-    final trimmed = title.trim();
-    if (trimmed.isEmpty ||
-        checkpointIndex < 0 ||
-        checkpointIndex >= states.length) {
-      return -1;
-    }
-    final cpNode = states[checkpointIndex];
-    cpNode.flattenLegacyNestedChecklistIfNeeded();
-    final primaryAsset = (cpNode.parameters['primarySharedScriptOrScene'] ??
-            documents[featureId]?.sections['primary_asset'] ??
-            '')
-        .trim();
-    final step = Subtask(
-      id: generateUniqueId('step'),
-      text: trimmed,
-      completed: false,
-      codeTargetFile: 'custom_snippet',
-      codeLanguage: stepPath?.trim().isNotEmpty == true
-          ? stepPath!.trim()
-          : (primaryAsset.isNotEmpty
-              ? primaryAsset
-              : (dockStage == GodotDockStage.scene
-                  ? 'Scene Dock (.tscn)'
-                  : dockStage == GodotDockStage.inspector
-                      ? 'Inspector & Project Settings'
-                      : dockStage == GodotDockStage.wire
-                          ? 'Node Dock → Signals'
-                          : 'GDScript Editor (.gd)')),
-      codeSnippet: codeSnippet ?? '',
-      verification: verifyResult?.trim().isNotEmpty == true
-          ? verifyResult!.trim()
-          : '$trimmed responds cleanly with 0 console errors.',
-      specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-        instruction: instruction?.trim().isNotEmpty == true
-            ? instruction!.trim()
-            : 'Implement "$trimmed" inside the active Godot dock.',
-        verifyMode: (dockStage == GodotDockStage.scene ||
-                dockStage == GodotDockStage.inspector)
-            ? 'editor'
-            : 'playtest',
-        stepRole: dockStage.stepRole,
-      ),
-    );
-    cpNode.checklist.add(step);
-    cpNode.parameters['manualStepOrder'] = 'true';
-    final newIdx = cpNode.checklist.length - 1;
-    TaskHowToBlueprint.clearCache();
-    updateFeatureStates(featureId, states);
-    return newIdx;
-  }
-
-  /// Reorders a Unified Step cleanly inside a Checkpoint Build Queue (`cpNode.checklist`).
-  bool reorderCheckpointStep({
-    required String featureId,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
-    required int oldIndex,
-    required int newIndex,
-  }) {
-    if (checkpointIndex < 0 || checkpointIndex >= states.length) return false;
-    final cpNode = states[checkpointIndex];
-    cpNode.flattenLegacyNestedChecklistIfNeeded();
-    if (oldIndex < 0 ||
-        oldIndex >= cpNode.checklist.length ||
-        newIndex < 0 ||
-        newIndex >= cpNode.checklist.length ||
-        oldIndex == newIndex) {
-      return false;
-    }
-    final moved = cpNode.checklist.removeAt(oldIndex);
-    cpNode.checklist.insert(newIndex, moved);
-    cpNode.parameters['manualStepOrder'] = 'true';
-    TaskHowToBlueprint.clearCache();
-    updateFeatureStates(featureId, states);
-    return true;
-  }
-
-  /// Removes a step at [stepIndex] from a Checkpoint Build Queue.
-  bool removeCheckpointStep({
-    required String featureId,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
-    required int stepIndex,
-  }) {
-    if (checkpointIndex < 0 || checkpointIndex >= states.length) return false;
-    final cpNode = states[checkpointIndex];
-    cpNode.flattenLegacyNestedChecklistIfNeeded();
-    if (stepIndex < 0 || stepIndex >= cpNode.checklist.length) return false;
-    cpNode.checklist.removeAt(stepIndex);
-    cpNode.parameters['manualStepOrder'] = 'true';
-    TaskHowToBlueprint.clearCache();
-    updateFeatureStates(featureId, states);
-    return true;
-  }
-
-  /// Backwards-compatible wrapper that appends a new Unified Step directly to
-  /// a Checkpoint Build Queue and tailors it via AI when available.
-  int addBuildTaskToCheckpointWithAi({
-    required String featureId,
-    required List<FeatureStateNode> states,
-    required int checkpointIndex,
-    required String rawTaskTitle,
-  }) {
-    return addUnifiedStepToCheckpoint(
-      featureId: featureId,
-      states: states,
-      checkpointIndex: checkpointIndex,
-      title: rawTaskTitle,
-      tailorWithAi: true,
-    );
   }
 
   /// Renames an active Feature document directly inside `2. Workbench` and syncs `_releaseBlueprint`.
@@ -1434,14 +1293,13 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       verification: 'Re-test: $cleanIssue is resolved with 0 console errors.',
     );
 
-    cpNode.checklist.add(fixStep);
+    cpNode.checklist = [...cpNode.checklist, fixStep];
     cpNode.isPlaytestPassed = false;
     final lowerIssue = cleanIssue.toLowerCase();
     final guardText = '[PLAYTEST GUARD] $cleanIssue';
     if (!cpNode.edgeCases.any((g) => g.toLowerCase().contains(lowerIssue))) {
       cpNode.edgeCases = [...cpNode.edgeCases, guardText];
     }
-    TaskHowToBlueprint.clearCache();
     updateFeatureStates(featureId, states);
     return newFixStepIndex;
   }
@@ -2021,9 +1879,7 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
               sb.writeln('  - [$checked] $g');
             }
           }
-          final openFixes = cp.checklist
-              .where((s) => !s.completed && s.text.contains('[FIX]'))
-              .toList();
+          final openFixes = cp.openFixItems;
           if (openFixes.isNotEmpty) {
             sb.writeln('- **Open Playtest Issues (`[FIX]`)**:');
             for (final fix in openFixes) {
@@ -2415,7 +2271,9 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
                 updatedCps[targetIdx] = ProposedCheckpointBlueprint(
                   title: oldCp.title,
                   playtestCriteria: oldCp.playtestCriteria,
-                  tasks: [for (final t in activeCp.checklist) t.text],
+                  tasks: activeCp.checklist.isNotEmpty
+                      ? [for (final t in activeCp.checklist) t.text]
+                      : oldCp.tasks,
                   coveredScope: activeCp.coveredScope.isNotEmpty
                       ? List<String>.from(activeCp.coveredScope)
                       : oldCp.coveredScope,
@@ -2431,7 +2289,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         }
       }
     }
-    TaskHowToBlueprint.clearCache();
     _persistDocument(feat, debounce: true);
     notifyListeners();
   }
@@ -2619,7 +2476,6 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
       }
     }
 
-    TaskHowToBlueprint.clearCache();
     if (updatedFeatureCount > 0) {
       notifyListeners();
     }

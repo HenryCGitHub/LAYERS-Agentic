@@ -4548,34 +4548,6 @@ class ReleaseExecutorAgent {
                 'plannedSlices': plannedSlices.join(' | '),
             },
           );
-          final projDocForHint =
-              parentProjId != null ? existingDocuments[parentProjId] : null;
-          final engineHint = projDocForHint?.sections['tech_spec'] ??
-              projDocForHint?.sections['techSpec'] ??
-              projDocForHint?.sections['tech_stack'] ??
-              '';
-          final rawPhase = (releaseDoc.sections['phase'] ?? '').trim();
-          final releasePhase = switch (rawPhase) {
-            'postLaunch' => ProductionPhase.postLaunch,
-            'fullProduction' => ProductionPhase.fullProduction,
-            'verticalSlice' => ProductionPhase.verticalSlice,
-            'mvp' => ProductionPhase.mvp,
-            'prototype' => ProductionPhase.prototype,
-            _ => switch (blueprint.preset) {
-              ReleaseScope.patch ||
-              ReleaseScope.contentUpdate =>
-                ProductionPhase.postLaunch,
-              ReleaseScope.fullProduction => ProductionPhase.fullProduction,
-              ReleaseScope.verticalSlice => ProductionPhase.verticalSlice,
-              ReleaseScope.mvp => ProductionPhase.mvp,
-              _ => ProductionPhase.prototype,
-            },
-          };
-          TaskHowToBlueprint.populateDefaultUnifiedSteps(
-            cpNode,
-            engineHint: engineHint,
-            phase: releasePhase,
-          );
           stateNodes.add(cpNode);
         }
 
@@ -4771,23 +4743,6 @@ class ReleaseExecutorAgent {
         'Done When: ${beatBp.doneWhen}';
     beatDoc.childrenIds.clear();
 
-    final parentProjId = releaseDoc.parentId;
-    final projDocForHint =
-        parentProjId != null ? existingDocuments[parentProjId] : null;
-    final engineHint = projDocForHint?.sections['tech_spec'] ??
-        projDocForHint?.sections['techSpec'] ??
-        projDocForHint?.sections['tech_stack'] ??
-        '';
-    final rawPhase = (releaseDoc.sections['phase'] ?? '').trim();
-    final releasePhase = switch (rawPhase) {
-      'postLaunch' => ProductionPhase.postLaunch,
-      'fullProduction' => ProductionPhase.fullProduction,
-      'verticalSlice' => ProductionPhase.verticalSlice,
-      'mvp' => ProductionPhase.mvp,
-      'prototype' => ProductionPhase.prototype,
-      _ => ProductionPhase.prototype,
-    };
-
     for (int fIdx = 0; fIdx < includedFeats.length; fIdx++) {
       final featBp = includedFeats[fIdx];
       final concreteFeatTitle =
@@ -4871,11 +4826,6 @@ class ReleaseExecutorAgent {
             if (plannedSlices.isNotEmpty)
               'plannedSlices': plannedSlices.join(' | '),
           },
-        );
-        TaskHowToBlueprint.populateDefaultUnifiedSteps(
-          cpNode,
-          engineHint: engineHint,
-          phase: releasePhase,
         );
         stateNodes.add(cpNode);
       }

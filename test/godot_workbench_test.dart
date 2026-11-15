@@ -15,6 +15,7 @@ import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
 import 'package:layers_agentic/utils/godot_gdscript_guard.dart';
+import 'package:layers_agentic/utils/section_text_utils.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -91,12 +92,7 @@ void main() {
                   codeLanguage: 'Scene Dock → res://scenes/player_dash.tscn',
                   codeSnippet: 'Timer',
                   verification: 'DashTimer appears in Scene Tree.',
-                  specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-                    instruction: 'Attach DashTimer under CharacterBody2D.',
-                    area1Hierarchy: 'PlayerDash (CharacterBody2D)\n └─ DashTimer (Timer)',
-                    verifyMode: 'editor',
-                    stepRole: 'editor_setup',
-                  ),
+                  specNotes: 'Attach DashTimer under CharacterBody2D.',
                 ),
                 Subtask(
                   id: 's_2',
@@ -106,12 +102,7 @@ void main() {
                   codeLanguage: 'Project Settings → Input Map',
                   codeSnippet: '| Input Map | dash | Shift |',
                   verification: 'Shift triggers dash action.',
-                  specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-                    instruction: 'Map Shift to dash in Input Map.',
-                    area2Inspector: 'Wait Time: 0.2',
-                    verifyMode: 'editor',
-                    stepRole: 'inspector_setup',
-                  ),
+                  specNotes: 'Map Shift to dash in Input Map.',
                 ),
               ],
             ),
@@ -127,11 +118,7 @@ void main() {
                   codeLanguage: 'res://scripts/player_dash.gd',
                   codeSnippet: 'velocity = dir * dash_speed',
                   verification: 'F6 -> Player dashes cleanly.',
-                  specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-                    instruction: 'Multiply input direction by dash_speed.',
-                    verifyMode: 'playtest',
-                    stepRole: 'script_logic',
-                  ),
+                  specNotes: 'Multiply input direction by dash_speed.',
                 ),
               ],
             ),
@@ -155,17 +142,6 @@ void main() {
 
         // Second call is an idempotent no-op.
         expect(cp.flattenLegacyNestedChecklistIfNeeded(), isFalse);
-
-        final resolved = TaskHowToBlueprint.resolveUnifiedSteps(
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        expect(resolved, hasLength(3));
-        expect(resolved.map((s) => s.resolvedDockStage), [
-          GodotDockStage.scene,
-          GodotDockStage.inspector,
-          GodotDockStage.code,
-        ]);
       },
     );
 
@@ -211,66 +187,7 @@ void main() {
           'releaseVersion': 'v0.1',
           'primarySharedScriptOrScene': 'res://scripts/player_dash.gd',
         },
-        checklist: [
-          Subtask(
-            id: 'st_scene',
-            text: 'Build PlayerDash Scene Nodes',
-            codeTargetFile: 'custom_snippet',
-            codeLanguage: 'Scene Dock → res://scenes/player_dash.tscn',
-            verification: 'PlayerDash + DashTimer exist in Scene Tree.',
-            specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-              instruction: 'Create res://scenes/player_dash.tscn with DashTimer.',
-              area1Hierarchy:
-                  'PlayerDash (CharacterBody2D)\n├─ CollisionShape2D\n└─ DashTimer (Timer)',
-              verifyMode: 'editor',
-              stepRole: 'editor_setup',
-            ),
-          ),
-          Subtask(
-            id: 'st_insp',
-            text: 'Tune Dash Export & Layer',
-            codeTargetFile: 'custom_snippet',
-            codeLanguage: 'Inspector & Project Settings',
-            codeSnippet:
-                '| Node / Category | Property | Value |\n| --- | --- | --- |\n| PlayerDash > CharacterBody2D | @export dash_speed | 640.0 |',
-            verification: 'Inspector exposes dash_speed = 640.0.',
-            specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-              instruction: 'Verify dash_speed in Inspector.',
-              area2Inspector: 'dash_speed: 640.0',
-              verifyMode: 'editor',
-              stepRole: 'inspector_setup',
-            ),
-          ),
-          Subtask(
-            id: 'st_code',
-            text: 'Implement Dash Velocity',
-            codeTargetFile: 'custom_snippet',
-            codeLanguage: 'res://scripts/player_dash.gd',
-            codeSnippet:
-                'extends CharacterBody2D\n+ @export var dash_speed: float = 640.0',
-            verification: 'Pressing Shift moves player at dash_speed.',
-            specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-              instruction:
-                  'Implement _trigger_dash() in res://scripts/player_dash.gd.',
-              verifyMode: 'playtest',
-              stepRole: 'script_logic',
-            ),
-          ),
-          Subtask(
-            id: 'st_wire',
-            text: 'Wire DashTimer Signal',
-            codeTargetFile: 'custom_snippet',
-            codeLanguage: 'Node Dock → Signals',
-            codeSnippet:
-                'DashTimer.timeout() ──► [PlayerDash._on_dash_timeout()]',
-            verification: 'Press F6 -> Dash ends cleanly after timer.',
-            specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-              instruction: 'Connect DashTimer.timeout to _on_dash_timeout().',
-              verifyMode: 'playtest',
-              stepRole: 'wire_and_verify',
-            ),
-          ),
-        ],
+        checklist: const [],
       );
       final feat = TierDocument(
         id: 'feat_dash_redesign',
@@ -920,7 +837,6 @@ void main() {
 
         // Complete E01's feature -> Godot active Epic automatically advances to E02
         final cp1Done = FeatureStateNode.getStatesForDocument(f1).first;
-        cp1Done.checklist.first.completed = true;
         cp1Done.isPlaytestPassed = true;
         provider.updateFeatureStates(f1.id, [cp1Done]);
         await tester.pumpAndSettle();
@@ -939,7 +855,6 @@ void main() {
         // Complete E02 + E03 -> allEpicsCompleted = true, active badge clears
         for (final feat in [f2, f3]) {
           final cpDone = FeatureStateNode.getStatesForDocument(feat).first;
-          cpDone.checklist.first.completed = true;
           cpDone.isPlaytestPassed = true;
           provider.updateFeatureStates(feat.id, [cpDone]);
         }
@@ -1475,85 +1390,9 @@ void main() {
         expect(nextSnap.allEpicsCompleted, isFalse);
 
         // Complete f3 -> entire release completes cleanly even with empty e2Empty!
-        cp3.checklist.first.completed = true;
         cp3.isPlaytestPassed = true;
         provider.updateFeatureStates(f3.id, [cp3]);
         expect(provider.computeActiveGodotEpicSnapshot().allEpicsCompleted, isTrue);
-      },
-    );
-
-    test(
-      'populateDefaultUnifiedSteps avoids bogus InputMap polling on enemies/spawners/UI and picks semantic keys on player features',
-      () {
-        final enemyNode = FeatureStateNode(
-          id: 'cp_enemy',
-          name: '01 · BUILD',
-          trigger: 'Enemy attacks player and dies cleanly at 0 hp.',
-          parameters: {'primarySharedScriptOrScene': 'res://scripts/crab_enemy.gd'},
-          coveredScope: ['Enemy pursuit', 'Telegraphed claw strike'],
-        );
-        TaskHowToBlueprint.populateDefaultUnifiedSteps(
-          enemyNode,
-          engineHint: 'Godot 4 (3D)',
-        );
-        final enemyDump = enemyNode.checklist
-            .map((s) => '${s.text} ${s.codeSnippet ?? ''} ${s.specNotes ?? ''}')
-            .join('\n');
-        expect(enemyDump, isNot(contains('_action')));
-        expect(enemyDump, isNot(contains('Input.is_action')));
-        expect(enemyDump, contains('take_damage'));
-
-        final spawnerNode = FeatureStateNode(
-          id: 'cp_spawner',
-          name: '01 · BUILD',
-          trigger: 'Spawner creates 3 enemy waves in order.',
-          parameters: {'primarySharedScriptOrScene': 'res://scripts/three_wave_spawner.gd'},
-          coveredScope: ['3-wave spawner'],
-        );
-        TaskHowToBlueprint.populateDefaultUnifiedSteps(
-          spawnerNode,
-          engineHint: 'Godot 4 (3D)',
-        );
-        final spawnerDump = spawnerNode.checklist
-            .map((s) => '${s.text} ${s.codeSnippet ?? ''} ${s.specNotes ?? ''}')
-            .join('\n');
-        expect(spawnerDump, isNot(contains('_action')));
-        expect(spawnerDump, isNot(contains('Input.is_action')));
-        expect(spawnerDump, contains('Node3D'));
-
-        final uiNode = FeatureStateNode(
-          id: 'cp_ui',
-          name: '01 · BUILD',
-          trigger: 'HUD shows HP and opens Draft screen.',
-          parameters: {'primarySharedScriptOrScene': 'res://scripts/hud_overlay.gd'},
-          coveredScope: ['HUD health bar', 'Upgrade draft menu'],
-        );
-        TaskHowToBlueprint.populateDefaultUnifiedSteps(
-          uiNode,
-          engineHint: 'Godot 4 (3D)',
-        );
-        final uiDump = uiNode.checklist
-            .map((s) => '${s.text} ${s.codeSnippet ?? ''} ${s.specNotes ?? ''}')
-            .join('\n');
-        expect(uiDump, isNot(contains('_action')));
-        expect(uiDump, contains('CanvasLayer'));
-
-        final dashNode = FeatureStateNode(
-          id: 'cp_dash',
-          name: '01 · BUILD',
-          trigger: 'Player dashes with invulnerability.',
-          parameters: {'primarySharedScriptOrScene': 'res://scripts/crab_player.gd'},
-          coveredScope: ['Player dash & i-frames'],
-        );
-        TaskHowToBlueprint.populateDefaultUnifiedSteps(
-          dashNode,
-          engineHint: 'Godot 4 (3D)',
-        );
-        final dashDump = dashNode.checklist
-            .map((s) => '${s.text} ${s.codeSnippet ?? ''} ${s.specNotes ?? ''}')
-            .join('\n');
-        expect(dashDump, contains('Input Map | dash | Shift'));
-        expect(dashDump, contains('Input.is_action_just_pressed("dash")'));
       },
     );
   });
@@ -1767,5 +1606,217 @@ void main() {
         expect(releaseMd, isNot(contains('3-Area Engine Implementation Blueprint')));
       },
     );
+  });
+
+  group('SEA Round 3 · Guard-Weighted Progress, Clean Outliner & Producer Shipped Modal', () {
+    test('Guard-weighted progress scales up to 50% on signed-off guards and reaches 100% strictly on Pass Playtest', () {
+      final provider = WorkbenchProvider();
+      final feat = TierDocument(
+        id: 'feat_guard_progress',
+        title: 'Player Dash',
+        tier: TierType.feature,
+      );
+      provider.documents[feat.id] = feat;
+
+      final cp = FeatureStateNode(
+        id: 'cp_dash',
+        name: '01 · BUILD',
+        edgeCases: const [
+          '[STATE GUARD] Block move while dash active',
+          '[STATE GUARD] Clamp cooldown >= 0',
+        ],
+        checklist: const [],
+      );
+      FeatureStateNode.saveStatesToDocument(feat, [cp]);
+      expect(cp.progress, equals(0.0));
+      expect(cp.isCompleted, isFalse);
+      expect(provider.getDocumentProgress(feat.id), equals(0));
+
+      cp.setGuardSignedOff(0, cp.edgeCases[0], true);
+      provider.updateFeatureStates(feat.id, [cp]);
+      expect(cp.progress, equals(0.25));
+      expect(cp.isCompleted, isFalse);
+      expect(provider.getDocumentProgress(feat.id), equals(25));
+
+      cp.setGuardSignedOff(1, cp.edgeCases[1], true);
+      provider.updateFeatureStates(feat.id, [cp]);
+      expect(cp.progress, equals(0.50));
+      expect(cp.isCompleted, isFalse);
+      expect(provider.getDocumentProgress(feat.id), equals(50));
+
+      // Open or resolved [FIX] bug stays <= 50% and never auto-completes without Pass Playtest.
+      cp.checklist = [
+        Subtask(id: 'fix_1', text: '[FIX] Edge jitter on slope', completed: false),
+      ];
+      provider.updateFeatureStates(feat.id, [cp]);
+      expect(cp.openFixCount, equals(1));
+      expect(cp.progress, equals(0.50));
+      expect(cp.isCompleted, isFalse);
+
+      cp.checklist.first.completed = true;
+      provider.updateFeatureStates(feat.id, [cp]);
+      expect(cp.openFixCount, equals(0));
+      expect(cp.progress, equals(0.50));
+      expect(cp.isCompleted, isFalse);
+      expect(provider.getDocumentProgress(feat.id), equals(50));
+
+      cp.isPlaytestPassed = true;
+      provider.updateFeatureStates(feat.id, [cp]);
+      expect(cp.progress, equals(1.0));
+      expect(cp.isCompleted, isTrue);
+      expect(provider.getDocumentProgress(feat.id), equals(100));
+    });
+
+    testWidgets(
+      'Outliner omits legacy 0/4 step badges, shows open ⚑ fix counts, and Shipped Summary renders GUARDS CHECKED & GATES PASSED',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider();
+        final cp = FeatureStateNode(
+          id: 'cp_r3',
+          name: '01 · BUILD',
+          edgeCases: const [
+            'Block move while dash active',
+            'Clamp cooldown >= 0',
+          ],
+          checklist: const [],
+        )..setGuardSignedOff(0, 'Block move while dash active', true);
+
+        final feat = TierDocument(
+          id: 'feat_r3',
+          title: 'Player Dash',
+          tier: TierType.feature,
+          parentId: 'epic_r3',
+          phase: 'v0.1',
+          estimatedDuration: '2h',
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+
+        final epic = TierDocument(
+          id: 'epic_r3',
+          title: 'Core Movement',
+          tier: TierType.epic,
+          parentId: 'rel_r3',
+          phase: 'v0.1',
+          childrenIds: [feat.id],
+        );
+        final rel = TierDocument(
+          id: 'rel_r3',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_r3',
+          phase: 'v0.1',
+          childrenIds: [epic.id],
+          sections: {'version': 'v0.1'},
+        );
+        final proj = TierDocument(
+          id: 'proj_r3',
+          title: 'Round 3 Arena',
+          tier: TierType.project,
+          childrenIds: [rel.id],
+          sections: {
+            'engine': 'Godot 4 (GDScript)',
+            'active_release_id': rel.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+
+        for (final doc in [proj, rel, epic, feat]) {
+          provider.documents[doc.id] = doc;
+        }
+        provider.switchProject(proj.id);
+        provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('0/4'), findsNothing);
+        expect(find.text('0/3'), findsNothing);
+        expect(find.byKey(ValueKey('rail_fix_badge_${feat.id}')), findsNothing);
+        expect(find.text('DONE'), findsNothing);
+
+        cp.checklist = [
+          Subtask(
+            id: 'fix_1',
+            text: '[FIX] Stamina negative after dash',
+            completed: false,
+          ),
+        ];
+        provider.updateFeatureStates(feat.id, [cp]);
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(ValueKey('rail_fix_badge_${feat.id}')), findsOneWidget);
+        expect(find.text('⚑ 1 fix'), findsOneWidget);
+
+        cp.checklist = [
+          ...cp.checklist,
+          Subtask(
+            id: 'fix_2',
+            text: '[FIX] Ghost trail lingers after pause',
+            completed: false,
+          ),
+        ];
+        provider.updateFeatureStates(feat.id, [cp]);
+        await tester.pumpAndSettle();
+        expect(find.text('⚑ 2 fixes'), findsOneWidget);
+
+        cp.isPlaytestPassed = true;
+        provider.updateFeatureStates(feat.id, [cp]);
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(ValueKey('rail_fix_badge_${feat.id}')), findsNothing);
+        expect(find.text('DONE'), findsWidgets);
+
+        final summaryBtn = find.byKey(const ValueKey('release_shipped_summary_btn'));
+        expect(summaryBtn, findsOneWidget);
+        await tester.tap(summaryBtn);
+        await tester.pumpAndSettle();
+
+        expect(find.text('GUARDS CHECKED'), findsOneWidget);
+        expect(find.text('GATES PASSED'), findsOneWidget);
+        expect(find.text('STEPS COMPLETED'), findsNothing);
+      },
+    );
+
+    test('SectionTextUtils Producer formatters normalize engine badge, remaining time, guards, goals, and verify checks', () {
+      expect(SectionTextUtils.detectEngineLabel('Godot 4 (3D)'), equals('GODOT 4'));
+      expect(SectionTextUtils.formatRemainingHoursShort(0), equals('0h'));
+      expect(SectionTextUtils.formatRemainingHoursShort(90), equals('1.5h'));
+      expect(SectionTextUtils.formatRemainingHoursShort(120), equals('2h'));
+      expect(
+        SectionTextUtils.formatTelegraphicGuardChip(
+          '[STATE GUARD] Prevent the player from dashing off the ledge.',
+        ),
+        equals('Block player dashing off ledge'),
+      );
+      expect(
+        SectionTextUtils.formatConciseFeatureGoal(
+          'Build a playable Dash system that allows the player to burst forward.',
+        ),
+        equals('Burst forward.'),
+      );
+      expect(
+        SectionTextUtils.formatConciseVerifySentence(
+          'Verify that when pressing Shift, the player dashes forward.',
+        ),
+        equals('Pressing Shift → The player dashes forward.'),
+      );
+    });
   });
 }

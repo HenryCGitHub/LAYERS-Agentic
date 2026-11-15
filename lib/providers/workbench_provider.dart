@@ -491,7 +491,7 @@ class WorkbenchProvider extends ChangeNotifier {
   }
 
   String get _activeEngineLabel =>
-      TaskHowToBlueprint.detectEngineLabel(_activeEngineHint);
+      SectionTextUtils.detectEngineLabel(_activeEngineHint);
 
   TierDocument? get activeProject =>
       _activeProjectId != null ? documents[_activeProjectId] : null;

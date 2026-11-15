@@ -1512,6 +1512,7 @@ void main() {
           for (final feat in provider.featuresForBeat(beat.id)) {
             final states = FeatureStateNode.getStatesForDocument(feat);
             for (final cp in states) {
+              cp.isPlaytestPassed = true;
               for (final task in cp.checklist) {
                 task.completed = true;
                 for (final child in task.children) {
@@ -1583,10 +1584,6 @@ void main() {
         // Restore first feature to incomplete so the half-width Pass Playtest CTA renders
         final activeStates = FeatureStateNode.getStatesForDocument(activeFeat);
         activeStates.first.isPlaytestPassed = false;
-        activeStates.first.checklist.first.completed = false;
-        for (final c in activeStates.first.checklist.first.children) {
-          c.completed = false;
-        }
         provider.updateFeatureStates(activeFeat.id, activeStates);
         await tester.pumpAndSettle();
 
@@ -2063,205 +2060,6 @@ void main() {
         // Delete Project 3
         provider.deleteProject(proj3Id);
         expect(provider.savedProjects.length, 1);
-      },
-    );
-
-    test(
-      'Godot 4 Native TaskHowToBlueprint.resolve adapts whereLocation, GDScript formulas, custom snippets, and scaling',
-      () {
-        final cp = FeatureStateNode(
-          id: 'cp_test',
-          name: 'Stage 1: Greybox Core Loop',
-          trigger: 'Verify movement and dash in arena.',
-          tuningParams: const ['move_speed: 240 px/s', 'dash_cooldown: 0.4 s'],
-          edgeCases: const ['[GUARD] Ignore dash input while airborne'],
-        );
-
-        final godotTask = Subtask(
-          id: 't_godot',
-          text: 'Bind WASD movement and dash physics velocity',
-          completed: false,
-        );
-        final godotBp = TaskHowToBlueprint.resolve(
-          parentTask: godotTask,
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript) 2D',
-        );
-        expect(godotBp.engineLabel, 'GODOT 4');
-        expect(godotBp.subSteps.length, 6);
-        expect(godotBp.whereLocation, contains('_physics_process'));
-        expect(godotBp.subSteps[0].stepPath, contains('res://scripts/'));
-        expect(godotBp.subSteps[0].instruction, contains('.tscn'));
-        expect(godotBp.subSteps[0].codeFormula, contains('extends CharacterBody2D'));
-        expect(godotBp.subSteps[0].specChips,
-            contains('Next: ${godotBp.subSteps[1].shortTitle}'));
-        expect(godotBp.subSteps[3].codeFormula, contains('@export var'));
-        expect(godotBp.subSteps[4].codeFormula,
-            contains('Input.is_action_pressed'));
-        expect(godotBp.subSteps[4].codeFormula, contains('move_toward'));
-
-        // Always resolves to GODOT 4 regardless of hint text
-        expect(
-          TaskHowToBlueprint.detectEngineLabel('Godot 4 (GDScript + GDExtension C++)'),
-          'GODOT 4',
-        );
-
-        // Verify custom_snippet preserves GDScript / Inspector pipe table / Node signal chain verbatim
-        final customRampTask = Subtask(
-          id: 'custom_ramp',
-          text: 'Dock Collision Bounds',
-          children: [
-            Subtask(
-              id: 'custom_ramp_s1',
-              text: 'Spawn Cargo Delivery Ramp',
-              specNotes:
-                  'Place Ramp_CargoDelivery scene instance in dock level and configure ramp_incline_angle.',
-              codeTargetFile: 'custom_snippet',
-              codeSnippet: '''extends Node3D
-@export var ramp_incline_angle: float = 25.0
-func _ready() -> void:
-    rotation_degrees.x = ramp_incline_angle''',
-            ),
-          ],
-        );
-        final resolvedRamp = TaskHowToBlueprint.resolve(
-          parentTask: customRampTask,
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        expect(
-          resolvedRamp.subSteps.first.codeFormula,
-          contains('@export var ramp_incline_angle: float = 25.0'),
-        );
-
-        // Verify Task 01 (Setup), Task 02 (State Logic), and Task 03 (Input/Raycast) have non-repeating step titles
-        final t0 = TaskHowToBlueprint.resolve(
-          parentTask: Subtask(id: 't0', text: 'Create Grid Tile Actor (2h)'),
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        final t1 = TaskHowToBlueprint.resolve(
-          parentTask: Subtask(id: 't1', text: 'Implement State Machine (4h)'),
-          taskIndex: 1,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        final t2 = TaskHowToBlueprint.resolve(
-          parentTask: Subtask(id: 't2', text: 'Add Interaction Raycast (2h)'),
-          taskIndex: 2,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        expect(t0.subSteps[0].shortTitle,
-            isNot(equals(t1.subSteps[0].shortTitle)));
-        expect(t1.subSteps[0].shortTitle,
-            isNot(equals(t2.subSteps[0].shortTitle)));
-        expect(t0.subSteps[1].shortTitle,
-            isNot(equals(t1.subSteps[1].shortTitle)));
-        expect(t1.subSteps[1].shortTitle,
-            isNot(equals(t2.subSteps[1].shortTitle)));
-        expect(t0.subSteps[2].shortTitle,
-            isNot(equals(t1.subSteps[2].shortTitle)));
-        expect(t1.subSteps[2].shortTitle,
-            isNot(equals(t2.subSteps[2].shortTitle)));
-
-        // Verify dynamic step scaling (compact 3-step guard, 4-step feel, 5-step single-clause extension, and 10+ step complex mechanic)
-        expect(t0.subSteps.length, 6);
-        expect(t1.subSteps.length,
-            7); // 4h heavy task includes extra tuning parameter step
-        expect(t2.subSteps.length, 5); // 2h single-clause extension task
-
-        final tGuard = TaskHowToBlueprint.resolve(
-          parentTask: Subtask(
-            id: 't_guard',
-            text: 'Enforce line-of-sight break guard (1h)',
-          ),
-          taskIndex: 1,
-          checkpointNode: cp,
-          engineHint: 'Godot 4.3 GDScript 2D',
-        );
-        expect(tGuard.subSteps.length, 3);
-
-        final tFeel = TaskHowToBlueprint.resolve(
-          parentTask: Subtask(
-            id: 't_feel',
-            text: 'Hook up impact flash and audio cue (1h)',
-          ),
-          taskIndex: 1,
-          checkpointNode: cp,
-          engineHint: 'Godot 4.3 GDScript 2D',
-        );
-        expect(tFeel.subSteps.length, 4);
-
-        final richCp = FeatureStateNode(
-          id: 'cp_rich',
-          name: 'Stage 1: Grapple Physics & Momentum',
-          trigger: 'Verify full grapple swing and release loop.',
-          tuningParams: const [
-            'hook_range: 18 m',
-            'pull_speed: 28 m/s',
-            'swing_damping: 0.92',
-          ],
-          edgeCases: const [
-            '[LOS GUARD] Detach on obstacle block',
-            '[TENSION CLAMP] Clamp velocity on frame spike',
-            '[COOLDOWN GUARD] Lock out re-fire during detach',
-          ],
-        );
-        final tComplex = TaskHowToBlueprint.resolve(
-          parentTask: Subtask(
-            id: 't_complex',
-            text:
-                'Implement anchor raycast, tether state entry, pull impulse, swing arc damping, and release momentum boost (4h)',
-          ),
-          taskIndex: 0,
-          checkpointNode: richCp,
-          engineHint: 'Godot 4.3 GDScript 2D',
-        );
-        expect(tComplex.subSteps.length, greaterThanOrEqualTo(10));
-
-        // Verify deriveConcreteAssetName strips "Checkpoint" and deduplicates repeated words without forcing "Controller"
-        final terminalAsset = TaskHowToBlueprint.deriveConcreteAssetName(
-          'Create Terminal interaction (2h) Checkpoint 1: Terminal Interaction & Contract',
-        );
-        expect(terminalAsset.pascalName, 'TerminalContract');
-        expect(terminalAsset.pascalName, isNot(contains('Checkpoint')));
-        expect(terminalAsset.pascalName, isNot(contains('Controller')));
-
-        // Verify deriveConcreteGuardStepSpec formats underscore bracket tags as clean Title Case
-        final spamGuard = TaskHowToBlueprint.deriveConcreteGuardStepSpec(
-          rawGuard: '[INPUT_SPAM GUARD] Ignore rapid interact clicks',
-          targetAssetName: 'terminal_contract.tscn',
-          engineLabel: 'GODOT 4',
-          primaryVarName: 'interact_cooldown',
-        );
-        expect(spamGuard.shortTitle, 'Guard: Input Spam');
-
-        // Verify UI / HUD and Weapon/Combat tasks resolve Godot node hierarchies cleanly
-        final uiBp = TaskHowToBlueprint.resolve(
-          parentTask: Subtask(
-            id: 't_ui',
-            text: 'Build HUD scoreboard overlay widget (2h)',
-          ),
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Godot 4.3 GDScript 2D',
-        );
-        expect(uiBp.subSteps[1].codeFormula, contains('HudCanvas'));
-
-        final combatBp = TaskHowToBlueprint.resolve(
-          parentTask: Subtask(
-            id: 't_combat',
-            text: 'Configure Weapon Projectile Spawner (2h)',
-          ),
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        expect(combatBp.subSteps[1].codeFormula, contains('CollisionShape2D'));
       },
     );
 
@@ -3031,66 +2829,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           'Cargo Pickup',
         );
 
-        // Verify custom_snippet sub-steps preserve custom verification (verifyResult) & codeLanguage (stepPath)
-        final sampleFeat = courierProvider
-            .featuresForBeat(courierProvider.activeReleaseBeats.first.id)
-            .first;
-        final sampleStates = FeatureStateNode.getStatesForDocument(sampleFeat);
-        final sampleCp = sampleStates.first;
-        final sampleTask = sampleCp.checklist.first;
-        TaskHowToBlueprint.resolve(
-          parentTask: sampleTask,
-          taskIndex: 0,
-          checkpointNode: sampleCp,
-          engineHint: 'Godot 4',
-        );
-        sampleTask.children.first
-          ..codeTargetFile = 'custom_snippet'
-          ..codeLanguage = 'Scene Dock → PlayerCharacter → Inspector'
-          ..verification =
-              'Confirm custom AI step verify check passes in Play mode.';
-        TaskHowToBlueprint.clearCache();
-        final resolvedCustom = TaskHowToBlueprint.resolve(
-          parentTask: sampleTask,
-          taskIndex: 0,
-          checkpointNode: sampleCp,
-          engineHint: 'Godot 4',
-        );
-        expect(
-          resolvedCustom.subSteps.first.stepPath,
-          'Scene Dock → PlayerCharacter → Inspector',
-        );
-        expect(
-          resolvedCustom.subSteps.first.verifyResult,
-          'Confirm custom AI step verify check passes in Play mode.',
-        );
-
-        // Round 3: Editing checkpoint tuningParams & edgeCases re-binds non-custom Subtask children & code formulas while preserving completion state
-        sampleTask.children[3].completed = true;
-        sampleCp.tuningParams = ['truckNitroSpeed: 42.0 m/s'];
-        sampleCp.edgeCases = ['[NITRO LOCK GUARD] Block nitro while braking'];
-        TaskHowToBlueprint.clearCache();
-        final resolvedAfterSpecEdit = TaskHowToBlueprint.resolve(
-          parentTask: sampleTask,
-          taskIndex: 0,
-          checkpointNode: sampleCp,
-          engineHint: 'Godot 4',
-        );
-        expect(
-          resolvedAfterSpecEdit.subSteps[3].codeFormula,
-          contains('truckNitroSpeed'),
-        );
-        expect(
-          sampleTask.children[3].codeSnippet,
-          contains('truckNitroSpeed'),
-        );
-        expect(
-          sampleTask.children[3].completed,
-          isTrue,
-          reason:
-              'Completed sub-step state must be preserved when tuning parameters update',
-        );
-
         // Round 6: Cancelling Progressive Next Release cleanly rolls back unbuilt v0.2 releases, phase, and blueprint
         final preCancelRelId = courierProvider.activeReleaseId;
         final preCancelPhase = courierProvider.currentPhase;
@@ -3141,6 +2879,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
 
         // Round 7: Switching releaseViewFilter between 'archived' and 'active' auto-selects archived / active features
+        final sampleFeat = courierProvider
+            .featuresForBeat(courierProvider.activeReleaseBeats.first.id)
+            .first;
         sampleFeat.sections['lifecycle'] =
             FeatureLifecycleStatus.superseded.name;
         courierProvider.setReleaseViewFilter('archived');
@@ -3174,9 +2915,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isNot(equals(tempArchDoc.id)),
         );
 
-        // Round 9: TaskHowToBlueprint.formatConciseTaskTitle strips trailing " for <Beat>" and leading action verbs
+        // Round 9: LayersTextStyleGuide.formatConciseTaskTitle strips trailing " for <Beat>" and leading action verbs
         expect(
-          TaskHowToBlueprint.formatConciseTaskTitle(
+          LayersTextStyleGuide.formatConciseTaskTitle(
             'Implement player dash velocity and cooldown timer for Arena Entry & Traversal (2h)',
           ),
           equals('Player dash velocity & cooldown timer'),
@@ -3205,13 +2946,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final beat3OriginalTitle = initialBeats[2].title;
         final beat1Feat = provider.featuresForBeat(beat1Id).first;
 
-        // Mark Task 1 of Beat 1's feature as 100% completed
+        // Sign off a playtest guard on Beat 1's feature to record non-zero progress
         final b1States = FeatureStateNode.getStatesForDocument(beat1Feat);
         expect(b1States, isNotEmpty);
-        b1States.first.checklist.first.completed = true;
-        for (final sub in b1States.first.checklist.first.children) {
-          sub.completed = true;
-        }
+        b1States.first.edgeCases = ['[STATE GUARD] Clamp grapple impulse'];
+        b1States.first.setGuardSignedOff(0, b1States.first.edgeCases.first, true);
         provider.updateFeatureStates(beat1Feat.id, b1States);
         expect(provider.getDocumentProgress(beat1Feat.id), greaterThan(0));
 
@@ -3391,10 +3130,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         statesB.last.edgeCases = [
           '[GUARD] Scale momentum impulse by grappleSpeed on detach',
         ];
-        statesB.last.checklist.first.children = [
+        statesB.last.checklist = [
           Subtask(
             id: 'sub_b_1',
-            text: 'Apply grappleSpeed multiplier on release',
+            text: '[FIX] Apply grappleSpeed multiplier on release',
             specNotes: 'NODE: GrappleController | PROP: grappleSpeed = 650.0',
             codeSnippet: 'velocity = hook_dir * grappleSpeed * releaseBoost',
             verification: 'Confirm grappleSpeed scales launch arc cleanly.',
@@ -3424,7 +3163,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           updatedStatesB.last.edgeCases.first,
           contains('Scale momentum impulse by zipVelocity on detach'),
         );
-        final updatedSubB = updatedStatesB.last.checklist.first.children.first;
+        final updatedSubB = updatedStatesB.last.checklist.first;
         expect(updatedSubB.text, contains('zipVelocity'));
         expect(updatedSubB.specNotes, contains('zipVelocity = 650.0'));
         expect(updatedSubB.codeSnippet, contains('zipVelocity * releaseBoost'));
@@ -3455,7 +3194,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(
             restoredStatesB.last.tuningParams, contains('zipVelocity: 650.0'));
         expect(
-          restoredStatesB.last.checklist.first.children.first.codeSnippet,
+          restoredStatesB.last.checklist.first.codeSnippet,
           contains('zipVelocity * releaseBoost'),
         );
 
@@ -3869,56 +3608,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           ];
         provider.updateFeatureStates(feat.id, states);
 
-        // ── 1. Deterministic Fallback: Shared Asset (locomotion_character) + Role-Aware SETUP -> INPUT -> PHYSICS ──
-        TaskHowToBlueprint.clearCache();
-        final freshStates = FeatureStateNode.getStatesForDocument(feat);
-        final cp = freshStates.first;
-        final bp0 = TaskHowToBlueprint.resolve(
-          parentTask: cp.checklist[0],
-          taskIndex: 0,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        final bp1 = TaskHowToBlueprint.resolve(
-          parentTask: cp.checklist[1],
-          taskIndex: 1,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        final bp2 = TaskHowToBlueprint.resolve(
-          parentTask: cp.checklist[2],
-          taskIndex: 2,
-          checkpointNode: cp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-
-        // Task 1 (Pawn Setup) creates locomotion_character.tscn as CharacterBody2D/3D with Visual + HitBox + CollisionShape2D
-        expect(bp0.subSteps[0].shortTitle,
-            equals('Create locomotion_character.tscn'));
-        expect(bp0.subSteps[0].codeFormula, contains('extends CharacterBody2D'));
-        expect(bp0.subSteps[0].codeFormula,
-            contains('class_name LocomotionCharacter'));
-        expect(bp0.subSteps[1].codeFormula, contains('HitBox (Area2D)'));
-        expect(bp0.subSteps[1].codeFormula, contains('CollisionShape2D'));
-
-        // Task 2 (Input Mapping) configures Input Map and reads Input.get_vector() on the SAME locomotion_character.gd
-        expect(
-            bp1.subSteps[0].shortTitle, equals('Configure Input Map Actions'));
-        expect(bp1.subSteps[0].instruction,
-            contains('res://scripts/locomotion_character.gd (created in Task 01)'));
-        expect(bp1.subSteps[1].shortTitle, equals('Read Input.get_vector()'));
-        expect(bp1.subSteps[2].shortTitle, equals('Wire Input to Velocity'));
-
-        // Task 3 (Physics Tuning) tunes acceleration, friction & move_and_slide() on the SAME locomotion_character.gd
-        expect(
-            bp2.subSteps[0].shortTitle, equals('Configure Physics Properties'));
-        expect(bp2.subSteps[0].instruction,
-            contains('res://scripts/locomotion_character.gd (created in Task 01)'));
-        expect(
-            bp2.subSteps[1].shortTitle, equals('Configure Velocity & Gravity'));
-        expect(bp2.subSteps[2].shortTitle, equals('Call move_and_slide()'));
-
-        // ── 2. Foundation-First Task Order & Zero Throwaway Scenes ──
+        // ── Foundation-First Task Order & Zero Throwaway Scenes ──
         final normalizedChamber =
             ReleasePlannerAgent.normalizeFoundationFirstTasks(
           const [
@@ -3948,62 +3638,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(normalizedJungle[0], equals('Character Setup (2h)'));
         expect(normalizedJungle[1], equals('Input & Physics Logic (2h)'));
         expect(normalizedJungle[2], equals('Animation Blend (2h)'));
-
-        // Even if a saved project has Task 1 = "Input Mapping (2h)", TaskHowToBlueprint never creates
-        // a throwaway input_mapping scene; Task 1 configures Input Map, Task 2 creates the scene,
-        // and Task 3 edits the same script!
-        final slideCp = FeatureStateNode(
-          id: 'cp_slide',
-          name: 'Movement (v0.1)',
-          trigger: 'Press slide -> character slides',
-          order: 0,
-          tuningParams: const ['slideSpeed: 1200 cm/s', 'frictionDecay: 0.8'],
-          edgeCases: const ['[COOLDOWN] Prevent slide spam'],
-          checklist: [
-            Subtask(id: 's_1', text: 'Input Mapping (2h)'),
-            Subtask(id: 's_2', text: 'Physics Setup (2h)'),
-            Subtask(id: 's_3', text: 'Animation Blend (2h)'),
-          ],
-        );
-        TaskHowToBlueprint.clearCache();
-        final slideBp0 = TaskHowToBlueprint.resolve(
-          parentTask: slideCp.checklist[0],
-          taskIndex: 0,
-          checkpointNode: slideCp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        final slideBp1 = TaskHowToBlueprint.resolve(
-          parentTask: slideCp.checklist[1],
-          taskIndex: 1,
-          checkpointNode: slideCp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        final slideBp2 = TaskHowToBlueprint.resolve(
-          parentTask: slideCp.checklist[2],
-          taskIndex: 2,
-          checkpointNode: slideCp,
-          engineHint: 'Godot 4 (GDScript)',
-        );
-        expect(
-          slideBp0.subSteps[0].shortTitle,
-          equals('Configure Input Map Actions'),
-        );
-        expect(
-          slideBp0.subSteps[0].shortTitle.contains('BP_InputMapping'),
-          isFalse,
-        );
-        expect(
-          slideBp1.subSteps[0].shortTitle,
-          startsWith('Create '),
-        );
-        expect(
-          slideBp1.subSteps[0].shortTitle,
-          endsWith('.tscn'),
-        );
-        expect(
-          slideBp2.subSteps[0].codeFormula,
-          contains('extends CharacterBody2D'),
-        );
       },
     );
 
@@ -4236,66 +3870,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isTrue,
         );
 
-        // ── Upgrade 3: Phase-Specific 3-Area Step Synthesis ──
-        final testCp = FeatureStateNode(
-          id: 'cp_phase_test',
-          name: 'Checkpoint 1: Dash Core (v0.1)',
-          trigger: 'Press Space -> player dashes forward',
-          order: 0,
-          tuningParams: const ['dashSpeed: 900.0 px/s'],
-          edgeCases: const ['[COOLDOWN GUARD] Prevent dash during cooldown'],
-          checklist: [
-            Subtask(id: 't_1', text: 'Character & Input Setup (2h)'),
-          ],
-          parameters: const {'releaseVersion': 'v0.1'},
-        );
-
-        TaskHowToBlueprint.clearCache();
-        final protoBp = TaskHowToBlueprint.resolve(
-          parentTask: testCp.checklist.first,
-          taskIndex: 0,
-          checkpointNode: testCp,
-          engineHint: 'Godot 4',
-          phase: ProductionPhase.prototype,
-        );
-        expect(protoBp.subSteps.first.specChips, contains('Phase: 01 Prototype'));
-        expect(
-          protoBp.subSteps.first.explainConcept,
-          contains('Greybox foundation pass'),
-        );
-
-        final vsBp = TaskHowToBlueprint.resolve(
-          parentTask: testCp.checklist.first,
-          taskIndex: 0,
-          checkpointNode: testCp,
-          engineHint: 'Godot 4',
-          phase: ProductionPhase.verticalSlice,
-        );
-        expect(
-          vsBp.subSteps.first.specChips,
-          contains('Phase: 03 Vertical Slice Polish'),
-        );
-        expect(
-          vsBp.subSteps.first.explainConcept,
-          contains('Vertical Slice polish pass'),
-        );
-
-        final postBp = TaskHowToBlueprint.resolve(
-          parentTask: testCp.checklist.first,
-          taskIndex: 0,
-          checkpointNode: testCp,
-          engineHint: 'Godot 4',
-          phase: ProductionPhase.postLaunch,
-        );
-        expect(
-          postBp.subSteps.first.specChips,
-          contains('Phase: 05 Post-Launch Live Ops'),
-        );
-        expect(
-          postBp.subSteps.first.explainConcept,
-          contains('Post-Launch Live Ops pass'),
-        );
-
         // ── Upgrade 1: 1-Click Feature Pivot / Supersede & Restore ──
         final provider = WorkbenchProvider(enableAutoLoad: false);
         await provider.startConceptInterview(
@@ -4347,6 +3921,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final targetStates = FeatureStateNode.getStatesForDocument(pivotTarget);
         targetStates.first.tuningParams = ['dashSpeed: 240.0 px/s'];
         targetStates.first.edgeCases = ['[COOLDOWN GUARD] Wait 0.4s'];
+        targetStates.first.isPlaytestPassed = true;
         for (final t in targetStates.first.checklist) {
           t.completed = true;
           for (final sub in t.children) {
@@ -4367,7 +3942,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             checklist: [
               Subtask(id: 'u_t1', text: 'Chain Logic (2h)', completed: true),
             ],
-            parameters: const {'releaseVersion': 'v0.2'},
+            parameters: const {'releaseVersion': 'v0.2', 'playtestPassed': 'true'},
           ),
         );
         provider.updateFeatureStates(pivotTarget.id, targetStates);
@@ -4400,6 +3975,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           for (final f in provider.featuresForBeat(b.id)) {
             final fStates = FeatureStateNode.getStatesForDocument(f);
             for (final s in fStates) {
+              s.isPlaytestPassed = true;
               for (final t in s.checklist) {
                 t.completed = true;
                 for (final sub in t.children) {
@@ -4423,6 +3999,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           for (final f in provider.featuresForBeat(b.id)) {
             final fStates = FeatureStateNode.getStatesForDocument(f);
             for (final s in fStates) {
+              s.isPlaytestPassed = true;
               for (final t in s.checklist) {
                 t.completed = true;
                 for (final sub in t.children) {
@@ -5208,26 +4785,22 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
 
         await provider.approveAndExecuteReleasePlan();
 
-        // Verify Fix 4: Immediately after executeBlueprint, every feature already has >= 3 flat Unified Steps via eager TaskHowToBlueprint.resolveUnifiedSteps
+        // Verify Fix 4: Immediately after executeBlueprint, Producer Workbench features seed clean empty checklists (zero pre-fabricated steps)
         for (final beat in provider.activeReleaseBeats) {
           for (final feat in provider.featuresForBeat(beat.id)) {
             final states = FeatureStateNode.getStatesForDocument(feat);
             expect(states, isNotEmpty);
             expect(
-              states.first.flatSteps.length,
-              greaterThanOrEqualTo(3),
+              states.first.checklist,
+              isEmpty,
               reason:
-                  'Feature "${feat.title}" must eagerly have >= 3 flat Unified Steps immediately after executeBlueprint',
-            );
-            expect(
-              states.first.flatSteps.every((s) => s.children.isEmpty),
-              isTrue,
+                  'Feature "${feat.title}" must keep empty checklist until user/Godot playtest issues are logged',
             );
           }
         }
 
         // Test Feature Inbox in v0.1:
-        // 1) Immediate ('now') Inbox item eagerly populates >= 3 flat Unified Steps
+        // 1) Immediate ('now') Inbox item creates a clean Producer feature with zero pre-fabricated steps
         final nowInbox = await provider.submitFeatureIdeaToInbox(
           'Add shotgun knockback recoil when firing heavy shells',
           preferredBeatId: provider.activeReleaseBeats[2].id,
@@ -5242,11 +4815,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(nowFeatId, isNotNull);
         final nowFeatDoc = provider.documents[nowFeatId!]!;
         final nowFeatStates = FeatureStateNode.getStatesForDocument(nowFeatDoc);
-        expect(nowFeatStates.first.flatSteps.length, greaterThanOrEqualTo(3));
-        expect(
-          nowFeatStates.first.flatSteps.every((s) => s.children.isEmpty),
-          isTrue,
-        );
+        expect(nowFeatStates.first.checklist, isEmpty);
 
         // 2) Scheduled ('futureRelease' -> 02 · MVP) Inbox item with newEpicAndFeature ("Physical Seed Combiner")
         final mvpInbox = await provider.submitFeatureIdeaToInbox(
@@ -5576,7 +5145,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           expect(persistedBpJson, contains(epicDoc.id));
         }
 
-        // 6. Verify Bug 5 Fix: addLiveFeatureToBeat immediately seeds 3 tasks with >= 3 eager sub-steps each
+        // 6. Verify addLiveFeatureToBeat seeds clean empty checklist (zero pre-fabricated steps)
         final addedFeatId = provider.addLiveFeatureToBeat(
           provider.activeReleaseBeats.first.id,
           'Sonar Ping Scanner',
@@ -5584,11 +5153,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         expect(addedFeatId, isNotNull);
         final addedFeatDoc = provider.documents[addedFeatId!]!;
         final addedStates = FeatureStateNode.getStatesForDocument(addedFeatDoc);
-        expect(addedStates.first.flatSteps, hasLength(4));
-        expect(
-          addedStates.first.flatSteps.every((s) => s.children.isEmpty),
-          isTrue,
-        );
+        expect(addedStates.first.checklist, isEmpty);
         await Future<void>.delayed(const Duration(milliseconds: 50));
 
         // 7. Verify logPlaytestIssueOnCheckpoint logs instant [FIX] + [PLAYTEST GUARD] with 0 AI calls
@@ -5964,34 +5529,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final inboxFutureTaskItemSchema = inboxFutureTasksSchema['items'] as Map;
         expect(inboxFutureTaskItemSchema['type'], equals('OBJECT'));
 
-        // 3. addBuildTaskToCheckpointWithAi appends a new step and preserves existing steps 0..N-1
-        final targetFeatForAddTask = provider.selectedFeature!;
-        final statesBeforeAdd =
-            FeatureStateNode.getStatesForDocument(targetFeatForAddTask);
-        final cp0BeforeCount = statesBeforeAdd.first.flatSteps.length;
-        final firstStepBefore = statesBeforeAdd.first.flatSteps.first.text;
-        final addedTaskIdx = provider.addBuildTaskToCheckpointWithAi(
-          featureId: targetFeatForAddTask.id,
-          states: statesBeforeAdd,
-          checkpointIndex: 0,
-          rawTaskTitle: 'Tether Winch Recoil Clamp',
-        );
-        expect(addedTaskIdx, equals(cp0BeforeCount));
-        final statesAfterAdd =
-            FeatureStateNode.getStatesForDocument(targetFeatForAddTask);
-        expect(
-          statesAfterAdd.first.flatSteps.length,
-          equals(cp0BeforeCount + 1),
-        );
-        expect(
-          statesAfterAdd.first.flatSteps.last.text,
-          equals('Tether Winch Recoil Clamp'),
-        );
-        expect(
-          statesAfterAdd.first.flatSteps.first.text,
-          equals(firstStepBefore),
-        );
-
         // 4. Verify End-to-End AI & Workflow Audit fixes:
         // 4a. commitSparkIntakeTool & proposeSparkExpansionCardsTool require badge & description
         final sparkExpItems = (((ProjectConceptAgent
@@ -6026,6 +5563,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
 
         // 4c. ReleaseExecutorAgent carries primary_asset into v0.2+ upgrade checkpoints
+        final targetFeatForAddTask = provider.selectedFeature!;
         targetFeatForAddTask.sections['primary_asset'] =
             'res://actors/salvage_winch.gd';
         final upgradeBp = ReleaseBlueprint(
@@ -6138,7 +5676,9 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         statesToMutate.last.tuningParams = ['syncTestSpeed = 777'];
         statesToMutate.last.edgeCases = ['[GUARD] Sync test guard'];
-        statesToMutate.last.checklist.first.text = 'Synced Task Title (2h)';
+        statesToMutate.last.checklist = [
+          Subtask(id: 'sync_fix_1', text: 'Synced Task Title (2h)'),
+        ];
         provider.updateFeatureStates(liveDocForBpSync.id, statesToMutate);
         final syncedBpFeat =
             provider.releaseBlueprint!.beats.first.features.firstWhere(
@@ -6194,35 +5734,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         expect(singleFeaturePrompt, contains('**Design Pillars**:'));
 
-        // 7c. TaskHowToBlueprint.resolve honors checkpointNode.parameters['primarySharedScriptOrScene']
-        TaskHowToBlueprint.clearCache();
-        final sharedAssetCp = FeatureStateNode(
-          id: 'cp_shared_asset_test',
-          name: 'Checkpoint 1: Grapple Swing',
-          trigger: 'Playtest: Press E -> attach grapple hook',
-          checklist: [
-            Subtask(
-              id: 't_shared_1',
-              text: 'Implement swing tension physics (2h)',
-            ),
-          ],
-          parameters: {
-            'releaseVersion': 'v0.1',
-            'primarySharedScriptOrScene':
-                'CustomHookRig (res://scenes/custom_hook_rig.tscn)',
-          },
-        );
-        final resolvedSharedBp = TaskHowToBlueprint.resolve(
-          parentTask: sharedAssetCp.checklist.first,
-          taskIndex: 0,
-          checkpointNode: sharedAssetCp,
-          engineHint: 'Godot 4 (2D)',
-        );
-        expect(
-          resolvedSharedBp.subSteps.first.stepPath,
-          contains('custom_hook_rig.gd'),
-        );
-
         // 8. Pass 5 AI & Workflow Refinements
         // 8a. Feature Inbox switching integrationMode to upgradeExistingFeature auto-resolves targetFeatureId & syncs primarySharedScriptOrScene
         final inboxUpgradeIdea = await provider.submitFeatureIdeaToInbox(
@@ -6238,27 +5749,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             .firstWhere((i) => i.id == inboxUpgradeIdea.id);
         expect(updatedInboxItem.targetFeatureId, isNotNull);
         expect(updatedInboxItem.targetFeatureTitle, isNotEmpty);
-
-        // 8b. Editing sub-step instruction via encodeThreeAreaNotes preserves [[AREA1]] and [[AREA2]]
-        final encodedThreeAreaPass5 = TaskHowToBlueprint.encodeThreeAreaNotes(
-          instruction: 'Updated step instruction prose.',
-          area1Hierarchy: 'PlayerRoot (CharacterBody2D)\n└─ GrappleRig (Node2D)',
-          area2Inspector: 'maxTension: 900.0 | reelSpeed: 420.0',
-        );
-        final decodedThreeAreaPass5 =
-            TaskHowToBlueprint.decodeThreeAreaNotes(encodedThreeAreaPass5);
-        expect(
-          decodedThreeAreaPass5.cleanInstruction,
-          equals('Updated step instruction prose.'),
-        );
-        expect(
-          decodedThreeAreaPass5.area1Hierarchy,
-          contains('GrappleRig (Node2D)'),
-        );
-        expect(
-          decodedThreeAreaPass5.area2Inspector,
-          contains('maxTension: 900.0'),
-        );
 
         // 9. Pass 6 Cross-Stage & Cross-Action State-Transition Refinements
         // 9a. propagateVariableRenameAcrossProject updates f.checkpoints inside _releaseBlueprint
@@ -6312,11 +5802,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         );
         preSwitchStates.first.parameters['primarySharedScriptOrScene'] =
             'res://scenes/grapple_rig.tscn';
-        preSwitchStates.first.checklist.first.completed = true;
-        preSwitchStates.first.checklist.first.children = [
+        preSwitchStates.first.checklist = [
           Subtask(
             id: 'stale_godot_sub_1',
-            text: 'STEP 1.1 · CREATE GODOT SCENE',
+            text: '[FIX] Stale 2D grapple offset',
             specNotes: 'Attach grapple_rig.gd in Godot.',
             codeSnippet: '@export var cable_speed: float = 400.0',
             codeLanguage: 'res://scenes/grapple_rig.tscn',
@@ -6344,21 +5833,11 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           isFalse,
         );
         expect(
-          postSwitchStates.first.flatSteps
+          postSwitchStates.first.checklist
               .any((s) => s.id == 'stale_godot_sub_1'),
           isFalse,
         );
-        final resolvedGodotSteps = TaskHowToBlueprint.resolveUnifiedSteps(
-          checkpointNode: postSwitchStates.first,
-          engineHint: 'Godot 4 (GDScript + GDExtension C++)',
-        );
-        expect(resolvedGodotSteps, isNotEmpty);
-        expect(
-          resolvedGodotSteps.every(
-            (s) => !s.codeFormula.contains('@export var cable_speed'),
-          ),
-          isTrue,
-        );
+        expect(postSwitchStates.first.checklist, isEmpty);
 
         // 9c. Promoting an Exclusion inside Progressive Release Co-Pilot and then canceling restores _conceptDraft.exclusions
         provider.updateConceptDraft((d) {
@@ -6900,57 +6379,35 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
       () async {
         // 1. Telegraphic Task Group Header (strips leading verbs + articles even on short titles)
         expect(
-          TaskHowToBlueprint.formatConciseTaskTitle(
+          LayersTextStyleGuide.formatConciseTaskTitle(
             'Create the Capsule Body and Camera (2h)',
           ),
           equals('Capsule Body & Camera'),
         );
         expect(
-          TaskHowToBlueprint.formatConciseTaskTitle('Create the HUD (1h)'),
+          LayersTextStyleGuide.formatConciseTaskTitle('Create the HUD (1h)'),
           equals('HUD'),
         );
 
-        // 2. Telegraphic Step Title (strips articles a/an/the and trailing prepositional filler while preserving engine identifiers)
+        // 2. Telegraphic Guard Chip (converts "Prevent <X> from <Y>ing" -> "Block <X> <Y>ing" and strips articles)
         expect(
-          TaskHowToBlueprint.formatTelegraphicStepTitle(
-            'STEP 1.1 · Attach a RayCast2D to the Player in the scene (15m)',
-          ),
-          equals('Attach RayCast2D to Player'),
-        );
-        expect(
-          TaskHowToBlueprint.formatTelegraphicStepTitle(
-            'STEP 1.2 · CREATE THE GD_PLAYER_DASH SCENE IN THE SCENE',
-          ),
-          equals('Create GD_Player_Dash Scene'),
-        );
-
-        // 3. Telegraphic Guard Chip (converts "Prevent <X> from <Y>ing" -> "Block <X> <Y>ing" and strips articles)
-        expect(
-          TaskHowToBlueprint.formatTelegraphicGuardChip(
+          SectionTextUtils.formatTelegraphicGuardChip(
             '[STATE GUARD] Prevent the player from dashing while stunned.',
           ),
           equals('Block player dashing while stunned'),
         );
 
-        // 4. Concise BLUF Feature Goal Subtitle (strips "Build a playable ... that allows the player to ")
+        // 3. Concise BLUF Feature Goal Subtitle (strips "Build a playable ... that allows the player to ")
         expect(
-          TaskHowToBlueprint.formatConciseFeatureGoal(
+          SectionTextUtils.formatConciseFeatureGoal(
             'Build a playable prototype that allows the player to dash across gaps with cooldown.',
           ),
           equals('Dash across gaps with cooldown.'),
         );
 
-        // 5. Concise Imperative Step Instruction (strips preamble clauses)
+        // 4. Concise Causal VERIFY Sentence ("When you <action>, <result>" -> "<Action> → <Result>")
         expect(
-          TaskHowToBlueprint.formatConciseStepInstruction(
-            'In order to configure movement, open Player.gd and export dashSpeed.',
-          ),
-          equals('Open Player.gd and export dashSpeed.'),
-        );
-
-        // 6. Concise Causal VERIFY Sentence ("When you <action>, <result>" -> "<Action> → <Result>")
-        expect(
-          TaskHowToBlueprint.formatConciseVerifySentence(
+          SectionTextUtils.formatConciseVerifySentence(
             'Confirm that when you press Spacebar, the character dashes 4m forward.',
           ),
           equals('Press Spacebar → The character dashes 4m forward.'),
@@ -7029,25 +6486,25 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             equals(LayersTextStyleGuide.compactStyleRules),
           );
           expect(
-            TaskHowToBlueprint.formatConciseTaskTitle(
+            LayersTextStyleGuide.formatConciseTaskTitle(
               'Setup dash collision response layer & invulnerability state flags',
             ),
             equals('Collision Layer & State Flags'),
           );
           expect(
-            TaskHowToBlueprint.formatConciseTaskTitle(
+            LayersTextStyleGuide.formatConciseTaskTitle(
               'Code dash trajectory impulse, invulnerability window timer, & cooldown',
             ),
             equals('Trajectory Impulse & Window Timer'),
           );
           expect(
-            TaskHowToBlueprint.formatConciseTaskTitle(
+            LayersTextStyleGuide.formatConciseTaskTitle(
               'Ghost trail particle trail & trigger dash burst sound cue while dashing',
             ),
             equals('Ghost Trail & Sound Cue'),
           );
           expect(
-            TaskHowToBlueprint.formatConciseFeatureGoal(
+            SectionTextUtils.formatConciseFeatureGoal(
               'Upgrade dash burst into full combat evasion with i-frame invulnerability window, animation cues, and cooldown tuning.',
             ),
             equals(
@@ -7077,36 +6534,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
               'Shard Physics Hull — Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.',
             ),
           );
-          final sampleBp = TaskHowToBlueprint(
-            numLabel: '01',
-            layerTag: 'PHYSICS',
-            cleanTitle: extractedWithGoals.first,
-            durationChip: '1h',
-            whereLocation: 'Script: ScrapShard.gd',
-            engineLabel: 'GODOT 4',
-            subSteps: [
-              TaskHowToSubStep(
-                subtask: Subtask(id: 's1', text: 'Setup Shard Physics Hull'),
-                stepNumberLabel: 'STEP 1.1',
-                shortTitle: 'Setup Shard Physics Hull',
-                instruction: 'Attach RigidBody3D and CollisionShape3D.',
-                verifyResult:
-                    'Drop ScrapShard from 3m → bounces twice before resting',
-                codeFormula: 'gravity_scale = 1.8',
-              ),
-            ],
-          );
-          expect(sampleBp.shortTaskTitle, equals('Shard Physics Hull'));
-          expect(
-            sampleBp.taskGoalSentence,
-            equals(
-              'Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.',
-            ),
-          );
-          expect(
-            sampleBp.taskDoneCheck,
-            equals('Drop ScrapShard from 3m → bounces twice before resting'),
-          );
 
           // 12. Full-Project Audit Upgrades: Direct Epic Creation, STABLE Sibling MVP Coverage, & v0.2+ Stage 1 Core Loop Append
           final initialBeatCount = provider.activeReleaseBeats.length;
@@ -7130,6 +6557,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             final upgradedFeat = siblingFeats[1];
             final st0 = FeatureStateNode.getStatesForDocument(stableFeat);
             for (final s in st0) {
+              s.isPlaytestPassed = true;
               for (final t in s.checklist) {
                 t.completed = true;
                 for (final c in t.children) {
@@ -7149,7 +6577,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                 checklist: [
                   Subtask(id: 'mvp_t1', text: 'MVP Task (2h)', completed: true),
                 ],
-                parameters: const {'releaseVersion': 'v0.2'},
+                parameters: const {
+                  'releaseVersion': 'v0.2',
+                  'playtestPassed': 'true',
+                },
               ),
             );
             provider.updateFeatureStates(upgradedFeat.id, st1);
@@ -7384,6 +6815,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             for (final feat in provider.featuresForBeat(fpEpic.id)) {
               final states = FeatureStateNode.getStatesForDocument(feat);
               for (final s in states) {
+                s.isPlaytestPassed = true;
                 for (final t in s.checklist) {
                   t.completed = true;
                   for (final c in t.children) {
@@ -7404,7 +6836,10 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                       completed: true,
                     ),
                   ],
-                  parameters: {'releaseVersion': nextPassVer},
+                  parameters: {
+                    'releaseVersion': nextPassVer,
+                    'playtestPassed': 'true',
+                  },
                 ),
               );
               provider.updateFeatureStates(feat.id, states);
@@ -7439,6 +6874,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           final exportStates =
               FeatureStateNode.getStatesForDocument(launchExportFeature);
           for (final s in exportStates) {
+            s.isPlaytestPassed = true;
             for (final t in s.checklist) {
               t.completed = true;
               for (final c in t.children) {
@@ -7632,17 +7068,12 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         final feat = provider.documents[featId]!;
         feat.sections['lifecycle'] = FeatureLifecycleStatus.stable.name;
         final updatedStates = FeatureStateNode.getStatesForDocument(feat);
-        for (final t in updatedStates.first.checklist) {
-          t.completed = true;
-          for (final c in t.children) {
-            c.completed = true;
-          }
-        }
+        updatedStates.first.isPlaytestPassed = true;
         provider.updateFeatureStates(featId, updatedStates);
         expect(provider.getDocumentProgress(featId), 100);
 
-        // Uncheck one flat step and update states -> lifecycle transitions out of STABLE and progress drops below 100%
-        updatedStates.first.checklist.first.completed = false;
+        // Unpass Playtest Gate and update states -> lifecycle transitions out of STABLE and progress drops below 100%
+        updatedStates.first.isPlaytestPassed = false;
         provider.updateFeatureStates(featId, updatedStates);
         expect(
           provider.documents[featId]!.sections['lifecycle'],
@@ -8862,29 +8293,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
       },
     );
 
-    test(
-      'TaskHowToBlueprint decodeThreeAreaNotes strips verifyMode cleanly without leaking into area2Inspector',
-      () {
-        final encodedEditorNotes = TaskHowToBlueprint.encodeThreeAreaNotes(
-          instruction: 'Add DashCooldownTimer under Player.',
-          area1Hierarchy: 'Player\n └─ DashCooldownTimer (Timer)',
-          area2Inspector: 'one_shot: true | wait_time: 0.6',
-          verifyMode: 'editor',
-        );
-        final decodedEditorNotes =
-            TaskHowToBlueprint.decodeThreeAreaNotes(encodedEditorNotes);
-        expect(decodedEditorNotes.verifyMode, equals('editor'));
-        expect(
-          decodedEditorNotes.area2Inspector,
-          equals('one_shot: true | wait_time: 0.6'),
-        );
-        expect(
-          decodedEditorNotes.area2Inspector,
-          isNot(contains('VERIFY_MODE')),
-        );
-      },
-    );
-
     testWidgets(
       '42. 3-Area Step Card Visibility (DO + Hierarchy + Clickable Inspector Pill + Step Check Footer) & Truthful Row 2 Check Binding',
       (WidgetTester tester) async {
@@ -8936,13 +8344,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                   codeSnippet: 'target_position = Vector2(96, 0)',
                   verification:
                       'Inspect Scene Tree -> DashRay2D points 96px right.',
-                  specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-                    instruction:
-                        'Add RayCast2D child named DashRay2D under CharacterBody2D.',
-                    area1Hierarchy: 'CharacterBody2D\n └─ DashRay2D',
-                    area2Inspector: 'dashImpulse: 620.0',
-                    verifyMode: 'editor',
-                  ),
+                  specNotes:
+                      'Add RayCast2D child named DashRay2D under CharacterBody2D.',
                 ),
                 Subtask(
                   id: 's_dash_1_2',
@@ -8953,11 +8356,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                       'if cooldown <= 0.0:\n\tvelocity.x = dashImpulse',
                   verification:
                       'Press Shift -> Character bursts at 620 px/s once per cooldown.',
-                  specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-                    instruction:
-                        'Clamp cooldown guard and apply dashImpulse on Shift press.',
-                    verifyMode: 'playtest',
-                  ),
+                  specNotes:
+                      'Clamp cooldown guard and apply dashImpulse on Shift press.',
                 ),
               ],
             ),
@@ -9009,21 +8409,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             find.byKey(ValueKey('build_queue_step_${cp0.id}_1')),
             findsNothing,
           );
-
-          // 2. Underlying step resolution still preserves Step 1 Editor Check and Step 2 Playtest Check
-          final resolvedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
-            checkpointNode: cp0,
-            engineHint: 'Godot 4 (GDScript)',
-          );
-          expect(resolvedSteps.length, greaterThanOrEqualTo(2));
-          expect(
-            resolvedSteps[0].verifyResult,
-            contains('DashRay2D points 96px right'),
-          );
-          expect(
-            resolvedSteps[1].verifyResult,
-            contains('Character bursts at 620 px/s'),
-          );
         } finally {
           GeminiAgentClient.testMockResponder = prevMock;
         }
@@ -9064,6 +8449,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
             id: 'cp_v01',
             name: '[v0.1] Core Dash',
             order: 0,
+            parameters: const {'playtestPassed': 'true'},
             tuningParams: ['dashSpeed: 500.0'],
             checklist: [
               Subtask(
@@ -9105,11 +8491,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                     codeSnippet: 'hurtbox.monitoring = false',
                     verification:
                         'Inspect Hurtbox -> monitoring toggles cleanly.',
-                    specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-                      instruction:
-                          'Disable Hurtbox monitoring when dash starts.',
-                      verifyMode: 'editor',
-                    ),
+                    specNotes: 'Disable Hurtbox monitoring when dash starts.',
                   ),
                   Subtask(
                     id: 'cp2_s2',
@@ -9120,11 +8502,7 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
                         'await get_tree().create_timer(iFrameWindow).timeout\nhurtbox.monitoring = true',
                     verification:
                         'Dash through hazard -> zero damage during 0.22s window.',
-                    specNotes: TaskHowToBlueprint.encodeThreeAreaNotes(
-                      instruction:
-                          'Re-enable Hurtbox after iFrameWindow elapses.',
-                      verifyMode: 'playtest',
-                    ),
+                    specNotes: 'Re-enable Hurtbox after iFrameWindow elapses.',
                   ),
                 ],
               ),
@@ -9271,22 +8649,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
         }
       },
     );
-    test('TaskHowToBlueprint token matching highlights properties and Vector3 coordinates accurately', () {
-      expect(
-        TaskHowToBlueprint.matchesHighlightTokens(
-          const {'camerachild', '1.6', 'position'},
-          'Camera3D Transform > Position (0, 1.6, 0)',
-        ),
-        isTrue,
-      );
-      expect(
-        TaskHowToBlueprint.matchesHighlightTokens(
-          const {'dash_speed'},
-          'CollisionShape2D Radius 16.0',
-        ),
-        isFalse,
-      );
-    });
 
     test('WorkbenchProvider activeModelIndicatorLabel defaults to Hydrogen', () {
       final provider = WorkbenchProvider();
@@ -9375,21 +8737,6 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
           LayersTextStyleGuide.runbookInstructionSchemaDesc,
           contains('newline-separated'),
         );
-      },
-    );
-
-    test(
-      'TaskHowToBlueprint.filterDeclaredGameplayVariables strips Godot Node built-ins and preserves @export vars',
-      () {
-        final vars = TaskHowToBlueprint.filterDeclaredGameplayVariables(const [
-          'position: Vector3(0, 1.6, 0)',
-          'visible: true',
-          'dash_speed: 14.0',
-          'is_airborne: bool',
-        ]);
-        expect(vars.map((v) => v.name), isNot(contains('position')));
-        expect(vars.map((v) => v.name), isNot(contains('visible')));
-        expect(vars.map((v) => v.name), containsAll(['dash_speed', 'is_airborne']));
       },
     );
 
@@ -9710,31 +9057,8 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     test(
-      'populateDefaultUnifiedSteps emits 3D nodes for 3D hints, zero (2h)/(1h) runtime fallback tags, and extracts dock-ordered roles',
+      'defaultDockStepTitles emits zero (2h)/(1h) runtime fallback tags and extracts dock-ordered roles',
       () {
-        final cp3d = FeatureStateNode(
-          id: 'cp_3d_hint',
-          name: '01 · PROTOTYPE',
-          checklist: [
-            Subtask(id: 's_1', text: 'Dash Scene Nodes'),
-            Subtask(id: 's_2', text: 'Dash State Script'),
-            Subtask(id: 's_3', text: 'Dash Signals & Guard'),
-          ],
-        );
-        TaskHowToBlueprint.populateDefaultUnifiedSteps(
-          cp3d,
-          engineHint: 'Godot 4 (3D GDScript)',
-        );
-        expect(cp3d.checklist, isNotEmpty);
-        expect(
-          cp3d.checklist.first.specNotes ?? '',
-          contains('CharacterBody3D'),
-        );
-        expect(
-          cp3d.checklist.first.specNotes ?? '',
-          contains('CapsuleShape3D'),
-        );
-
         final fallbackTitles = ReleasePlannerAgent.defaultDockStepTitles(
           subject: 'Player Dash',
         );

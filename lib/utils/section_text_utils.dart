@@ -36,6 +36,118 @@ class SectionTextUtils {
     r'Done When:\s*',
     caseSensitive: false,
   );
+  static final RegExp _whitespaceRegex = RegExp(r'\s+');
+  static final RegExp _leadingBracketTagRegex = RegExp(r'^\[[^\]]+\]\s*');
+  static final RegExp _inlineArticlesRegex = RegExp(
+    r'\b(?:a|an|the)\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _verifyPrefixRegex = RegExp(
+    r'^(?:(?:Confirm|Verify|Ensure|Make\s+sure|Check)\s+that\s+|Make\s+sure\s+)',
+    caseSensitive: false,
+  );
+  static final RegExp _verifyWhenClauseRegex = RegExp(
+    r'^(?:when|after)\s+(?:you\s+|the\s+player\s+)?([^,]+),\s*(.+)$',
+    caseSensitive: false,
+  );
+  static final RegExp _featureGoalPreambleRegex = RegExp(
+    r'^(?:Goal:\s*)?(?:(?:Build|Implement|Create|Develop|Add|Deliver)\s+(?:a\s+|an\s+|the\s+)?(?:playable\s+|responsive\s+|modular\s+|tactile\s+)?[\w\s\-&/]{0,42}?(?:prototype|feature|mechanic|system|loop)\s+(?:that\s+allows\s+(?:the\s+)?player\s+to|where\s+(?:the\s+)?player\s+can|where\s+you\s+can|where\s+you|so\s+(?:the\s+)?player\s+can|to)\s+|(?:Allow|Enable)\s+(?:the\s+)?player\s+to\s+)',
+    caseSensitive: false,
+  );
+  static final RegExp _progressiveGoalPreambleRegex = RegExp(
+    r'^(?:Goal:\s*)?(?:Upgrade|Polish|Extend|Scale|Tune)\s+[\w\s\-&/]{1,36}?(?:\s+from\s+v\d+\.\d+(?:\s+greybox)?)?\s+(?:(?:into|to)\s+(?:(?:a|an|the|full|complete)\s+)?[\w\s\-]{1,28}?\s+with\s+|with\s+)',
+    caseSensitive: false,
+  );
+  static final RegExp _guardLeadInPreventFromRegex = RegExp(
+    r'^Prevent\s+(?:the\s+)?(.+?)\s+from\s+',
+    caseSensitive: false,
+  );
+  static final RegExp _guardLeadInPrefixRegex = RegExp(
+    r'^(?:Prevent|Ensure\s+that|Ensure|Make\s+sure\s+that|Make\s+sure|Do\s+not\s+allow)\s+(?:the\s+)?',
+    caseSensitive: false,
+  );
+
+  /// Godot 4 Native engine label across Stage 1 and Stage 2.
+  static String detectEngineLabel(String? engineHint) => 'GODOT 4';
+
+  /// Formats a remaining minute estimate into a compact hour string (`0h`, `4h`, `1.5h`).
+  static String formatRemainingHoursShort(int minutes) {
+    if (minutes <= 0) return '0h';
+    final hours = minutes / 60.0;
+    if ((hours - hours.roundToDouble()).abs() < 0.05) {
+      return '${hours.round()}h';
+    }
+    return '${hours.toStringAsFixed(1)}h';
+  }
+
+  /// Formats an edge-case guard into Telegraphic Style, stripping `[TAG]`,
+  /// verbose `"Prevent ... from "` lead-ins, and articles (`a`/`an`/`the`).
+  static String formatTelegraphicGuardChip(String raw) {
+    var clean = raw.replaceFirst(_leadingBracketTagRegex, '').trim();
+    if (clean.isEmpty) return raw.trim();
+    final preventFromMatch = _guardLeadInPreventFromRegex.firstMatch(clean);
+    if (preventFromMatch != null) {
+      final subject = preventFromMatch.group(1)!.trim();
+      final rest = clean.substring(preventFromMatch.end).trim();
+      clean = 'Block $subject $rest';
+    } else {
+      clean = clean.replaceFirst(_guardLeadInPrefixRegex, '').trim();
+    }
+    clean = clean
+        .replaceAll(_inlineArticlesRegex, '')
+        .replaceAll(_whitespaceRegex, ' ')
+        .trim();
+    if (clean.endsWith('.')) {
+      clean = clean.substring(0, clean.length - 1).trim();
+    }
+    if (clean.isNotEmpty) {
+      clean = clean[0].toUpperCase() + clean.substring(1);
+    }
+    return clean.isEmpty ? raw.trim() : clean;
+  }
+
+  /// Formats a Feature Header Goal into Concise Messaging (BLUF),
+  /// stripping repetitive `"Build a playable ... that allows the player to "` preambles.
+  static String formatConciseFeatureGoal(String raw) {
+    var clean = raw.trim();
+    if (clean.isEmpty) return clean;
+    clean = clean
+        .replaceFirst(_featureGoalPreambleRegex, '')
+        .replaceFirst(_progressiveGoalPreambleRegex, '')
+        .trim();
+    if (clean.startsWith('Goal:')) {
+      clean = clean.substring(5).trim();
+    }
+    if (clean.isNotEmpty) {
+      clean = clean[0].toUpperCase() + clean.substring(1);
+    }
+    return clean;
+  }
+
+  /// Formats a playtest verify sentence into a direct causal `Action → Result` check.
+  static String formatConciseVerifySentence(String raw) {
+    var clean = raw.trim();
+    if (clean.isEmpty) return clean;
+    clean = clean.replaceFirst(_verifyPrefixRegex, '').trim();
+    if (!clean.contains('→') && !clean.contains('->')) {
+      final whenMatch = _verifyWhenClauseRegex.firstMatch(clean);
+      if (whenMatch != null) {
+        var action = whenMatch.group(1)!.trim();
+        var result = whenMatch.group(2)!.trim();
+        if (action.isNotEmpty && result.isNotEmpty) {
+          action = action[0].toUpperCase() + action.substring(1);
+          result = result[0].toUpperCase() + result.substring(1);
+          return '$action → $result';
+        }
+      }
+    } else if (clean.contains(' -> ')) {
+      clean = clean.replaceAll(' -> ', ' → ');
+    }
+    if (clean.isNotEmpty) {
+      clean = clean[0].toUpperCase() + clean.substring(1);
+    }
+    return clean;
+  }
 
   static String _firstNonEmptyLine(String text) {
     int start = 0;

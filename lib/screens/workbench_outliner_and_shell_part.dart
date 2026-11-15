@@ -149,7 +149,7 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     final activeVer = widget.workbench.activeReleaseVersionTag;
     final releaseRemMins = _computeReleaseRemainingMinutes(beats);
     final releaseRemHoursStr =
-        TaskHowToBlueprint.formatRemainingHoursShort(releaseRemMins);
+        SectionTextUtils.formatRemainingHoursShort(releaseRemMins);
     final isReleaseDone = relProgress >= 100 || releaseRemMins <= 0;
     final isConceptActive =
         widget.workbench.currentStage == WorkbenchStage.projectPitch ||
@@ -1970,24 +1970,14 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
     final isWaitingForStepsInLiveMode =
         widget.workbench.isFeatureWaitingForStepsInLiveMode(feat.id);
 
-    int doneStepCount = 0;
-    int totalStepCount = 0;
+    int openFixCount = 0;
     int activeFocusIndex = 0;
     FeatureStateNode? activeCp;
     final states = FeatureStateNode.getStatesForDocument(feat);
     if (states.isNotEmpty) {
       activeFocusIndex = _resolveActiveCheckpointIndex(feat, states);
       activeCp = states[activeFocusIndex];
-      final hint = _engineHint;
-      final phase = widget.workbench.currentPhase;
-      final unifiedSteps = TaskHowToBlueprint.resolveUnifiedSteps(
-        checkpointNode: activeCp,
-        engineHint: hint,
-        phase: phase,
-      );
-      totalStepCount = unifiedSteps.length;
-      doneStepCount =
-          unifiedSteps.where((s) => s.subtask.completed).length;
+      openFixCount = activeCp.openFixCount;
     }
 
     return Opacity(
@@ -2194,16 +2184,29 @@ extension _WorkbenchOutlinerAndShellExt on _ReleaseWorkbenchScreenState {
                           ),
                         ),
                       ),
-                    ] else if (totalStepCount > 0) ...[
+                    ] else if (openFixCount > 0) ...[
                       const SizedBox(width: 6),
-                      Text(
-                        '$doneStepCount/$totalStepCount',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: fontMicro,
-                          fontWeight: weightSemi,
-                          color: isSelected
-                              ? const Color(0xFFA5B4FC)
-                              : const Color(0xFF64748B),
+                      Container(
+                        key: ValueKey('rail_fix_badge_${feat.id}'),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1.5,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.14),
+                          borderRadius: BorderRadius.circular(3.5),
+                          border: Border.all(
+                            color:
+                                const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          '⚑ $openFixCount ${openFixCount == 1 ? 'fix' : 'fixes'}',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: fontMicro,
+                            fontWeight: weightBold,
+                            color: const Color(0xFFFBBF24),
+                          ),
                         ),
                       ),
                     ],

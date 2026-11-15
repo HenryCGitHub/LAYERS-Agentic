@@ -29,14 +29,11 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     required String epicTitle,
   }) {
     final edgeItems = node.edgeCases;
-    final signedOffGuards = [
-      for (int i = 0; i < edgeItems.length; i++)
-        if (node.isGuardSignedOff(i, edgeItems[i])) i,
-    ].length;
+    final signedOffGuards = node.signedOffGuardsCount;
 
     final rawGoal = SectionTextUtils.resolveGoal(feat.sections).trim();
     final conciseGoal = rawGoal.isNotEmpty
-        ? TaskHowToBlueprint.formatConciseFeatureGoal(rawGoal)
+        ? SectionTextUtils.formatConciseFeatureGoal(rawGoal)
         : node.cleanStageTitle;
 
     final scopeSource = node.coveredScope.isNotEmpty
@@ -53,13 +50,7 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         : SectionTextUtils.resolveDoneWhen(feat.sections).trim();
 
     node.flattenLegacyNestedChecklistIfNeeded();
-    final openFixEntries = <Subtask>[
-      for (final step in node.flatSteps)
-        if (!step.completed &&
-            ((step.codeLanguage ?? '').toLowerCase() == 'fix' ||
-                step.text.trim().toUpperCase().startsWith('[FIX]')))
-          step,
-    ];
+    final openFixEntries = node.openFixItems;
 
     final activeVer = widget.workbench.activeReleaseVersionTag;
     final hasNextCp = states.any(

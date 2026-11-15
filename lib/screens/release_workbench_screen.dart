@@ -431,7 +431,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
       isHalfScreenOverlayMode: isHalfScreenOverlayMode,
     );
     if (!isHalfScreenOverlayMode) return featureCanvas;
-    final featTitle = widget.workbench.selectedFeature?.title ?? 'Active Step Runbook';
+    final featTitle = widget.workbench.selectedFeature?.title ?? 'Feature Brief';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -635,50 +635,26 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen>
     );
   }
 
-  String? get _engineHint {
-    final draftTech =
-        widget.workbench.conceptDraft?.techSpec.join(' ').trim() ?? '';
-    if (draftTech.isNotEmpty) return draftTech;
-    final projSec = widget.workbench.activeProject?.sections;
-    return projSec?['tech_spec'] ?? projSec?['techSpec'];
-  }
-
-  int _computeCheckpointRemainingMinutes(FeatureStateNode cpNode) {
-    if (cpNode.isCompleted) return 0;
-    final hint = _engineHint;
-    final phase = widget.workbench.currentPhase;
-    final steps = TaskHowToBlueprint.resolveUnifiedSteps(
-      checkpointNode: cpNode,
-      engineHint: hint,
-      phase: phase,
-    );
-    int rem = 0;
-    for (final s in steps) {
-      if (!s.subtask.completed) rem += s.estimatedMinutes;
-    }
-    return rem > 0 ? rem : 30;
-  }
-
   int _computeFeatureRemainingMinutes(TierDocument feat) {
     if (!widget.workbench.isFeatureActiveInRelease(feat)) {
       return 0;
     }
     final states = FeatureStateNode.getStatesForDocument(feat);
-    if (states.isEmpty) return 0;
+    if (states.isEmpty) return feat.isCompleted ? 0 : 120;
     final activeVer = widget.workbench.activeReleaseVersionTag;
-    int rem = 0;
-    bool foundActive = false;
-    for (final cp in states) {
-      if (cp.releaseVersion == activeVer) {
-        rem += _computeCheckpointRemainingMinutes(cp);
-        foundActive = true;
-      }
-    }
-    if (foundActive) return rem;
-    for (final cp in states) {
-      rem += _computeCheckpointRemainingMinutes(cp);
-    }
-    return rem;
+    final activeStates =
+        states.where((s) => s.releaseVersion == activeVer).toList();
+    final targetStates = activeStates.isNotEmpty ? activeStates : states;
+    if (targetStates.every((cp) => cp.isCompleted)) return 0;
+    final parsedMins = DurationHelper.parseToMinutes(feat.estimatedDuration);
+    final baseMins = parsedMins > 0 ? parsedMins : 120;
+    final avgProgress = targetStates.fold<double>(
+          0.0,
+          (sum, cp) => sum + cp.progress,
+        ) /
+        targetStates.length;
+    final rem = (baseMins * (1.0 - avgProgress)).round();
+    return rem > 0 ? rem : 15;
   }
 
   int _computeReleaseRemainingMinutes(List<TierDocument> beats) {

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/tier_document.dart';
 export 'mechanic_archetype_profile.dart';
-export 'task_how_to_blueprint.dart';
 
 /// Represents a single dynamic state node in a Feature's state machine.
 ///
@@ -32,11 +31,17 @@ class FeatureStateNode {
     List<String>? coveredScope,
     List<String>? tuningParams,
     List<String>? edgeCases,
-  })  : parameters = parameters ?? {},
-        checklist = checklist ?? [],
-        coveredScope = coveredScope ?? [],
-        tuningParams = tuningParams ?? [],
-        edgeCases = edgeCases ?? [];
+  })  : parameters = parameters != null
+            ? Map<String, String>.of(parameters)
+            : <String, String>{},
+        checklist =
+            checklist != null ? List<Subtask>.of(checklist) : <Subtask>[],
+        coveredScope =
+            coveredScope != null ? List<String>.of(coveredScope) : <String>[],
+        tuningParams =
+            tuningParams != null ? List<String>.of(tuningParams) : <String>[],
+        edgeCases =
+            edgeCases != null ? List<String>.of(edgeCases) : <String>[];
 
   /// Returns the operational stage tag (e.g. '[ROUGH PASS]', '[BUILD PASS]', '[FINAL PASS]') if present in the stage title.
   String? get operationalTag {
@@ -103,17 +108,34 @@ class FeatureStateNode {
       checklist.fold(0, (sum, item) => sum + item.completedLeafCount);
 
   /// Fractional progress (0.0 to 1.0) of this checkpoint.
-  /// Passing playtest guarantees 1.0 (even when 0 manual steps exist).
+  /// Checked Playtest Guards contribute up to 0.5 (50%); 1.0 (100%) requires [isPlaytestPassed].
   double get progress {
     if (isPlaytestPassed) return 1.0;
-    if (totalChecklistCount == 0) return 0.0;
-    return completedChecklistCount / totalChecklistCount;
+    if (edgeCases.isEmpty) return 0.0;
+    return (signedOffGuardsCount / edgeCases.length) * 0.5;
   }
 
-  bool get isCompleted {
-    if (isPlaytestPassed) return true;
-    return totalChecklistCount > 0 &&
-        completedChecklistCount == totalChecklistCount;
+  /// A Feature Checkpoint is 100% complete strictly when Playtest is passed.
+  bool get isCompleted => isPlaytestPassed;
+
+  static bool isFixSubtask(Subtask s) =>
+      (s.codeLanguage ?? '').toLowerCase() == 'fix' ||
+      (s.codeTargetFile ?? '').toLowerCase() == 'playtest_fix' ||
+      s.text.trim().toUpperCase().startsWith('[FIX]');
+
+  List<Subtask> get openFixItems => [
+        for (final step in flatSteps)
+          if (!step.completed && isFixSubtask(step)) step,
+      ];
+
+  int get openFixCount => openFixItems.length;
+
+  int get signedOffGuardsCount {
+    int count = 0;
+    for (int i = 0; i < edgeCases.length; i++) {
+      if (isGuardSignedOff(i, edgeCases[i])) count++;
+    }
+    return count;
   }
 
   /// Iterates every executable build step in [checklist] uniformly across both
@@ -146,14 +168,6 @@ class FeatureStateNode {
     FeatureStateNode cp,
   ) =>
       cp.flatStepEntries;
-
-  /// True when every executable step in [checklist] has been synthesized by AI
-  /// (or user-authored as `'custom_snippet'`), across both flat & legacy layouts.
-  bool get hasAllStepsSynthesized {
-    final entries = flatStepEntries;
-    return entries.isNotEmpty &&
-        entries.every((e) => e.step.codeTargetFile == 'custom_snippet');
-  }
 
   /// Flat ordered list of executable [Subtask] steps for this checkpoint.
   List<Subtask> get flatSteps =>
