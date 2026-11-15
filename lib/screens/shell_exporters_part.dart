@@ -66,6 +66,10 @@ extension _ShellExportersExt on WorkbenchShell {
       for (int bIdx = 0; bIdx < beats.length; bIdx++) {
         final beat = beats[bIdx];
         sb.writeln('\n### Epic ${bIdx + 1}: ${beat.title}');
+        final epicGoal = SectionTextUtils.resolveGoal(beat.sections);
+        if (epicGoal.isNotEmpty) {
+          sb.writeln('Goal: $epicGoal');
+        }
         final feats = workbench.featuresForBeat(beat.id);
         for (final feat in feats) {
           final p = workbench.getDocumentProgress(feat.id);
@@ -73,23 +77,41 @@ extension _ShellExportersExt on WorkbenchShell {
           final states = FeatureStateNode.getStatesForDocument(feat);
           for (final cp in states) {
             final cpDone = cp.isCompleted ? '✓' : '○';
-            sb.writeln(
-              '  - [$cpDone] **${cp.cleanStageTitle} (${cp.releaseVersion})** — *${cp.playtestCondition}*',
+            final cpDoneWhen = SectionTextUtils.resolveCheckpointDoneWhen(
+              playtestGoalParam: cp.parameters['playtestGoal'],
+              checkpointTrigger: cp.trigger,
+              checkpointFeedback: cp.feedback,
+              sections: feat.sections,
+              fallback: cp.playtestCondition,
             );
-            if (cp.coveredScope.isNotEmpty) {
-              sb.writeln('    - In Scope: ${cp.coveredScope.join(' · ')}');
+            sb.writeln(
+              '  - [$cpDone] **${cp.cleanStageTitle} (${cp.releaseVersion})** — *$cpDoneWhen*',
+            );
+            final scopeItems = SectionTextUtils.resolveCheckpointInScope(
+              checkpointScope: cp.coveredScope,
+              sections: feat.sections,
+              releaseVersion: cp.releaseVersion,
+            );
+            if (scopeItems.isNotEmpty) {
+              final scopeHdr = SectionTextUtils.resolveInScopeHeaderLabel(
+                scopeItems,
+                releaseVersion: cp.releaseVersion,
+                uppercase: false,
+              );
+              sb.writeln('    - $scopeHdr: ${scopeItems.join(' · ')}');
             }
             if (cp.tuningParams.isNotEmpty) {
               sb.writeln('    - Tuning: `${cp.tuningParams.join(', ')}`');
             }
             if (cp.edgeCases.isNotEmpty) {
-              sb.writeln('    - Guards: ${cp.edgeCases.join(' · ')}');
+              final guardParts = <String>[
+                for (int gIdx = 0; gIdx < cp.edgeCases.length; gIdx++)
+                  '[${cp.isGuardSignedOff(gIdx, cp.edgeCases[gIdx]) ? 'x' : ' '}] ${cp.edgeCases[gIdx]}',
+              ];
+              sb.writeln('    - Guards: ${guardParts.join(' · ')}');
             }
-            final openFixes = cp.checklist
-                .where((s) => !s.completed && s.text.contains('[FIX]'))
-                .toList();
-            for (final fix in openFixes) {
-              sb.writeln('    - [ ] ${fix.text}');
+            for (final fix in cp.openFixItems) {
+              sb.writeln('    - [ ] ${fix.text.trim()}');
             }
           }
         }

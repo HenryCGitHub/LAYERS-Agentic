@@ -410,10 +410,6 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     r'^no\s+',
     caseSensitive: false,
   );
-  static final RegExp _goalPrefixRegex = RegExp(
-    r'^goal:\s*',
-    caseSensitive: false,
-  );
 
   static String _stripExclusionPrefixes(
     String raw, {
@@ -1604,6 +1600,20 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     }
 
     final beats = activeReleaseBeats;
+    final releaseHasActiveFeats = beats.any(
+      (b) => featuresForBeat(b.id).any(
+        (f) => isFeatureActiveInRelease(f, activeVer),
+      ),
+    );
+    List<TierDocument> activeFeaturesForBeat(String beatId) {
+      final allFeats = featuresForBeat(beatId);
+      return releaseHasActiveFeats
+          ? allFeats
+              .where((f) => isFeatureActiveInRelease(f, activeVer))
+              .toList()
+          : allFeats;
+    }
+
     final allTuningRows = <({String feature, String variable, String value})>[];
     final allGuards = <({String feature, String guard})>[];
 
@@ -1622,9 +1632,21 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     } else {
       for (int bIdx = 0; bIdx < beats.length; bIdx++) {
         final beat = beats[bIdx];
+        final allBeatFeats = featuresForBeat(beat.id);
+        final scopedFeats = activeFeaturesForBeat(beat.id);
+        if (releaseHasActiveFeats &&
+            allBeatFeats.isNotEmpty &&
+            scopedFeats.isEmpty) {
+          continue;
+        }
         final eNum = (bIdx + 1).toString().padLeft(2, '0');
-        sb.writeln('- **E$eNum · ${beat.title}**');
-        for (final feat in featuresForBeat(beat.id)) {
+        final epicGoal = SectionTextUtils.resolveGoal(beat.sections);
+        sb.writeln(
+          epicGoal.isNotEmpty
+              ? '- **E$eNum · ${beat.title}**: $epicGoal'
+              : '- **E$eNum · ${beat.title}**',
+        );
+        for (final feat in scopedFeats) {
           final lc = (feat.sections['lifecycle'] ?? 'newFeature').toUpperCase();
           final p = getDocumentProgress(feat.id);
           final states = FeatureStateNode.getStatesForDocument(feat);
@@ -1689,23 +1711,28 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     sb.writeln('\n## 5. Feature Specifications & Playtest Gates');
     for (int bIdx = 0; bIdx < beats.length; bIdx++) {
       final beat = beats[bIdx];
+      final allBeatFeats = featuresForBeat(beat.id);
+      final scopedFeats = activeFeaturesForBeat(beat.id);
+      if (releaseHasActiveFeats &&
+          allBeatFeats.isNotEmpty &&
+          scopedFeats.isEmpty) {
+        continue;
+      }
       final eNum = (bIdx + 1).toString().padLeft(2, '0');
       sb.writeln('\n### E$eNum · ${beat.title}');
-      for (final feat in featuresForBeat(beat.id)) {
+      final epicGoal = SectionTextUtils.resolveGoal(beat.sections);
+      if (epicGoal.isNotEmpty) {
+        sb.writeln('- **Epic Goal**: $epicGoal');
+      }
+      for (final feat in scopedFeats) {
         final states = FeatureStateNode.getStatesForDocument(feat);
         final activeStates =
             states.where((s) => s.releaseVersion == activeVer).toList();
         final effectiveStates =
             activeStates.isNotEmpty ? activeStates : states;
-        final rawGoal =
-            (feat.sections['scope'] ?? feat.sections['goal'] ?? '').trim();
-        final goalLine = rawGoal.isEmpty
-            ? ''
-            : rawGoal
-                .split('\n')
-                .first
-                .replaceFirst(_goalPrefixRegex, '')
-                .trim();
+        final goalLine = SectionTextUtils.formatConciseFeatureGoal(
+          SectionTextUtils.resolveGoal(feat.sections),
+        );
         for (final cp in effectiveStates) {
           sb.writeln(
             '\n#### ${feat.title} — ${cp.cleanStageTitle} (${cp.releaseVersion})',
@@ -1714,13 +1741,20 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
           if (goalLine.isNotEmpty) {
             sb.writeln('- **Goal**: $goalLine');
           }
-          if (cp.coveredScope.isNotEmpty) {
-            sb.writeln('- **In Scope**:');
-            for (final item in cp.coveredScope) {
-              final clean = item.trim();
-              if (clean.isNotEmpty) {
-                sb.writeln('  - $clean');
-              }
+          final scopeItems = SectionTextUtils.resolveCheckpointInScope(
+            checkpointScope: cp.coveredScope,
+            sections: feat.sections,
+            releaseVersion: cp.releaseVersion,
+          );
+          if (scopeItems.isNotEmpty) {
+            final scopeHdr = SectionTextUtils.resolveInScopeHeaderLabel(
+              scopeItems,
+              releaseVersion: cp.releaseVersion,
+              uppercase: false,
+            );
+            sb.writeln('- **$scopeHdr**:');
+            for (final item in scopeItems) {
+              sb.writeln('  - $item');
             }
           }
           if (cp.tuningParams.isNotEmpty) {
@@ -1744,7 +1778,14 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
               sb.writeln('  - [ ] ${fix.text.trim()}');
             }
           }
-          sb.writeln('- **Done When**: ${cp.playtestCondition}');
+          final resolvedDoneWhen = SectionTextUtils.resolveCheckpointDoneWhen(
+            playtestGoalParam: cp.parameters['playtestGoal'],
+            checkpointTrigger: cp.trigger,
+            checkpointFeedback: cp.feedback,
+            sections: feat.sections,
+            fallback: cp.playtestCondition,
+          );
+          sb.writeln('- **Done When**: $resolvedDoneWhen');
         }
       }
     }

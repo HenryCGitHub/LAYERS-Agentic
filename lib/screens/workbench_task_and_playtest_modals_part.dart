@@ -187,7 +187,11 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                         cpIdx >= 0 ? states[cpIdx] : null;
                                     final prog = widget.workbench
                                         .getDocumentProgress(feat.id);
-                                    final isPassed = prog >= 100;
+                                    final isPassed = cpNode != null
+                                        ? cpNode.isPlaytestPassed
+                                        : prog >= 100;
+                                    final openFixes =
+                                        cpNode?.openFixItems ?? const <Subtask>[];
 
                                     return Container(
                                       key: ValueKey(
@@ -207,251 +211,522 @@ extension _WorkbenchTaskAndPlaytestModalsExt on _ReleaseWorkbenchScreenState {
                                             CrossAxisAlignment.stretch,
                                         children: [
                                           Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  top: 3,
+                                                ),
+                                                child: Icon(
+                                                  isPassed
+                                                      ? Icons
+                                                          .check_circle_rounded
+                                                      : Icons
+                                                          .radio_button_unchecked_rounded,
+                                                  size: 16,
+                                                  color: isPassed
+                                                      ? textSecondary
+                                                      : textMuted,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
                                               Expanded(
-                                                child: Row(
+                                                child: Wrap(
+                                                  spacing: 10,
+                                                  runSpacing: 6,
+                                                  alignment: WrapAlignment
+                                                      .spaceBetween,
+                                                  crossAxisAlignment:
+                                                      WrapCrossAlignment.center,
                                                   children: [
-                                                    Icon(
-                                                      isPassed
-                                                          ? Icons
-                                                              .check_circle_rounded
-                                                          : Icons
-                                                              .radio_button_unchecked_rounded,
-                                                      size: 16,
-                                                      color: isPassed
-                                                          ? textSecondary
-                                                          : textMuted,
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    Flexible(
-                                                      child: Text(
-                                                        _formatOutlineFeatureDisplayTitle(
-                                                          feat.title,
-                                                          beats[bIdx].title,
-                                                          beatIndex: bIdx,
+                                                    Wrap(
+                                                      spacing: 8,
+                                                      runSpacing: 4,
+                                                      crossAxisAlignment:
+                                                          WrapCrossAlignment
+                                                              .center,
+                                                      children: [
+                                                        Text(
+                                                          _formatOutlineFeatureDisplayTitle(
+                                                            feat.title,
+                                                            beats[bIdx].title,
+                                                            beatIndex: bIdx,
+                                                          ),
+                                                          style:
+                                                              GoogleFonts.inter(
+                                                            fontSize: 13.5,
+                                                            fontWeight:
+                                                                FontWeight.w700,
+                                                            color: textPrimary,
+                                                          ),
                                                         ),
-                                                        style:
-                                                            GoogleFonts.inter(
-                                                          fontSize: 13.5,
-                                                          fontWeight:
-                                                              FontWeight.w700,
-                                                          color: textPrimary,
+                                                        Text(
+                                                          '$prog%',
+                                                          style: GoogleFonts
+                                                              .jetBrainsMono(
+                                                            fontSize: 10.5,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                            color: isPassed
+                                                                ? textSecondary
+                                                                : textMuted,
+                                                          ),
                                                         ),
-                                                      ),
+                                                        if (openFixes
+                                                            .isNotEmpty)
+                                                          Container(
+                                                            key: ValueKey(
+                                                              'playtest_sheet_issues_badge_${feat.id}',
+                                                            ),
+                                                            padding:
+                                                                const EdgeInsets
+                                                                    .symmetric(
+                                                              horizontal: 6,
+                                                              vertical: 2,
+                                                            ),
+                                                            decoration:
+                                                                BoxDecoration(
+                                                              color: accentAmber
+                                                                  .withValues(
+                                                                alpha: 0.14,
+                                                              ),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                4,
+                                                              ),
+                                                            ),
+                                                            child: Text(
+                                                              'Issues (${openFixes.length})',
+                                                              style: GoogleFonts
+                                                                  .jetBrainsMono(
+                                                                fontSize: 10,
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w700,
+                                                                color:
+                                                                    accentAmber,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                      ],
                                                     ),
-                                                    const SizedBox(width: 8),
-                                                    Text(
-                                                      '$prog%',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 10.5,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        color: isPassed
-                                                            ? textSecondary
-                                                            : textMuted,
+                                                    if (cpNode != null)
+                                                      Wrap(
+                                                        spacing: 6,
+                                                        runSpacing: 4,
+                                                        crossAxisAlignment:
+                                                            WrapCrossAlignment
+                                                                .center,
+                                                        children: [
+                                                          InkWell(
+                                                            key: ValueKey(
+                                                              'playtest_sheet_pass_btn_${feat.id}',
+                                                            ),
+                                                            onTap: () {
+                                                              if (isPassed) {
+                                                                _reopenCheckpointPlaytestGate(
+                                                                  feat,
+                                                                  states,
+                                                                  cpNode,
+                                                                );
+                                                              } else {
+                                                                _completeAllCheckpointTasks(
+                                                                  cpNode,
+                                                                );
+                                                                _rebuild(() {
+                                                                  _awaitingPlaytestVerification
+                                                                      .remove(
+                                                                    cpNode.id,
+                                                                  );
+                                                                });
+                                                                widget.workbench
+                                                                    .updateFeatureStates(
+                                                                  feat.id,
+                                                                  states,
+                                                                );
+                                                              }
+                                                            },
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              5,
+                                                            ),
+                                                            child: Container(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                horizontal: 10,
+                                                                vertical: 5,
+                                                              ),
+                                                              decoration:
+                                                                  BoxDecoration(
+                                                                color: isPassed
+                                                                    ? Colors
+                                                                        .transparent
+                                                                    : accentEmerald,
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                  5,
+                                                                ),
+                                                              ),
+                                                              child: Text(
+                                                                isPassed
+                                                                    ? '✓ Gate Passed'
+                                                                    : '✓ Pass Gate',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 10,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w700,
+                                                                  color: isPassed
+                                                                      ? textSecondary
+                                                                      : (isDark
+                                                                          ? const Color(
+                                                                              0xFF06281E,
+                                                                            )
+                                                                          : Colors
+                                                                              .white),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          if (isPassed)
+                                                            InkWell(
+                                                              key: ValueKey(
+                                                                'playtest_sheet_reopen_btn_${feat.id}',
+                                                              ),
+                                                              onTap: () =>
+                                                                  _reopenCheckpointPlaytestGate(
+                                                                feat,
+                                                                states,
+                                                                cpNode,
+                                                              ),
+                                                              borderRadius:
+                                                                  BorderRadius
+                                                                      .circular(
+                                                                5,
+                                                              ),
+                                                              child: Padding(
+                                                                padding:
+                                                                    const EdgeInsets
+                                                                        .symmetric(
+                                                                  horizontal: 6,
+                                                                  vertical: 4,
+                                                                ),
+                                                                child: Text(
+                                                                  '↺ Reopen Gate',
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize:
+                                                                        10,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w600,
+                                                                    color:
+                                                                        textSecondary,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          InkWell(
+                                                            key: ValueKey(
+                                                              'playtest_sheet_flag_btn_${feat.id}',
+                                                            ),
+                                                            onTap: () =>
+                                                                _showLogPlaytestIssueDialog(
+                                                              feat,
+                                                              states,
+                                                              cpIdx,
+                                                            ),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              5,
+                                                            ),
+                                                            child: Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                horizontal: 6,
+                                                                vertical: 4,
+                                                              ),
+                                                              child: Text(
+                                                                'Flag Issue',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 10,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  color:
+                                                                      textSecondary,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          InkWell(
+                                                            key: ValueKey(
+                                                              'playtest_sheet_pivot_btn_${feat.id}',
+                                                            ),
+                                                            onTap: () {
+                                                              widget.workbench
+                                                                  .toggleSupersedeFeature(
+                                                                feat.id,
+                                                                pivotReason:
+                                                                    'Pivoted during $activeVer playtest',
+                                                              );
+                                                            },
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                              5,
+                                                            ),
+                                                            child: Padding(
+                                                              padding:
+                                                                  const EdgeInsets
+                                                                      .symmetric(
+                                                                horizontal: 6,
+                                                                vertical: 4,
+                                                              ),
+                                                              child: Text(
+                                                                '⊗ Pivot',
+                                                                style: GoogleFonts
+                                                                    .jetBrainsMono(
+                                                                  fontSize: 10,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600,
+                                                                  color:
+                                                                      textMuted,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
-                                                    ),
                                                   ],
                                                 ),
                                               ),
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  if (cpNode != null) ...[
-                                                    InkWell(
-                                                      key: ValueKey(
-                                                        'playtest_sheet_pass_btn_${feat.id}',
+                                            ],
+                                          ),
+                                          if (cpNode != null)
+                                            Builder(
+                                              builder: (context) {
+                                                final scopeItems =
+                                                    SectionTextUtils
+                                                        .resolveCheckpointInScope(
+                                                  checkpointScope:
+                                                      cpNode.coveredScope,
+                                                  sections: feat.sections,
+                                                  releaseVersion:
+                                                      cpNode.releaseVersion,
+                                                );
+                                                final scopeHdr =
+                                                    SectionTextUtils
+                                                        .resolveInScopeHeaderLabel(
+                                                  scopeItems,
+                                                  releaseVersion:
+                                                      cpNode.releaseVersion,
+                                                  uppercase: false,
+                                                );
+                                                final resolvedDoneWhen =
+                                                    SectionTextUtils
+                                                        .formatConciseVerifySentence(
+                                                  SectionTextUtils
+                                                      .resolveCheckpointDoneWhen(
+                                                    playtestGoalParam:
+                                                        cpNode.parameters[
+                                                            'playtestGoal'],
+                                                    checkpointTrigger:
+                                                        cpNode.trigger,
+                                                    checkpointFeedback:
+                                                        cpNode.feedback,
+                                                    sections: feat.sections,
+                                                    fallback:
+                                                        cpNode.playtestCondition,
+                                                  ),
+                                                );
+                                                return Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .stretch,
+                                                  children: [
+                                                    if (scopeItems
+                                                        .isNotEmpty) ...[
+                                                      const SizedBox(height: 8),
+                                                      Text(
+                                                        '$scopeHdr: ${scopeItems.join(' · ')}',
+                                                        style:
+                                                            GoogleFonts.inter(
+                                                          fontSize: 11.5,
+                                                          color: textMuted,
+                                                        ),
                                                       ),
-                                                      onTap: () {
-                                                        final targetDone =
-                                                            !isPassed;
-                                                        cpNode.flattenLegacyNestedChecklistIfNeeded();
-                                                        cpNode.isPlaytestPassed =
-                                                            targetDone;
-                                                        if (targetDone) {
-                                                          for (final entry
-                                                              in cpNode
-                                                                  .flatSteps) {
-                                                            entry.completed =
-                                                                true;
-                                                          }
+                                                    ],
+                                                    if (cpNode.edgeCases
+                                                        .isNotEmpty) ...[
+                                                      const SizedBox(height: 8),
+                                                      Wrap(
+                                                        spacing: 12,
+                                                        runSpacing: 4,
+                                                        children: [
                                                           for (int gIdx = 0;
                                                               gIdx <
                                                                   cpNode
                                                                       .edgeCases
                                                                       .length;
-                                                              gIdx++) {
-                                                            cpNode
-                                                                .setGuardSignedOff(
-                                                              gIdx,
-                                                              cpNode.edgeCases[
-                                                                  gIdx],
-                                                              true,
-                                                            );
-                                                          }
-                                                        }
-                                                        _rebuild(() {
-                                                          _awaitingPlaytestVerification
-                                                              .remove(
-                                                            cpNode.id,
-                                                          );
-                                                        });
-                                                        widget.workbench
-                                                            .updateFeatureStates(
-                                                          feat.id,
-                                                          states,
-                                                        );
-                                                      },
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        5,
+                                                              gIdx++)
+                                                            Builder(
+                                                              builder:
+                                                                  (context) {
+                                                                final g = cpNode
+                                                                        .edgeCases[
+                                                                    gIdx];
+                                                                final signedOff =
+                                                                    cpNode.isGuardSignedOff(
+                                                                  gIdx,
+                                                                  g,
+                                                                );
+                                                                return InkWell(
+                                                                  key: ValueKey(
+                                                                    'playtest_sheet_guard_${feat.id}_$gIdx',
+                                                                  ),
+                                                                  onTap: () {
+                                                                    cpNode.setGuardSignedOff(
+                                                                      gIdx,
+                                                                      g,
+                                                                      !signedOff,
+                                                                    );
+                                                                    widget
+                                                                        .workbench
+                                                                        .updateFeatureStates(
+                                                                      feat.id,
+                                                                      states,
+                                                                    );
+                                                                  },
+                                                                  borderRadius:
+                                                                      BorderRadius
+                                                                          .circular(
+                                                                    4,
+                                                                  ),
+                                                                  child:
+                                                                      Padding(
+                                                                    padding:
+                                                                        const EdgeInsets
+                                                                            .symmetric(
+                                                                      horizontal:
+                                                                          4,
+                                                                      vertical:
+                                                                          2,
+                                                                    ),
+                                                                    child: Text(
+                                                                      '${signedOff ? '✓' : '○'} ${SectionTextUtils.formatTelegraphicGuardChip(g)}',
+                                                                      style: GoogleFonts
+                                                                          .jetBrainsMono(
+                                                                        fontSize:
+                                                                            9.5,
+                                                                        color: signedOff
+                                                                            ? accentEmerald
+                                                                            : textMuted,
+                                                                      ),
+                                                                    ),
+                                                                  ),
+                                                                );
+                                                              },
+                                                            ),
+                                                        ],
                                                       ),
-                                                      child: Container(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 10,
-                                                          vertical: 5,
-                                                        ),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: isPassed
-                                                              ? Colors
-                                                                  .transparent
-                                                              : accentEmerald,
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(5),
-                                                        ),
-                                                        child: Text(
-                                                          isPassed
-                                                              ? '✓ Gate Passed'
-                                                              : '✓ Pass Gate',
-                                                          style: GoogleFonts
-                                                              .jetBrainsMono(
-                                                            fontSize: 10,
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                            color: isPassed
-                                                                ? textSecondary
-                                                                : (isDark
-                                                                    ? const Color(
-                                                                        0xFF06281E,
-                                                                      )
-                                                                    : Colors
-                                                                        .white),
+                                                    ],
+                                                    if (openFixes
+                                                        .isNotEmpty) ...[
+                                                      const SizedBox(height: 8),
+                                                      for (final fix
+                                                          in openFixes)
+                                                        Padding(
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .only(
+                                                            bottom: 4,
+                                                          ),
+                                                          child: Row(
+                                                            children: [
+                                                              Expanded(
+                                                                child: Text(
+                                                                  fix.text
+                                                                      .trim(),
+                                                                  style: GoogleFonts
+                                                                      .jetBrainsMono(
+                                                                    fontSize:
+                                                                        10.5,
+                                                                    color:
+                                                                        accentAmber,
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                              const SizedBox(
+                                                                width: 8,
+                                                              ),
+                                                              InkWell(
+                                                                key: ValueKey(
+                                                                  'playtest_sheet_resolve_fix_${feat.id}_${fix.id}',
+                                                                ),
+                                                                onTap: () {
+                                                                  fix.completed =
+                                                                      true;
+                                                                  widget
+                                                                      .workbench
+                                                                      .updateFeatureStates(
+                                                                    feat.id,
+                                                                    states,
+                                                                  );
+                                                                },
+                                                                borderRadius:
+                                                                    BorderRadius
+                                                                        .circular(
+                                                                  4,
+                                                                ),
+                                                                child: Padding(
+                                                                  padding: const EdgeInsets
+                                                                      .symmetric(
+                                                                    horizontal:
+                                                                        6,
+                                                                    vertical: 2,
+                                                                  ),
+                                                                  child: Text(
+                                                                    'Resolve ✓',
+                                                                    style: GoogleFonts
+                                                                        .jetBrainsMono(
+                                                                      fontSize:
+                                                                          10,
+                                                                      fontWeight:
+                                                                          FontWeight
+                                                                              .w700,
+                                                                      color:
+                                                                          accentEmerald,
+                                                                    ),
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
                                                           ),
                                                         ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    InkWell(
-                                                      key: ValueKey(
-                                                        'playtest_sheet_flag_btn_${feat.id}',
-                                                      ),
-                                                      onTap: () =>
-                                                          _showLogPlaytestIssueDialog(
-                                                        feat,
-                                                        states,
-                                                        cpIdx,
-                                                      ),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        5,
-                                                      ),
-                                                      child: Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 4,
-                                                        ),
-                                                        child: Text(
-                                                          'Flag Issue',
-                                                          style: GoogleFonts
-                                                              .jetBrainsMono(
-                                                            fontSize: 10,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                            color:
-                                                                textSecondary,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 6),
-                                                    InkWell(
-                                                      key: ValueKey(
-                                                        'playtest_sheet_pivot_btn_${feat.id}',
-                                                      ),
-                                                      onTap: () {
-                                                        widget.workbench
-                                                            .toggleSupersedeFeature(
-                                                          feat.id,
-                                                          pivotReason:
-                                                              'Pivoted during $activeVer playtest',
-                                                        );
-                                                      },
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                        5,
-                                                      ),
-                                                      child: Padding(
-                                                        padding:
-                                                            const EdgeInsets
-                                                                .symmetric(
-                                                          horizontal: 6,
-                                                          vertical: 4,
-                                                        ),
-                                                        child: Text(
-                                                          '⊗ Pivot',
-                                                          style: GoogleFonts
-                                                              .jetBrainsMono(
-                                                            fontSize: 10,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                            color: textMuted,
-                                                          ),
-                                                        ),
+                                                    ],
+                                                    const SizedBox(height: 8),
+                                                    Text(
+                                                      'Done When: $resolvedDoneWhen',
+                                                      style: GoogleFonts.inter(
+                                                        fontSize: 12,
+                                                        color: textSecondary,
                                                       ),
                                                     ),
                                                   ],
-                                                ],
-                                              ),
-                                            ],
-                                          ),
-                                          if (cpNode != null) ...[
-                                            const SizedBox(height: 8),
-                                            Text(
-                                              'Playtest Gate: ${SectionTextUtils.formatConciseVerifySentence(cpNode.playtestCondition)}',
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                color: textSecondary,
-                                              ),
+                                                );
+                                              },
                                             ),
-                                            if (cpNode.edgeCases.isNotEmpty) ...[
-                                              const SizedBox(height: 6),
-                                              Wrap(
-                                                spacing: 12,
-                                                runSpacing: 4,
-                                                children: [
-                                                  for (final g
-                                                      in cpNode.edgeCases)
-                                                    Text(
-                                                      '• ${SectionTextUtils.formatTelegraphicGuardChip(g)}',
-                                                      style: GoogleFonts
-                                                          .jetBrainsMono(
-                                                        fontSize: 9.5,
-                                                        color: textMuted,
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                            ],
-                                          ],
                                         ],
                                       ),
                                     );

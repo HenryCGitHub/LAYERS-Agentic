@@ -3909,5 +3909,294 @@ process.stdout.write("JS_NO_NODE_MODULES_OK\n");
         expect(find.text('WHY: Master parry timing'), findsOneWidget);
       },
     );
+
+    test(
+      'Round 36: buildActiveReleaseCodingAgentMarkdown filters stabilized v0.1 features on v0.2, emits Epic Goal + In Scope (v0.2) +deltas + causal Done When, and computeActiveGodotEpicSnapshot honors selected_feature_id fallback',
+      () {
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final cpStableV01 = FeatureStateNode(
+          id: 'cp_r36_stable',
+          name: '01 · PROTOTYPE',
+          trigger: 'Walk cleanly across floor',
+          parameters: {'releaseVersion': 'v0.1', 'playtestPassed': 'true'},
+        );
+        final featStableV01 = TierDocument(
+          id: 'feat_r36_stable',
+          title: 'Base Walk',
+          tier: TierType.feature,
+          parentId: 'epic_r36_move',
+          phase: 'v0.1',
+          sections: {
+            'lifecycle': 'stable',
+            'originVersion': 'v0.1',
+            'scope': 'Goal: Walk across arena\n\nDone When: Hold WASD -> player moves',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(featStableV01, [cpStableV01]);
+
+        final cpUpgV01 = FeatureStateNode(
+          id: 'cp_r36_upg_01',
+          name: '01 · PROTOTYPE',
+          trigger: 'Dash on ground',
+          parameters: {'releaseVersion': 'v0.1', 'playtestPassed': 'true'},
+        );
+        final cpUpgV02 = FeatureStateNode(
+          id: 'cp_r36_upg_02',
+          name: '02 · POLISH',
+          trigger: '+air dash upgrade',
+          coveredScope: ['Ground dash', '+air dash impulse', '+afterimage trail'],
+          parameters: {'releaseVersion': 'v0.2', 'playtestPassed': 'false'},
+        );
+        final featUpgV02 = TierDocument(
+          id: 'feat_r36_upg',
+          title: 'Air Dash',
+          tier: TierType.feature,
+          parentId: 'epic_r36_move',
+          phase: 'v0.2',
+          sections: {
+            'lifecycle': 'upgrade',
+            'activeReleaseVersion': 'v0.2',
+            'scope':
+                'Goal: +air dash burst\n\nIn Scope:\n• Ground dash\n• +air dash impulse\n• +afterimage trail\n\nDone When: Press Shift mid-air -> player dashes 6m',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(featUpgV02, [cpUpgV01, cpUpgV02]);
+
+        final cpWallV02 = FeatureStateNode(
+          id: 'cp_r36_wall',
+          name: '01 · BUILD',
+          trigger: 'Verify stage deliverables and checklist criteria in game viewport.',
+          parameters: {'releaseVersion': 'v0.2', 'playtestPassed': 'false'},
+        );
+        final featNewV02 = TierDocument(
+          id: 'feat_r36_new',
+          title: 'Wall Kick',
+          tier: TierType.feature,
+          parentId: 'epic_r36_move',
+          phase: 'v0.2',
+          sections: {
+            'lifecycle': 'newFeature',
+            'activeReleaseVersion': 'v0.2',
+            'goal': 'Kick off vertical walls',
+            'done_when': 'Tap Jump on wall -> player rebounds upward',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(featNewV02, [cpWallV02]);
+
+        final epicMove = TierDocument(
+          id: 'epic_r36_move',
+          title: 'Traversal Loop',
+          tier: TierType.epic,
+          parentId: 'rel_r36_02',
+          phase: 'v0.2',
+          childrenIds: [featStableV01.id, featUpgV02.id, featNewV02.id],
+          sections: {'scope': 'Goal: Responsive dash & grapple combat'},
+        );
+        final epic01 = TierDocument(
+          id: 'epic_r36_01',
+          title: 'Initial Slice',
+          tier: TierType.epic,
+          parentId: 'rel_r36_01',
+          phase: 'v0.1',
+        );
+        final rel01 = TierDocument(
+          id: 'rel_r36_01',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_r36',
+          phase: 'v0.1',
+          childrenIds: [epic01.id],
+          sections: {'version': 'v0.1'},
+        );
+        final rel02 = TierDocument(
+          id: 'rel_r36_02',
+          title: 'v0.2 Core Slice',
+          tier: TierType.release,
+          parentId: 'proj_r36',
+          phase: 'v0.2',
+          childrenIds: [epicMove.id],
+          sections: {'version': 'v0.2'},
+        );
+        final proj = TierDocument(
+          id: 'proj_r36',
+          title: 'Dash Forge',
+          tier: TierType.project,
+          childrenIds: [rel01.id, rel02.id],
+          sections: {
+            'active_release_id': rel02.id,
+            'selected_feature_id': featNewV02.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+        for (final d in [
+          proj,
+          rel01,
+          epic01,
+          rel02,
+          epicMove,
+          featStableV01,
+          featUpgV02,
+          featNewV02,
+        ]) {
+          provider.documents[d.id] = d;
+        }
+        provider.switchProject(proj.id);
+
+        // 1. Outliner Godot Focus Dot fallback honors selected_feature_id when last_godot_feature_id is empty
+        expect(
+          provider.computeActiveGodotEpicSnapshot().activeFeatureId,
+          equals(featNewV02.id),
+        );
+
+        // 2. Release AGENTS.md filters stabilized v0.1 features from Section 5 & aligns Epic Goal / +delta In Scope / Done When
+        final md = provider.buildActiveReleaseCodingAgentMarkdown();
+        expect(md, isNot(contains('#### Base Walk')));
+        expect(md, contains('- **Epic Goal**: Responsive dash & grapple combat'));
+        expect(md, contains('- **In Scope (v0.2)**:'));
+        expect(md, isNot(contains('  - Ground dash')));
+        expect(md, contains('  - +air dash impulse'));
+        expect(
+          md,
+          contains('- **Done When**: Press Shift mid-air → player dashes 6m'),
+        );
+        expect(
+          md,
+          contains('- **Done When**: Tap Jump on wall → player rebounds upward'),
+        );
+      },
+    );
+
+    testWidgets(
+      'Round 36: Playtest Run Sheet renders causal Done When, signed-off Guards, Open [FIX] badge/resolve, and lifecycle-safe Reopen Gate',
+      (WidgetTester tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
+        addTearDown(tester.view.resetDevicePixelRatio);
+
+        final provider = WorkbenchProvider(enableAutoLoad: false);
+        final cpSheet = FeatureStateNode(
+          id: 'cp_r36_sheet',
+          name: '01 · PROTOTYPE',
+          trigger: '+parry timing',
+          edgeCases: const [
+            '[STATE GUARD] Clamp stamina >= 0',
+            '[PLAYTEST GUARD] Ignore input while stunned',
+          ],
+          checklist: [
+            Subtask(
+              id: 'fix_s1',
+              text: '[FIX] Shield spark missing on block',
+              completed: false,
+              codeTargetFile: 'playtest_fix',
+              codeLanguage: 'fix',
+            ),
+          ],
+          parameters: {'releaseVersion': 'v0.1', 'playtestPassed': 'true'},
+        )..setGuardSignedOff(0, '[STATE GUARD] Clamp stamina >= 0', true);
+
+        final featSheet = TierDocument(
+          id: 'feat_r36_sheet',
+          title: 'Shield Parry',
+          tier: TierType.feature,
+          parentId: 'epic_r36_sheet',
+          phase: 'v0.1',
+          sections: {
+            'lifecycle': 'stable',
+            'scope':
+                'Goal: Parry melee attacks\n\nIn Scope:\n• Shield spark VFX\n\nDone When: Tap Space on swing -> enemy staggers',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(featSheet, [cpSheet]);
+
+        final epicSheet = TierDocument(
+          id: 'epic_r36_sheet',
+          title: 'Parry Loop',
+          tier: TierType.epic,
+          parentId: 'rel_r36_sheet',
+          phase: 'v0.1',
+          childrenIds: [featSheet.id],
+        );
+        final relSheet = TierDocument(
+          id: 'rel_r36_sheet',
+          title: 'v0.1 Prototype',
+          tier: TierType.release,
+          parentId: 'proj_r36_sheet',
+          phase: 'v0.1',
+          childrenIds: [epicSheet.id],
+          sections: {'version': 'v0.1'},
+        );
+        final projSheet = TierDocument(
+          id: 'proj_r36_sheet',
+          title: 'Parry Quest',
+          tier: TierType.project,
+          childrenIds: [relSheet.id],
+          sections: {
+            'active_release_id': relSheet.id,
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+        );
+        for (final d in [projSheet, relSheet, epicSheet, featSheet]) {
+          provider.documents[d.id] = d;
+        }
+        provider.switchProject(projSheet.id);
+        provider.selectFeature(featSheet.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ReleaseWorkbenchScreen(workbench: provider),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final sheetBtn = find.byKey(
+          const ValueKey('open_playtest_run_sheet_btn'),
+        );
+        expect(sheetBtn, findsOneWidget);
+        await tester.tap(sheetBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('Done When: Tap Space on swing → enemy staggers'),
+          findsOneWidget,
+        );
+        expect(find.text('In Scope: Shield spark VFX'), findsOneWidget);
+        expect(find.text('✓ Clamp stamina >= 0'), findsOneWidget);
+        expect(find.text('○ Ignore input while stunned'), findsOneWidget);
+        expect(
+          find.byKey(ValueKey('playtest_sheet_issues_badge_${featSheet.id}')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(ValueKey('playtest_sheet_guard_${featSheet.id}_1')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('✓ Ignore input while stunned'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(ValueKey('playtest_sheet_reopen_btn_${featSheet.id}')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(provider.getDocumentProgress(featSheet.id), lessThan(100));
+        expect(featSheet.sections['lifecycle'], equals('newFeature'));
+
+        await tester.tap(
+          find.byKey(
+            ValueKey('playtest_sheet_resolve_fix_${featSheet.id}_fix_s1'),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(ValueKey('playtest_sheet_issues_badge_${featSheet.id}')),
+          findsNothing,
+        );
+      },
+    );
   });
 }

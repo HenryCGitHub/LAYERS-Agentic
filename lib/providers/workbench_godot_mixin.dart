@@ -130,6 +130,8 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
 
     final godotFeatId =
         (activeProject?.sections['last_godot_feature_id'] ?? '').trim();
+    final webSelFeatId =
+        (activeProject?.sections['selected_feature_id'] ?? '').trim();
 
     for (int i = 0; i < beats.length; i++) {
       final beat = beats[i];
@@ -145,6 +147,13 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       if (godotFeatId.isNotEmpty) {
         for (final f in scopedFeats) {
           if (f.id == godotFeatId && !isFeatureFinishedForGodot(f)) {
+            nextFeat = f;
+            break;
+          }
+        }
+      } else if (webSelFeatId.isNotEmpty) {
+        for (final f in scopedFeats) {
+          if (f.id == webSelFeatId && !isFeatureFinishedForGodot(f)) {
             nextFeat = f;
             break;
           }

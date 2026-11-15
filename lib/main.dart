@@ -11,6 +11,7 @@ import 'screens/release_workbench_screen.dart';
 import 'screens/widgets/godot_workbench_modals.dart';
 import 'theme/app_theme.dart';
 import 'utils/markdown_exporter.dart';
+import 'utils/section_text_utils.dart';
 
 part 'screens/shell_exporters_part.dart';
 part 'screens/shell_dialogs_part.dart';
