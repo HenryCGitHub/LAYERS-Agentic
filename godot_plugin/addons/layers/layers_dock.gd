@@ -247,6 +247,19 @@ func refresh_from_focus() -> void:
 	notify_editor_state_changed()
 
 
+func on_editor_scene_changed(_scene_root: Node = null) -> void:
+	if _executor != null:
+		_executor.call("invalidate_eval_cache")
+	notify_editor_state_changed()
+
+
+func on_editor_scene_saved(_filepath: String = "") -> void:
+	if _executor != null:
+		_executor.call("invalidate_eval_cache")
+	_diagnostics_dirty = true
+	notify_editor_state_changed()
+
+
 func on_editor_resource_saved(resource: Resource) -> void:
 	if _executor != null:
 		_executor.call("invalidate_eval_cache")
@@ -297,6 +310,9 @@ func _on_tree_mutated(node: Node) -> void:
 	if edited_root == null:
 		return
 	if node == edited_root or edited_root.is_ancestor_of(node):
+		if _executor != null:
+			_executor.call("invalidate_eval_cache")
+		_diagnostics_dirty = true
 		notify_editor_state_changed()
 
 
@@ -412,7 +428,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.7")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.8")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -840,11 +856,11 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	goal_rtl.text = "[b]Done When:[/b] " + _markdown_to_bbcode(done_when)
 	brief_vb.add_child(goal_rtl)
 
-	var scene_to_open: String = ""
-	if not primary_scene.is_empty() and FileAccess.file_exists(primary_scene):
-		scene_to_open = primary_scene
-	elif not arena_scene.is_empty() and FileAccess.file_exists(arena_scene):
-		scene_to_open = arena_scene
+	var scenes_to_open := PackedStringArray()
+	if not primary_scene.is_empty() and primary_scene.ends_with(".tscn") and FileAccess.file_exists(primary_scene):
+		scenes_to_open.append(primary_scene)
+	if not arena_scene.is_empty() and arena_scene.ends_with(".tscn") and FileAccess.file_exists(arena_scene) and not (arena_scene in scenes_to_open):
+		scenes_to_open.append(arena_scene)
 
 	var scripts_to_open := PackedStringArray()
 	var raw_script_paths: Variant = eval_info.get("script_paths", feat.get("scriptPaths", []))
@@ -881,7 +897,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		build_btn.disabled = ai_busy
 		build_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
 		action_row.add_child(build_btn)
-		_maybe_add_open_scene_button(action_row, scene_to_open, "Open %s in Godot viewport" % scene_to_open)
+		_maybe_add_open_scene_button(action_row, scenes_to_open, arena_scene)
 		_maybe_add_open_script_button(action_row, scripts_to_open)
 	else:
 		var arena_btn := Button.new()
@@ -892,7 +908,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		arena_btn.pressed.connect(_on_playtest_arena_pressed.bind(arena_scene, primary_scene))
 		action_row.add_child(arena_btn)
 
-		_maybe_add_open_scene_button(action_row, scene_to_open, "Open %s to arrange visuals or inspect nodes" % scene_to_open)
+		_maybe_add_open_scene_button(action_row, scenes_to_open, arena_scene)
 		_maybe_add_open_script_button(action_row, scripts_to_open)
 
 		var rebuild_btn := Button.new()
@@ -996,8 +1012,15 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		err_row.add_theme_constant_override("separation", _S(4))
 		agent_vb.add_child(err_row)
 
+		var err_fmt: Dictionary = _format_capped_issue_list(
+			log_errors,
+			3,
+			"Playtest errors (%d)" % log_errors.size() if log_errors.size() > 1 else ""
+		)
 		var err_lbl := Label.new()
-		err_lbl.text = str(log_errors[0])
+		err_lbl.text = String(err_fmt.get("inline_text", ""))
+		err_lbl.tooltip_text = String(err_fmt.get("tooltip_text", ""))
+		err_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 		err_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		err_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		err_lbl.add_theme_color_override("font_color", _editor_color("error_color", Color(0.95, 0.48, 0.48)))
@@ -1033,8 +1056,12 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		diag_row.add_theme_constant_override("separation", _S(4))
 		agent_vb.add_child(diag_row)
 
+		var diag_header: String = "%d static wiring/combat issue%s" % [diag_issues.size(), "" if diag_issues.size() == 1 else "s"]
+		var diag_fmt: Dictionary = _format_capped_issue_list(diag_issues, 3, diag_header)
 		var diag_lbl := Label.new()
-		diag_lbl.text = "%d static wiring/combat issue%s: %s" % [diag_issues.size(), "" if diag_issues.size() == 1 else "s", str(diag_issues[0])]
+		diag_lbl.text = String(diag_fmt.get("inline_text", ""))
+		diag_lbl.tooltip_text = String(diag_fmt.get("tooltip_text", ""))
+		diag_lbl.mouse_filter = Control.MOUSE_FILTER_PASS
 		diag_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		diag_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		diag_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
@@ -1103,7 +1130,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 
 
 # ---------------------------------------------------------------------------
-# Feature Actions, Playtest, Export Tuners & Agent Director
+# Feature Actions, Playtest & Agent Director
 # ---------------------------------------------------------------------------
 
 func _get_active_project_diagnostics() -> Array:
@@ -1162,17 +1189,65 @@ func _collect_full_project_agent_context(feat: Dictionary, code_files: Dictionar
 	}
 
 
-func _maybe_add_open_scene_button(action_row: HBoxContainer, scene_to_open: String, tooltip_text: String) -> void:
-	if scene_to_open.is_empty():
+func _format_capped_issue_list(items: Array, max_inline: int = 3, header_prefix: String = "") -> Dictionary:
+	var clean := PackedStringArray()
+	for raw_item in items:
+		var s := str(raw_item).strip_edges()
+		if not s.is_empty():
+			clean.append(s)
+	if clean.is_empty():
+		return {"inline_text": "", "tooltip_text": ""}
+	var tip_lines := PackedStringArray()
+	if not header_prefix.is_empty():
+		tip_lines.append(header_prefix + ":")
+	for idx in range(clean.size()):
+		tip_lines.append("%d. %s" % [idx + 1, clean[idx]])
+	var tooltip_str := "\n".join(tip_lines)
+	if clean.size() == 1:
+		var single := ("%s: %s" % [header_prefix, clean[0]]) if not header_prefix.is_empty() else clean[0]
+		return {"inline_text": single, "tooltip_text": tooltip_str}
+	var inline_lines := PackedStringArray()
+	if not header_prefix.is_empty():
+		inline_lines.append(header_prefix + ":")
+	var cap: int = mini(clean.size(), maxi(max_inline, 1))
+	for idx in range(cap):
+		inline_lines.append("• %s" % clean[idx])
+	if clean.size() > cap:
+		inline_lines.append("+%d more (hover for full list)" % (clean.size() - cap))
+	return {"inline_text": "\n".join(inline_lines), "tooltip_text": tooltip_str}
+
+
+func _maybe_add_open_scene_button(action_row: HBoxContainer, scene_paths: PackedStringArray, arena_scene_path: String = "") -> void:
+	if scene_paths.is_empty():
 		return
-	var open_scene_btn := Button.new()
-	open_scene_btn.flat = true
-	open_scene_btn.theme_type_variation = &"FlatButton"
-	open_scene_btn.text = "Open Scene"
-	open_scene_btn.icon = _editor_icon("PackedScene", "File")
-	open_scene_btn.tooltip_text = tooltip_text
-	open_scene_btn.pressed.connect(_on_open_res_path_pressed.bind(scene_to_open))
-	action_row.add_child(open_scene_btn)
+	if scene_paths.size() == 1:
+		var scene_path: String = scene_paths[0]
+		var open_scene_btn := Button.new()
+		open_scene_btn.flat = true
+		open_scene_btn.theme_type_variation = &"FlatButton"
+		open_scene_btn.text = "Open Scene"
+		open_scene_btn.icon = _editor_icon("PackedScene", "File")
+		open_scene_btn.tooltip_text = "Open %s in Godot viewport" % scene_path
+		open_scene_btn.pressed.connect(_on_open_res_path_pressed.bind(scene_path))
+		action_row.add_child(open_scene_btn)
+		return
+	var open_menu_btn := MenuButton.new()
+	open_menu_btn.flat = true
+	open_menu_btn.theme_type_variation = &"FlatButton"
+	open_menu_btn.text = "Open Scene (%d)" % scene_paths.size()
+	open_menu_btn.icon = _editor_icon("PackedScene", "File")
+	open_menu_btn.tooltip_text = "Choose feature scene or arena scene to open in Godot viewport"
+	var popup: PopupMenu = open_menu_btn.get_popup()
+	for idx in range(scene_paths.size()):
+		var sp: String = scene_paths[idx]
+		var role_tag: String = "Arena" if (not arena_scene_path.is_empty() and sp == arena_scene_path) else "Feature"
+		popup.add_item("%s (%s)" % [sp.get_file(), role_tag], idx)
+		popup.set_item_tooltip(idx, sp)
+	popup.id_pressed.connect(func(id: int) -> void:
+		if id >= 0 and id < scene_paths.size():
+			_on_open_res_path_pressed(scene_paths[id])
+	)
+	action_row.add_child(open_menu_btn)
 
 
 func _maybe_add_open_script_button(action_row: HBoxContainer, script_paths: PackedStringArray) -> void:
@@ -1260,12 +1335,26 @@ func _on_fix_input_gui_input(event: InputEvent, feat_id: String, cp_id: String) 
 
 
 func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
+	_submit_direct_agent(feat_id, cp_id, "")
+
+
+func _submit_direct_agent(feat_id: String, cp_id: String, explicit_error_text: String = "") -> void:
 	if _sync == null or _building_feature or _diagnosing_fix:
 		return
 	var prompt_txt: String = (_fix_input.text if _fix_input != null else _fix_draft_text).strip_edges()
 	if prompt_txt.is_empty():
 		_set_status("Type a gameplay tweak or paste a Godot error first.", true)
 		return
+	var err_payload: String = explicit_error_text.strip_edges()
+	if err_payload.is_empty():
+		var active_errs: Array = _collect_active_playtest_errors()
+		if not active_errs.is_empty():
+			var err_lines := PackedStringArray()
+			for ae in active_errs:
+				var aes := str(ae).strip_edges()
+				if not aes.is_empty():
+					err_lines.append(aes)
+			err_payload = "\n".join(err_lines)
 	_auto_repair_attempted_this_op = false
 	_pending_bundle_is_auto_repair = false
 	_pre_repair_summary = ""
@@ -1285,7 +1374,7 @@ func _on_direct_agent_pressed(feat_id: String, cp_id: String) -> void:
 	_set_status("Agent Director updating Scene & GDScript...", false)
 	if not feat.is_empty():
 		_render_active_feature_workspace(feat)
-	_sync.direct_agent(feat_id, cp_id, prompt_txt, scene_snap, live_scripts, arena_scene, primary_scene, prompt_txt, input_map_snap, diag_issues)
+	_sync.direct_agent(feat_id, cp_id, prompt_txt, scene_snap, live_scripts, arena_scene, primary_scene, err_payload, input_map_snap, diag_issues)
 
 
 func _on_fix_detected_diagnostics_pressed(feat_id: String, cp_id: String, diag_issues: Array) -> void:
@@ -1312,10 +1401,11 @@ func _on_fix_log_errors_pressed(feat_id: String, cp_id: String, log_errors: Arra
 		var s := str(e).strip_edges()
 		if not s.is_empty():
 			joined.append(s)
-	_fix_draft_text = "\n".join(joined)
+	var joined_str := "\n".join(joined)
+	_fix_draft_text = joined_str
 	if _fix_input != null:
 		_fix_input.text = _fix_draft_text
-	_on_direct_agent_pressed(feat_id, cp_id)
+	_submit_direct_agent(feat_id, cp_id, joined_str)
 
 
 func _on_agent_bundle_received(bundle: Dictionary, payload_data: Dictionary) -> void:
@@ -1576,6 +1666,18 @@ func _on_undo_last_ai_pressed() -> void:
 	_last_agent_summary = ""
 	_last_agent_warnings = PackedStringArray()
 	var restored_scripts: PackedStringArray = res.get("restored_scripts", PackedStringArray())
+	var removed_scripts: PackedStringArray = res.get("removed_scripts", PackedStringArray())
+	var raw_cf: Variant = _payload.get("codeFiles", null)
+	if typeof(raw_cf) == TYPE_DICTIONARY:
+		var code_files: Dictionary = raw_cf
+		for rm_sp in removed_scripts:
+			code_files.erase(str(rm_sp).strip_edges())
+		for rsp in restored_scripts:
+			var rsp_str := str(rsp).strip_edges()
+			if rsp_str.begins_with("res://") and rsp_str.ends_with(".gd") and FileAccess.file_exists(rsp_str):
+				code_files[rsp_str] = FileAccess.get_file_as_string(rsp_str)
+	if _sync != null and _sync.has_method("save_cached_epic") and not _payload.is_empty():
+		_sync.call("save_cached_epic", _payload)
 	for rsp in restored_scripts:
 		var rsp_str := str(rsp).strip_edges()
 		if rsp_str.begins_with("res://") and rsp_str.ends_with(".gd"):

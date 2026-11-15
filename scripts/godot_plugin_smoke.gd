@@ -360,14 +360,101 @@ func take_damage(amount: float) -> void:
 		quit(1)
 		return
 	box2.free()
-	dock_probe.free()
-
+	dock_probe.set("_executor", exec)
+	dock_probe.set("_diagnostics_dirty", false)
 	exec.call("invalidate_eval_cache")
 	var eval_built: Dictionary = exec.call("evaluate_feature", {"id": "f1", "primaryAsset": "res://scenes/smoke_fighter.tscn"}, null, {}, "")
 	if not bool(eval_built.get("has_built_artifacts", false)) or not (eval_built.get("script_paths", []) as Array).has("res://scripts/smoke_fighter.gd"):
+		dock_probe.free()
 		printerr("FAIL: evaluate_feature did not detect built scene + attached script from disk: ", eval_built)
 		quit(1)
 		return
+	if (exec.get("_eval_cache") as Dictionary).is_empty():
+		dock_probe.free()
+		printerr("FAIL: evaluate_feature did not populate _eval_cache")
+		quit(1)
+		return
+	if not dock_probe.has_method("on_editor_scene_saved"):
+		dock_probe.free()
+		printerr("FAIL: layers_dock.gd missing on_editor_scene_saved")
+		quit(1)
+		return
+	dock_probe.call("on_editor_scene_saved", "res://scenes/smoke_fighter.tscn")
+	if not bool(dock_probe.get("_diagnostics_dirty")) or not (exec.get("_eval_cache") as Dictionary).is_empty():
+		dock_probe.free()
+		printerr("FAIL: on_editor_scene_saved did not invalidate _eval_cache and mark _diagnostics_dirty=true")
+		quit(1)
+		return
+
+	if not dock_probe.has_method("_format_capped_issue_list"):
+		dock_probe.free()
+		printerr("FAIL: layers_dock.gd missing _format_capped_issue_list")
+		quit(1)
+		return
+	var fmt_res: Variant = dock_probe.call("_format_capped_issue_list", ["Err A", "Err B", "Err C", "Err D"], 3, "4 static wiring/combat issues")
+	if typeof(fmt_res) != TYPE_DICTIONARY:
+		dock_probe.free()
+		printerr("FAIL: _format_capped_issue_list did not return a Dictionary")
+		quit(1)
+		return
+	var fmt_dict: Dictionary = fmt_res
+	var fmt_inline: String = String(fmt_dict.get("inline_text", ""))
+	var fmt_tip: String = String(fmt_dict.get("tooltip_text", ""))
+	if not fmt_inline.contains("• Err A") or not fmt_inline.contains("• Err B") or not fmt_inline.contains("• Err C") or not fmt_inline.contains("+1 more") or fmt_inline.contains("• Err D") or not fmt_tip.contains("1. Err A") or not fmt_tip.contains("4. Err D"):
+		dock_probe.free()
+		printerr("FAIL: _format_capped_issue_list output mismatch: ", fmt_dict)
+		quit(1)
+		return
+
+	if not _write_text("res://scenes/smoke_arena.tscn", "[gd_scene format=3]\n\n[node name=\"Arena\" type=\"Node3D\"]\n"):
+		dock_probe.free()
+		printerr("FAIL: could not write temporary smoke_arena.tscn")
+		quit(1)
+		return
+	var sc_box1 := HBoxContainer.new()
+	dock_probe.call("_maybe_add_open_scene_button", sc_box1, PackedStringArray(["res://scenes/smoke_fighter.tscn"]), "res://scenes/smoke_arena.tscn")
+	if sc_box1.get_child_count() != 1 or not (sc_box1.get_child(0) is Button) or (sc_box1.get_child(0) is MenuButton) or (sc_box1.get_child(0) as Button).text != "Open Scene":
+		sc_box1.free()
+		dock_probe.free()
+		printerr("FAIL: _maybe_add_open_scene_button 1-scene mode did not produce flat 'Open Scene' Button")
+		quit(1)
+		return
+	sc_box1.free()
+
+	var sc_box2 := HBoxContainer.new()
+	dock_probe.call("_maybe_add_open_scene_button", sc_box2, PackedStringArray(["res://scenes/smoke_fighter.tscn", "res://scenes/smoke_arena.tscn"]), "res://scenes/smoke_arena.tscn")
+	if sc_box2.get_child_count() != 1 or not (sc_box2.get_child(0) is MenuButton) or (sc_box2.get_child(0) as MenuButton).text != "Open Scene (2)" or (sc_box2.get_child(0) as MenuButton).get_popup().item_count != 2 or not (sc_box2.get_child(0) as MenuButton).get_popup().get_item_text(0).contains("smoke_fighter.tscn") or not (sc_box2.get_child(0) as MenuButton).get_popup().get_item_text(1).contains("Arena"):
+		sc_box2.free()
+		dock_probe.free()
+		printerr("FAIL: _maybe_add_open_scene_button multi-scene mode did not produce 'Open Scene (2)' MenuButton with Feature/Arena items")
+		quit(1)
+		return
+	sc_box2.free()
+	if FileAccess.file_exists("res://scenes/smoke_arena.tscn"):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path("res://scenes/smoke_arena.tscn"))
+	dock_probe.free()
+
+	var new_bundle := {
+		"mode": "direct_agent",
+		"summary": "Create new AI script probe",
+		"scriptUpdates": [
+			{"resPath": "res://scripts/smoke_ai_new.gd", "content": "extends Node\n"},
+		],
+		"sceneOps": [],
+	}
+	var new_snap: Dictionary = exec.call("capture_bundle_snapshot", null, new_bundle, "res://scenes/smoke_fighter.tscn")
+	exec.call("apply_agent_bundle", null, null, new_bundle, "res://scenes/smoke_fighter.tscn")
+	if not FileAccess.file_exists("res://scripts/smoke_ai_new.gd"):
+		printerr("FAIL: apply_agent_bundle did not create smoke_ai_new.gd")
+		quit(1)
+		return
+	var undo_new_res: Dictionary = exec.call("restore_bundle_snapshot", null, new_snap)
+	if FileAccess.file_exists("res://scripts/smoke_ai_new.gd") or not (undo_new_res.get("removed_scripts", PackedStringArray()) as PackedStringArray).has("res://scripts/smoke_ai_new.gd"):
+		printerr("FAIL: restore_bundle_snapshot did not remove smoke_ai_new.gd or report it in removed_scripts: ", undo_new_res)
+		quit(1)
+		return
+
+	exec.call("invalidate_eval_cache")
 	var eval_unbuilt: Dictionary = exec.call("evaluate_feature", {"id": "f2", "isBuiltInGodot": false, "primaryAsset": "res://scenes/smoke_fighter.tscn"}, null, {}, "")
 	if bool(eval_unbuilt.get("has_built_artifacts", true)):
 		printerr("FAIL: evaluate_feature should return has_built_artifacts=false when isBuiltInGodot=false")
@@ -375,6 +462,27 @@ func take_damage(amount: float) -> void:
 		return
 
 	var sync_probe: Node = sync_scr.new()
+	if not sync_probe.has_method("save_cached_epic"):
+		sync_probe.free()
+		printerr("FAIL: layers_sync_client.gd missing save_cached_epic")
+		quit(1)
+		return
+	sync_probe.call("save_cached_epic", {
+		"ok": true,
+		"codeFiles": {"res://scripts/smoke_fighter.gd": orig_fighter_disk},
+		"activeEpic": {"features": [{"id": "f1", "isBuiltInGodot": false}]},
+	})
+	var persisted_cache: Dictionary = sync_probe.call("load_cached_epic")
+	for tmp_f in ["res://.layers/epic_cache.json", "res://.layers/.gdignore", "res://.layers/.gitignore"]:
+		if FileAccess.file_exists(tmp_f):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp_f))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.layers"))
+	var persisted_feats: Array = (persisted_cache.get("activeEpic", {}) as Dictionary).get("features", [])
+	if persisted_feats.is_empty() or bool((persisted_feats[0] as Dictionary).get("isBuiltInGodot", true)):
+		sync_probe.free()
+		printerr("FAIL: save_cached_epic / load_cached_epic did not persist reverted isBuiltInGodot=false: ", persisted_cache)
+		quit(1)
+		return
 	sync_probe.set("_link_token", "lyr_smoke_test_token_1234567890")
 	sync_probe.set("_agent_busy", true)
 	if not bool(sync_probe.call("has_active_agent_request")):

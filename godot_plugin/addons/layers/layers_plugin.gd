@@ -44,13 +44,21 @@ func _exit_tree() -> void:
 		_dock = null
 
 
-func _on_editor_scene_changed(_scene_root: Node) -> void:
-	if _dock != null and _dock.has_method("notify_editor_state_changed"):
+func _on_editor_scene_changed(scene_root: Node) -> void:
+	if _dock == null:
+		return
+	if _dock.has_method("on_editor_scene_changed"):
+		_dock.call("on_editor_scene_changed", scene_root)
+	elif _dock.has_method("notify_editor_state_changed"):
 		_dock.call("notify_editor_state_changed")
 
 
-func _on_editor_scene_saved(_filepath: String) -> void:
-	if _dock != null and _dock.has_method("notify_editor_state_changed"):
+func _on_editor_scene_saved(filepath: String) -> void:
+	if _dock == null:
+		return
+	if _dock.has_method("on_editor_scene_saved"):
+		_dock.call("on_editor_scene_saved", filepath)
+	elif _dock.has_method("notify_editor_state_changed"):
 		_dock.call("notify_editor_state_changed")
 
 

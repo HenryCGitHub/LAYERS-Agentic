@@ -211,13 +211,7 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 				err_msg = str(err_obj["message"])
 		sync_failed.emit(err_msg)
 	elif typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
-		var has_bundle: bool = parsed.has("agentBundle") and typeof(parsed.get("agentBundle")) == TYPE_DICTIONARY
-		if _agent_busy and not has_bundle:
-			pass
-		elif has_bundle:
-			_write_cache(parsed)
-			agent_bundle_received.emit(parsed.get("agentBundle"), parsed)
-		else:
+		if not _agent_busy:
 			_write_cache(parsed)
 			epic_updated.emit(parsed)
 	else:
@@ -234,6 +228,12 @@ func _write_cache(payload: Dictionary) -> void:
 	var file := FileAccess.open(CACHE_JSON_PATH, FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify(payload))
+
+
+func save_cached_epic(payload: Dictionary) -> void:
+	if payload.is_empty():
+		return
+	_write_cache(payload)
 
 
 func get_local_plugin_version() -> String:

@@ -230,27 +230,10 @@ func _parse_vector2_literal(raw: String) -> Variant:
 func parse_input_specs(step: Dictionary) -> Array:
 	var specs: Array = []
 	var seen: Dictionary = {}
-	var code: String = str(step.get("codeSnippet", "")).strip_edges()
 	var area2: String = str(step.get("area2Inspector", "")).strip_edges()
 	var instr: String = str(step.get("instruction", "")).strip_edges()
 
-	# 1. Pipe table rows: | Input Map > move_forward | Key | W |
-	for raw_line in code.replace("\r\n", "\n").split("\n"):
-		var line: String = raw_line.strip_edges()
-		if not line.begins_with("|"):
-			continue
-		var cols: PackedStringArray = line.split("|", false)
-		if cols.size() < 3:
-			continue
-		var col0: String = cols[0].strip_edges()
-		if "input map" in col0.to_lower() and ">" in col0:
-			var act: String = col0.split(">", false, 1)[1].strip_edges()
-			var key_hint: String = cols[2].strip_edges()
-			if not act.is_empty() and not seen.has(act):
-				seen[act] = true
-				specs.append({"action": act, "keyLabel": key_hint})
-
-	# 2. area2Inspector & instruction: `move_forward (W)` or `Add dash action (Space)`
+	# Match `move_forward (W)` or `Add dash action (Space)`
 	var text_scan: String = "%s\n%s" % [area2, instr]
 	var pair_re := RegEx.new()
 	pair_re.compile("\\b([a-z][a-z0-9_]{1,28})\\s+(?:action\\s+)?\\(([A-Za-z0-9_ ]{1,16})\\)")
@@ -1866,7 +1849,7 @@ func restore_bundle_snapshot(
 	snapshot: Dictionary
 ) -> Dictionary:
 	if snapshot.is_empty():
-		return {"ok": false, "restored_count": 0, "restored_scripts": PackedStringArray()}
+		return {"ok": false, "restored_count": 0, "restored_scripts": PackedStringArray(), "removed_scripts": PackedStringArray()}
 
 	var files: Dictionary = snapshot.get("files", {}) if typeof(snapshot.get("files", null)) == TYPE_DICTIONARY else {}
 	var ordered_paths := PackedStringArray()
@@ -1892,6 +1875,7 @@ func restore_bundle_snapshot(
 	var restored_scenes := PackedStringArray()
 	var removed_scenes := PackedStringArray()
 	var restored_scripts := PackedStringArray()
+	var removed_scripts := PackedStringArray()
 	for rp in ordered_paths:
 		var raw_entry: Variant = files.get(rp, null)
 		if typeof(raw_entry) != TYPE_DICTIONARY:
@@ -1911,6 +1895,8 @@ func restore_bundle_snapshot(
 				elif rp.ends_with(".tscn"):
 					restored_scenes.append(rp)
 		else:
+			if rp.ends_with(".gd") and not (rp in removed_scripts):
+				removed_scripts.append(rp)
 			if FileAccess.file_exists(rp):
 				DirAccess.remove_absolute(ProjectSettings.globalize_path(rp))
 				restored_count += 1
@@ -1984,7 +1970,7 @@ func restore_bundle_snapshot(
 				editor_interface.open_scene_from_path(prev_main_scene)
 
 	invalidate_eval_cache()
-	return {"ok": true, "restored_count": restored_count, "restored_scripts": restored_scripts}
+	return {"ok": true, "restored_count": restored_count, "restored_scripts": restored_scripts, "removed_scripts": removed_scripts}
 
 
 func apply_agent_bundle(

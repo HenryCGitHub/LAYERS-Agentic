@@ -1616,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.7"'));
+        expect(cfgText, contains('version="2.7.8"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1626,6 +1626,8 @@ func _physics_process(delta: float) -> void:
         expect(pluginText, contains('get_undo_redo()'));
         expect(pluginText, contains('get_editor_interface()'));
         expect(pluginText, contains('scene_changed'));
+        expect(pluginText, contains('on_editor_scene_changed'));
+        expect(pluginText, contains('on_editor_scene_saved'));
         expect(pluginText, contains('on_editor_resource_saved'));
         expect(pluginText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(pluginText, isNot(contains('preload(')));
@@ -1640,6 +1642,7 @@ func _physics_process(delta: float) -> void:
         expect(syncText, isNot(contains('func is_agent_busy')));
         expect(syncText, isNot(contains('func complete_feature_steps')));
         expect(syncText, contains('_normalize_code_files_dict'));
+        expect(syncText, contains('func save_cached_epic'));
         expect(syncText, contains('"sync_scripts"'));
         expect(syncText, contains('sync_live_scripts'));
         expect(syncText, contains('scripts_synced'));
@@ -1683,7 +1686,10 @@ func _physics_process(delta: float) -> void:
         expect(dockText, isNot(contains('build_feature_local')));
         expect(dockText, contains('_on_cancel_agent_pressed'));
         expect(dockText, contains('_sync_feature_picker_lock'));
+        expect(dockText, contains('func on_editor_scene_saved'));
+        expect(dockText, contains('_format_capped_issue_list'));
         expect(dockText, contains('_maybe_add_open_scene_button'));
+        expect(dockText, contains('Open Scene (%d)'));
         expect(dockText, contains('MenuButton.new()'));
         expect(dockText, contains('snap.get("feature_id"'));
         expect(dockText, contains('_pre_repair_warnings'));
@@ -1743,6 +1749,8 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('capture_bundle_snapshot'));
         expect(executorText, contains('restore_bundle_snapshot'));
         expect(executorText, contains('restored_scripts'));
+        expect(executorText, contains('removed_scripts'));
+        expect(executorText, isNot(contains('"input map" in col0')));
         expect(executorText, contains('is_likely_gdscript_snippet'));
         expect(executorText, contains('can_attach_script_to_node'));
         expect(executorText, contains('evaluate_feature'));
