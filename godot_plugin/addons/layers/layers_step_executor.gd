@@ -202,16 +202,6 @@ func resolve_step_code_text(step: Dictionary) -> String:
 	return strip_diff_prefixes(snip)
 
 
-func _raw_step_snippet(step: Dictionary) -> String:
-	var patch_raw: Variant = step.get("scriptPatch", null)
-	if typeof(patch_raw) == TYPE_DICTIONARY:
-		var patch_dict: Dictionary = patch_raw
-		var rep: String = str(patch_dict.get("replaceBlock", "")).strip_edges()
-		if not rep.is_empty():
-			return rep
-	return str(step.get("codeSnippet", "")).strip_edges()
-
-
 func strip_diff_prefixes(raw: String) -> String:
 	var lines: PackedStringArray = raw.split("\n")
 	var out: PackedStringArray = []
@@ -225,331 +215,6 @@ func strip_diff_prefixes(raw: String) -> String:
 		else:
 			out.append(line)
 	return "\n".join(out).strip_edges()
-
-
-func _has_diff_markers(raw: String) -> bool:
-	for line in raw.split("\n"):
-		if line.begins_with("+ ") or line == "+":
-			return true
-	return false
-
-
-func is_step_code_present(disk_text: String, step: Dictionary) -> bool:
-	var clean_disk: String = disk_text.replace("\r\n", "\n")
-	var raw: String = _raw_step_snippet(step)
-	if raw.is_empty():
-		return true
-
-	var target_lines: PackedStringArray = []
-	if _has_diff_markers(raw):
-		for line in raw.split("\n"):
-			if line.begins_with("+ "):
-				target_lines.append(line.substr(2))
-	else:
-		for line in strip_diff_prefixes(raw).split("\n"):
-			target_lines.append(line)
-
-	var sig_checks: int = 0
-	for raw_l in target_lines:
-		var trimmed: String = raw_l.strip_edges()
-		if trimmed.is_empty() or trimmed.begins_with("#") or trimmed.begins_with("extends ") or trimmed.begins_with("class_name "):
-			continue
-		if trimmed == "pass" or trimmed == "return":
-			continue
-		sig_checks += 1
-		if trimmed.begins_with("@export var ") or trimmed.begins_with("@onready var ") or trimmed.begins_with("var ") or trimmed.begins_with("const ") or trimmed.begins_with("signal "):
-			var decl_head: String = _extract_decl_head(trimmed)
-			if not decl_head.is_empty():
-				if not (decl_head in clean_disk):
-					return false
-				continue
-		if trimmed.begins_with("func "):
-			var fn_head: String = trimmed.split("(", false, 1)[0].strip_edges()
-			if not (fn_head in clean_disk):
-				return false
-			continue
-		if not (_normalize_ws(trimmed) in _normalize_ws(clean_disk)):
-			return false
-
-	return sig_checks > 0 or (_normalize_ws(strip_diff_prefixes(raw)) in _normalize_ws(clean_disk))
-
-
-func _extract_decl_head(trimmed: String) -> String:
-	var eq_idx: int = trimmed.find("=")
-	var head: String = trimmed.substr(0, eq_idx).strip_edges() if eq_idx > 0 else trimmed
-	var col_idx: int = head.find(":")
-	if col_idx > 0:
-		head = head.substr(0, col_idx).strip_edges()
-	return head
-
-
-func _normalize_ws(text: String) -> String:
-	var lines: PackedStringArray = []
-	for line in text.replace("\r\n", "\n").split("\n"):
-		var t: String = line.strip_edges()
-		if not t.is_empty():
-			lines.append(t)
-	return "\n".join(lines)
-
-
-func _extract_top_level_decl_key(line: String) -> String:
-	if line.begins_with("\t") or line.begins_with(" "):
-		return ""
-	var t: String = line.strip_edges()
-	if t.is_empty() or t.begins_with("#"):
-		return ""
-	var var_re := RegEx.new()
-	var_re.compile("^(?:@export(?:_[a-z_]+)?(?:\\([^)]*\\))?\\s+|@onready\\s+)*(?:static\\s+)?var\\s+([A-Za-z_][A-Za-z0-9_]*)\\b")
-	var vm: RegExMatch = var_re.search(t)
-	if vm != null:
-		return "var:" + vm.get_string(1)
-	var const_re := RegEx.new()
-	const_re.compile("^(?:const|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)\\b")
-	var cm: RegExMatch = const_re.search(t)
-	if cm != null:
-		return "var:" + cm.get_string(1)
-	var sig_re := RegEx.new()
-	sig_re.compile("^signal\\s+([A-Za-z_][A-Za-z0-9_]*)\\b")
-	var sm: RegExMatch = sig_re.search(t)
-	if sm != null:
-		return "signal:" + sm.get_string(1)
-	var fn_re := RegEx.new()
-	fn_re.compile("^(?:static\\s+)?func\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(")
-	var fm: RegExMatch = fn_re.search(t)
-	if fm != null:
-		return "func:" + fm.get_string(1)
-	return ""
-
-
-func _collect_top_level_decls(script_text: String) -> Dictionary:
-	var decls: Dictionary = {}
-	for line in script_text.replace("\r\n", "\n").split("\n"):
-		var k: String = _extract_top_level_decl_key(line)
-		if not k.is_empty():
-			decls[k] = true
-	return decls
-
-
-func _line_bracket_delta(line: String) -> int:
-	var delta: int = 0
-	for ch_idx in range(line.length()):
-		var c: String = line[ch_idx]
-		if c == "#":
-			break
-		if c == "[" or c == "(" or c == "{":
-			delta += 1
-		elif c == "]" or c == ")" or c == "}":
-			delta -= 1
-	return delta
-
-
-func _filter_duplicate_hunk_decls(existing_text: String, candidate_lines: PackedStringArray) -> PackedStringArray:
-	var existing_decls: Dictionary = _collect_top_level_decls(existing_text)
-	var out := PackedStringArray()
-	var idx: int = 0
-	while idx < candidate_lines.size():
-		var line: String = candidate_lines[idx]
-		if _is_non_gdscript_diagram_line(line):
-			idx += 1
-			continue
-		var dkey: String = _extract_top_level_decl_key(line)
-		if not dkey.is_empty() and existing_decls.has(dkey):
-			idx += 1
-			if dkey.begins_with("func:"):
-				while idx < candidate_lines.size():
-					var next_l: String = candidate_lines[idx]
-					var next_t: String = next_l.strip_edges()
-					if next_t.is_empty() or next_t.begins_with("#") or next_l.begins_with("\t") or next_l.begins_with(" "):
-						idx += 1
-					else:
-						break
-			else:
-				var depth: int = _line_bracket_delta(line)
-				var cont: bool = line.strip_edges().ends_with("\\")
-				while idx < candidate_lines.size() and (depth > 0 or cont):
-					var cont_l: String = candidate_lines[idx]
-					depth += _line_bracket_delta(cont_l)
-					cont = cont_l.strip_edges().ends_with("\\")
-					idx += 1
-			continue
-		if not dkey.is_empty():
-			existing_decls[dkey] = true
-		out.append(line)
-		idx += 1
-	return out
-
-
-func merge_step_code_into_existing(existing_text: String, raw_snippet: String, fallback_extends: String = "Node") -> String:
-	var current: String = existing_text.replace("\r\n", "\n")
-	if current.strip_edges().is_empty():
-		var clean_new_lines := _filter_duplicate_hunk_decls("", strip_diff_prefixes(raw_snippet).split("\n"))
-		var clean_new: String = "\n".join(clean_new_lines).strip_edges()
-		if clean_new.is_empty():
-			return ""
-		if not ("extends " in clean_new) and not ("class_name " in clean_new):
-			clean_new = "extends %s\n\n%s" % [fallback_extends, clean_new]
-		return clean_new.strip_edges() + "\n"
-
-	if not _has_diff_markers(raw_snippet):
-		var clean_plain: String = strip_diff_prefixes(raw_snippet)
-		if clean_plain.is_empty() or not is_likely_gdscript_snippet(clean_plain):
-			return current
-		var body_without_header := PackedStringArray()
-		for l in clean_plain.split("\n"):
-			if l.begins_with("extends ") or l.begins_with("class_name "):
-				continue
-			body_without_header.append(l)
-		var filtered_plain := _filter_duplicate_hunk_decls(current, body_without_header)
-		var additions: String = "\n".join(filtered_plain).strip_edges()
-		if additions.is_empty():
-			return current
-		if not (additions in current):
-			return current.strip_edges() + "\n\n" + additions + "\n"
-		return current
-
-	# Parse interleaved context + added hunks from `+ ` diff
-	var lines: PackedStringArray = raw_snippet.replace("\r\n", "\n").split("\n")
-	var hunks: Array = []
-	var i: int = 0
-	while i < lines.size():
-		var line: String = lines[i]
-		if line.begins_with("+ ") or line == "+":
-			var before_ctx: PackedStringArray = []
-			var j: int = i - 1
-			while j >= 0 and not lines[j].begins_with("+ ") and lines[j] != "+":
-				var trimmed_prev: String = lines[j].strip_edges()
-				if not trimmed_prev.is_empty() and not trimmed_prev.begins_with("#"):
-					before_ctx.insert(0, lines[j])
-					if before_ctx.size() >= 2:
-						break
-				j -= 1
-
-			var added: PackedStringArray = []
-			while i < lines.size() and (lines[i].begins_with("+ ") or lines[i] == "+"):
-				added.append(lines[i].substr(2) if lines[i].begins_with("+ ") else "")
-				i += 1
-
-			var after_ctx: PackedStringArray = []
-			var k: int = i
-			while k < lines.size() and not lines[k].begins_with("+ ") and lines[k] != "+":
-				var trimmed_next: String = lines[k].strip_edges()
-				if not trimmed_next.is_empty() and not trimmed_next.begins_with("#"):
-					after_ctx.append(lines[k])
-					break
-				k += 1
-
-			hunks.append({
-				"before": before_ctx,
-				"added": added,
-				"after": after_ctx,
-			})
-		else:
-			i += 1
-
-	for h_raw in hunks:
-		var h: Dictionary = h_raw
-		var added_lines: PackedStringArray = _filter_duplicate_hunk_decls(current, h.get("added", PackedStringArray()))
-		var added_block: String = "\n".join(added_lines).strip_edges(false, true)
-		if added_block.strip_edges().is_empty():
-			continue
-		if not is_likely_gdscript_snippet(added_block):
-			continue
-		if _is_block_present(current, added_lines):
-			continue
-
-		var before_ctx: PackedStringArray = h.get("before", PackedStringArray())
-		var after_ctx: PackedStringArray = h.get("after", PackedStringArray())
-		current = _insert_hunk_by_context(current, before_ctx, added_lines, after_ctx)
-
-	return current.strip_edges() + "\n"
-
-
-func _is_block_present(disk_text: String, added_lines: PackedStringArray) -> bool:
-	var dummy_step: Dictionary = {"codeSnippet": "\n".join(added_lines)}
-	return is_step_code_present(disk_text, dummy_step)
-
-
-func _insert_hunk_by_context(
-	current: String,
-	before_ctx: PackedStringArray,
-	added_lines: PackedStringArray,
-	after_ctx: PackedStringArray
-) -> String:
-	var cur_lines: PackedStringArray = current.split("\n")
-	var block_str: String = "\n".join(added_lines)
-
-	# 1. Try matching the last before_ctx line
-	if not before_ctx.is_empty():
-		var anchor_before: String = before_ctx[before_ctx.size() - 1].strip_edges()
-		if not anchor_before.is_empty() and not anchor_before.begins_with("extends "):
-			for idx in range(cur_lines.size()):
-				if cur_lines[idx].strip_edges() == anchor_before:
-					# Prefer insertion before `after_ctx` if present shortly after `idx`
-					if not after_ctx.is_empty():
-						var anchor_after: String = after_ctx[0].strip_edges()
-						for k in range(idx + 1, mini(cur_lines.size(), idx + 12)):
-							if cur_lines[k].strip_edges() == anchor_after:
-								return _splice_lines_at(cur_lines, k, added_lines)
-					# Also check if next line is an indented body block and after_ctx wasn't matched:
-					# if anchor_before is `func ...:` with body following, append at end of block? No, usually line-after.
-					return _splice_lines_at(cur_lines, idx + 1, added_lines)
-
-	# 2. Try matching after_ctx line alone (insert right above it)
-	if not after_ctx.is_empty():
-		var anchor_after2: String = after_ctx[0].strip_edges()
-		if not anchor_after2.is_empty():
-			for idx in range(cur_lines.size()):
-				if cur_lines[idx].strip_edges() == anchor_after2:
-					return _splice_lines_at(cur_lines, idx, added_lines)
-
-	# 3. Classify declaration hunk (`@export` / `@onready` / `var` / `const` / `signal`) vs method hunk
-	var first_non_empty: String = ""
-	for l in added_lines:
-		var t: String = l.strip_edges()
-		if not t.is_empty():
-			first_non_empty = t
-			break
-
-	var is_top_decl: bool = (
-		first_non_empty.begins_with("@export")
-		or first_non_empty.begins_with("@onready")
-		or first_non_empty.begins_with("var ")
-		or first_non_empty.begins_with("const ")
-		or first_non_empty.begins_with("signal ")
-	) and not added_lines[0].begins_with("\t") and not added_lines[0].begins_with("    ")
-
-	if is_top_decl:
-		# Insert right before first `func ` if one exists, otherwise after `extends` header
-		for idx in range(cur_lines.size()):
-			if cur_lines[idx].strip_edges().begins_with("func "):
-				var insert_arr := PackedStringArray()
-				for l in added_lines:
-					insert_arr.append(l)
-				insert_arr.append("")
-				return _splice_lines_at(cur_lines, idx, insert_arr)
-		var after_ext: int = 0
-		for idx in range(cur_lines.size()):
-			var st: String = cur_lines[idx].strip_edges()
-			if st.begins_with("extends ") or st.begins_with("class_name "):
-				after_ext = idx + 1
-				break
-		return _splice_lines_at(cur_lines, after_ext, added_lines)
-
-	# 4. Fallback: append at bottom
-	return current.strip_edges() + "\n\n" + block_str
-
-
-func _splice_lines_at(lines: PackedStringArray, insert_at: int, inserted: PackedStringArray) -> String:
-	var out := PackedStringArray()
-	for idx in range(lines.size()):
-		if idx == insert_at:
-			for ins in inserted:
-				out.append(ins)
-		out.append(lines[idx])
-	if insert_at >= lines.size():
-		for ins in inserted:
-			out.append(ins)
-	return "\n".join(out)
 
 
 # ---------------------------------------------------------------------------
@@ -1151,40 +816,8 @@ func _parse_vector2_literal(raw: String) -> Variant:
 
 
 # ---------------------------------------------------------------------------
-# Child Scene Instancing, InputMap, Inspector & Multi-Signal Parsers
+# InputMap & Multi-Signal Parsers
 # ---------------------------------------------------------------------------
-
-func parse_scene_instance_specs(step: Dictionary, target_scene_path: String) -> Array:
-	var instances: Array = []
-	var combined: String = "%s\n%s" % [str(step.get("instruction", "")), str(step.get("codeSnippet", ""))]
-	var inst_re := RegEx.new()
-	inst_re.compile("(?i)instance\\s+`?(?:res://(?:scenes/)?)?([a-zA-Z0-9_]+\\.tscn)`?(?:\\s+at\\s+(?:Vector3)?\\(\\s*(-?[0-9]+(?:\\.[0-9]+)?)\\s*,\\s*(-?[0-9]+(?:\\.[0-9]+)?)\\s*,\\s*(-?[0-9]+(?:\\.[0-9]+)?)\\s*\\))?")
-	var matches: Array[RegExMatch] = inst_re.search_all(combined)
-	var seen: Dictionary = {}
-	for m in matches:
-		var tscn_file: String = m.get_string(1)
-		if tscn_file.is_empty():
-			continue
-		var full_path: String = "res://scenes/%s" % tscn_file
-		if not FileAccess.file_exists(full_path) and FileAccess.file_exists("res://%s" % tscn_file):
-			full_path = "res://%s" % tscn_file
-		if full_path == target_scene_path or seen.has(full_path):
-			continue
-		seen[full_path] = true
-		var has_pos: bool = not m.get_string(2).is_empty()
-		var pos := Vector3(
-			m.get_string(2).to_float(),
-			m.get_string(3).to_float(),
-			m.get_string(4).to_float()
-		) if has_pos else Vector3.ZERO
-		instances.append({
-			"scenePath": full_path,
-			"nodeName": tscn_file.get_basename().to_pascal_case(),
-			"position": pos,
-			"hasPos": has_pos,
-		})
-	return instances
-
 
 func parse_input_specs(step: Dictionary) -> Array:
 	var specs: Array = []
@@ -1222,69 +855,6 @@ func parse_input_specs(step: Dictionary) -> Array:
 		if not seen.has(act2):
 			seen[act2] = true
 			specs.append({"action": act2, "keyLabel": key2})
-
-	return specs
-
-
-func parse_inspector_specs(step: Dictionary) -> Array:
-	var specs: Array = []
-	var seen: Dictionary = {}
-	var code: String = str(step.get("codeSnippet", "")).strip_edges()
-	var area2: String = str(step.get("area2Inspector", "")).strip_edges()
-
-	for raw_line in code.replace("\r\n", "\n").split("\n"):
-		var line: String = raw_line.strip_edges()
-		if not line.begins_with("|"):
-			continue
-		var cols: PackedStringArray = line.split("|", false)
-		if cols.size() < 3:
-			continue
-		var first_col: String = cols[0].strip_edges()
-		var fl: String = first_col.to_lower()
-		if first_col.is_empty() or first_col.begins_with("-") or first_col.begins_with(":"):
-			continue
-		if fl.begins_with("node") or fl.begins_with("property") or "input map" in fl:
-			continue
-		var prop_col: String = cols[1].strip_edges()
-		if prop_col.to_lower() == "scene path":
-			continue
-		var node_part: String = first_col.split(">")[first_col.split(">").size() - 1].strip_edges()
-		var paren_i: int = node_part.find("(")
-		if paren_i > 0:
-			node_part = node_part.substr(0, paren_i).strip_edges()
-		var val_col: String = cols[2].strip_edges()
-		var key: String = "%s|%s" % [node_part, prop_col]
-		if seen.has(key):
-			continue
-		seen[key] = true
-		specs.append({
-			"nodeName": node_part,
-			"prop": prop_col,
-			"value": val_col,
-			"label": "%s · %s = %s" % [node_part, prop_col, val_col],
-		})
-
-	if specs.is_empty() and not area2.is_empty():
-		for part_raw in area2.split("|"):
-			var part: String = part_raw.strip_edges()
-			if part.is_empty() or "input map" in part.to_lower() or not (":" in part):
-				continue
-			var kv: PackedStringArray = part.split(":", false, 1)
-			var lhs: String = kv[0].strip_edges()
-			var rhs: String = kv[1].strip_edges()
-			if "." in lhs:
-				var dp: PackedStringArray = lhs.split(".", false, 1)
-				var n_hint: String = dp[0].strip_edges()
-				var p_hint: String = dp[1].strip_edges()
-				var key2: String = "%s|%s" % [n_hint, p_hint]
-				if not seen.has(key2):
-					seen[key2] = true
-					specs.append({
-						"nodeName": n_hint,
-						"prop": p_hint,
-						"value": rhs,
-						"label": "%s · %s = %s" % [n_hint, p_hint, rhs],
-					})
 
 	return specs
 
@@ -1357,661 +927,6 @@ func _infer_signal_target_name(step: Dictionary, scene_root: Node) -> String:
 	return ""
 
 
-# ---------------------------------------------------------------------------
-# Unified Step Evaluation (Capabilities + Hierarchical Tree Rows)
-# ---------------------------------------------------------------------------
-
-func evaluate_step(feat: Dictionary, step: Dictionary, editor_interface: EditorInterface) -> Dictionary:
-	var rows: Array = []
-	var role: String = str(step.get("role", "CODE"))
-	var step_path: String = resolve_effective_step_path(step, feat, editor_interface.get_edited_scene_root() if editor_interface != null else null)
-	var verify_mode: String = str(step.get("verifyMode", "")).strip_edges().to_lower()
-
-	var live_scene_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
-	var inspect_root: Node = live_scene_root
-	var temp_scene_root: Node = null
-	var scene_matches_open: bool = false
-
-	if step_path.ends_with(".tscn"):
-		if live_scene_root != null and live_scene_root.scene_file_path == step_path:
-			inspect_root = live_scene_root
-			scene_matches_open = true
-		elif FileAccess.file_exists(step_path):
-			var packed: Resource = ResourceLoader.load(step_path, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE)
-			if packed is PackedScene:
-				temp_scene_root = (packed as PackedScene).instantiate()
-				inspect_root = temp_scene_root
-	elif live_scene_root != null:
-		scene_matches_open = true
-
-	var node_specs: Array = parse_scene_node_specs(step)
-	var missing_nodes: Array = []
-	var instance_specs: Array = parse_scene_instance_specs(step, step_path)
-	var missing_instances: Array = []
-	var input_specs: Array = parse_input_specs(step)
-	var missing_inputs: Array = []
-	var insp_specs: Array = parse_inspector_specs(step) if role == "INSP" else []
-	var missing_insp: Array = []
-	var sig_specs: Array = parse_signal_specs(step, inspect_root)
-	var missing_sigs: Array = []
-
-	var first_focus_path: String = "." if inspect_root != null else ""
-
-	# 1. Scene File & Hierarchical Node Specs
-	if step_path.ends_with(".tscn") and (role == "SCENE" or not node_specs.is_empty() or not instance_specs.is_empty()):
-		var scene_on_disk: bool = FileAccess.file_exists(step_path)
-		rows.append({
-			"id": "scene_file",
-			"parentId": "",
-			"depth": 0,
-			"title": step_path.get_file(),
-			"subtitle": "saved on disk" if scene_on_disk else "not created yet",
-			"iconName": "PackedScene",
-			"ok": scene_on_disk,
-			"focusPath": "." if scene_matches_open else "",
-			"resPath": step_path,
-		})
-
-	for sp_raw in node_specs:
-		var sp: Dictionary = sp_raw
-		var n_name: String = str(sp.get("name", ""))
-		var rel_path: String = str(sp.get("path", n_name))
-		var parent_path: String = str(sp.get("parentPath", ""))
-		var n_type: String = str(sp.get("type", "Node3D"))
-		var disp_type: String = str(sp.get("displayType", n_type))
-		var found: Node = _resolve_spec_node(inspect_root, sp)
-		var is_present: bool = found != null
-		if not is_present:
-			missing_nodes.append(sp)
-		elif scene_matches_open and first_focus_path == ".":
-			first_focus_path = str(inspect_root.get_path_to(found))
-
-		var parent_row_id: String = ""
-		if not parent_path.is_empty():
-			parent_row_id = "node:%s" % parent_path
-
-		rows.append({
-			"id": "node:%s" % rel_path,
-			"parentId": parent_row_id,
-			"depth": int(sp.get("depth", 0)),
-			"title": n_name,
-			"subtitle": disp_type,
-			"iconName": n_type,
-			"ok": is_present,
-			"focusPath": str(inspect_root.get_path_to(found)) if (found != null and scene_matches_open) else "",
-			"resPath": "",
-		})
-
-	# 2. Child Scene Instance Specs (e.g. CrabPlayer in CoastalArena)
-	for inst_raw in instance_specs:
-		var inst: Dictionary = inst_raw
-		var i_path: String = str(inst.get("scenePath", ""))
-		var i_name: String = str(inst.get("nodeName", i_path.get_file().get_basename()))
-		var inst_node: Node = _find_instanced_scene_node(inspect_root, i_path)
-		var inst_ok: bool = inst_node != null
-		if not inst_ok:
-			missing_instances.append(inst)
-		rows.append({
-			"id": "inst:%s" % i_name,
-			"parentId": "",
-			"depth": 0,
-			"title": "Instance %s" % i_path.get_file(),
-			"subtitle": "in %s" % step_path.get_file(),
-			"iconName": "PackedScene",
-			"ok": inst_ok,
-			"focusPath": str(inspect_root.get_path_to(inst_node)) if (inst_node != null and scene_matches_open) else "",
-			"resPath": i_path,
-		})
-
-	# 3. InputMap Bindings
-	for inp_raw in input_specs:
-		var inp: Dictionary = inp_raw
-		var act_name: String = str(inp.get("action", ""))
-		var key_lbl: String = str(inp.get("keyLabel", ""))
-		var setting_key: String = "input/%s" % act_name
-		var has_input: bool = _has_real_input_binding(act_name, setting_key)
-		if not has_input:
-			missing_inputs.append(inp)
-		rows.append({
-			"id": "input:%s" % act_name,
-			"parentId": "",
-			"depth": 0,
-			"title": "InputMap: %s" % act_name,
-			"subtitle": key_lbl,
-			"iconName": "InputEventKey",
-			"ok": has_input,
-			"focusPath": "",
-			"resPath": "",
-		})
-
-	# 4. Inspector Properties
-	for isp_raw in insp_specs:
-		var isp: Dictionary = isp_raw
-		var n_hint: String = str(isp.get("nodeName", ""))
-		var prop: String = str(isp.get("prop", ""))
-		var val_str: String = str(isp.get("value", ""))
-		var target_n: Node = _find_node_recursive(inspect_root, n_hint) if not n_hint.is_empty() else null
-		var prop_ok: bool = _check_inspector_prop_ok(target_n, prop, val_str)
-		if not prop_ok:
-			missing_insp.append(isp)
-		rows.append({
-			"id": "insp:%s:%s" % [n_hint, prop],
-			"parentId": "",
-			"depth": 0,
-			"title": "%s.%s" % [n_hint, prop] if not n_hint.is_empty() else prop,
-			"subtitle": val_str,
-			"iconName": "Edit",
-			"ok": prop_ok,
-			"focusPath": str(inspect_root.get_path_to(target_n)) if (target_n != null and scene_matches_open) else "",
-			"resPath": "",
-		})
-
-	# 5. GDScript Creation, Attachment & Code Hunk Verification
-	var has_code: bool = (role == "CODE" or role == "FIX")
-	var code_exists: bool = false
-	var code_attached: bool = false
-	var code_merged: bool = false
-	if has_code:
-		code_exists = step_path.ends_with(".gd") and FileAccess.file_exists(step_path)
-		rows.append({
-			"id": "script_file",
-			"parentId": "",
-			"depth": 0,
-			"title": step_path.get_file(),
-			"subtitle": step_path,
-			"iconName": "Script",
-			"ok": code_exists,
-			"focusPath": "",
-			"resPath": step_path if code_exists else "",
-		})
-
-		var attach_node_hint: String = _infer_script_target_node_name(step, step_path, inspect_root)
-		var attached_node: Node = _find_node_with_script(inspect_root, step_path) if code_exists else null
-		if attached_node == null and not attach_node_hint.is_empty() and code_exists:
-			var cand_n: Node = _find_node_recursive(inspect_root, attach_node_hint)
-			if cand_n != null and cand_n.get_script() is Script and (cand_n.get_script() as Script).resource_path == step_path:
-				attached_node = cand_n
-		code_attached = attached_node != null
-		rows.append({
-			"id": "script_attached",
-			"parentId": "",
-			"depth": 0,
-			"title": "Attached to %s" % (attached_node.name if attached_node != null else (attach_node_hint if not attach_node_hint.is_empty() else "target node")),
-			"subtitle": attached_node.get_class() if attached_node != null else "pending attachment",
-			"iconName": attached_node.get_class() if attached_node != null else "Node",
-			"ok": code_attached,
-			"focusPath": str(inspect_root.get_path_to(attached_node)) if (attached_node != null and scene_matches_open) else "",
-			"resPath": "",
-		})
-
-		var disk_txt: String = ""
-		if code_exists:
-			var rf := FileAccess.open(step_path, FileAccess.READ)
-			if rf != null:
-				disk_txt = rf.get_as_text()
-				rf.close()
-			code_merged = is_step_code_present(disk_txt, step)
-		rows.append({
-			"id": "script_code",
-			"parentId": "",
-			"depth": 0,
-			"title": "Step code present" if role == "CODE" else "Root-cause patch present",
-			"subtitle": "in %s" % step_path.get_file(),
-			"iconName": "ScriptExtend" if code_exists else "ScriptCreate",
-			"ok": code_merged,
-			"focusPath": "",
-			"resPath": step_path if code_exists else "",
-		})
-
-	# 6. Signal Connections
-	for sig_raw in sig_specs:
-		var sg: Dictionary = sig_raw
-		var src_name: String = str(sg.get("source", ""))
-		var sig_name: String = str(sg.get("signalName", ""))
-		var dst_name: String = str(sg.get("target", ""))
-		var method_name: String = str(sg.get("method", ""))
-		var src_node: Node = _find_node_recursive(inspect_root, src_name)
-		var dst_node: Node = _find_node_recursive(inspect_root, dst_name) if not dst_name.is_empty() else inspect_root
-		var connected: bool = false
-		if src_node != null and dst_node != null and src_node.has_signal(sig_name):
-			connected = src_node.is_connected(sig_name, Callable(dst_node, method_name))
-		if not connected:
-			missing_sigs.append(sg)
-		rows.append({
-			"id": "sig:%s:%s" % [src_name, sig_name],
-			"parentId": "",
-			"depth": 0,
-			"title": "%s.%s" % [src_name, sig_name],
-			"subtitle": "-> %s()" % method_name,
-			"iconName": "Signals",
-			"ok": connected,
-			"focusPath": str(inspect_root.get_path_to(src_node)) if (src_node != null and scene_matches_open) else "",
-			"resPath": "",
-		})
-
-	# 7. Playtest Verification Step (e.g. `Verify Floor Collision` with zero signals)
-	var is_playtest_step: bool = (verify_mode == "playtest") or (role == "WIRE" and sig_specs.is_empty() and input_specs.is_empty())
-	if rows.is_empty():
-		var target_exists: bool = FileAccess.file_exists(step_path) if step_path.begins_with("res://") else false
-		var scene_ready: bool = target_exists or (live_scene_root != null)
-		rows.append({
-			"id": "playtest_scene",
-			"parentId": "",
-			"depth": 0,
-			"title": step_path.get_file() if not step_path.is_empty() else "Active Scene",
-			"subtitle": "ready to run with F6" if scene_ready else "create scene first",
-			"iconName": "PlayScene",
-			"ok": scene_ready,
-			"focusPath": "." if scene_matches_open else "",
-			"resPath": step_path if target_exists else "",
-		})
-
-	if temp_scene_root != null:
-		temp_scene_root.free()
-
-	var ready_cnt: int = 0
-	for r_raw in rows:
-		var r: Dictionary = r_raw
-		if bool(r.get("ok", false)):
-			ready_cnt += 1
-
-	var all_ready: bool = not rows.is_empty() and ready_cnt == rows.size()
-	return {
-		"rows": rows,
-		"readyCount": ready_cnt,
-		"totalCount": rows.size(),
-		"allReady": all_ready,
-		"stepPath": step_path,
-		"nodeSpecs": node_specs,
-		"missingNodeSpecs": missing_nodes,
-		"instanceSpecs": instance_specs,
-		"missingInstanceSpecs": missing_instances,
-		"inputSpecs": input_specs,
-		"missingInputSpecs": missing_inputs,
-		"inspSpecs": insp_specs,
-		"missingInspSpecs": missing_insp,
-		"sigSpecs": sig_specs,
-		"missingSigSpecs": missing_sigs,
-		"hasCode": has_code,
-		"codeExists": code_exists,
-		"codeAttached": code_attached,
-		"codeMerged": code_merged,
-		"isPlaytestStep": is_playtest_step,
-		"firstFocusPath": first_focus_path,
-		"sceneMatchesOpen": scene_matches_open,
-	}
-
-
-# ---------------------------------------------------------------------------
-# Undoable Step Actions
-# ---------------------------------------------------------------------------
-
-func build_missing_scene_nodes(
-	editor_interface: EditorInterface,
-	undo_redo: EditorUndoRedoManager,
-	step: Dictionary,
-	eval_info: Dictionary
-) -> Dictionary:
-	if editor_interface == null:
-		return {"ok": false, "message": "EditorInterface unavailable."}
-
-	var step_path: String = str(eval_info.get("stepPath", "res://scenes/main.tscn"))
-	var node_specs: Array = eval_info.get("nodeSpecs", [])
-	var inst_specs: Array = eval_info.get("missingInstanceSpecs", [])
-
-	if step_path.ends_with(".tscn"):
-		if not FileAccess.file_exists(step_path):
-			var root_type: String = "Node3D"
-			var root_name: String = step_path.get_file().get_basename().to_pascal_case()
-			if not node_specs.is_empty():
-				var first_spec: Dictionary = node_specs[0]
-				var cand: String = str(first_spec.get("type", "Node3D"))
-				if ClassDB.class_exists(cand) and ClassDB.can_instantiate(cand) and ClassDB.is_parent_class(cand, "Node"):
-					root_type = cand
-				var cand_name: String = str(first_spec.get("name", ""))
-				if not cand_name.is_empty():
-					root_name = cand_name
-			var new_root_v: Variant = ClassDB.instantiate(root_type)
-			if not (new_root_v is Node):
-				return {"ok": false, "message": "Could not instantiate root class %s." % root_type}
-			var new_root: Node = new_root_v as Node
-			new_root.name = root_name
-			_ensure_dir_for_res_path(step_path)
-			var packed := PackedScene.new()
-			packed.pack(new_root)
-			ResourceSaver.save(packed, step_path)
-			new_root.queue_free()
-			if editor_interface.get_resource_filesystem() != null:
-				editor_interface.get_resource_filesystem().scan()
-			editor_interface.open_scene_from_path(step_path)
-		else:
-			var cur_root: Node = editor_interface.get_edited_scene_root()
-			if cur_root == null or cur_root.scene_file_path != step_path:
-				editor_interface.open_scene_from_path(step_path)
-
-	var scene_root: Node = editor_interface.get_edited_scene_root()
-	if scene_root == null:
-		return {"ok": false, "message": "Open target scene before building nodes."}
-
-	var added_cnt: int = 0
-	var created_nodes: Array[Node] = []
-	var created_paths: Dictionary = {}
-
-	if undo_redo != null:
-		undo_redo.create_action("LAYERS: Build Missing Scene Nodes")
-
-	for sp_raw in node_specs:
-		var sp: Dictionary = sp_raw
-		if bool(sp.get("isRoot", false)):
-			var root_script_path: String = str(sp.get("attachScript", "")).strip_edges()
-			if not root_script_path.is_empty() and FileAccess.file_exists(root_script_path) and scene_root.get_script() == null and can_attach_script_to_node(scene_root, root_script_path):
-				var scr: Script = reload_script_safely(root_script_path)
-				if scr != null:
-					if undo_redo != null:
-						undo_redo.add_do_property(scene_root, "script", scr)
-						undo_redo.add_undo_property(scene_root, "script", null)
-					else:
-						scene_root.set_script(scr)
-			continue
-
-		var existing_node := _resolve_spec_node(scene_root, sp)
-		if existing_node != null:
-			if _sync_existing_node_from_spec(existing_node, sp, undo_redo):
-				added_cnt += 1
-			continue
-
-		var rel_path: String = str(sp.get("path", ""))
-		var parent_path: String = str(sp.get("parentPath", "."))
-		var parent_node: Node = scene_root
-		if parent_path != "." and not parent_path.is_empty():
-			if created_paths.has(parent_path):
-				parent_node = created_paths[parent_path] as Node
-			else:
-				parent_node = _resolve_node_by_rel_path(scene_root, parent_path)
-		if parent_node == null:
-			parent_node = scene_root
-
-		var created_node: Node = instantiate_spec_node(sp)
-		if created_node == null:
-			continue
-
-		created_paths[rel_path] = created_node
-		created_nodes.append(created_node)
-
-		# Attach companion MeshInstance3D inside undo transaction too if present
-		var companion_mesh_cls: String = str(sp.get("companionMeshClass", ""))
-		var companion_mesh_node: MeshInstance3D = null
-		if not companion_mesh_cls.is_empty() and ClassDB.class_exists(companion_mesh_cls):
-			companion_mesh_node = MeshInstance3D.new()
-			companion_mesh_node.name = "MeshInstance3D"
-			var mesh_inst: Variant = ClassDB.instantiate(companion_mesh_cls)
-			if mesh_inst is Mesh:
-				var sub_p: Dictionary = sp.get("subProps", {})
-				_apply_props_to_object(mesh_inst as Object, sub_p)
-				companion_mesh_node.mesh = mesh_inst as Mesh
-
-		if undo_redo != null:
-			undo_redo.add_do_method(parent_node, "add_child", created_node, true)
-			undo_redo.add_do_property(created_node, "owner", scene_root)
-			undo_redo.add_do_reference(created_node)
-			undo_redo.add_undo_method(parent_node, "remove_child", created_node)
-			if companion_mesh_node != null:
-				undo_redo.add_do_method(created_node, "add_child", companion_mesh_node, true)
-				undo_redo.add_do_property(companion_mesh_node, "owner", scene_root)
-				undo_redo.add_do_reference(companion_mesh_node)
-				undo_redo.add_undo_method(created_node, "remove_child", companion_mesh_node)
-		else:
-			parent_node.add_child(created_node, true)
-			created_node.owner = scene_root
-			if companion_mesh_node != null:
-				created_node.add_child(companion_mesh_node, true)
-				companion_mesh_node.owner = scene_root
-
-		added_cnt += 1
-
-	# Instance child scenes (e.g. crab_player.tscn)
-	for inst_raw in inst_specs:
-		var inst: Dictionary = inst_raw
-		var s_path: String = str(inst.get("scenePath", ""))
-		if not FileAccess.file_exists(s_path):
-			continue
-		var packed_child: Resource = ResourceLoader.load(s_path, "PackedScene")
-		if packed_child is PackedScene:
-			var inst_node: Node = (packed_child as PackedScene).instantiate()
-			if inst_node != null:
-				if bool(inst.get("hasPos", false)) and inst_node is Node3D:
-					(inst_node as Node3D).position = inst.get("position", Vector3.ZERO)
-				if undo_redo != null:
-					undo_redo.add_do_method(scene_root, "add_child", inst_node, true)
-					undo_redo.add_do_property(inst_node, "owner", scene_root)
-					undo_redo.add_do_reference(inst_node)
-					undo_redo.add_undo_method(scene_root, "remove_child", inst_node)
-				else:
-					scene_root.add_child(inst_node, true)
-					inst_node.owner = scene_root
-				added_cnt += 1
-
-	if undo_redo != null:
-		if added_cnt > 0:
-			undo_redo.commit_action()
-		else:
-			undo_redo.clear_history()
-
-	if added_cnt > 0 and step_path.ends_with(".tscn"):
-		sanitize_null_script_exports(scene_root)
-		editor_interface.save_scene()
-	if not created_nodes.is_empty():
-		select_and_inspect_node(editor_interface, created_nodes[0])
-
-	return {"ok": true, "addedCount": added_cnt}
-
-
-func instantiate_spec_node(sp: Dictionary) -> Node:
-	var n_name: String = str(sp.get("name", "Node3D"))
-	var n_type: String = str(sp.get("type", "Node3D"))
-	var sub_res: String = str(sp.get("subResourceClass", ""))
-	var props: Dictionary = sp.get("props", {})
-	var sub_props: Dictionary = sp.get("subProps", {})
-
-	var created: Node = null
-	if ClassDB.class_exists(n_type) and ClassDB.can_instantiate(n_type) and ClassDB.is_parent_class(n_type, "Node"):
-		var inst: Variant = ClassDB.instantiate(n_type)
-		if inst is Node:
-			created = inst as Node
-	if created == null:
-		created = Node3D.new()
-	created.name = n_name
-
-	if not sub_res.is_empty() and ClassDB.class_exists(sub_res) and ClassDB.can_instantiate(sub_res):
-		var res_inst: Variant = ClassDB.instantiate(sub_res)
-		if created is CollisionShape3D and res_inst is Shape3D:
-			_apply_props_to_object(res_inst as Object, sub_props)
-			(created as CollisionShape3D).shape = res_inst as Shape3D
-		elif created is CollisionShape2D and res_inst is Shape2D:
-			_apply_props_to_object(res_inst as Object, sub_props)
-			(created as CollisionShape2D).shape = res_inst as Shape2D
-		elif created is MeshInstance3D and res_inst is Mesh:
-			_apply_props_to_object(res_inst as Object, sub_props)
-			(created as MeshInstance3D).mesh = res_inst as Mesh
-
-	_apply_props_to_object(created, props)
-
-	# Practical default lighting tilt for new DirectionalLight3D if unrotated
-	if created is DirectionalLight3D and not props.has("rotation_degrees"):
-		(created as DirectionalLight3D).rotation_degrees = Vector3(-45.0, -30.0, 0.0)
-		(created as DirectionalLight3D).shadow_enabled = true
-
-	var attach_gd: String = str(sp.get("attachScript", "")).strip_edges()
-	if not attach_gd.is_empty() and FileAccess.file_exists(attach_gd) and can_attach_script_to_node(created, attach_gd):
-		var scr: Script = reload_script_safely(attach_gd)
-		if scr != null:
-			created.set_script(scr)
-
-	return created
-
-
-func apply_input_and_inspector(
-	editor_interface: EditorInterface,
-	undo_redo: EditorUndoRedoManager,
-	step: Dictionary,
-	eval_info: Dictionary
-) -> Dictionary:
-	var step_path: String = str(eval_info.get("stepPath", ""))
-	var input_specs: Array = eval_info.get("inputSpecs", [])
-	var insp_specs: Array = eval_info.get("inspSpecs", [])
-
-	var input_added: int = 0
-	for inp_raw in input_specs:
-		var inp: Dictionary = inp_raw
-		var act: String = str(inp.get("action", "")).strip_edges()
-		var key_lbl: String = str(inp.get("keyLabel", "")).strip_edges()
-		if act.is_empty() or _is_bogus_non_player_action_name(act):
-			continue
-		var setting_key: String = "input/%s" % act
-		var ev: InputEvent = _build_input_event_for_label(key_lbl)
-		if ev == null:
-			ev = _infer_default_input_event_for_action(act)
-		if ev != null and not _has_real_input_binding(act, setting_key):
-			ProjectSettings.set_setting(setting_key, {"deadzone": 0.2, "events": [ev]})
-			input_added += 1
-
-	if input_added > 0:
-		ProjectSettings.save()
-		InputMap.load_from_project_settings()
-
-	if editor_interface != null and step_path.ends_with(".tscn"):
-		var cur: Node = editor_interface.get_edited_scene_root()
-		if (cur == null or cur.scene_file_path != step_path) and FileAccess.file_exists(step_path):
-			editor_interface.open_scene_from_path(step_path)
-
-	var scene_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
-	var props_applied: int = 0
-	var focused_node: Node = null
-
-	if scene_root != null and not insp_specs.is_empty():
-		if undo_redo != null:
-			undo_redo.create_action("LAYERS: Apply Inspector Properties")
-		for isp_raw in insp_specs:
-			var isp: Dictionary = isp_raw
-			var n_hint: String = str(isp.get("nodeName", "")).strip_edges()
-			var prop: String = str(isp.get("prop", "")).strip_edges()
-			var val_str: String = str(isp.get("value", "")).strip_edges()
-			if n_hint.is_empty() or prop.is_empty():
-				continue
-			var target: Node = _find_node_recursive(scene_root, n_hint)
-			if target == null:
-				continue
-			if focused_node == null:
-				focused_node = target
-			var applied: bool = _apply_inspector_setting_to_node(target, prop, val_str, undo_redo)
-			if applied:
-				props_applied += 1
-		if undo_redo != null:
-			if props_applied > 0:
-				undo_redo.commit_action()
-			else:
-				undo_redo.clear_history()
-
-	if focused_node == null and scene_root != null:
-		var focus_path: String = str(eval_info.get("firstFocusPath", "."))
-		if focus_path == ".":
-			focused_node = scene_root
-		elif not focus_path.is_empty():
-			focused_node = scene_root.get_node_or_null(NodePath(focus_path))
-	if focused_node != null and editor_interface != null:
-		select_and_inspect_node(editor_interface, focused_node)
-	if props_applied > 0 and editor_interface != null and step_path.ends_with(".tscn"):
-		sanitize_null_script_exports(scene_root)
-		editor_interface.save_scene()
-
-	return {"ok": true, "inputCount": input_added, "propCount": props_applied}
-
-
-func apply_or_create_script(
-	editor_interface: EditorInterface,
-	undo_redo: EditorUndoRedoManager,
-	step: Dictionary,
-	eval_info: Dictionary
-) -> Dictionary:
-	var step_path: String = str(eval_info.get("stepPath", ""))
-	if not step_path.ends_with(".gd"):
-		return {"ok": false, "message": "Step path is not a .gd file."}
-
-	var scene_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
-	var target_node_hint: String = _infer_script_target_node_name(step, step_path, scene_root)
-	var target_node: Node = _find_node_recursive(scene_root, target_node_hint) if (scene_root != null and not target_node_hint.is_empty()) else null
-	var fallback_extends: String = target_node.get_class() if target_node != null else (scene_root.get_class() if scene_root != null else "Node")
-
-	var raw_snip: String = _raw_step_snippet(step)
-	var wrote_file: bool = false
-
-	if not FileAccess.file_exists(step_path):
-		var content: String = strip_diff_prefixes(raw_snip)
-		if not content.is_empty() and not is_likely_gdscript_snippet(raw_snip):
-			content = ""
-		if content.is_empty():
-			content = "extends %s\n" % fallback_extends
-		elif not ("extends " in content) and not ("class_name " in content):
-			content = "extends %s\n\n%s" % [fallback_extends, content]
-		_ensure_dir_for_res_path(step_path)
-		var wf := FileAccess.open(step_path, FileAccess.WRITE)
-		if wf == null:
-			return {"ok": false, "message": "Could not create %s" % step_path}
-		wf.store_string(content.strip_edges() + "\n")
-		wf.close()
-		wrote_file = true
-	else:
-		var rf := FileAccess.open(step_path, FileAccess.READ)
-		var existing: String = rf.get_as_text() if rf != null else ""
-		if rf != null:
-			rf.close()
-		if not raw_snip.is_empty() and is_likely_gdscript_snippet(raw_snip) and not is_step_code_present(existing, step):
-			var merged: String = merge_step_code_into_existing(existing, raw_snip, fallback_extends)
-			var existing_compiles: bool = not existing.strip_edges().is_empty() and bool(check_gdscript_compiles(existing).get("ok", false))
-			var merged_compiles: bool = not merged.strip_edges().is_empty() and bool(check_gdscript_compiles(merged).get("ok", false))
-			if merged != existing and (merged_compiles or not existing_compiles):
-				var wf2 := FileAccess.open(step_path, FileAccess.WRITE)
-				if wf2 == null:
-					return {"ok": false, "message": "Could not update %s" % step_path}
-				wf2.store_string(merged)
-				wf2.close()
-				wrote_file = true
-
-	if wrote_file and editor_interface != null and editor_interface.get_resource_filesystem() != null:
-		editor_interface.get_resource_filesystem().scan()
-
-	var scr: Script = reload_script_safely(step_path)
-	if scr == null:
-		scr = load(step_path) as Script
-
-	var attached_new: bool = false
-	if scene_root != null and scr != null and _find_node_with_script(scene_root, step_path) == null:
-		var attach_to: Node = target_node
-		if attach_to == null and editor_interface != null and editor_interface.get_selection() != null:
-			var sel: Array = editor_interface.get_selection().get_selected_nodes()
-			if not sel.is_empty() and sel[0] is Node and can_attach_script_to_node(sel[0] as Node, step_path):
-				attach_to = sel[0] as Node
-		if attach_to == null and can_attach_script_to_node(scene_root, step_path):
-			attach_to = scene_root
-		if attach_to != null and attach_to.get_script() == null and can_attach_script_to_node(attach_to, step_path):
-			if undo_redo != null:
-				undo_redo.create_action("LAYERS: Attach %s" % step_path.get_file())
-				undo_redo.add_do_property(attach_to, "script", scr)
-				undo_redo.add_undo_property(attach_to, "script", null)
-				undo_redo.commit_action()
-			else:
-				attach_to.set_script(scr)
-			attached_new = true
-			if editor_interface != null:
-				sanitize_null_script_exports(scene_root)
-				editor_interface.save_scene()
-
-	if editor_interface != null and scr != null:
-		editor_interface.edit_script(scr)
-
-	return {"ok": true, "wroteFile": wrote_file, "attached": attached_new, "path": step_path}
-
-
 func open_res_path(editor_interface: EditorInterface, res_path: String) -> String:
 	if editor_interface == null:
 		return "EditorInterface unavailable."
@@ -2030,15 +945,6 @@ func open_res_path(editor_interface: EditorInterface, res_path: String) -> Strin
 	elif res != null:
 		editor_interface.edit_resource(res)
 	return ""
-
-
-func select_and_inspect_node(editor_interface: EditorInterface, node: Node) -> void:
-	if editor_interface == null or node == null:
-		return
-	if editor_interface.get_selection() != null:
-		editor_interface.get_selection().clear()
-		editor_interface.get_selection().add_node(node)
-	editor_interface.inspect_object(node)
 
 
 # ---------------------------------------------------------------------------
@@ -2106,40 +1012,6 @@ func _find_instanced_scene_node(root: Node, scene_path: String) -> Node:
 		if deeper != null:
 			return deeper
 	return null
-
-
-func _find_node_with_script(root: Node, script_path: String) -> Node:
-	if root == null or script_path.is_empty():
-		return null
-	var scr: Variant = root.get_script()
-	if scr is Script and (scr as Script).resource_path == script_path:
-		return root
-	for child in root.get_children():
-		var found: Node = _find_node_with_script(child, script_path)
-		if found != null:
-			return found
-	return null
-
-
-func _infer_script_target_node_name(step: Dictionary, script_path: String, scene_root: Node) -> String:
-	var instr: String = str(step.get("instruction", ""))
-	var area2: String = str(step.get("area2Inspector", ""))
-	var attach_re := RegEx.new()
-	attach_re.compile("(?i)attach[^\\n]*?(?:to|on)\\s+`?([A-Z][A-Za-z0-9_]*)`?")
-	var am: RegExMatch = attach_re.search(instr)
-	if am != null:
-		return am.get_string(1)
-
-	var a2_re := RegEx.new()
-	a2_re.compile("\\b([A-Z][A-Za-z0-9_]*)\\s*:\\s*Script\\s+res://")
-	var a2m: RegExMatch = a2_re.search(area2)
-	if a2m != null:
-		return a2m.get_string(1)
-
-	if scene_root != null:
-		return scene_root.name
-	var fname: String = script_path.get_file().get_basename().to_pascal_case()
-	return fname
 
 
 func _has_real_input_binding(act_name: String, setting_key: String) -> bool:
@@ -2890,60 +1762,6 @@ func read_editor_and_playtest_errors(
 	if out.size() > max_errors:
 		out = out.slice(out.size() - max_errors, out.size())
 	return out
-
-
-func _check_inspector_prop_ok(node: Node, raw_prop: String, val_str: String) -> bool:
-	if node == null:
-		return false
-	var clean_prop: String = raw_prop.to_lower().strip_edges().replace(" ", "_")
-	if "collision_mask" in clean_prop:
-		var m_mask: Variant = node.get("collision_mask")
-		var num_re := RegEx.new()
-		num_re.compile("([0-9]+)")
-		var rm: RegExMatch = num_re.search(val_str)
-		if rm != null and m_mask is int:
-			var expected: int = 1 << (rm.get_string(1).to_int() - 1) if "layer" in val_str.to_lower() else rm.get_string(1).to_int()
-			return (m_mask as int & expected) == expected
-	var cur_val: Variant = node.get(clean_prop)
-	if cur_val == null:
-		return false
-	if cur_val is float:
-		var f_exp: float = _extract_first_float(val_str)
-		return not is_nan(f_exp) and is_equal_approx(cur_val as float, f_exp)
-	if cur_val is int:
-		var i_exp: float = _extract_first_float(val_str)
-		return not is_nan(i_exp) and (cur_val as int) == int(i_exp)
-	if cur_val is bool:
-		var vl: String = val_str.to_lower()
-		var b_exp: bool = (vl == "true" or vl == "on" or vl == "yes" or vl == "1")
-		return (cur_val as bool) == b_exp
-	return str(cur_val).to_lower() == val_str.to_lower()
-
-
-func _apply_inspector_setting_to_node(node: Node, raw_prop: String, val_str: String, undo_redo: EditorUndoRedoManager) -> bool:
-	var sp: Dictionary = {"props": {}, "subProps": {}}
-	_assign_single_prop(sp, raw_prop, val_str)
-	var props: Dictionary = sp.get("props", {})
-	var applied: bool = false
-	for k_raw in props.keys():
-		var prop_key: String = str(k_raw)
-		var new_val: Variant = props[k_raw]
-		if undo_redo != null:
-			undo_redo.add_do_property(node, prop_key, new_val)
-			undo_redo.add_undo_property(node, prop_key, node.get(prop_key))
-		else:
-			node.set(prop_key, new_val)
-		applied = true
-	return applied
-
-
-func _apply_props_to_object(obj: Object, props: Dictionary) -> void:
-	if obj == null or props.is_empty():
-		return
-	for k_raw in props.keys():
-		var prop_name: String = str(k_raw)
-		if obj.get(prop_name) != null:
-			obj.set(prop_name, props[k_raw])
 
 
 func _is_abstract_subresource_class(cls_name: String) -> bool:
@@ -3870,158 +2688,6 @@ func evaluate_feature(
 	return result
 
 
-func build_feature_local(
-	feat: Dictionary,
-	editor_interface: EditorInterface,
-	undo_redo: EditorUndoRedoManager,
-	code_files: Dictionary = {},
-	arena_hint: String = ""
-) -> Dictionary:
-	heal_empty_project_input_actions(feat)
-	var paths := resolve_feature_paths(feat, code_files, arena_hint)
-	var primary_scene := String(paths.get("primary_scene", ""))
-	var arena_scene := String(paths.get("arena_scene", ""))
-	var actions := PackedStringArray()
-
-	var root: Node = null
-	if not primary_scene.is_empty() and editor_interface != null:
-		root = ensure_scene_exists_and_open(editor_interface, primary_scene, "", "", arena_hint)
-	elif editor_interface != null:
-		root = editor_interface.get_edited_scene_root()
-	if root != null:
-		var detached := detach_incompatible_scripts(root)
-		for d in detached:
-			actions.append("Detached mismatched script: %s" % d)
-
-	var steps: Array = feat.get("steps", [])
-	for st in steps:
-		var st_role := String(st.get("role", st.get("stepRole", ""))).strip_edges().to_upper()
-		if st_role == "FIX":
-			continue
-		var st_eval: Dictionary = evaluate_step(feat, st, editor_interface)
-		if root != null:
-			var node_res: Dictionary = build_missing_scene_nodes(editor_interface, undo_redo, st, st_eval)
-			var msg := String(node_res.get("message", "")).strip_edges()
-			var added_n := int(node_res.get("addedCount", 0))
-			if added_n > 0:
-				actions.append(msg if not msg.is_empty() else ("Built %d node(s)" % added_n))
-			apply_input_and_inspector(editor_interface, undo_redo, st, st_eval)
-		else:
-			for inp in parse_input_specs(st):
-				var act := String(inp.get("action", ""))
-				if not act.is_empty() and not _has_real_input_binding(act, "input/" + act):
-					apply_input_and_inspector(editor_interface, undo_redo, st, st_eval)
-					break
-
-	# Write synced/merged GDScript files & attach safely with ClassDB guard.
-	var synced_full_scripts: Dictionary = {}
-	for spath in paths.get("script_paths", []):
-		var sp_str := String(spath)
-		var disk_ok: bool = false
-		if FileAccess.file_exists(sp_str):
-			var fa_chk := FileAccess.open(sp_str, FileAccess.READ)
-			if fa_chk != null:
-				var disk_src: String = fa_chk.get_as_text()
-				fa_chk.close()
-				disk_ok = not disk_src.strip_edges().is_empty() and bool(check_gdscript_compiles(disk_src).get("ok", false))
-		var synced_code := String(code_files.get(sp_str, "")).strip_edges()
-		if not synced_code.is_empty() and bool(check_gdscript_compiles(synced_code).get("ok", false)):
-			if not disk_ok:
-				_ensure_dir_for_res_path(sp_str)
-				var f := FileAccess.open(sp_str, FileAccess.WRITE)
-				if f != null:
-					f.store_string(synced_code + "\n")
-					f.close()
-					reload_script_safely(sp_str, synced_code + "\n")
-					actions.append("Synced %s" % sp_str.get_file())
-			synced_full_scripts[sp_str] = true
-		elif disk_ok:
-			synced_full_scripts[sp_str] = true
-
-	for st in steps:
-		var st_role := String(st.get("role", st.get("stepRole", ""))).strip_edges().to_upper()
-		if st_role == "FIX":
-			continue
-		var code_text := resolve_step_code_text(st)
-		if not code_text.is_empty():
-			var eff_path := resolve_effective_step_path(st, feat, root)
-			if eff_path.ends_with(".gd"):
-				if synced_full_scripts.has(eff_path):
-					if root != null and FileAccess.file_exists(eff_path):
-						var target_name_s: String = _infer_script_target_node_name(st, eff_path, root)
-						var target_node_s: Node = root if (target_name_s.is_empty() or target_name_s == root.name) else _find_node_recursive(root, target_name_s)
-						if target_node_s != null and target_node_s.get_script() == null and can_attach_script_to_node(target_node_s, eff_path):
-							var scr_s: Script = reload_script_safely(eff_path)
-							if scr_s != null:
-								target_node_s.set_script(scr_s)
-					continue
-				var st_eval: Dictionary = evaluate_step(feat, st, editor_interface)
-				if root != null:
-					var target_name := _infer_script_target_node_name(st, eff_path, root)
-					var target_node := root if (target_name.is_empty() or target_name == root.name) else _find_node_recursive(root, target_name)
-					if target_node != null and can_attach_script_to_node(target_node, code_text):
-						apply_or_create_script(editor_interface, undo_redo, st, st_eval)
-					elif target_node != null:
-						actions.append("Skipped incompatible script %s for %s (%s)" % [eff_path.get_file(), target_node.name, target_node.get_class()])
-				else:
-					apply_or_create_script(editor_interface, undo_redo, st, st_eval)
-
-	if root != null:
-		for st in steps:
-			var st_role := String(st.get("role", st.get("stepRole", ""))).strip_edges().to_upper()
-			if st_role == "FIX":
-				continue
-			for sig in parse_signal_specs(st, root):
-				_connect_single_signal_safe(
-					root,
-					String(sig.get("source", "")),
-					String(sig.get("signalName", sig.get("signal", ""))),
-					String(sig.get("target", "")),
-					String(sig.get("method", ""))
-				)
-
-	if editor_interface != null and root != null:
-		sanitize_null_script_exports(root)
-		editor_interface.save_scene()
-
-	# Also wire arena instances cleanly if any step mentions arena_scene.
-	if not arena_scene.is_empty() and arena_scene != primary_scene and editor_interface != null:
-		var inst_needed := false
-		for st in steps:
-			if parse_scene_instance_specs(st, arena_scene).size() > 0:
-				inst_needed = true
-				break
-		if inst_needed:
-			var arena_root := ensure_scene_exists_and_open(editor_interface, arena_scene, "", "", arena_hint)
-			if arena_root != null:
-				detach_incompatible_scripts(arena_root)
-				for st in steps:
-					var st_role := String(st.get("role", st.get("stepRole", ""))).strip_edges().to_upper()
-					if st_role == "FIX":
-						continue
-					var st_eval: Dictionary = evaluate_step(feat, st, editor_interface)
-					build_missing_scene_nodes(editor_interface, undo_redo, st, st_eval)
-				sanitize_null_script_exports(arena_root)
-				editor_interface.save_scene()
-
-	var local_script_contents: Array = []
-	for sp_raw in paths.get("script_paths", []):
-		var sp_p := String(sp_raw)
-		if FileAccess.file_exists(sp_p):
-			var fa := FileAccess.open(sp_p, FileAccess.READ)
-			if fa != null:
-				local_script_contents.append(fa.get_as_text())
-				fa.close()
-	var auto_inputs := register_missing_script_input_actions(local_script_contents)
-	if auto_inputs > 0:
-		actions.append("Auto-registered %d InputMap action(s)" % auto_inputs)
-
-	ensure_main_scene_configured(arena_scene, primary_scene)
-	invalidate_eval_cache()
-	var summary := "Feature scaffold ready." if actions.is_empty() else "; ".join(actions)
-	return { "ok": true, "summary": summary, "actions": actions }
-
-
 func capture_bundle_snapshot(
 	editor_interface: EditorInterface,
 	bundle: Dictionary,
@@ -4181,6 +2847,8 @@ func apply_agent_bundle(
 	var applied_scripts := PackedStringArray()
 	var written_script_contents: Array = []
 	var warnings := PackedStringArray()
+	var compile_errors := PackedStringArray()
+	var failed_script_updates: Dictionary = {}
 	var applied_ops := 0
 	var root_type_hints := {}
 	var initial_open_scene := ""
@@ -4198,7 +2866,10 @@ func apply_agent_bundle(
 			continue
 		var chk := check_gdscript_compiles(content)
 		if not bool(chk.get("ok", false)):
-			warnings.append("Skipped %s: %s" % [rpath.get_file(), String(chk.get("error", "compile error"))])
+			var err_msg: String = String(chk.get("error", "compile error"))
+			warnings.append("Skipped %s: %s" % [rpath.get_file(), err_msg])
+			compile_errors.append("%s: %s" % [rpath, err_msg])
+			failed_script_updates[rpath] = content
 			continue
 		_ensure_dir_for_res_path(rpath)
 		var f := FileAccess.open(rpath, FileAccess.WRITE)
@@ -4324,6 +2995,8 @@ func apply_agent_bundle(
 		"applied_scripts": applied_scripts,
 		"applied_ops": applied_ops,
 		"warnings": warnings,
+		"compile_errors": compile_errors,
+		"failed_script_updates": failed_script_updates,
 	}
 
 
@@ -4928,13 +3601,6 @@ func diagnose_project_combat_and_wiring(
 				scenes_to_check.append(proj_sp)
 
 	var scripts_map: Dictionary = live_scripts.duplicate() if not live_scripts.is_empty() else read_all_live_project_scripts("res://")
-	if scripts_map.is_empty():
-		scripts_map = read_all_live_project_scripts("res://")
-	else:
-		var disk_scripts := read_all_live_project_scripts("res://")
-		for dk in disk_scripts.keys():
-			if not scripts_map.has(dk):
-				scripts_map[dk] = disk_scripts[dk]
 
 	# 1. InputMap key collision audit & non-player Input.* polling check
 	var input_map := capture_input_map_snapshot()
@@ -5353,3 +4019,132 @@ func _ensure_dir_for_res_path(res_path: String) -> void:
 	var abs_dir: String = ProjectSettings.globalize_path(dir_path)
 	if not DirAccess.dir_exists_absolute(abs_dir):
 		DirAccess.make_dir_recursive_absolute(abs_dir)
+
+
+func format_feature_context_markdown(
+	feat: Dictionary,
+	live_scripts: Dictionary,
+	scene_snap: Dictionary,
+	input_map_snap: Dictionary,
+	recent_errors: Array = [],
+	diagnosis: Variant = []
+) -> String:
+	var out := PackedStringArray()
+	out.append("## LAYERS Godot Context")
+	var feat_title: String = str(feat.get("title", "")).strip_edges()
+	var feat_id: String = str(feat.get("id", "")).strip_edges()
+	if not feat_title.is_empty() or not feat_id.is_empty():
+		out.append("")
+		out.append("### Active Feature")
+		if not feat_title.is_empty():
+			out.append("- Title: %s" % feat_title)
+		var done_when: String = str(feat.get("doneWhen", feat.get("playtestCriteria", ""))).strip_edges()
+		if not done_when.is_empty():
+			out.append("- Done When: %s" % done_when)
+
+	var scenes_raw: Variant = scene_snap.get("scenes", {})
+	if typeof(scenes_raw) == TYPE_DICTIONARY and not (scenes_raw as Dictionary).is_empty():
+		var scenes_dict: Dictionary = scenes_raw
+		var scene_keys: Array = scenes_dict.keys()
+		scene_keys.sort()
+		out.append("")
+		out.append("### Scenes (%d)" % scene_keys.size())
+		for sk_raw in scene_keys:
+			var spath: String = str(sk_raw)
+			var sinfo_raw: Variant = scenes_dict.get(sk_raw, {})
+			var is_open: bool = false
+			var nodes_arr: Array = []
+			if typeof(sinfo_raw) == TYPE_DICTIONARY:
+				var sinfo: Dictionary = sinfo_raw
+				is_open = bool(sinfo.get("isOpenInEditor", false))
+				var nraw: Variant = sinfo.get("nodes", [])
+				if typeof(nraw) == TYPE_ARRAY:
+					nodes_arr = nraw
+			out.append("- `%s`%s (%d nodes)" % [spath, " [open]" if is_open else "", nodes_arr.size()])
+			for n_raw in nodes_arr.slice(0, 24):
+				if typeof(n_raw) == TYPE_DICTIONARY:
+					var nd: Dictionary = n_raw
+					var npath: String = str(nd.get("path", nd.get("name", "")))
+					var ntype: String = str(nd.get("type", ""))
+					var nscr: String = str(nd.get("script", ""))
+					var extra: String = " (`%s`)" % nscr if not nscr.is_empty() else ""
+					out.append("  - `%s` : %s%s" % [npath, ntype, extra])
+				else:
+					out.append("  - %s" % str(n_raw))
+
+	if not input_map_snap.is_empty():
+		var act_keys: Array = input_map_snap.keys()
+		act_keys.sort()
+		out.append("")
+		out.append("### InputMap Actions (%d)" % act_keys.size())
+		for ak_raw in act_keys:
+			var act_name: String = str(ak_raw)
+			var raw_keys: Variant = input_map_snap.get(ak_raw, [])
+			var packed_keys := PackedStringArray()
+			if typeof(raw_keys) == TYPE_ARRAY or typeof(raw_keys) == TYPE_PACKED_STRING_ARRAY:
+				for rk in raw_keys:
+					packed_keys.append(str(rk))
+			out.append("- `%s`: %s" % [act_name, ", ".join(packed_keys) if not packed_keys.is_empty() else "(unbound)"])
+
+	var err_lines := PackedStringArray()
+	for e_raw in recent_errors:
+		var es: String = str(e_raw).strip_edges()
+		if not es.is_empty():
+			err_lines.append(es)
+	if not err_lines.is_empty():
+		out.append("")
+		out.append("### Recent Godot Errors (%d)" % err_lines.size())
+		for es in err_lines.slice(0, 12):
+			out.append("- %s" % es)
+
+	var diag_lines := PackedStringArray()
+	if typeof(diagnosis) == TYPE_DICTIONARY:
+		var diag_dict: Dictionary = diagnosis
+		for dk in ["findings", "warnings", "issues"]:
+			var d_raw: Variant = diag_dict.get(dk, [])
+			if typeof(d_raw) == TYPE_ARRAY or typeof(d_raw) == TYPE_PACKED_STRING_ARRAY:
+				for item in d_raw:
+					if typeof(item) == TYPE_DICTIONARY:
+						var idict: Dictionary = item
+						var tag: String = str(idict.get("tag", idict.get("type", ""))).strip_edges()
+						var msg: String = str(idict.get("message", idict.get("summary", ""))).strip_edges()
+						if not tag.is_empty() and not msg.is_empty():
+							diag_lines.append("[%s] %s" % [tag, msg])
+						elif not msg.is_empty():
+							diag_lines.append(msg)
+					else:
+						var sitem: String = str(item).strip_edges()
+						if not sitem.is_empty():
+							diag_lines.append(sitem)
+	elif typeof(diagnosis) == TYPE_ARRAY or typeof(diagnosis) == TYPE_PACKED_STRING_ARRAY:
+		for item in diagnosis:
+			var sitem: String = str(item).strip_edges()
+			if not sitem.is_empty():
+				diag_lines.append(sitem)
+	if not diag_lines.is_empty():
+		out.append("")
+		out.append("### Wiring & Combat Diagnostics (%d)" % diag_lines.size())
+		for dl in diag_lines.slice(0, 16):
+			out.append("- %s" % dl)
+
+	if not live_scripts.is_empty():
+		var skeys: Array = live_scripts.keys()
+		skeys.sort()
+		out.append("")
+		out.append("### Project Scripts (%d)" % skeys.size())
+		var char_budget: int = 18000
+		for sp_raw in skeys:
+			var spath: String = str(sp_raw)
+			var src: String = str(live_scripts.get(sp_raw, ""))
+			out.append("")
+			out.append("#### `%s`" % spath)
+			if char_budget >= src.length() + 64:
+				out.append("```gdscript")
+				out.append(src.strip_edges())
+				out.append("```")
+				char_budget -= src.length()
+			else:
+				var line_cnt: int = src.split("\n").size()
+				out.append("(%d lines, truncated to keep clipboard concise)" % line_cnt)
+
+	return "\n".join(out).strip_edges() + "\n"

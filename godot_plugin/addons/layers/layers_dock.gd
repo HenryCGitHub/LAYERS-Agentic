@@ -403,7 +403,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.4")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.5")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -622,11 +622,14 @@ func _refresh_view() -> void:
 
 	var chosen_idx: int = -1
 	var first_incomplete_idx: int = -1
+	var passed_count: int = 0
 	for i in range(features.size()):
 		var f: Dictionary = features[i]
 		var f_id: String = str(f.get("id", ""))
 		var f_title: String = str(f.get("title", "Feature"))
 		var f_done: bool = bool(f.get("isCompleted", false)) or bool(f.get("isPlaytestPassed", false))
+		if f_done:
+			passed_count += 1
 		var f_ready := false
 		if _executor != null:
 			var f_eval: Dictionary = _executor.call("evaluate_feature", f, editor_interface, code_files, arena_scene)
@@ -642,6 +645,8 @@ func _refresh_view() -> void:
 			chosen_idx = i
 		if first_incomplete_idx == -1 and not f_done:
 			first_incomplete_idx = i
+
+	_meta_label.text = "%s · Epic %d/%d · %s · %d/%d Passed" % [ver, pos, maxi(total, 1), epic_code, passed_count, features.size()]
 
 	if chosen_idx == -1:
 		chosen_idx = first_incomplete_idx if first_incomplete_idx != -1 else 0
@@ -777,6 +782,15 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		state_lbl.text = "Not Built"
 		state_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
 	hdr_row.add_child(state_lbl)
+	if gate_passed and not _building_feature and not _diagnosing_fix:
+		var reopen_btn := Button.new()
+		reopen_btn.flat = true
+		reopen_btn.theme_type_variation = &"FlatButton"
+		reopen_btn.text = "Reopen Gate"
+		reopen_btn.icon = _editor_icon("Reload", "UndoRedo")
+		reopen_btn.tooltip_text = "Mark this feature unpassed so you can iterate and re-verify it"
+		reopen_btn.pressed.connect(_on_reopen_gate_pressed.bind(feat))
+		hdr_row.add_child(reopen_btn)
 
 	var raw_scope: Variant = feat.get("coveredScope", [])
 	var scope_items: Array = raw_scope if typeof(raw_scope) == TYPE_ARRAY else []
@@ -898,6 +912,16 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	if bold_font != null:
 		agent_hdr.add_theme_font_override("font", bold_font)
 	agent_hdr_row.add_child(agent_hdr)
+
+	if not _building_feature and not _diagnosing_fix:
+		var copy_ctx_btn := Button.new()
+		copy_ctx_btn.flat = true
+		copy_ctx_btn.theme_type_variation = &"FlatButton"
+		copy_ctx_btn.text = "Copy Context"
+		copy_ctx_btn.icon = _editor_icon("ActionCopy", "Copy")
+		copy_ctx_btn.tooltip_text = "Copy active feature, scene trees, scripts, InputMap, errors & diagnostics as Markdown"
+		copy_ctx_btn.pressed.connect(_on_copy_context_pressed.bind(feat, eval_info))
+		agent_hdr_row.add_child(copy_ctx_btn)
 
 	if not _last_ai_snapshot.is_empty() and not _building_feature and not _diagnosing_fix:
 		var undo_ai_btn := Button.new()
@@ -1046,8 +1070,8 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 	apply_btn.pressed.connect(_on_direct_agent_pressed.bind(feat_id, cp_id))
 	agent_vb.add_child(apply_btn)
 
-	_footer_box.visible = can_pass_playtest
-	if can_pass_playtest:
+	_footer_box.visible = can_pass_playtest and not gate_passed
+	if can_pass_playtest and not gate_passed:
 		_primary_cta_btn.disabled = _building_feature or _diagnosing_fix
 		_primary_cta_btn.text = "Playtest Passed — Next Feature"
 		_primary_cta_btn.icon = _editor_icon("StatusSuccess" if gate_passed else "Forward")
@@ -1137,16 +1161,7 @@ func _on_build_feature_pressed(feat: Dictionary) -> void:
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 
 	if _sync == null or not _sync.has_link_token():
-		var local_res: Dictionary = _executor.call("build_feature_local", feat, editor_interface, undo_redo, code_files, arena_scene)
-		if editor_interface != null and editor_interface.get_resource_filesystem() != null:
-			editor_interface.get_resource_filesystem().scan()
-		if bool(local_res.get("ok", true)):
-			_locally_built_keys[_make_checkpoint_build_key(feat)] = true
-			feat["isBuiltInGodot"] = true
-		var local_sum: String = str(local_res.get("summary", "Built local feature scaffold."))
-		_last_agent_summary = local_sum
-		_set_status(local_sum, not bool(local_res.get("ok", true)))
-		_render_active_feature_workspace(feat)
+		_set_status("Link Godot to Web Studio to build features with AI.", true)
 		return
 
 	var full_ctx: Dictionary = _collect_full_project_agent_context(feat, code_files, arena_scene)
@@ -1271,7 +1286,10 @@ func _on_bundle_apply_timeout() -> void:
 	pre_snap["was_initial_build"] = was_initial_build
 	pre_snap["checkpoint_key"] = _make_checkpoint_build_key(active_feat) if not active_feat.is_empty() else ""
 	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle, pref_scene)
-	if bool(apply_res.get("ok", false)):
+	var apply_ok: bool = bool(apply_res.get("ok", false))
+	var compile_errors: PackedStringArray = apply_res.get("compile_errors", PackedStringArray())
+	var failed_script_updates: Dictionary = apply_res.get("failed_script_updates", {}) if typeof(apply_res.get("failed_script_updates", null)) == TYPE_DICTIONARY else {}
+	if apply_ok or not compile_errors.is_empty():
 		if is_auto_repair and not _last_ai_snapshot.is_empty():
 			var orig_files: Dictionary = _last_ai_snapshot.get("files", {}) if typeof(_last_ai_snapshot.get("files", null)) == TYPE_DICTIONARY else {}
 			var repair_files: Dictionary = pre_snap.get("files", {}) if typeof(pre_snap.get("files", null)) == TYPE_DICTIONARY else {}
@@ -1281,12 +1299,13 @@ func _on_bundle_apply_timeout() -> void:
 			_last_ai_snapshot["files"] = orig_files
 		else:
 			_last_ai_snapshot = pre_snap
+	if apply_ok:
 		var applied_scripts: PackedStringArray = apply_res.get("applied_scripts", PackedStringArray())
 		for sp in applied_scripts:
 			var sp_str := str(sp).strip_edges()
 			if sp_str.begins_with("res://") and sp_str.ends_with(".gd"):
 				_queue_live_script_sync(sp_str)
-	if was_initial_build and bool(apply_res.get("ok", false)) and not active_feat.is_empty():
+	if was_initial_build and apply_ok and compile_errors.is_empty() and not active_feat.is_empty():
 		_locally_built_keys[_make_checkpoint_build_key(active_feat)] = true
 		active_feat["isBuiltInGodot"] = true
 	_executor.call("invalidate_eval_cache")
@@ -1301,8 +1320,18 @@ func _on_bundle_apply_timeout() -> void:
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 	var integrity: Dictionary = _executor.call("verify_built_feature_integrity", editor_interface, active_feat, code_files, arena_scene)
-	if not bool(integrity.get("ok", true)):
-		var integrity_errors: PackedStringArray = integrity.get("errors", PackedStringArray())
+	var integrity_ok: bool = bool(integrity.get("ok", true))
+	var integrity_errors: PackedStringArray = integrity.get("errors", PackedStringArray())
+	var all_repair_errors := PackedStringArray()
+	for ce in compile_errors:
+		var ces := str(ce).strip_edges()
+		if not ces.is_empty():
+			all_repair_errors.append(ces)
+	for ie in integrity_errors:
+		var ies := str(ie).strip_edges()
+		if not ies.is_empty() and not (ies in all_repair_errors):
+			all_repair_errors.append(ies)
+	if not all_repair_errors.is_empty():
 		if not is_auto_repair and not _auto_repair_attempted_this_op and not feat_id.is_empty() and _sync != null and _sync.has_link_token():
 			_auto_repair_attempted_this_op = true
 			_pending_bundle_is_auto_repair = true
@@ -1310,31 +1339,34 @@ func _on_bundle_apply_timeout() -> void:
 			var primary_scene: String = str(full_ctx.get("primary_scene", pref_scene)).strip_edges()
 			var scene_snap: Variant = full_ctx.get("scene_snapshot", {})
 			var live_scripts: Dictionary = full_ctx.get("live_scripts", {})
+			for fk in failed_script_updates.keys():
+				live_scripts[str(fk)] = str(failed_script_updates[fk])
 			var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
 			var diag_issues: Array = full_ctx.get("project_diagnostics", [])
-			var err_joined := "\n".join(integrity_errors)
+			var err_joined := "\n".join(all_repair_errors)
 			_diagnosing_fix = true
 			_last_agent_summary = ""
 			_last_agent_warnings = PackedStringArray()
-			_set_status("Auto-repairing scene/script wiring issue...", false)
+			_set_status("Auto-repairing GDScript compile/wiring issue...", false)
 			_refresh_view()
-			_sync.direct_agent(feat_id, cp_id, "Fix post-apply verification issues:\n" + err_joined, scene_snap, live_scripts, arena_scene, primary_scene, err_joined, input_map_snap, diag_issues)
+			_sync.direct_agent(feat_id, cp_id, "Fix skipped GDScript compile errors and post-apply verification issues:\n" + err_joined, scene_snap, live_scripts, arena_scene, primary_scene, err_joined, input_map_snap, diag_issues)
 			return
 		for ie in integrity_errors:
 			var ies := str(ie).strip_edges()
 			if not ies.is_empty():
 				warnings.append(ies)
 
+	var overall_ok: bool = apply_ok and integrity_ok and compile_errors.is_empty()
 	_last_agent_summary = summary
 	_last_agent_warnings = warnings
-	if bool(apply_res.get("ok", false)) and bool(integrity.get("ok", true)):
+	if overall_ok:
 		for active_err in _collect_active_playtest_errors():
 			_ignored_error_signatures[str(active_err)] = true
 		if _editor_logger != null:
 			_editor_logger.clear()
 		_fix_draft_text = ""
 		_last_error_clear_unix = Time.get_unix_time_from_system()
-	_set_status(summary, not bool(apply_res.get("ok", true)) or not bool(integrity.get("ok", true)))
+	_set_status(summary, not overall_ok)
 	_refresh_view()
 
 
@@ -1413,6 +1445,10 @@ func _on_playtest_arena_pressed(arena_scene: String, primary_scene: String) -> v
 	if _is_editor_playing() and editor_interface.has_method("stop_playing_scene"):
 		editor_interface.call("stop_playing_scene")
 		return
+	if editor_interface.has_method("save_all_scenes"):
+		editor_interface.call("save_all_scenes")
+	elif editor_interface.has_method("save_scene"):
+		editor_interface.call("save_scene")
 	if not arena_scene.is_empty() and arena_scene.ends_with(".tscn") and FileAccess.file_exists(arena_scene):
 		editor_interface.play_custom_scene(arena_scene)
 		return
@@ -1494,6 +1530,43 @@ func _on_primary_cta_pressed() -> void:
 	_set_status("Playtest passed — advancing to next feature...", false)
 	_refresh_view()
 	_sync.set_playtest_passed(feat_id, cp_id, true)
+
+
+func _on_reopen_gate_pressed(feat: Dictionary) -> void:
+	if feat.is_empty():
+		return
+	var feat_id: String = str(feat.get("id", ""))
+	var cp_id: String = str(feat.get("checkpointId", ""))
+	feat["isPlaytestPassed"] = false
+	feat["isCompleted"] = false
+	_set_status("Playtest gate reopened — iterate & re-verify when ready.", false)
+	_refresh_view()
+	if _sync != null and _sync.has_link_token() and not feat_id.is_empty():
+		_sync.set_playtest_passed(feat_id, cp_id, false)
+
+
+func _on_copy_context_pressed(feat: Dictionary, _eval_info: Dictionary = {}) -> void:
+	if _executor == null:
+		return
+	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+	var full_ctx: Dictionary = _collect_full_project_agent_context(feat, code_files, arena_scene)
+	var live_scripts: Dictionary = full_ctx.get("live_scripts", {})
+	var scene_snap: Dictionary = full_ctx.get("scene_snapshot", {})
+	var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
+	var diag_issues: Array = full_ctx.get("project_diagnostics", [])
+	var recent_errors: Array = _collect_active_playtest_errors()
+	var md: String = _executor.call(
+		"format_feature_context_markdown",
+		feat,
+		live_scripts,
+		scene_snap,
+		input_map_snap,
+		recent_errors,
+		diag_issues
+	)
+	DisplayServer.clipboard_set(md)
+	_set_status("Copied Godot context (%d chars) to clipboard." % md.length(), false)
 
 
 func _on_epic_updated(payload: Dictionary) -> void:

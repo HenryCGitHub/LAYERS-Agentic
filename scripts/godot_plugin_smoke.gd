@@ -280,5 +280,42 @@ func take_damage(amount: float) -> void:
 		quit(1)
 		return
 
+	var broken_bundle := {
+		"mode": "direct_agent",
+		"summary": "Broken compile probe",
+		"scriptUpdates": [
+			{"resPath": "res://scripts/smoke_fighter.gd", "content": "extends CharacterBody3D\nfunc broken(:\n"},
+		],
+		"sceneOps": [],
+	}
+	Engine.print_error_messages = false
+	var broken_res: Dictionary = exec.call("apply_agent_bundle", null, null, broken_bundle, "res://scenes/smoke_fighter.tscn")
+	Engine.print_error_messages = true
+	var compile_errs: PackedStringArray = broken_res.get("compile_errors", PackedStringArray())
+	var failed_updates: Dictionary = broken_res.get("failed_script_updates", {}) if typeof(broken_res.get("failed_script_updates", null)) == TYPE_DICTIONARY else {}
+	if compile_errs.size() != 1 or not failed_updates.has("res://scripts/smoke_fighter.gd"):
+		printerr("FAIL: expected compile_errors.size()==1 and failed_script_updates to contain smoke_fighter.gd")
+		quit(1)
+		return
+	if FileAccess.get_file_as_string("res://scripts/smoke_fighter.gd") != orig_fighter_disk:
+		printerr("FAIL: broken scriptUpdate should not overwrite orig_fighter_disk")
+		quit(1)
+		return
+
+	var ctx_md: String = exec.call(
+		"format_feature_context_markdown",
+		{"id": "f1", "title": "Smoke Jump", "doneWhen": "Press Space -> Player jumps"},
+		{"res://scripts/smoke_fighter.gd": orig_fighter_disk},
+		{"scenes": {"res://scenes/smoke_fighter.tscn": {"isOpenInEditor": true, "nodes": [{"path": ".", "type": "CharacterBody3D", "script": "res://scripts/smoke_fighter.gd"}]}}},
+		{"jump": ["Space"]},
+		["SCRIPT ERROR: sample"],
+		["[3D BASIS FLIP] sample"]
+	)
+	for needle in ["## LAYERS Godot Context", "smoke_fighter.tscn", "jump", "SCRIPT ERROR: sample", "[3D BASIS FLIP] sample"]:
+		if not ctx_md.contains(needle):
+			printerr("FAIL: format_feature_context_markdown missing expected substring")
+			quit(1)
+			return
+
 	print("GODOT_SMOKE_OK")
 	quit(0)

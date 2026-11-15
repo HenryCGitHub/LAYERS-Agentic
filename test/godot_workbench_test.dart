@@ -1616,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.4"'));
+        expect(cfgText, contains('version="2.7.5"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1672,7 +1672,11 @@ func _physics_process(delta: float) -> void:
         expect(dockText, isNot(contains('Broken? Ask Agent to Fix')));
         expect(dockText, isNot(contains('Fix Latest Playtest Error (0)')));
         expect(dockText, contains('Undo Last AI'));
-        expect(dockText, contains('_footer_box.visible = can_pass_playtest'));
+        expect(dockText, contains('_footer_box.visible = can_pass_playtest and not gate_passed'));
+        expect(dockText, contains('Copy Context'));
+        expect(dockText, contains('Reopen Gate'));
+        expect(dockText, contains('save_all_scenes'));
+        expect(dockText, isNot(contains('build_feature_local')));
         expect(dockText, contains('_is_feature_checkpoint_built'));
         expect(dockText, contains('OS.add_logger'));
         expect(dockText, contains('Build Feature in Godot'));
@@ -1704,18 +1708,22 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('set_plugin_enabled'));
 
         expect(executorText, contains('ClassDB.class_exists'));
-        expect(executorText, contains('inspect_object'));
         expect(executorText, contains('save_scene()'));
-        expect(executorText, contains('merge_step_code_into_existing'));
         expect(executorText, contains('parse_signal_specs'));
         expect(executorText, contains('undo_redo'));
         expect(executorText, contains('apply_agent_bundle'));
         expect(executorText, contains('preserve_existing_visuals'));
         expect(executorText, contains('verify_built_feature_integrity'));
+        expect(executorText, contains('compile_errors'));
+        expect(executorText, contains('failed_script_updates'));
+        expect(executorText, contains('format_feature_context_markdown'));
         expect(executorText, contains('sceneFilePath'));
         expect(executorText, isNot(contains('func extract_feature_export_tuners')));
         expect(executorText, isNot(contains('func apply_fix_patch')));
         expect(executorText, isNot(contains('func read_live_scripts_for_feature')));
+        expect(executorText, isNot(contains('func build_feature_local')));
+        expect(executorText, isNot(contains('func evaluate_step')));
+        expect(executorText, isNot(contains('func merge_step_code_into_existing')));
         expect(executorText, contains('_unset_subtree_owners'));
         expect(executorText, contains('capture_bundle_snapshot'));
         expect(executorText, contains('restore_bundle_snapshot'));
