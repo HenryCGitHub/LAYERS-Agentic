@@ -1616,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.8"'));
+        expect(cfgText, contains('version="2.7.9"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1691,6 +1691,9 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('_maybe_add_open_scene_button'));
         expect(dockText, contains('Open Scene (%d)'));
         expect(dockText, contains('MenuButton.new()'));
+        expect(dockText, contains('ConfirmationDialog.new()'));
+        expect(dockText, contains('_on_rebuild_feature_requested'));
+        expect(dockText, contains('_ignored_diagnostic_signatures.clear()'));
         expect(dockText, contains('snap.get("feature_id"'));
         expect(dockText, contains('_pre_repair_warnings'));
         expect(dockText, contains('_is_feature_checkpoint_built'));
@@ -1753,6 +1756,11 @@ func _physics_process(delta: float) -> void:
         expect(executorText, isNot(contains('"input map" in col0')));
         expect(executorText, contains('is_likely_gdscript_snippet'));
         expect(executorText, contains('can_attach_script_to_node'));
+        expect(executorText, contains('class _CompileProbeLogger extends Logger'));
+        expect(executorText, contains('[MISSING @ONREADY NODE]'));
+        expect(executorText, contains('[EMPTY COLLISION SHAPE]'));
+        expect(executorText, contains('_load_or_create_disk_scene_root'));
+        expect(executorText, isNot(contains('for dk in ["findings", "warnings", "issues"]')));
         expect(executorText, contains('evaluate_feature'));
         expect(executorText, contains('invalidate_eval_cache'));
         expect(executorText, contains('infer_scene_root_type'));

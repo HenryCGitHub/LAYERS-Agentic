@@ -174,6 +174,24 @@ func take_damage(amount: float) -> void:
 	inst.free()
 
 	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://scripts/smoke_enemy.gd"))
+	var findings_missing_onready: PackedStringArray = exec.call(
+		"diagnose_project_combat_and_wiring",
+		["res://scenes/smoke_fighter.tscn"],
+		{"res://scripts/smoke_fighter.gd": fighter_src},
+		null
+	)
+	var caught_missing_onready := false
+	for mf in findings_missing_onready:
+		if "[MISSING @ONREADY NODE]" in mf and "$ClawPivot" in mf:
+			caught_missing_onready = true
+			break
+	if not caught_missing_onready:
+		printerr("FAIL: diagnose_project_combat_and_wiring did not catch missing @onready $ClawPivot after reparenting, got:\n", "\n".join(findings_missing_onready))
+		quit(1)
+		return
+
+	fighter_src = fighter_src.replace("$ClawPivot", "$VisualRig/ClawPivot")
+	_write_text("res://scripts/smoke_fighter.gd", fighter_src)
 	var findings_after: PackedStringArray = exec.call(
 		"diagnose_project_combat_and_wiring",
 		["res://scenes/smoke_fighter.tscn"],
@@ -519,6 +537,135 @@ func take_damage(amount: float) -> void:
 		quit(1)
 		return
 	sync_probe.free()
+
+	# v2.7.9 SEA Red/Green Probes:
+	# 1. Exact compile error line capture + gdscript:// noise filter
+	if not exec.has_method("format_compile_error_entry") or not exec.has_method("_create_compile_probe_logger"):
+		printerr("FAIL: exec missing format_compile_error_entry or _create_compile_probe_logger")
+		quit(1)
+		return
+	var formatted_compile_err: String = exec.call("format_compile_error_entry", "Parse Error", "Expected parameter name.", "gdscript://-99.gd", 4)
+	if not ("Line 4:" in formatted_compile_err and "Expected parameter name." in formatted_compile_err):
+		printerr("FAIL: format_compile_error_entry did not preserve line & rationale: ", formatted_compile_err)
+		quit(1)
+		return
+	if not bool(exec.call("_is_ignored_godot_error_noise", "ERROR: Parse Error in gdscript://-99.gd")):
+		printerr("FAIL: _is_ignored_godot_error_noise did not filter gdscript:// temp compile probes")
+		quit(1)
+		return
+	var probe_logger: Variant = exec.call("_create_compile_probe_logger")
+	if probe_logger == null:
+		printerr("FAIL: _create_compile_probe_logger returned null")
+		quit(1)
+		return
+	var empty_bt: Array[ScriptBacktrace] = []
+	probe_logger.call("_log_error", "reload", "gdscript://-99.gd", 4, "Parse Error", "Expected parameter name.", false, 0, empty_bt)
+	probe_logger.call("_log_error", "other", "res://addons/layers/layers_dock.gd", 10, "Error", "Should ignore non-temp error", false, 0, empty_bt)
+	var captured_compile_msgs: PackedStringArray = probe_logger.get("messages")
+	if captured_compile_msgs.size() != 1 or not ("Line 4:" in captured_compile_msgs[0] and "Expected parameter name." in captured_compile_msgs[0]):
+		printerr("FAIL: _CompileProbeLogger did not isolate gdscript:// line/parse error cleanly: ", captured_compile_msgs)
+		quit(1)
+		return
+
+	# 2. Headless disk PackedScene sceneOps creation + [EMPTY COLLISION SHAPE] detection + rollback
+	if not exec.has_method("_load_or_create_disk_scene_root"):
+		printerr("FAIL: exec missing _load_or_create_disk_scene_root")
+		quit(1)
+		return
+	var pickup_script_src := "extends Area3D\n@onready var shape: CollisionShape3D = $CollisionShape3D\n"
+	var pickup_bundle := {
+		"mode": "build_feature",
+		"summary": "Headless pickup sceneOps probe",
+		"scriptUpdates": [
+			{
+				"resPath": "res://scripts/smoke_pickup.gd",
+				"attachTo": ".",
+				"scenePath": "res://scenes/smoke_pickup.tscn",
+				"content": pickup_script_src,
+			},
+		],
+		"sceneOps": [
+			{
+				"op": "ensure_node",
+				"scenePath": "res://scenes/smoke_pickup.tscn",
+				"parentPath": ".",
+				"nodeName": "CollisionShape3D",
+				"nodeType": "CollisionShape3D",
+			},
+		],
+	}
+	var pickup_snap: Dictionary = exec.call("capture_bundle_snapshot", null, pickup_bundle, "res://scenes/smoke_pickup.tscn")
+	var pickup_apply: Dictionary = exec.call("apply_agent_bundle", null, null, pickup_bundle, "res://scenes/smoke_pickup.tscn")
+	var pickup_ok := FileAccess.file_exists("res://scenes/smoke_pickup.tscn") and int(pickup_apply.get("applied_ops", 0)) > 0
+	var pickup_diags: PackedStringArray = exec.call(
+		"diagnose_project_combat_and_wiring",
+		["res://scenes/smoke_pickup.tscn"],
+		{"res://scripts/smoke_pickup.gd": pickup_script_src},
+		null
+	)
+	var caught_empty_shape := false
+	for pd in pickup_diags:
+		if "[EMPTY COLLISION SHAPE]" in pd and "CollisionShape3D" in pd:
+			caught_empty_shape = true
+			break
+	exec.call("restore_bundle_snapshot", null, pickup_snap)
+	if FileAccess.file_exists("res://scenes/smoke_pickup.tscn") or FileAccess.file_exists("res://scripts/smoke_pickup.gd"):
+		printerr("FAIL: restore_bundle_snapshot did not remove smoke_pickup artifacts")
+		quit(1)
+		return
+	if not pickup_ok:
+		printerr("FAIL: apply_agent_bundle(null, null, ...) did not create disk PackedScene smoke_pickup.tscn: ", pickup_apply)
+		quit(1)
+		return
+	if not caught_empty_shape:
+		printerr("FAIL: diagnose_project_combat_and_wiring did not catch [EMPTY COLLISION SHAPE] on smoke_pickup.tscn, got:\n", "\n".join(pickup_diags))
+		quit(1)
+		return
+
+	# 3. Copy Context coveredScope formatting
+	var ctx_scope_md: String = exec.call(
+		"format_feature_context_markdown",
+		{"id": "f_ctx", "title": "Player Jump", "coveredScope": ["+Coyote timer"]},
+		{},
+		{},
+		{},
+		[],
+		PackedStringArray()
+	)
+	if not ("- In Scope:" in ctx_scope_md and "  - +Coyote timer" in ctx_scope_md):
+		printerr("FAIL: format_feature_context_markdown missing coveredScope '- In Scope:' block:\n", ctx_scope_md)
+		quit(1)
+		return
+
+	# 4. Dock Rebuild confirmation + Sync static diagnostic reset
+	var dock_script_path: String = exec.get_script().resource_path.get_base_dir().path_join("layers_dock.gd")
+	var dock_script_res: Script = load(dock_script_path)
+	var v279_dock: Control = dock_script_res.new()
+	if not v279_dock.has_method("_on_rebuild_feature_requested"):
+		v279_dock.free()
+		printerr("FAIL: layers_dock missing _on_rebuild_feature_requested")
+		quit(1)
+		return
+	v279_dock.call("_on_rebuild_feature_requested", {"id": "f1", "title": "Smoke Jump"})
+	var pending_feat: Dictionary = v279_dock.get("_pending_rebuild_feat")
+	var confirm_dlg: Variant = v279_dock.get("_rebuild_confirm_dialog")
+	if String(pending_feat.get("id", "")) != "f1" or confirm_dlg == null or not ("Smoke Jump" in String(confirm_dlg.get("dialog_text"))):
+		v279_dock.free()
+		printerr("FAIL: _on_rebuild_feature_requested did not populate _pending_rebuild_feat or _rebuild_confirm_dialog")
+		quit(1)
+		return
+	v279_dock.set("_diagnostics_dirty", false)
+	v279_dock.set("_ignored_diagnostic_signatures", {"diag_sig_1": true})
+	v279_dock.set("_ignored_error_signatures", {"SCRIPT ERROR: old": true})
+	v279_dock.call("_on_sync_pressed")
+	var diag_cleared := (v279_dock.get("_ignored_diagnostic_signatures") as Dictionary).is_empty()
+	var err_kept := (v279_dock.get("_ignored_error_signatures") as Dictionary).has("SCRIPT ERROR: old")
+	var dirty_reset := bool(v279_dock.get("_diagnostics_dirty"))
+	v279_dock.free()
+	if not (diag_cleared and err_kept and dirty_reset):
+		printerr("FAIL: _on_sync_pressed did not clear _ignored_diagnostic_signatures while preserving _ignored_error_signatures")
+		quit(1)
+		return
 
 	print("GODOT_SMOKE_OK")
 	quit(0)

@@ -27,6 +27,7 @@ class _LayersEditorLogger extends Logger:
 		var lower := combined.to_lower()
 		if (
 			"addons/layers/" in lower or
+			"gdscript://" in lower or
 			"progress_dialog.cpp" in lower or
 			"editoricons" in lower or
 			"vulkan" in lower or
@@ -103,6 +104,8 @@ var _cached_diagnostics: PackedStringArray = PackedStringArray()
 var _diagnostics_dirty: bool = true
 var _ignored_diagnostic_signatures: Dictionary = {}
 var _last_ai_snapshot: Dictionary = {}
+var _rebuild_confirm_dialog: ConfirmationDialog
+var _pending_rebuild_feat: Dictionary = {}
 
 # Slim Top Self-Update Banner
 var _update_banner: PanelContainer
@@ -428,7 +431,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.8")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.9")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -918,7 +921,7 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		rebuild_btn.icon = _editor_icon("Reload", "Tools")
 		rebuild_btn.tooltip_text = "Re-run AI Feature Builder while preserving your scene transforms and meshes."
 		rebuild_btn.disabled = ai_busy
-		rebuild_btn.pressed.connect(_on_build_feature_pressed.bind(feat))
+		rebuild_btn.pressed.connect(_on_rebuild_feature_requested.bind(feat))
 		action_row.add_child(rebuild_btn)
 
 	# -----------------------------------------------------------------------
@@ -1960,7 +1963,38 @@ func _on_disconnect_pressed() -> void:
 	_refresh_view()
 
 
+func _ensure_rebuild_confirm_dialog() -> void:
+	if _rebuild_confirm_dialog != null:
+		return
+	_rebuild_confirm_dialog = ConfirmationDialog.new()
+	_rebuild_confirm_dialog.title = "Rebuild Feature?"
+	_rebuild_confirm_dialog.ok_button_text = "Rebuild"
+	_rebuild_confirm_dialog.confirmed.connect(_on_confirm_rebuild_accepted)
+	add_child(_rebuild_confirm_dialog)
+
+
+func _on_rebuild_feature_requested(feat: Dictionary) -> void:
+	_pending_rebuild_feat = feat.duplicate(true)
+	_ensure_rebuild_confirm_dialog()
+	var ftitle: String = str(feat.get("title", "this feature")).strip_edges()
+	if ftitle.is_empty():
+		ftitle = "this feature"
+	_rebuild_confirm_dialog.dialog_text = "Re-run AI Feature Builder for '%s'?\n\nExisting scene transforms and meshes are preserved, while generated script logic will be regenerated." % ftitle
+	if is_inside_tree():
+		_rebuild_confirm_dialog.popup_centered()
+
+
+func _on_confirm_rebuild_accepted() -> void:
+	if _pending_rebuild_feat.is_empty():
+		return
+	var feat_to_build: Dictionary = _pending_rebuild_feat.duplicate(true)
+	_pending_rebuild_feat = {}
+	_on_build_feature_pressed(feat_to_build)
+
+
 func _on_sync_pressed() -> void:
+	_diagnostics_dirty = true
+	_ignored_diagnostic_signatures.clear()
 	if _executor != null:
 		_executor.call("invalidate_eval_cache")
 	if _sync != null:
@@ -1969,6 +2003,8 @@ func _on_sync_pressed() -> void:
 			if not all_scripts.is_empty():
 				_sync.sync_live_scripts(all_scripts)
 		_sync.fetch_active_epic()
+	if _workspace_panel != null and _workspace_panel.visible and not _payload.is_empty():
+		_refresh_view()
 
 
 func _on_open_web_pressed() -> void:

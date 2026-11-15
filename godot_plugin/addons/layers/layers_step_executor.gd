@@ -4,7 +4,50 @@ extends RefCounted
 # Hierarchy-aware Scene, InputMap, Signal, and GDScript Step Engine
 # for LAYERS Godot 4 Editor Plugin (v2.7.2+).
 
+class _CompileProbeLogger extends Logger:
+	var messages: PackedStringArray = PackedStringArray()
+
+	static func format_entry(code: String, rationale: String, _file: String = "", line: int = 0) -> String:
+		var c := code.strip_edges()
+		var r := rationale.strip_edges()
+		var body := r
+		if body.is_empty():
+			body = c
+		elif not c.is_empty() and not (c.to_lower() in body.to_lower()):
+			body = "%s: %s" % [c, body]
+		if body.is_empty():
+			body = "GDScript compile error"
+		if line > 0 and not ("line %d" % line in body.to_lower()):
+			body = "Line %d: %s" % [line, body]
+		return body
+
+	func _log_error(
+		_function: String,
+		file: String,
+		line: int,
+		code: String,
+		rationale: String,
+		_editor_notify: bool,
+		_error_type: int,
+		_script_backtraces: Array[ScriptBacktrace]
+	) -> void:
+		var lower_file := file.to_lower()
+		if not ("gdscript://" in lower_file or "gdscript://" in rationale.to_lower()):
+			return
+		var entry := format_entry(code, rationale, file, line)
+		if not (entry in messages):
+			messages.append(entry)
+
+
 var _eval_cache: Dictionary = {}
+
+
+func format_compile_error_entry(code: String, rationale: String, file: String = "", line: int = 0) -> String:
+	return _CompileProbeLogger.format_entry(code, rationale, file, line)
+
+
+func _create_compile_probe_logger() -> _CompileProbeLogger:
+	return _CompileProbeLogger.new()
 var _eval_cache_epoch: int = 0
 var _cached_base_ctrl_id: int = 0
 var _cached_debugger_roots: Array[Node] = []
@@ -888,6 +931,7 @@ func _is_ignored_godot_error_noise(text: String) -> bool:
 	var lower := text.to_lower()
 	return (
 		"addons/layers/" in lower or
+		"gdscript://" in lower or
 		"progress_dialog.cpp" in lower or
 		"editoricons" in lower or
 		"vulkan" in lower or
@@ -1213,7 +1257,6 @@ func _is_physics_or_rig_node(node: Node, node_type_hint: String = "", node_name_
 func _sync_existing_node_from_spec(
 	node: Node,
 	sp: Dictionary,
-	_undo_redo: EditorUndoRedoManager = null,
 	preserve_existing_visuals: bool = false
 ) -> bool:
 	if node == null:
@@ -1372,11 +1415,25 @@ func check_gdscript_compiles(code: String) -> Dictionary:
 		return { "ok": false, "error": "Empty GDScript." }
 	var scr := GDScript.new()
 	scr.source_code = code
+	var probe_logger: _CompileProbeLogger = null
+	var logger_attached := false
+	if ClassDB.class_exists("Logger") and OS.has_method("add_logger") and OS.has_method("remove_logger"):
+		probe_logger = _CompileProbeLogger.new()
+		OS.add_logger(probe_logger)
+		logger_attached = true
 	var err := scr.reload(true)
+	if logger_attached:
+		OS.remove_logger(probe_logger)
+	var err_msg := ""
+	if err != OK:
+		if probe_logger != null and not probe_logger.messages.is_empty():
+			err_msg = " | ".join(probe_logger.messages)
+		else:
+			err_msg = "GDScript compile check failed (code %d)." % err
 	return {
 		"ok": err == OK,
 		"error_code": err,
-		"error": "" if err == OK else "GDScript compile check failed (code %d)." % err,
+		"error": err_msg,
 	}
 
 
@@ -2069,42 +2126,62 @@ func apply_agent_bundle(
 		var spath_str := String(spath_key)
 		var scene_ops: Array = ops_by_scene[spath_str]
 		var target_root: Node = null
+		var loaded_on_disk := false
+		var rhint := String(root_type_hints.get(spath_str, ""))
 		if editor_interface != null:
-			var rhint := String(root_type_hints.get(spath_str, ""))
 			target_root = ensure_scene_exists_and_open(editor_interface, spath_str, rhint, "", arena_hint)
+		else:
+			target_root = _load_or_create_disk_scene_root(spath_str, rhint)
+			loaded_on_disk = target_root != null
 		if target_root == null:
 			warnings.append("Could not open scene %s for sceneOps." % spath_str)
 			continue
 		detach_incompatible_scripts(target_root)
-		applied_ops += apply_scene_ops_to_root(target_root, scene_ops, undo_redo, warnings, preserve_visuals)
+		applied_ops += apply_scene_ops_to_root(target_root, scene_ops, warnings, preserve_visuals)
+		sanitize_null_script_exports(target_root)
 		if editor_interface != null:
-			sanitize_null_script_exports(target_root)
 			editor_interface.save_scene()
+		elif loaded_on_disk:
+			_save_disk_scene_root(target_root, spath_str)
+			target_root.free()
 
 	# Also attach scriptUpdates that specify attachTo + scenePath if not already handled in sceneOps.
-	if editor_interface != null:
-		for raw_u in bundle.get("scriptUpdates", []):
-			if typeof(raw_u) != TYPE_DICTIONARY:
-				continue
-			var u: Dictionary = raw_u
-			var rpath := String(u.get("resPath", "")).strip_edges()
-			var attach_to := String(u.get("attachTo", "")).strip_edges()
-			var spath := String(u.get("scenePath", default_scene)).strip_edges()
-			if rpath.is_empty() or attach_to.is_empty() or spath.is_empty() or not FileAccess.file_exists(rpath):
-				continue
-			var sroot := ensure_scene_exists_and_open(editor_interface, spath, String(root_type_hints.get(spath, "")), "", arena_hint)
-			if sroot == null:
-				continue
-			var tnode: Node = sroot if (attach_to == "." or attach_to == sroot.name) else _resolve_node_by_rel_path(sroot, attach_to)
-			if tnode == null:
-				tnode = _find_node_recursive(sroot, attach_to)
-			if tnode != null and can_attach_script_to_node(tnode, rpath):
-				var scr_res: Script = reload_script_safely(rpath)
-				if scr_res != null and tnode.get_script() != scr_res:
-					tnode.set_script(scr_res)
-					sanitize_null_script_exports(sroot)
+	for raw_u in bundle.get("scriptUpdates", []):
+		if typeof(raw_u) != TYPE_DICTIONARY:
+			continue
+		var u: Dictionary = raw_u
+		var rpath := String(u.get("resPath", "")).strip_edges()
+		if failed_script_updates.has(rpath):
+			continue
+		var attach_to := String(u.get("attachTo", "")).strip_edges()
+		var spath := String(u.get("scenePath", default_scene)).strip_edges()
+		if rpath.is_empty() or attach_to.is_empty() or spath.is_empty() or not FileAccess.file_exists(rpath):
+			continue
+		var sroot: Node = null
+		var sroot_on_disk := false
+		var shint := String(root_type_hints.get(spath, ""))
+		if editor_interface != null:
+			sroot = ensure_scene_exists_and_open(editor_interface, spath, shint, "", arena_hint)
+		else:
+			sroot = _load_or_create_disk_scene_root(spath, shint)
+			sroot_on_disk = sroot != null
+		if sroot == null:
+			continue
+		var tnode: Node = sroot if (attach_to == "." or attach_to == sroot.name) else _resolve_node_by_rel_path(sroot, attach_to)
+		if tnode == null:
+			tnode = _find_node_recursive(sroot, attach_to)
+		if tnode != null and can_attach_script_to_node(tnode, rpath):
+			var scr_res: Script = reload_script_safely(rpath)
+			if scr_res != null and tnode.get_script() != scr_res:
+				tnode.set_script(scr_res)
+				sanitize_null_script_exports(sroot)
+				if editor_interface != null:
 					editor_interface.save_scene()
-					applied_ops += 1
+				elif sroot_on_disk:
+					_save_disk_scene_root(sroot, spath)
+				applied_ops += 1
+		if sroot_on_disk and sroot != null:
+			sroot.free()
 
 	heal_empty_project_input_actions()
 	ensure_main_scene_configured(arena_hint, default_scene)
@@ -2159,10 +2236,59 @@ func _apply_groups_to_node(node: Node, raw_groups: Variant) -> int:
 	return added
 
 
+func _load_or_create_disk_scene_root(
+	scene_path: String,
+	root_type_hint: String = "",
+	root_name_hint: String = ""
+) -> Node:
+	var clean_path := scene_path.strip_edges()
+	if clean_path.is_empty() or not clean_path.ends_with(".tscn"):
+		return null
+	if FileAccess.file_exists(clean_path) or ResourceLoader.exists(clean_path):
+		var ps := ResourceLoader.load(clean_path, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+		if ps != null:
+			return ps.instantiate()
+	var cls_name := root_type_hint.strip_edges()
+	if cls_name.is_empty() or not ClassDB.class_exists(cls_name) or not ClassDB.can_instantiate(cls_name):
+		cls_name = "Node3D"
+	var inst := ClassDB.instantiate(cls_name)
+	if not (inst is Node):
+		if inst is Object:
+			(inst as Object).free()
+		return null
+	var root := inst as Node
+	var rname := root_name_hint.strip_edges()
+	if rname.is_empty():
+		rname = clean_path.get_file().get_basename().to_pascal_case()
+	if rname.is_empty():
+		rname = "SceneRoot"
+	root.name = rname
+	return root
+
+
+func _save_disk_scene_root(scene_root: Node, scene_path: String) -> bool:
+	if scene_root == null or scene_path.strip_edges().is_empty():
+		return false
+	var stack: Array[Node] = []
+	for ch in scene_root.get_children():
+		stack.append(ch)
+	while not stack.is_empty():
+		var cur: Node = stack.pop_back()
+		if cur.owner == null:
+			cur.owner = scene_root
+		if cur.scene_file_path.is_empty():
+			for gch in cur.get_children():
+				stack.append(gch)
+	_ensure_dir_for_res_path(scene_path)
+	var ps := PackedScene.new()
+	if ps.pack(scene_root) != OK:
+		return false
+	return ResourceSaver.save(ps, scene_path) == OK
+
+
 func apply_scene_ops_to_root(
 	scene_root: Node,
 	ops: Array,
-	_undo_redo: EditorUndoRedoManager = null,
 	warnings: PackedStringArray = PackedStringArray(),
 	preserve_existing_visuals: bool = false
 ) -> int:
@@ -2253,7 +2379,7 @@ func apply_scene_ops_to_root(
 				"subResourceProps": sr_props,
 				"props": op_dict.get("properties", {}),
 			}
-			if _sync_existing_node_from_spec(node, fake_sp, _undo_redo, preserve_existing_visuals and not created_new):
+			if _sync_existing_node_from_spec(node, fake_sp, preserve_existing_visuals and not created_new):
 				count += 1
 			var attach_sp := String(op_dict.get("scriptPath", "")).strip_edges()
 			if not attach_sp.is_empty() and FileAccess.file_exists(attach_sp) and can_attach_script_to_node(node, attach_sp):
@@ -2282,7 +2408,7 @@ func apply_scene_ops_to_root(
 				count += 1
 			var rp_props: Variant = op_dict.get("properties", {})
 			if typeof(rp_props) == TYPE_DICTIONARY and not (rp_props as Dictionary).is_empty():
-				if _sync_existing_node_from_spec(src_node, {"props": rp_props}, _undo_redo, false):
+				if _sync_existing_node_from_spec(src_node, {"props": rp_props}, false):
 					count += 1
 		elif op == "set_property":
 			var np := String(op_dict.get("nodePath", "."))
@@ -2295,7 +2421,7 @@ func apply_scene_ops_to_root(
 			if not sr_cls2.is_empty() or not sr_props2.is_empty():
 				if sr_cls2.is_empty() and (node is CollisionShape3D or node is CollisionShape2D) and node.get("shape") != null:
 					sr_cls2 = (node.get("shape") as Object).get_class()
-				if _sync_existing_node_from_spec(node, {"subResourceClass": sr_cls2, "subResourceProps": sr_props2, "props": {}}, _undo_redo, false):
+				if _sync_existing_node_from_spec(node, {"subResourceClass": sr_cls2, "subResourceProps": sr_props2, "props": {}}, false):
 					count += 1
 			var props: Dictionary = op_dict.get("properties", {})
 			for pk in props.keys():
@@ -2854,6 +2980,8 @@ func diagnose_project_combat_and_wiring(
 
 	var rx_combat_area := RegEx.new()
 	rx_combat_area.compile("(?i)(hitbox|strike|attack|claw|slash|bite|melee|weapon|muzzle)")
+	var rx_onready_node := RegEx.new()
+	rx_onready_node.compile("(?m)^[ \\t]*@onready\\s+var\\s+\\w+[^=\\n]*=\\s*\\$([A-Za-z0-9_/]+)")
 
 	for item in scene_roots:
 		var sc_path := String(item["path"])
@@ -2894,6 +3022,30 @@ func diagnose_project_combat_and_wiring(
 			var cur: Node = stack.pop_back()
 			for ch in cur.get_children():
 				stack.append(ch)
+			var rel_cur := "." if cur == sroot else String(sroot.get_path_to(cur))
+			if cur is CollisionShape3D or cur is CollisionShape2D:
+				if cur.get("shape") == null:
+					append_finding.call("[EMPTY COLLISION SHAPE] %s :: CollisionShape '%s' has no shape assigned." % [sc_path.get_file(), rel_cur])
+			var cur_scr_v: Variant = cur.get_script()
+			if cur_scr_v is Script:
+				var cur_scr := cur_scr_v as Script
+				var cur_scr_p := String(cur_scr.resource_path).strip_edges()
+				var cur_scr_txt := ""
+				if not cur_scr_p.is_empty() and scripts_map.has(cur_scr_p):
+					cur_scr_txt = String(scripts_map[cur_scr_p])
+				elif not cur_scr_p.is_empty() and FileAccess.file_exists(cur_scr_p):
+					var f_on := FileAccess.open(cur_scr_p, FileAccess.READ)
+					if f_on != null:
+						cur_scr_txt = f_on.get_as_text()
+						f_on.close()
+				if cur_scr_txt.is_empty():
+					cur_scr_txt = String(cur_scr.source_code)
+				if not cur_scr_txt.is_empty():
+					for m_on in rx_onready_node.search_all(cur_scr_txt):
+						var node_ref := m_on.get_string(1).strip_edges()
+						if not node_ref.is_empty() and cur.get_node_or_null(node_ref) == null:
+							var scr_lbl := cur_scr_p.get_file() if not cur_scr_p.is_empty() else String(cur.name)
+							append_finding.call("[MISSING @ONREADY NODE] %s :: %s references missing child $%s on '%s'." % [sc_path.get_file(), scr_lbl, node_ref, rel_cur])
 			if not (cur is Area3D or cur is Area2D):
 				continue
 			var rel_area_path := String(sroot.get_path_to(cur))
@@ -3031,58 +3183,39 @@ func verify_built_feature_integrity(
 			if not bool(chk.get("ok", false)):
 				errors.append("%s: %s" % [sp.get_file(), String(chk.get("error", "compile failed"))])
 
-	var eval_root: Node = null
-	var temp_root: Node = null
-	if not primary_scene.is_empty() and ResourceLoader.exists(primary_scene):
-		var ed_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
-		if ed_root != null and ed_root.scene_file_path == primary_scene:
-			eval_root = ed_root
-		else:
-			var ps := ResourceLoader.load(primary_scene, "", ResourceLoader.CACHE_MODE_REPLACE) as PackedScene
-			if ps != null:
-				temp_root = ps.instantiate()
-				eval_root = temp_root
-			else:
-				errors.append("Failed to load built scene %s." % primary_scene.get_file())
+	var live_scripts := read_all_live_project_scripts("res://")
+	var rx_gd_ref := RegEx.new()
+	rx_gd_ref.compile("res://[^\"'\\s]+\\.gd")
+	for sc_ref in [primary_scene, arena_hint]:
+		var clean_sc := String(sc_ref).strip_edges()
+		if clean_sc.is_empty() or not FileAccess.file_exists(clean_sc):
+			continue
+		var tscn_txt := FileAccess.get_file_as_string(clean_sc)
+		for gm in rx_gd_ref.search_all(tscn_txt):
+			var sp2 := gm.get_string(0).strip_edges()
+			if sp2.is_empty() or checked_scripts.has(sp2) or sp2.begins_with("res://addons/"):
+				continue
+			var src2 := String(live_scripts.get(sp2, ""))
+			if src2.is_empty() and FileAccess.file_exists(sp2):
+				src2 = FileAccess.get_file_as_string(sp2)
+			if not src2.strip_edges().is_empty():
+				checked_scripts[sp2] = true
+				var chk2 := check_gdscript_compiles(src2)
+				if not bool(chk2.get("ok", false)):
+					errors.append("%s: %s" % [sp2.get_file(), String(chk2.get("error", "compile failed"))])
 
-	if eval_root != null:
-		var onready_re := RegEx.new()
-		onready_re.compile("@onready\\s+var\\s+\\w+[^=\\n]*=\\s*\\$([A-Za-z0-9_/]+)")
-		var stack: Array[Node] = [eval_root]
-		while not stack.is_empty():
-			var cur: Node = stack.pop_back()
-			var rel := "." if cur == eval_root else String(eval_root.get_path_to(cur))
-			if cur is CollisionShape3D or cur is CollisionShape2D:
-				if cur.get("shape") == null:
-					errors.append("CollisionShape '%s' in %s has no shape assigned." % [rel, primary_scene.get_file()])
-			var cur_scr: Variant = cur.get_script()
-			if cur_scr is Script:
-				var scr_res := cur_scr as Script
-				var scr_p := String(scr_res.resource_path).strip_edges()
-				var scr_txt := ""
-				if not scr_p.is_empty() and FileAccess.file_exists(scr_p):
-					var fb := FileAccess.open(scr_p, FileAccess.READ)
-					if fb != null:
-						scr_txt = fb.get_as_text()
-						fb.close()
-				if scr_txt.is_empty():
-					scr_txt = String(scr_res.source_code)
-				if not scr_p.is_empty() and not checked_scripts.has(scr_p) and not scr_txt.strip_edges().is_empty():
-					checked_scripts[scr_p] = true
-					var chk2 := check_gdscript_compiles(scr_txt)
-					if not bool(chk2.get("ok", false)):
-						errors.append("%s: %s" % [scr_p.get_file(), String(chk2.get("error", "compile failed"))])
-				if not scr_txt.is_empty():
-					for m in onready_re.search_all(scr_txt):
-						var node_ref := m.get_string(1).strip_edges()
-						if not node_ref.is_empty() and cur.get_node_or_null(node_ref) == null:
-							var label_p := scr_p.get_file() if not scr_p.is_empty() else cur.name
-							errors.append("%s references missing child $%s on '%s' in %s." % [label_p, node_ref, rel, primary_scene.get_file()])
-			for ch in cur.get_children():
-				stack.append(ch)
-
-	if temp_root != null:
-		temp_root.free()
+	var ed_open_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
+	if ed_open_root != null and not primary_scene.is_empty() and ed_open_root.scene_file_path == primary_scene:
+		var root_scr_v: Variant = ed_open_root.get_script()
+		if root_scr_v is Script:
+			var sp3 := String((root_scr_v as Script).resource_path).strip_edges()
+			if not sp3.is_empty() and not checked_scripts.has(sp3):
+				var src3 := String(live_scripts.get(sp3, (root_scr_v as Script).source_code))
+				if not src3.strip_edges().is_empty():
+					checked_scripts[sp3] = true
+					var chk3 := check_gdscript_compiles(src3)
+					if not bool(chk3.get("ok", false)):
+						errors.append("%s: %s" % [sp3.get_file(), String(chk3.get("error", "compile failed"))])
 
 	var diag_scenes: Array = []
 	for sc_cand in [primary_scene, arena_hint]:
@@ -3094,7 +3227,7 @@ func verify_built_feature_integrity(
 			diag_scenes.append(proj_sc)
 	var feat_diags := diagnose_project_combat_and_wiring(
 		diag_scenes,
-		read_all_live_project_scripts("res://"),
+		live_scripts,
 		editor_interface
 	)
 	var p_file := primary_scene.get_file()
@@ -3112,7 +3245,9 @@ func verify_built_feature_integrity(
 			diag_msg.begins_with("[UNROTATED HITBOX PIVOT]") or
 			diag_msg.begins_with("[NON-PLAYER INPUT]") or
 			diag_msg.begins_with("[COLLISION MASK MISMATCH]") or
-			diag_msg.begins_with("[INPUT COLLISION]")
+			diag_msg.begins_with("[INPUT COLLISION]") or
+			diag_msg.begins_with("[MISSING @ONREADY NODE]") or
+			diag_msg.begins_with("[EMPTY COLLISION SHAPE]")
 		)
 		if critical and (is_relevant_fn.call(diag_msg) or diag_msg.begins_with("[INPUT COLLISION]")):
 			if not (diag_msg in errors):
@@ -3179,6 +3314,17 @@ func format_feature_context_markdown(
 		out.append("### Active Feature")
 		if not feat_title.is_empty():
 			out.append("- Title: %s" % feat_title)
+		var covered_raw: Variant = feat.get("coveredScope", feat.get("inScope", []))
+		if typeof(covered_raw) == TYPE_ARRAY or typeof(covered_raw) == TYPE_PACKED_STRING_ARRAY:
+			var covered_items := PackedStringArray()
+			for c_item in covered_raw:
+				var cs := str(c_item).strip_edges()
+				if not cs.is_empty():
+					covered_items.append(cs)
+			if not covered_items.is_empty():
+				out.append("- In Scope:")
+				for ci in covered_items:
+					out.append("  - %s" % ci)
 		var done_when: String = str(feat.get("doneWhen", feat.get("playtestCriteria", ""))).strip_edges()
 		if not done_when.is_empty():
 			out.append("- Done When: %s" % done_when)
@@ -3248,25 +3394,7 @@ func format_feature_context_markdown(
 			out.append("- %s" % es)
 
 	var diag_lines := PackedStringArray()
-	if typeof(diagnosis) == TYPE_DICTIONARY:
-		var diag_dict: Dictionary = diagnosis
-		for dk in ["findings", "warnings", "issues"]:
-			var d_raw: Variant = diag_dict.get(dk, [])
-			if typeof(d_raw) == TYPE_ARRAY or typeof(d_raw) == TYPE_PACKED_STRING_ARRAY:
-				for item in d_raw:
-					if typeof(item) == TYPE_DICTIONARY:
-						var idict: Dictionary = item
-						var tag: String = str(idict.get("tag", idict.get("type", ""))).strip_edges()
-						var msg: String = str(idict.get("message", idict.get("summary", ""))).strip_edges()
-						if not tag.is_empty() and not msg.is_empty():
-							diag_lines.append("[%s] %s" % [tag, msg])
-						elif not msg.is_empty():
-							diag_lines.append(msg)
-					else:
-						var sitem: String = str(item).strip_edges()
-						if not sitem.is_empty():
-							diag_lines.append(sitem)
-	elif typeof(diagnosis) == TYPE_ARRAY or typeof(diagnosis) == TYPE_PACKED_STRING_ARRAY:
+	if typeof(diagnosis) == TYPE_ARRAY or typeof(diagnosis) == TYPE_PACKED_STRING_ARRAY:
 		for item in diagnosis:
 			var sitem: String = str(item).strip_edges()
 			if not sitem.is_empty():
