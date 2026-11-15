@@ -72,6 +72,7 @@ var _sync: Node
 var _executor: RefCounted
 var _payload: Dictionary = {}
 var _selected_feature_id: String = ""
+var _in_flight_feature_id: String = ""
 var _building_feature: bool = false
 var _diagnosing_fix: bool = false
 var _fix_draft_text: String = ""
@@ -95,6 +96,7 @@ var _post_playtest_log_timer: Timer
 var _was_playing_scene: bool = false
 var _script_sync_timer: Timer
 var _pending_script_sync_paths: Dictionary = {}
+var _pending_deleted_script_sync_paths: Dictionary = {}
 var _editor_logger: _LayersEditorLogger
 var _ignored_error_signatures: Dictionary = {}
 var _locally_built_keys: Dictionary = {}
@@ -431,7 +433,7 @@ func _build_ui() -> void:
 	_connect_panel.add_child(ver_row)
 
 	_version_label = Label.new()
-	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.7.9")
+	_version_label.text = "Plugin v%s" % (_sync.get_local_plugin_version() if _sync != null else "2.8.0")
 	_version_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_version_label.clip_text = true
 	_version_label.add_theme_color_override("font_color", _editor_color("disabled_font_color", Color(0.68, 0.72, 0.78)))
@@ -695,15 +697,26 @@ func _sync_feature_picker_lock() -> void:
 		_feature_picker.disabled = _building_feature or _diagnosing_fix
 
 
-func _get_active_feature() -> Dictionary:
+func _get_feature_by_id(feat_id: String) -> Dictionary:
+	if feat_id.is_empty():
+		return {}
 	var epic_raw: Variant = _payload.get("activeEpic", null)
 	if typeof(epic_raw) != TYPE_DICTIONARY:
 		return {}
-	var epic_d: Dictionary = epic_raw
-	var features: Array = epic_d.get("features", [])
-	for f_raw in features:
-		if typeof(f_raw) == TYPE_DICTIONARY and str((f_raw as Dictionary).get("id", "")) == _selected_feature_id:
+	for f_raw in (epic_raw as Dictionary).get("features", []):
+		if typeof(f_raw) == TYPE_DICTIONARY and str((f_raw as Dictionary).get("id", "")) == feat_id:
 			return f_raw
+	return {}
+
+
+func _get_active_feature() -> Dictionary:
+	var by_id := _get_feature_by_id(_selected_feature_id)
+	if not by_id.is_empty():
+		return by_id
+	var epic_raw: Variant = _payload.get("activeEpic", null)
+	if typeof(epic_raw) != TYPE_DICTIONARY:
+		return {}
+	var features: Array = (epic_raw as Dictionary).get("features", [])
 	return features[0] if not features.is_empty() and typeof(features[0]) == TYPE_DICTIONARY else {}
 
 
@@ -873,6 +886,18 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 			if sp_cand.begins_with("res://") and sp_cand.ends_with(".gd") and FileAccess.file_exists(sp_cand) and not (sp_cand in scripts_to_open):
 				scripts_to_open.append(sp_cand)
 
+	var known_jump_paths := PackedStringArray()
+	for ks in scenes_to_open:
+		if not (ks in known_jump_paths):
+			known_jump_paths.append(ks)
+	for kg in scripts_to_open:
+		if not (kg in known_jump_paths):
+			known_jump_paths.append(kg)
+	for cf_raw in code_files.keys():
+		var cf_p := str(cf_raw).strip_edges()
+		if cf_p.begins_with("res://") and not (cf_p in known_jump_paths):
+			known_jump_paths.append(cf_p)
+
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", _S(6))
 	brief_vb.add_child(action_row)
@@ -1029,6 +1054,8 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		err_lbl.add_theme_color_override("font_color", _editor_color("error_color", Color(0.95, 0.48, 0.48)))
 		err_row.add_child(err_lbl)
 
+		_maybe_add_issue_jump_button(err_row, log_errors, known_jump_paths)
+
 		var dismiss_err_btn := Button.new()
 		dismiss_err_btn.flat = true
 		dismiss_err_btn.theme_type_variation = &"FlatButton"
@@ -1069,6 +1096,8 @@ func _render_active_feature_workspace(feat: Dictionary) -> void:
 		diag_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		diag_lbl.add_theme_color_override("font_color", _editor_color("warning_color", Color(0.96, 0.76, 0.36)))
 		diag_row.add_child(diag_lbl)
+
+		_maybe_add_issue_jump_button(diag_row, diag_issues, known_jump_paths)
 
 		var dismiss_diag_btn := Button.new()
 		dismiss_diag_btn.flat = true
@@ -1144,7 +1173,7 @@ func _get_active_project_diagnostics() -> Array:
 		var scene_arr: Array = []
 		for sc in all_scenes:
 			scene_arr.append(sc)
-		var all_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://")
+		var all_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://", editor_interface)
 		_cached_diagnostics = _executor.call("diagnose_project_combat_and_wiring", scene_arr, all_scripts, editor_interface)
 		_diagnostics_dirty = false
 	var visible_diags: Array = []
@@ -1171,17 +1200,20 @@ func _collect_full_project_agent_context(feat: Dictionary, code_files: Dictionar
 			extra_scenes.append(sc)
 
 	var scene_snap: Dictionary = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes)
-	var live_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://")
+	var live_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://", editor_interface)
 	for fsp_raw in paths.get("script_paths", []):
 		var fsp := str(fsp_raw).strip_edges()
-		if not fsp.is_empty() and not live_scripts.has(fsp) and FileAccess.file_exists(fsp):
-			live_scripts[fsp] = FileAccess.get_file_as_string(fsp)
+		if not fsp.is_empty() and not live_scripts.has(fsp):
+			var live_txt: String = str(_executor.call("read_live_script_text", fsp, editor_interface))
+			if not live_txt.is_empty():
+				live_scripts[fsp] = live_txt
 	var input_map_snap: Dictionary = _executor.call("capture_input_map_snapshot")
-	var scene_arr: Array = []
-	for sc in extra_scenes:
-		scene_arr.append(sc)
-	_cached_diagnostics = _executor.call("diagnose_project_combat_and_wiring", scene_arr, live_scripts, editor_interface)
-	_diagnostics_dirty = false
+	if _diagnostics_dirty:
+		var scene_arr: Array = []
+		for sc in extra_scenes:
+			scene_arr.append(sc)
+		_cached_diagnostics = _executor.call("diagnose_project_combat_and_wiring", scene_arr, live_scripts, editor_interface)
+		_diagnostics_dirty = false
 	var active_diags := _get_active_project_diagnostics()
 	return {
 		"primary_scene": primary_scene,
@@ -1284,6 +1316,60 @@ func _maybe_add_open_script_button(action_row: HBoxContainer, script_paths: Pack
 	action_row.add_child(open_menu_btn)
 
 
+func _maybe_add_issue_jump_button(
+	row: HBoxContainer,
+	issue_items: Array,
+	known_paths: PackedStringArray
+) -> void:
+	if _executor == null or row == null or issue_items.is_empty():
+		return
+	var raw_targets: Variant = _executor.call("extract_issue_jump_targets", issue_items, known_paths)
+	if typeof(raw_targets) != TYPE_ARRAY:
+		return
+	var valid_targets: Array = []
+	for t_raw in (raw_targets as Array):
+		if typeof(t_raw) != TYPE_DICTIONARY:
+			continue
+		var td: Dictionary = t_raw
+		var tp := str(td.get("path", "")).strip_edges()
+		if tp.begins_with("res://") and FileAccess.file_exists(tp):
+			valid_targets.append(td)
+	if valid_targets.is_empty():
+		return
+	if valid_targets.size() == 1:
+		var first_t: Dictionary = valid_targets[0]
+		var fp := str(first_t.get("path", ""))
+		var fln := int(first_t.get("line", 0))
+		var jump_btn := Button.new()
+		jump_btn.flat = true
+		jump_btn.theme_type_variation = &"FlatButton"
+		jump_btn.text = ("Open :%d" % fln) if fln > 0 else "Open"
+		jump_btn.icon = _editor_icon("Script" if fp.ends_with(".gd") else "PackedScene", "File")
+		jump_btn.tooltip_text = ("Jump to %s line %d" % [fp, fln]) if fln > 0 else ("Open %s" % fp)
+		jump_btn.pressed.connect(_on_open_res_path_pressed.bind(fp, fln if fln > 0 else -1))
+		row.add_child(jump_btn)
+		return
+	var jump_menu := MenuButton.new()
+	jump_menu.flat = true
+	jump_menu.theme_type_variation = &"FlatButton"
+	jump_menu.text = "Open (%d)" % valid_targets.size()
+	jump_menu.icon = _editor_icon("Script", "File")
+	jump_menu.tooltip_text = "Jump to an affected script line or scene"
+	var popup: PopupMenu = jump_menu.get_popup()
+	for idx in range(valid_targets.size()):
+		var td: Dictionary = valid_targets[idx]
+		popup.add_item(str(td.get("label", "Open")), idx)
+		popup.set_item_tooltip(idx, str(td.get("path", "")))
+	popup.id_pressed.connect(func(id: int) -> void:
+		if id >= 0 and id < valid_targets.size():
+			var chosen: Dictionary = valid_targets[id]
+			var cp := str(chosen.get("path", ""))
+			var cln := int(chosen.get("line", 0))
+			_on_open_res_path_pressed(cp, cln if cln > 0 else -1)
+	)
+	row.add_child(jump_menu)
+
+
 func _on_build_feature_pressed(feat: Dictionary) -> void:
 	if _executor == null or _building_feature or _diagnosing_fix:
 		return
@@ -1306,6 +1392,7 @@ func _on_build_feature_pressed(feat: Dictionary) -> void:
 	var live_scripts: Dictionary = full_ctx.get("live_scripts", {})
 	var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
 	var diag_issues: Array = full_ctx.get("project_diagnostics", [])
+	_in_flight_feature_id = feat_id
 	_building_feature = true
 	_sync_feature_picker_lock()
 	_set_status("Building %s with Gemini 4 Hydrogen..." % str(feat.get("title", "Feature")), false)
@@ -1362,7 +1449,9 @@ func _submit_direct_agent(feat_id: String, cp_id: String, explicit_error_text: S
 	_pending_bundle_is_auto_repair = false
 	_pre_repair_summary = ""
 	_pre_repair_warnings = PackedStringArray()
-	var feat: Dictionary = _get_active_feature()
+	var feat: Dictionary = _get_feature_by_id(feat_id)
+	if feat.is_empty():
+		feat = _get_active_feature()
 	var code_files: Dictionary = _payload.get("codeFiles", {}) if typeof(_payload.get("codeFiles", null)) == TYPE_DICTIONARY else {}
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
 	var full_ctx: Dictionary = _collect_full_project_agent_context(feat, code_files, arena_scene) if _executor != null else {}
@@ -1372,6 +1461,7 @@ func _submit_direct_agent(feat_id: String, cp_id: String, explicit_error_text: S
 	var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
 	var diag_issues: Array = full_ctx.get("project_diagnostics", [])
 
+	_in_flight_feature_id = feat_id
 	_diagnosing_fix = true
 	_sync_feature_picker_lock()
 	_set_status("Agent Director updating Scene & GDScript...", false)
@@ -1426,6 +1516,8 @@ func _on_agent_bundle_received(bundle: Dictionary, payload_data: Dictionary) -> 
 func _on_bundle_apply_timeout() -> void:
 	_building_feature = false
 	_diagnosing_fix = false
+	var in_flight_id := _in_flight_feature_id
+	_in_flight_feature_id = ""
 	var was_initial_build := _pending_bundle_was_initial_build
 	_pending_bundle_was_initial_build = false
 	var is_auto_repair := _pending_bundle_is_auto_repair
@@ -1435,11 +1527,14 @@ func _on_bundle_apply_timeout() -> void:
 	if _executor == null or bundle.is_empty():
 		_refresh_view()
 		return
-	var active_feat: Dictionary = _get_active_feature()
+	var active_feat: Dictionary = _get_feature_by_id(in_flight_id)
+	if active_feat.is_empty():
+		active_feat = _get_active_feature()
 	var pref_scene: String = str(active_feat.get("primaryAsset", "")).strip_edges()
 	var pre_snap: Dictionary = _executor.call("capture_bundle_snapshot", editor_interface, bundle, pref_scene)
 	pre_snap["was_initial_build"] = was_initial_build
 	pre_snap["feature_id"] = str(active_feat.get("id", ""))
+	pre_snap["checkpoint_id"] = str(active_feat.get("checkpointId", ""))
 	pre_snap["checkpoint_key"] = _make_checkpoint_build_key(active_feat) if not active_feat.is_empty() else ""
 	var apply_res: Dictionary = _executor.call("apply_agent_bundle", editor_interface, undo_redo, bundle, pref_scene)
 	var apply_ok: bool = bool(apply_res.get("ok", false))
@@ -1512,6 +1607,7 @@ func _on_bundle_apply_timeout() -> void:
 			var input_map_snap: Dictionary = full_ctx.get("input_map_snapshot", {})
 			var diag_issues: Array = full_ctx.get("project_diagnostics", [])
 			var err_joined := "\n".join(all_repair_errors)
+			_in_flight_feature_id = feat_id
 			_diagnosing_fix = true
 			_last_agent_summary = ""
 			_last_agent_warnings = PackedStringArray()
@@ -1577,6 +1673,7 @@ func _on_post_playtest_log_timeout() -> void:
 
 func _queue_live_script_sync(script_path: String = "") -> void:
 	if not script_path.is_empty():
+		_pending_deleted_script_sync_paths.erase(script_path)
 		_pending_script_sync_paths[script_path] = true
 	else:
 		_pending_script_sync_paths["__ALL__"] = true
@@ -1584,26 +1681,41 @@ func _queue_live_script_sync(script_path: String = "") -> void:
 		_script_sync_timer.start()
 
 
+func _queue_deleted_script_sync(script_path: String) -> void:
+	var clean_p := script_path.strip_edges()
+	if not clean_p.begins_with("res://") or not clean_p.ends_with(".gd"):
+		return
+	_pending_script_sync_paths.erase(clean_p)
+	_pending_deleted_script_sync_paths[clean_p] = true
+	if is_inside_tree() and _script_sync_timer != null:
+		_script_sync_timer.start()
+	else:
+		_on_script_sync_timeout()
+
+
 func _on_script_sync_timeout() -> void:
 	if _sync == null or not _sync.has_link_token() or _executor == null:
 		_pending_script_sync_paths.clear()
+		_pending_deleted_script_sync_paths.clear()
 		return
 	var scripts_to_push := {}
 	if _pending_script_sync_paths.has("__ALL__"):
-		scripts_to_push = _executor.call("read_all_live_project_scripts", "res://")
+		scripts_to_push = _executor.call("read_all_live_project_scripts", "res://", editor_interface)
 	else:
 		for raw_k in _pending_script_sync_paths.keys():
 			var rp := String(raw_k).strip_edges()
-			if rp.ends_with(".gd") and FileAccess.file_exists(rp):
-				var f := FileAccess.open(rp, FileAccess.READ)
-				if f != null:
-					var txt := f.get_as_text()
-					f.close()
-					if not txt.strip_edges().is_empty():
-						scripts_to_push[rp] = txt.left(65536)
+			var live_txt := String(_executor.call("read_live_script_text", rp, editor_interface))
+			if not live_txt.strip_edges().is_empty():
+				scripts_to_push[rp] = live_txt
+	var deleted_to_push := PackedStringArray()
+	for raw_dk in _pending_deleted_script_sync_paths.keys():
+		var dp := String(raw_dk).strip_edges()
+		if dp.begins_with("res://") and dp.ends_with(".gd") and not scripts_to_push.has(dp):
+			deleted_to_push.append(dp)
 	_pending_script_sync_paths.clear()
-	if not scripts_to_push.is_empty():
-		_sync.sync_live_scripts(scripts_to_push)
+	_pending_deleted_script_sync_paths.clear()
+	if not scripts_to_push.is_empty() or not deleted_to_push.is_empty():
+		_sync.sync_live_scripts(scripts_to_push, deleted_to_push)
 
 
 func _on_scripts_synced(synced_count: int) -> void:
@@ -1617,6 +1729,10 @@ func _on_playtest_arena_pressed(arena_scene: String, primary_scene: String) -> v
 	if _is_editor_playing() and editor_interface.has_method("stop_playing_scene"):
 		editor_interface.call("stop_playing_scene")
 		return
+	if editor_interface.has_method("get_script_editor"):
+		var script_ed: Variant = editor_interface.get_script_editor()
+		if script_ed != null and script_ed.has_method("save_all_scripts"):
+			script_ed.call("save_all_scripts")
 	if editor_interface.has_method("save_all_scenes"):
 		editor_interface.call("save_all_scenes")
 	elif editor_interface.has_method("save_scene"):
@@ -1634,10 +1750,10 @@ func _on_playtest_arena_pressed(arena_scene: String, primary_scene: String) -> v
 	editor_interface.play_current_scene()
 
 
-func _on_open_res_path_pressed(res_path: String) -> void:
+func _on_open_res_path_pressed(res_path: String, line_number: int = -1) -> void:
 	if _executor == null:
 		return
-	var err_msg: String = str(_executor.call("open_res_path", editor_interface, res_path))
+	var err_msg: String = str(_executor.call("open_res_path", editor_interface, res_path, line_number))
 	if not err_msg.is_empty():
 		_set_status(err_msg, true)
 
@@ -1649,14 +1765,7 @@ func _on_undo_last_ai_pressed() -> void:
 	_last_ai_snapshot = {}
 	var res: Dictionary = _executor.call("restore_bundle_snapshot", editor_interface, snap)
 	var snap_feat_id: String = str(snap.get("feature_id", "")).strip_edges()
-	var target_feat: Dictionary = {}
-	if not snap_feat_id.is_empty():
-		var epic_raw: Variant = _payload.get("activeEpic", null)
-		if typeof(epic_raw) == TYPE_DICTIONARY:
-			for f_raw in (epic_raw as Dictionary).get("features", []):
-				if typeof(f_raw) == TYPE_DICTIONARY and str((f_raw as Dictionary).get("id", "")) == snap_feat_id:
-					target_feat = f_raw
-					break
+	var target_feat: Dictionary = _get_feature_by_id(snap_feat_id)
 	if target_feat.is_empty():
 		target_feat = _get_active_feature()
 	if bool(snap.get("was_initial_build", false)):
@@ -1665,6 +1774,9 @@ func _on_undo_last_ai_pressed() -> void:
 			_locally_built_keys.erase(cp_key)
 		if not target_feat.is_empty():
 			target_feat["isBuiltInGodot"] = false
+		if _sync != null and _sync.has_link_token() and not snap_feat_id.is_empty() and _sync.has_method("set_feature_built"):
+			var undo_cp_id := str(target_feat.get("checkpointId", snap.get("checkpoint_id", ""))).strip_edges()
+			_sync.call("set_feature_built", snap_feat_id, undo_cp_id, false)
 	_diagnostics_dirty = true
 	_last_agent_summary = ""
 	_last_agent_warnings = PackedStringArray()
@@ -1681,6 +1793,10 @@ func _on_undo_last_ai_pressed() -> void:
 				code_files[rsp_str] = FileAccess.get_file_as_string(rsp_str)
 	if _sync != null and _sync.has_method("save_cached_epic") and not _payload.is_empty():
 		_sync.call("save_cached_epic", _payload)
+	for rm_sp in removed_scripts:
+		var rm_str := str(rm_sp).strip_edges()
+		if rm_str.begins_with("res://") and rm_str.ends_with(".gd"):
+			_queue_deleted_script_sync(rm_str)
 	for rsp in restored_scripts:
 		var rsp_str := str(rsp).strip_edges()
 		if rsp_str.begins_with("res://") and rsp_str.ends_with(".gd"):
@@ -1776,6 +1892,7 @@ func _on_cancel_agent_pressed() -> void:
 	_pending_bundle_was_initial_build = false
 	_pending_bundle_is_auto_repair = false
 	_auto_repair_attempted_this_op = false
+	_in_flight_feature_id = ""
 	_building_feature = false
 	_diagnosing_fix = false
 	_sync_feature_picker_lock()
@@ -1805,6 +1922,7 @@ func _on_epic_updated(payload: Dictionary) -> void:
 
 
 func _on_sync_failed(message: String) -> void:
+	_in_flight_feature_id = ""
 	_building_feature = false
 	_diagnosing_fix = false
 	_pending_bundle_is_auto_repair = false
@@ -1938,6 +2056,9 @@ func _on_connect_pressed() -> void:
 	_show_token_editor = false
 	_payload = {}
 	_selected_feature_id = ""
+	_in_flight_feature_id = ""
+	_pending_script_sync_paths.clear()
+	_pending_deleted_script_sync_paths.clear()
 	_last_agent_summary = ""
 	_last_ai_snapshot = {}
 	_refresh_view()
@@ -1955,6 +2076,9 @@ func _on_disconnect_pressed() -> void:
 	_sync.clear_link_token()
 	_payload = {}
 	_selected_feature_id = ""
+	_in_flight_feature_id = ""
+	_pending_script_sync_paths.clear()
+	_pending_deleted_script_sync_paths.clear()
 	_last_agent_summary = ""
 	_last_ai_snapshot = {}
 	_show_token_editor = true
@@ -1999,7 +2123,7 @@ func _on_sync_pressed() -> void:
 		_executor.call("invalidate_eval_cache")
 	if _sync != null:
 		if _executor != null and _sync.has_link_token():
-			var all_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://")
+			var all_scripts: Dictionary = _executor.call("read_all_live_project_scripts", "res://", editor_interface)
 			if not all_scripts.is_empty():
 				_sync.sync_live_scripts(all_scripts)
 		_sync.fetch_active_epic()

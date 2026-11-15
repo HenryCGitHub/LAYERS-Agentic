@@ -37,7 +37,9 @@ var _update_silent: bool = true
 var _update_zip_attempt_idx: int = 0
 var _script_sync_busy: bool = false
 var _pending_live_scripts: Dictionary = {}
+var _pending_deleted_scripts: Dictionary = {}
 var _script_sync_in_flight: Dictionary = {}
+var _script_delete_in_flight: PackedStringArray = PackedStringArray()
 var _script_sync_retried_paths: Dictionary = {}
 
 
@@ -96,6 +98,7 @@ func clear_link_token() -> void:
 	_link_token = ""
 	_pending_request = {}
 	_pending_live_scripts.clear()
+	_pending_deleted_scripts.clear()
 	_script_sync_retried_paths.clear()
 	if FileAccess.file_exists(LINK_CFG_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(LINK_CFG_PATH))
@@ -140,6 +143,22 @@ func set_playtest_passed(feature_id: String, checkpoint_id: String, passed: bool
 			"checkpointId": checkpoint_id,
 			"action": "set_playtest",
 			"passed": passed,
+		}),
+	})
+
+
+func set_feature_built(feature_id: String, checkpoint_id: String, built: bool) -> void:
+	if not has_link_token():
+		return
+	_dispatch_or_queue({
+		"kind": "update",
+		"method": HTTPClient.METHOD_POST,
+		"path": "/godotLink/update",
+		"body": JSON.stringify({
+			"featureId": feature_id,
+			"checkpointId": checkpoint_id,
+			"action": "set_godot_built",
+			"built": built,
 		}),
 	})
 
@@ -511,8 +530,11 @@ func direct_agent(
 	_post_agent_update(payload)
 
 
-func sync_live_scripts(live_scripts: Dictionary) -> void:
-	if not has_link_token() or live_scripts.is_empty():
+func sync_live_scripts(
+	live_scripts: Dictionary,
+	deleted_paths: PackedStringArray = PackedStringArray()
+) -> void:
+	if not has_link_token() or (live_scripts.is_empty() and deleted_paths.is_empty()):
 		return
 	for raw_path in live_scripts.keys():
 		var p := str(raw_path).strip_edges()
@@ -520,8 +542,15 @@ func sync_live_scripts(live_scripts: Dictionary) -> void:
 			var code := str(live_scripts[raw_path])
 			if not code.strip_edges().is_empty():
 				_script_sync_retried_paths.erase(p)
+				_pending_deleted_scripts.erase(p)
 				_pending_live_scripts[p] = code
-	if _pending_live_scripts.is_empty():
+	for raw_del in deleted_paths:
+		var dp := str(raw_del).strip_edges()
+		if dp.begins_with("res://") and dp.ends_with(".gd") and not live_scripts.has(dp):
+			_script_sync_retried_paths.erase(dp)
+			_pending_live_scripts.erase(dp)
+			_pending_deleted_scripts[dp] = true
+	if _pending_live_scripts.is_empty() and _pending_deleted_scripts.is_empty():
 		return
 	if _script_sync_busy:
 		return
@@ -529,12 +558,16 @@ func sync_live_scripts(live_scripts: Dictionary) -> void:
 
 
 func _flush_pending_script_sync() -> void:
-	if _script_sync_busy or _pending_live_scripts.is_empty() or not has_link_token():
+	if _script_sync_busy or (_pending_live_scripts.is_empty() and _pending_deleted_scripts.is_empty()) or not has_link_token():
 		return
 	if _script_sync_http == null:
 		return
 	_script_sync_in_flight = _pending_live_scripts.duplicate()
 	_pending_live_scripts.clear()
+	_script_delete_in_flight = PackedStringArray()
+	for raw_dp in _pending_deleted_scripts.keys():
+		_script_delete_in_flight.append(str(raw_dp))
+	_pending_deleted_scripts.clear()
 	_script_sync_busy = true
 
 	var url := "%s/godotLink/update" % _sync_base_url.trim_suffix("/")
@@ -542,14 +575,21 @@ func _flush_pending_script_sync() -> void:
 		"Content-Type: application/json",
 		"Authorization: Bearer %s" % _link_token,
 	])
-	var body_str := JSON.stringify({
+	var payload := {
 		"action": "sync_scripts",
 		"scripts": _script_sync_in_flight,
-	})
+	}
+	if not _script_delete_in_flight.is_empty():
+		var del_arr: Array = []
+		for dp in _script_delete_in_flight:
+			del_arr.append(dp)
+		payload["deletedPaths"] = del_arr
+	var body_str := JSON.stringify(payload)
 	var err := _script_sync_http.request(url, headers, HTTPClient.METHOD_POST, body_str)
 	if err != OK:
 		_script_sync_busy = false
 		_script_sync_in_flight.clear()
+		_script_delete_in_flight = PackedStringArray()
 
 
 func _on_script_sync_http_completed(
@@ -560,7 +600,9 @@ func _on_script_sync_http_completed(
 ) -> void:
 	_script_sync_busy = false
 	var synced_snapshot: Dictionary = _script_sync_in_flight.duplicate()
+	var deleted_snapshot: PackedStringArray = _script_delete_in_flight.duplicate()
 	_script_sync_in_flight.clear()
+	_script_delete_in_flight = PackedStringArray()
 
 	var synced_ok := false
 	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
@@ -569,17 +611,24 @@ func _on_script_sync_http_completed(
 			synced_ok = true
 			for rk in synced_snapshot.keys():
 				_script_sync_retried_paths.erase(str(rk))
-			_update_cached_code_files(synced_snapshot)
-			scripts_synced.emit(int(parsed.get("syncedCount", synced_snapshot.size())))
+			for dk in deleted_snapshot:
+				_script_sync_retried_paths.erase(str(dk))
+			_update_cached_code_files(synced_snapshot, deleted_snapshot)
+			scripts_synced.emit(int(parsed.get("syncedCount", synced_snapshot.size())) + int(parsed.get("deletedCount", 0)))
 
 	if not synced_ok:
 		for rk in synced_snapshot.keys():
 			var rp := str(rk)
-			if not _pending_live_scripts.has(rp) and not _script_sync_retried_paths.has(rp):
+			if not _pending_live_scripts.has(rp) and not _pending_deleted_scripts.has(rp) and not _script_sync_retried_paths.has(rp):
 				_script_sync_retried_paths[rp] = true
 				_pending_live_scripts[rp] = synced_snapshot[rk]
+		for dk in deleted_snapshot:
+			var dp := str(dk)
+			if not _pending_deleted_scripts.has(dp) and not _pending_live_scripts.has(dp) and not _script_sync_retried_paths.has(dp):
+				_script_sync_retried_paths[dp] = true
+				_pending_deleted_scripts[dp] = true
 
-	if not _pending_live_scripts.is_empty():
+	if not _pending_live_scripts.is_empty() or not _pending_deleted_scripts.is_empty():
 		_flush_pending_script_sync()
 
 
@@ -597,8 +646,11 @@ func _normalize_code_files_dict(raw_val: Variant) -> Dictionary:
 	return migrated
 
 
-func _update_cached_code_files(live_scripts: Dictionary) -> void:
-	if live_scripts.is_empty():
+func _update_cached_code_files(
+	live_scripts: Dictionary,
+	deleted_paths: PackedStringArray = PackedStringArray()
+) -> void:
+	if live_scripts.is_empty() and deleted_paths.is_empty():
 		return
 	var cached := load_cached_epic()
 	if cached.is_empty():
@@ -608,6 +660,10 @@ func _update_cached_code_files(live_scripts: Dictionary) -> void:
 		var rp := str(rp_raw).strip_edges()
 		if not rp.is_empty():
 			code_files[rp] = str(live_scripts[rp_raw])
+	for dp_raw in deleted_paths:
+		var dp := str(dp_raw).strip_edges()
+		if not dp.is_empty():
+			code_files.erase(dp)
 	cached["codeFiles"] = code_files
 	_write_cache(cached)
 

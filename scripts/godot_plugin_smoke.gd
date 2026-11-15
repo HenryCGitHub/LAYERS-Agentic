@@ -667,5 +667,81 @@ func take_damage(amount: float) -> void:
 		quit(1)
 		return
 
+	# --- v2.8.0 SEA regression probes ---
+	# 1. Disk UI scene root class inference via infer_scene_root_type
+	var v280_hud_root: Variant = exec.call("_load_or_create_disk_scene_root", "res://scenes/v280_hud_overlay.tscn", "")
+	var v280_hud_ok := (v280_hud_root is CanvasLayer)
+	if v280_hud_root is Object:
+		(v280_hud_root as Object).free()
+	if not v280_hud_ok:
+		printerr("FAIL: _load_or_create_disk_scene_root did not infer CanvasLayer for v280_hud_overlay.tscn")
+		quit(1)
+		return
+
+	# 2. Unsaved ScriptEditor buffer overlay filtering
+	if not exec.has_method("merge_script_buffer_overrides"):
+		printerr("FAIL: exec missing merge_script_buffer_overrides")
+		quit(1)
+		return
+	var v280_merged_scripts: Dictionary = exec.call(
+		"merge_script_buffer_overrides",
+		{"res://scripts/a.gd": "extends Node\n"},
+		{
+			"res://scripts/a.gd": "extends Node3D\n@export var speed: float = 9.0\n",
+			"res://addons/layers/layers_dock.gd": "ignored_plugin_script",
+		}
+	)
+	if not ("speed: float = 9.0" in String(v280_merged_scripts.get("res://scripts/a.gd", ""))) or v280_merged_scripts.has("res://addons/layers/layers_dock.gd"):
+		printerr("FAIL: merge_script_buffer_overrides did not overlay unsaved buffer or filter addons/: ", v280_merged_scripts)
+		quit(1)
+		return
+
+	# 3. Jump target extraction (script:line + diagnostic .tscn/.gd)
+	if not exec.has_method("extract_issue_jump_target") or not exec.has_method("extract_issue_jump_targets"):
+		printerr("FAIL: exec missing extract_issue_jump_target / extract_issue_jump_targets")
+		quit(1)
+		return
+	var v280_jump_gd_path := "res://scripts/v280_jump_probe.gd"
+	var v280_jump_tscn_path := "res://scenes/v280_jump_probe.tscn"
+	_write_text(v280_jump_gd_path, "extends CharacterBody3D\n@onready var claw_pivot: Node3D = $ClawPivot\n")
+	_write_text(v280_jump_tscn_path, "[gd_scene format=3]\n[node name=\"V280JumpProbe\" type=\"CharacterBody3D\"]\n")
+	var v280_line_target: Dictionary = exec.call(
+		"extract_issue_jump_target",
+		"SCRIPT ERROR: Invalid get index (res://scripts/v280_jump_probe.gd:42 in _physics_process)",
+		PackedStringArray()
+	)
+	var v280_diag_targets: Array = exec.call(
+		"extract_issue_jump_targets",
+		["[MISSING @ONREADY NODE] v280_jump_probe.tscn :: v280_jump_probe.gd references missing child $ClawPivot on '.'."],
+		PackedStringArray()
+	)
+	if FileAccess.file_exists(v280_jump_gd_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(v280_jump_gd_path))
+	if FileAccess.file_exists(v280_jump_tscn_path):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(v280_jump_tscn_path))
+	if String(v280_line_target.get("path", "")) != v280_jump_gd_path or int(v280_line_target.get("line", 0)) != 42:
+		printerr("FAIL: extract_issue_jump_target failed on script:line error: ", v280_line_target)
+		quit(1)
+		return
+	var v280_diag_paths := PackedStringArray()
+	for v280_dt in v280_diag_targets:
+		if typeof(v280_dt) == TYPE_DICTIONARY:
+			v280_diag_paths.append(String((v280_dt as Dictionary).get("path", "")))
+	if not (v280_jump_tscn_path in v280_diag_paths) or not (v280_jump_gd_path in v280_diag_paths):
+		printerr("FAIL: extract_issue_jump_targets did not resolve both .tscn and .gd from diagnostic row: ", v280_diag_targets)
+		quit(1)
+		return
+
+	# 4. Sync client set_feature_built & deletedPaths surface
+	var v280_sync_path: String = exec.get_script().resource_path.get_base_dir().path_join("layers_sync_client.gd")
+	var v280_sync_scr: Script = load(v280_sync_path)
+	var v280_sync_client: Node = v280_sync_scr.new()
+	var v280_sync_ok := v280_sync_client.has_method("set_feature_built") and v280_sync_client.has_method("sync_live_scripts")
+	v280_sync_client.free()
+	if not v280_sync_ok:
+		printerr("FAIL: layers_sync_client missing set_feature_built / sync_live_scripts")
+		quit(1)
+		return
+
 	print("GODOT_SMOKE_OK")
 	quit(0)

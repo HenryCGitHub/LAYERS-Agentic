@@ -360,6 +360,7 @@ function collectFeatureScriptPathsJs(feat, steps, existingCodeFiles = null) {
 function collectProjectCodeFilesJs(docsById) {
   const out = {};
   const latestTsByPath = {};
+  const tombstonedPaths = new Set();
   if (!docsById || typeof docsById.values !== "function") return out;
   for (const d of docsById.values()) {
     if (!d || String(d.tier || "").toUpperCase() !== "CODEFILE") continue;
@@ -370,12 +371,23 @@ function collectProjectCodeFilesJs(docsById) {
         d?.sections?.updated_at_ms || d?.updatedAtMs || d?.updated_at_ms || 0
       ) || 0;
     if (
-      !Object.prototype.hasOwnProperty.call(out, resPath) ||
+      !Object.prototype.hasOwnProperty.call(latestTsByPath, resPath) ||
       ts >= (latestTsByPath[resPath] || 0)
     ) {
-      out[resPath] = String(d?.sections?.content || "");
+      const content = String(d?.sections?.content || "");
+      const isTombstoned = Boolean(d?.isIcebox) || !content.trim();
       latestTsByPath[resPath] = ts;
+      if (isTombstoned) {
+        tombstonedPaths.add(resPath);
+        delete out[resPath];
+      } else {
+        tombstonedPaths.delete(resPath);
+        out[resPath] = content;
+      }
     }
+  }
+  for (const tp of tombstonedPaths) {
+    delete out[tp];
   }
   return out;
 }
@@ -770,40 +782,6 @@ async function runGodotAgentWithGemini({
   return { ok: true, model: aiResp.model, bundle };
 }
 
-function markFeatureScaffoldStepsCompletedJs(states, checkpointId) {
-  let changed = false;
-  const markItems = (items) => {
-    if (!Array.isArray(items)) return items;
-    return items.map((item) => {
-      if (!item || typeof item !== "object") return item;
-      const children = Array.isArray(item.children) ? item.children : [];
-      if (children.length > 0) {
-        const nextChildren = markItems(children);
-        const nextItem = { ...item, children: nextChildren };
-        const counts = countLeafChecklist(nextItem);
-        const allChildDone = counts.total > 0 && counts.done === counts.total;
-        if (Boolean(item.completed) !== allChildDone) {
-          changed = true;
-        }
-        return { ...nextItem, completed: allChildDone };
-      }
-      const notes = decodeThreeAreaNotesJs(item.specNotes || "");
-      const isFix = notes.stepRole === "fix" || String(item.title || "").startsWith("[FIX]");
-      if (!isFix && !item.completed) {
-        changed = true;
-        return { ...item, completed: true };
-      }
-      return item;
-    });
-  };
-  const updatedStates = (Array.isArray(states) ? states : []).map((st) => {
-    if (!st || typeof st !== "object") return st;
-    if (checkpointId && String(st.id || "") !== checkpointId) return st;
-    return { ...st, checklist: markItems(st.checklist || []) };
-  });
-  return { updatedStates, changed };
-}
-
 function markFeatureBuiltInGodotJs(states, checkpointId) {
   let changed = false;
   const list = Array.isArray(states) ? states : [];
@@ -935,23 +913,39 @@ function applyCodeFileWritesInTxJs({
 
 async function handleSyncLiveScriptsRoute({ linkAuth, body, res }) {
   const rawScripts = body?.scripts ?? body?.liveScripts;
-  if (!rawScripts || typeof rawScripts !== "object" || Array.isArray(rawScripts)) {
+  const scriptsObj =
+    rawScripts && typeof rawScripts === "object" && !Array.isArray(rawScripts)
+      ? rawScripts
+      : null;
+  const rawDeleted = Array.isArray(body?.deletedPaths) ? body.deletedPaths : null;
+  if (!scriptsObj && !rawDeleted) {
     res.status(400).json({ error: { code: 400, message: "Missing scripts map." } });
     return;
   }
 
   const normalizedUpdates = [];
-  for (const [rawPath, rawContent] of Object.entries(rawScripts)) {
+  const updatedPathSet = new Set();
+  for (const [rawPath, rawContent] of Object.entries(scriptsObj || {})) {
     if (normalizedUpdates.length >= 40) break;
     const resPath = normalizeResPathJs(String(rawPath || ""));
     if (!resPath.startsWith("res://") || !resPath.endsWith(".gd")) continue;
     const content = typeof rawContent === "string" ? rawContent : "";
     if (!content.trim()) continue;
+    updatedPathSet.add(resPath);
     normalizedUpdates.push({
       resPath,
       content: content.slice(0, 65536),
       language: "gdscript",
     });
+  }
+
+  const deletedPathSet = new Set();
+  for (const rawDel of rawDeleted || []) {
+    if (deletedPathSet.size >= 40) break;
+    const resPath = normalizeResPathJs(String(rawDel || ""));
+    if (!resPath.startsWith("res://") || !resPath.endsWith(".gd")) continue;
+    if (updatedPathSet.has(resPath)) continue;
+    deletedPathSet.add(resPath);
   }
 
   const db = getFirestore();
@@ -974,30 +968,97 @@ async function handleSyncLiveScriptsRoute({ linkAuth, body, res }) {
     scriptUpdates: normalizedUpdates,
   });
 
+  const projChildrenSet = new Set(
+    Array.isArray(projDoc?.childrenIds) ? projDoc.childrenIds : []
+  );
+  const pendingCodeDeletes = [];
+  if (deletedPathSet.size > 0) {
+    for (const d of docsById.values()) {
+      if (!d || String(d.tier || "").toUpperCase() !== "CODEFILE") continue;
+      if (d.parentId !== linkAuth.projectId && !projChildrenSet.has(d.id)) {
+        continue;
+      }
+      const rp = normalizeResPathJs(d?.sections?.res_path || "");
+      if (rp && deletedPathSet.has(rp)) {
+        pendingCodeDeletes.push({
+          docId: d.id,
+          ref: docsCol.doc(d.id),
+          resPath: rp,
+        });
+      }
+    }
+  }
+
   const projRef = docsCol.doc(linkAuth.projectId);
   const nowMs = Date.now();
   await db.runTransaction(async (tx) => {
-    const [projSnap, ...codeSnaps] = await Promise.all([
+    const [projSnap, ...otherSnaps] = await Promise.all([
       tx.get(projRef),
       ...pendingCodeWrites.map((w) => tx.get(w.ref)),
+      ...pendingCodeDeletes.map((d) => tx.get(d.ref)),
     ]);
-    applyCodeFileWritesInTxJs({
-      tx,
-      projRef,
-      projSnap,
-      docsById,
-      projectId: linkAuth.projectId,
-      pendingCodeWrites,
-      codeSnaps,
-      activeVer,
-      nowMs,
-    });
+    const codeSnaps = otherSnaps.slice(0, pendingCodeWrites.length);
+    const deleteSnaps = otherSnaps.slice(pendingCodeWrites.length);
+
+    if (pendingCodeWrites.length > 0) {
+      applyCodeFileWritesInTxJs({
+        tx,
+        projRef,
+        projSnap,
+        docsById,
+        projectId: linkAuth.projectId,
+        pendingCodeWrites,
+        codeSnaps,
+        activeVer,
+        nowMs,
+      });
+    }
+
+    const deletedIdSet = new Set();
+    for (let i = 0; i < pendingCodeDeletes.length; i++) {
+      const delItem = pendingCodeDeletes[i];
+      const delSnap = deleteSnaps[i];
+      if (!delSnap.exists) continue;
+      const existingData = delSnap.data() || {};
+      const nextSections = {
+        ...(existingData.sections || {}),
+        res_path: delItem.resPath,
+        content: "",
+        updated_at_ms: String(nowMs),
+      };
+      tx.update(delItem.ref, {
+        isIcebox: true,
+        sections: nextSections,
+      });
+      deletedIdSet.add(delItem.docId);
+      docsById.set(delItem.docId, {
+        ...existingData,
+        id: delItem.docId,
+        isIcebox: true,
+        sections: nextSections,
+      });
+    }
+
+    if ((pendingCodeDeletes.length > 0 || pendingCodeWrites.length === 0) && projSnap.exists) {
+      const latestProj = docsById.get(linkAuth.projectId) || projSnap.data() || {};
+      const curChildren = Array.isArray(latestProj.childrenIds)
+        ? latestProj.childrenIds.filter((cid) => !deletedIdSet.has(cid))
+        : [];
+      const nextProjSections = {
+        ...(latestProj.sections || {}),
+        last_godot_sync_ms: String(nowMs),
+      };
+      const projPatch = { sections: nextProjSections };
+      if (deletedIdSet.size > 0) projPatch.childrenIds = curChildren;
+      tx.update(projRef, projPatch);
+    }
   });
 
   linkAuth.linkRef.set({ lastSyncAt: nowMs }, { merge: true }).catch(() => {});
   res.status(200).json({
     ok: true,
     syncedCount: pendingCodeWrites.length,
+    deletedCount: pendingCodeDeletes.length,
     syncedAtMs: nowMs,
   });
 }
@@ -1054,40 +1115,6 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
       steps: [],
       scriptPaths: [],
     };
-  }
-
-  if (action === "complete_feature_steps") {
-    const featRef = docsCol.doc(featureId);
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(featRef);
-      if (!snap.exists) return;
-      const d = snap.data() || {};
-      const parsedStates = parseFeatureStates({ sections: d.sections });
-      const { updatedStates, changed } = markFeatureScaffoldStepsCompletedJs(
-        parsedStates,
-        checkpointId || String(featureObj.checkpointId || "")
-      );
-      if (!changed) return;
-      const nextSections = {
-        ...(d.sections || {}),
-        states: JSON.stringify(updatedStates),
-      };
-      const nextSubtasks = rebuildDocSubtasksFromStates(updatedStates);
-      tx.update(featRef, { sections: nextSections, subtasks: nextSubtasks });
-      docsById.set(featureId, {
-        id: featureId,
-        ...d,
-        sections: nextSections,
-        subtasks: nextSubtasks,
-      });
-    });
-    const nextPayload = computeActiveEpicPayload({
-      docsById,
-      projectId: linkAuth.projectId,
-      webStudioUrl: linkAuth.webStudioUrl,
-    });
-    res.status(200).json(nextPayload);
-    return;
   }
 
   const apiKey = String(GEMINI_API_KEY.value() || "").trim();
@@ -1175,6 +1202,7 @@ async function handleGodotAgentActionRoute({ req, res, linkAuth, body }) {
         const nextSections = {
           ...(fData.sections || {}),
           states: JSON.stringify(updatedStates),
+          last_godot_sync_ms: String(nowMs),
           ...(!hasPrimary && fallbackPrimary
             ? { primary_asset: fallbackPrimary }
             : {}),
@@ -1625,31 +1653,6 @@ function rebuildDocSubtasksFromStates(states) {
       specNotes: JSON.stringify(meta),
     };
   });
-}
-
-function updateLeafStepCompletion(items, stepId, completed) {
-  let matched = false;
-  if (!Array.isArray(items)) return false;
-  for (const item of items) {
-    if (!item || typeof item !== "object") continue;
-    const children = Array.isArray(item.children) ? item.children : [];
-    if (String(item.id || "") === stepId) {
-      item.completed = completed;
-      if (children.length > 0) {
-        for (const c of children) {
-          c.completed = completed;
-        }
-      }
-      matched = true;
-    } else if (children.length > 0) {
-      if (updateLeafStepCompletion(children, stepId, completed)) {
-        const counts = countLeafChecklist(item);
-        item.completed = counts.total > 0 && counts.done === counts.total;
-        matched = true;
-      }
-    }
-  }
-  return matched;
 }
 
 function setAllChecklistItemsCompleted(items, completed) {
@@ -2629,13 +2632,11 @@ exports.geminiProxy = onRequest(
       const featureId = String(body.featureId || "").trim();
       const checkpointId = String(body.checkpointId || "").trim();
       const action = String(body.action || "").trim();
-      const stepId = String(body.stepId || "").trim();
 
       if (
         action === "build_feature" ||
         action === "direct_agent" ||
-        action === "diagnose_fix" ||
-        action === "complete_feature_steps"
+        action === "diagnose_fix"
       ) {
         await handleGodotAgentActionRoute({ req, res, linkAuth, body });
         return;
@@ -2648,22 +2649,14 @@ exports.geminiProxy = onRequest(
 
       if (
         !featureId ||
-        (action !== "toggle_step" &&
-          action !== "pass_gate" &&
-          action !== "set_playtest")
+        (action !== "set_playtest" && action !== "set_godot_built")
       ) {
         res.status(400).json({
           error: {
             code: 400,
             message:
-              "Expected featureId and action ('toggle_step', 'pass_gate', or 'set_playtest').",
+              "Expected featureId and action ('set_playtest' or 'set_godot_built').",
           },
-        });
-        return;
-      }
-      if (action === "toggle_step" && !stepId) {
-        res.status(400).json({
-          error: { code: 400, message: "Missing stepId for toggle_step." },
         });
         return;
       }
@@ -2704,23 +2697,10 @@ exports.geminiProxy = onRequest(
               ? { ...cp.parameters }
               : {};
 
-          if (action === "toggle_step") {
-            const nextCompleted = Boolean(body.completed);
-            const matched = updateLeafStepCompletion(
-              cp.checklist,
-              stepId,
-              nextCompleted
-            );
-            if (!matched) {
-              const missingStep = new Error(`Step "${stepId}" not found.`);
-              missingStep.statusCode = 404;
-              throw missingStep;
-            }
-            if (!nextCompleted) {
-              cp.parameters.playtestPassed = "false";
-            }
+          if (action === "set_godot_built") {
+            cp.parameters.godotBuilt = Boolean(body.built) ? "true" : "false";
           } else {
-            const nextPassed = action === "pass_gate" ? true : Boolean(body.passed);
+            const nextPassed = Boolean(body.passed);
             cp.parameters.playtestPassed = nextPassed ? "true" : "false";
             if (nextPassed) {
               setAllChecklistItemsCompleted(cp.checklist, true);
@@ -2728,6 +2708,7 @@ exports.geminiProxy = onRequest(
           }
 
           sections.states = JSON.stringify(states);
+          sections.last_godot_sync_ms = String(Date.now());
           const nextSubtasks = rebuildDocSubtasksFromStates(states);
           tx.update(featRef, {
             sections,

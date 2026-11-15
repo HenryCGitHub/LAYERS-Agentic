@@ -274,6 +274,7 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
         byPath[vf.resPath] = winner.copyWith(featureIds: mergedFeatureIds);
       }
     }
+    byPath.removeWhere((_, vf) => vf.content.trim().isEmpty);
     return byPath;
   }
 

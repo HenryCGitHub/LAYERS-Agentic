@@ -1616,7 +1616,7 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.7.9"'));
+        expect(cfgText, contains('version="2.8.0"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
@@ -1651,6 +1651,8 @@ func _physics_process(delta: float) -> void:
         expect(syncText, contains('inputMapSnapshot'));
         expect(syncText, contains('projectDiagnostics'));
         expect(syncText, contains('agent_bundle_received'));
+        expect(syncText, contains('func set_feature_built'));
+        expect(syncText, contains('deletedPaths'));
         expect(syncText, contains('func has_active_agent_request'));
         expect(syncText, contains('func cancel_agent_request'));
         expect(syncText, isNot(contains('_active_request_kind')));
@@ -1683,6 +1685,9 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('Copy Context'));
         expect(dockText, contains('Reopen Gate'));
         expect(dockText, contains('save_all_scenes'));
+        expect(dockText, contains('save_all_scripts'));
+        expect(dockText, contains('_maybe_add_issue_jump_button'));
+        expect(dockText, contains('_in_flight_feature_id'));
         expect(dockText, isNot(contains('build_feature_local')));
         expect(dockText, contains('_on_cancel_agent_pressed'));
         expect(dockText, contains('_sync_feature_picker_lock'));
@@ -1778,6 +1783,9 @@ func _physics_process(delta: float) -> void:
         expect(executorText, contains('reparent_node'));
         expect(executorText, contains('capture_input_map_snapshot'));
         expect(executorText, contains('diagnose_project_combat_and_wiring'));
+        expect(executorText, contains('merge_script_buffer_overrides'));
+        expect(executorText, contains('extract_issue_jump_targets'));
+        expect(executorText, contains('get_open_scene_roots'));
         expect(executorText, contains('shapeProps'));
         expect(executorText, contains('collisionLayer'));
 
@@ -1791,6 +1799,12 @@ func _physics_process(delta: float) -> void:
         expect(fnText, contains('"build_feature"'));
         expect(fnText, contains('"direct_agent"'));
         expect(fnText, contains('"sync_scripts"'));
+        expect(fnText, isNot(contains('complete_feature_steps')));
+        expect(fnText, isNot(contains('markFeatureScaffoldStepsCompletedJs')));
+        expect(fnText, isNot(contains('updateLeafStepCompletion')));
+        expect(fnText, isNot(contains('"toggle_step"')));
+        expect(fnText, contains('"set_godot_built"'));
+        expect(fnText, contains('deletedPaths'));
         expect(fnText, contains('"add_to_group"'));
         expect(fnText, contains('"reparent_node"'));
         expect(fnText, contains('inputMapSnapshot'));
@@ -2015,6 +2029,20 @@ func _physics_process(delta: float) -> void:
         expect(summary, contains('res://scripts/crab_player.gd'));
         expect(summary, contains('@export var move_speed: float = 8.5'));
         expect(summary, contains('func _physics_process(delta: float)'));
+
+        final tombstonedDoc = GodotVirtualFile(
+          id: 'proj_dedup_code_scripts_crab_player_gd_111111',
+          projectId: proj.id,
+          resPath: 'res://scripts/crab_player.gd',
+          content: '',
+          language: 'gdscript',
+          releaseVersion: 'v0.1',
+          featureIds: const ['feat_b'],
+          updatedAtMs: 3500,
+        ).toTierDocument();
+        provider.documents[tombstonedDoc.id] = tombstonedDoc;
+        expect(provider.activeProjectGodotFiles, isEmpty);
+        expect(provider.godotFileForResPath('res://scripts/crab_player.gd'), isNull);
       },
     );
 
