@@ -4,15 +4,14 @@
 
 ---
 
-## 1. The 5 Canonical Text Styles
+## 1. The 4 Canonical Text Styles
 
 | # | Style Name | Formula | Max Length | Where Used | Canonical Example |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **1** | **BLUF (Bottom Line Up Front)** | **`[2–4 Word Payoff] — [Scope / Action]`** | `<= 14 words` | • Progressive Release `GOAL:` line<br>• Progressive `EPICS` Option Cards<br>• Stage 1 `01 · Goal`, `04 · Design Pillars`, `06 · Core Loop` | `3-Wave Arena Combat — Complete E02 Shotgun Hazards and E03 Enemy Waves for MVP.` |
-| **2** | **Causal `Trigger → Result`** | **`[Player Action] → [Observable Screen Result]`** | `<= 14 words` | • `✓ END GOAL:` (`doneWhen`)<br>• `VERIFY IN ENGINE` (`verifyResult`)<br>• Feature `doneWhen` / `playtestCriteria` / `playtestGate` | `Press Fire within 4m of target → 6 pellets fan out + push enemy back 2.5m` |
-| **3** | **Changelog / Delta-Diff (`+Delta`)** | **`+delta1, +delta2`** *(Upgrades)*<br>**`Direct noun summary`** *(New)* | `5–10 words` (`2–4 words` per delta) | • Progressive Release Feature Rows (`v0.2+`)<br>• Workbench Feature Goal subtitle<br>• Feature `inScope` bullets | • `[UPGRADE]`: `+6-pellet cone spread, +knockback impulse`<br>• `[NEW]`: `Magnetic ore shard spawn on enemy kill` |
-| **4** | **Imperative Runbook** | **`Verb + Object + Value`** | • Step Title: `3–4 words`<br>• Instruction: `<= 18 words` | • Child Sub-Step Titles (`01 · ...` inside task)<br>• Active Step `DO` instruction (`02 STEP X OF Y`) | • **Step Title**: `Spawn 6 Pellet Raycasts`<br>• **Instruction**: `Cast 6 raycasts across an 18° cone from MuzzlePoint and apply knockbackForce (14.0) to hit bodies.` |
-| **5** | **Telegraphic Component / Micro-Label** | **`2–4 Title-Case Words`** *(no verbs, no articles `a/an/the`)* | `2–4 words` (`<= 32 chars`) | • Parent Task Group Titles (`01 · ...` in `01 STEPS`)<br>• Epic & Feature Titles<br>• Stage 1 `02 Game Spec`, `03 Tech Spec`, `05 Trade-Offs`, `07 Out of Scope`<br>• `[STATE GUARD]` chips | • **Task Group**: `Collision Layer & Flags`, `Impulse & Window Timer`, `Ghost Trail & SFX`<br>• **Feature**: `Shotgun Spread & Recoil`<br>• **Guard**: `[STATE GUARD] Block dash while cooldown active` |
+| **2** | **Causal `Trigger → Result`** | **`[Player Action] → [Observable Screen Result]`** | `<= 14 words` | • `✓ END GOAL:` (`doneWhen`)<br>• Feature Playtest Gate (`doneWhen` / `playtestCriteria` / `playtestCondition`) | `Press Fire within 4m of target → 6 pellets fan out + push enemy back 2.5m` |
+| **3** | **Changelog / Delta-Diff (`+Delta`)** | **`+delta1, +delta2`** *(Upgrades)*<br>**`Direct noun summary`** *(New)* | `5–10 words` (`2–4 words` per delta) | • Progressive Release Feature Rows (`v0.2+`)<br>• Workbench Feature Goal subtitle<br>• Feature `coveredScope` / `inScope` bullets | • `[UPGRADE]`: `+6-pellet cone spread, +knockback impulse`<br>• `[NEW]`: `Magnetic ore shard spawn on enemy kill` |
+| **4** | **Telegraphic Micro-Label & Tuning/Guard Chips** | **`2–4 Title-Case Words`** / **`paramName: value unit`** / **`[STATE GUARD] rule`** | `2–6 words` (`<= 36 chars`) | • Epic & Feature Titles<br>• Stage 1 `02 Game Spec`, `03 Tech Spec`, `05 Trade-Offs`, `07 Out of Scope`<br>• Feature `Tuning Variables` (`tuningParams[]`)<br>• `[STATE GUARD]` / `[PLAYTEST GUARD]` chips | • **Feature**: `Shotgun Spread`<br>• **Tuning**: `dashSpeed: 650.0 px/s`<br>• **Guard**: `[STATE GUARD] Block dash while cooldown active` |
 
 ---
 
@@ -47,15 +46,14 @@
 
 ---
 
-### C. Stage 2 — Release Workbench (`2. Workbench` in `lib/providers/workbench_release_mixin.dart`)
+### C. Stage 2 — Release Workbench (`2. Workbench` in `lib/providers/workbench_release_mixin.dart`) & Godot 4 Dock (`godot_plugin/addons/layers/`)
 
 | Surface | Field | Assigned Style | Exact Format Rule | Example |
 | :--- | :--- | :--- | :--- | :--- |
-| **Left Outliner Epic Row** | `beat.title` | **5. Micro-Label** | `E0# · 2–4 Title-Case Words` naming gameplay system | `E01 · Top-Down Traversal & Dash` |
-| **Left Outliner Feature Row** | `feature.title` | **5. Micro-Label** | `2–3 Title-Case Words` naming 1 observable action/object (no `"System"`, `"Controller"`, `"Manager"`) | `Dash Burst Evade`, `Shotgun Spread`, `Ore Drop Pickup` |
+| **Left Outliner Epic Row** | `beat.title` | **4. Micro-Label** | `E0# · 2–4 Title-Case Words` naming gameplay system | `E01 · Top-Down Traversal & Dash` |
+| **Left Outliner Feature Row** | `feature.title` + Status | **4. Micro-Label** | `2–3 Title-Case Words` naming 1 observable action/object (no `"System"`, `"Controller"`, `"Manager"`, or `"&"`) + status (`Queued`, `In Progress · N%`, `Issues (N)`, `Passed ✓`) | `Dash Burst Evade`, `Shotgun Spread`, `Ore Drop Pickup` |
 | **Workspace Feature Subtitle** | `feature.goal` | **3. Changelog `+Delta`** | `5–10` words stating the concrete mechanics/deltas directly (no `"Build a playable..."` or `"Upgrade <Feature> into..."` preambles) | `+I-frame invulnerability window, +ghost trail VFX, +cooldown tuning` |
-| **`BUILD QUEUE` · Unified Steps (`01..0N`)** | `steps[].title` | **4. Imperative Runbook (`Verb + Object`)** | **`3–4 Title-Case Words`** starting with a command verb + concrete target, ordered once per Feature Checkpoint by Godot dock (`SCENE` -> `INSP` -> `CODE` -> `WIRE`). Emit **without** `"STEP X.Y ·"` prefix and **never** nest inside `T1..T3` parent tasks. | • `01 · SCENE · Build Player Dash Nodes`<br>• `02 · INSP · Set Layers & Exports`<br>• `03 · CODE · Code Dash Impulse`<br>• `04 · WIRE · Connect DashTimer Signal` |
-| **`ACTIVE STEP` · Breadcrumb** | `steps[].stepPath` | **5. Micro-Label** | Telegraphic dock/file path | `res://scenes/player.tscn` · `res://scripts/player.gd` |
-| **`ACTIVE STEP` · `DO` Instruction** | `steps[].instruction` | **4. Imperative Runbook (`Verb + Object + Value`)** | **`1–3` crisp micro-actions (`<= 18 words` each)** starting with a command verb + exact node/script and tuning value (no `"In the Inspector, ..."` preamble) | `Cast 6 raycasts across an 18° cone from MuzzlePoint and apply knockbackForce (14.0) to hit bodies.` |
-| **`ACTIVE STEP` · `CHECK IN EDITOR` / `VERIFY IN ENGINE`** | `steps[].verifyMode` + `steps[].verifyResult` | **Dual-Mode Check (`editor` vs. `playtest`)** | • **`editor` (`EDITOR CHECK:`):** Literal Hierarchy/Inspector/Compiler check (`<= 14 words`, no `"Press Play"`) when runtime wiring isn't connected yet.<br>• **`playtest` (`PLAYTEST CHECK:`):** **`[Player Action] → [Observable Screen Result]`** (`<= 14 words`) on runnable & final steps. | • `editor`: `Player shows DashTimer child node + 0 script errors`<br>• `playtest`: `Press Fire within 4m of target → 6 pellets fan out + push enemy back 2.5m` |
-| **`F6 · PLAYTEST GATE` · Guards & Tuning** | `tuningParams[]` & `edgeCases[]` | **5. Micro-Label** | • Tuning (`INSP` Sheet): `"paramName: numericValue unit"`<br>• Guard (`F6` Gate): `"[STATE GUARD] <3–6 word telegraphic rule without a/an/the>"` | • `dashSpeed: 650.0 px/s`<br>• `[STATE GUARD] Block dash while cooldown active` |
+| **Feature In-Scope Bullets** | `coveredScope[]` | **3. Changelog `+Delta`** | `2–3` telegraphic `2–4` word bullets without articles `a/an/the` (prefix upgrades with `+`) | `+6-pellet cone spread`, `+knockback impulse` |
+| **Tuning Variables** | `tuningParams[]` | **4. Tuning Chip** | `"paramName: numericValue unit"` (`<= 8` items; never guess ungrounded `res://` file paths) | `dashSpeed: 650.0 px/s`, `cooldownSec: 0.65 s` |
+| **Playtest & Edge-Case Guards** | `edgeCases[]` | **4. Guard Chip** | `"[STATE GUARD] <3–6 word rule>"` or `"[PLAYTEST GUARD] <3–6 word regression check>"` | `[STATE GUARD] Block dash while cooldown active` |
+| **Playtest Gate (Done When)** | `doneWhen` / `playtestCondition` | **2. Causal `Trigger → Result`** | `"[Player Action] → [Observable Screen Result]"` (`<= 14 words`, no FPS targets; highest ticket depth stops cleanly at Feature level) | `Press Fire within 4m of target → 6 pellets fan out + push enemy back 2.5m` |

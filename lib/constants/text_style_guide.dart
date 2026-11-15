@@ -1,4 +1,4 @@
-/// Central Single Source of Truth for the 5-Style LAYERS Text Format Guide
+/// Central Single Source of Truth for the 4-Style LAYERS Feature-First Format Guide
 /// (documented in `STYLE_GUIDE.md` and `GEMINI.md`).
 ///
 /// Referenced directly across Stage 1 (`ProjectConceptAgent`) and Stage 2
@@ -10,7 +10,7 @@ class LayersTextStyleGuide {
 
   /// Shared compact style rules injected across Stage 1 & Stage 2 prompts.
   static const String compactStyleRules = '''
-RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
+RULES (LAYERS 4-STYLE FEATURE-FIRST FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 - Feature & Epic Titles (Micro-Label): 2-3 plain Title-Case game-dev words naming 1 observable player/world action or object (e.g. "Truck Steering", "Shotgun Spread", "Ore Drop Pickup"). NEVER use code-architecture suffixes ("Controller", "System", "Mechanic", "Manager", "Component", "Handler") or roleplay/archaic lore ("Husbandry", "Homestead", "Expedition") or buzzwords ("canonical", "deliver", "verified", "validate", "leverage", "unified", "end-to-end", "synergy", "seamlessly").
 - Release Goals (BLUF): "[2-4 Word Payoff] — [Scope]" (e.g. "3-Wave Arena Combat — Complete E02 Shotgun Hazards and E03 Enemy Waves for MVP.").
 - Feature Goals & In-Scope (Changelog +Delta): Direct 5-10 word summary of concrete mechanics/deltas (e.g. "+6-pellet cone spread, +knockback impulse" for upgrades; "Magnetic ore shard spawn on enemy kill" for new features). NEVER start feature goals with "Build a playable..." or "Upgrade <Feature> into/with..." and NEVER copy-paste raw user instructions verbatim.
@@ -162,9 +162,6 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
   static const String changelogDeltaInScopeSchemaDesc =
       '2-3 telegraphic 2-4 word changelog deltas without articles a/an/the (prefix upgrades with "+", e.g. "+6-pellet cone spread", "+knockback impulse").';
 
-  static const String taskGroupTitleSchemaDesc =
-      'Strictly 2-4 Title-Case words naming the specific scene node, UI widget, data resource, or gameplay calculation for this task (e.g. "Shard Physics Hull", "Merchant Trade Panel", "Backpack Weight Counter", "Hitscan Recoil Ray"). NO verbs (Setup/Code/Create/Trigger/Implement), NO 3-item lists, NO "while/when" clauses, NO "(2h)" duration tags, and NEVER use generic template suffixes ("Body & Collision", "Prop & Collision", "Action & Math", "Cue & Clamp", "Cue & Boundary Clamp").';
-
   static final RegExp _legacyTemplateSuffixRegex = RegExp(
     r'\b(?:Body\s*&\s*Collision|Prop\s*&\s*Collision|Action\s*&\s*Math|Cue\s*&\s*Boundary\s*Clamp|Cue\s*&\s*Clamp)\b',
     caseSensitive: false,
@@ -188,9 +185,6 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
     });
     return s.replaceAll(_whitespaceRegex, ' ').trim();
   }
-
-  static const String taskGroupGoalSchemaDesc =
-      '1 clear imperative sentence (8-14 words) stating what this task group configures or builds (e.g. "Configure the low-poly scrap shard collision hull, gravity scale, and floor bounce material.").';
 
   static final RegExp _anyDurationTagRe =
       RegExp(r'\s*\(([\d\.]+\s*[hm])\)', caseSensitive: false);
@@ -431,15 +425,6 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
   static const String playtestGuardSchemaDesc =
       'Telegraphic guard formatted as "[PLAYTEST GUARD] <3-6 word rule without articles a/an/the>"';
 
-  static const String runbookStepTitleSchemaDesc =
-      '3-4 Title-Case Imperative Runbook words (Verb + Object, e.g. "Spawn 6 Pellet Raycasts", "Add Hazard Detection Component", drop articles a/an/the). Do NOT include "STEP X.Y" prefix.';
-
-  static const String runbookStepPathSchemaDesc =
-      'Telegraphic editor panel/menu/inspector/script breadcrumb separated by " > "';
-
-  static const String runbookInstructionSchemaDesc =
-      '2-4 short newline-separated imperative micro-actions (max 10 words per line, each starting with "- <Dock/Node> → <Command Verb + Value>" or "- <Command Verb + Exact Node/Value>"). Never write a paragraph.';
-
   static const List<String> engineBuildTierEnum = <String>[
     'tier_1_world_space',
     'tier_2_actor_locomotion',
@@ -450,25 +435,4 @@ RULES (LAYERS 5-STYLE FORMAT GUIDE — GENERATE DIRECTLY AT SOURCE):
 
   static const String buildTierSchemaDesc =
       'Engine build-dependency tier: tier_1_world_space (Arena/Level/Grid/Camera blockout), tier_2_actor_locomotion (Player/Vehicle/Cursor controller), tier_3_targets_hazards (Enemies, Props, Spawners, Hazards — world nouns), tier_4_verbs_tools_combat (Weapons, Tools, Projectiles, Interactions — verbs acting on Tier 2-3), or tier_5_loop_economy_hud (Wave/Score/Shop state, Reset, HUD widgets).';
-
-  static const List<String> stepPhaseRoleEnum = <String>[
-    'editor_setup',
-    'inspector_setup',
-    'script_logic',
-    'wire_and_verify',
-  ];
-
-  static const String stepPhaseRoleSchemaDesc =
-      'Godot workflow dock beat inside a Feature Build Queue: editor_setup (create/attach Scene Tree child nodes in .tscn FIRST), inspector_setup (bind InputMap, Collision Layers, and @export Inspector properties SECOND), script_logic (add/extend functions & math on the feature script THIRD), or wire_and_verify (connect Node Signals & verify F6 FOURTH).';
-
-  static const List<String> verifyModeEnum = <String>[
-    'editor',
-    'playtest',
-  ];
-
-  static const String verifyModeSchemaDesc =
-      'Verification mode: "editor" for pure setup steps whose runtime wiring does not exist yet (inspect Scene Tree / Inspector / 0 compile errors without pressing Play), or "playtest" for runnable steps (mandatory on final step of playable tasks & checkpoints).';
-
-  static const String stepVerifyResultSchemaDesc =
-      'If verifyMode=="editor": concise Hierarchy/Inspector/Compiler check (<= 14 words, NO "Press Play ->", e.g. "PlayerCharacter shows DashTimer child node + 0 script errors"). If verifyMode=="playtest": Causal Trigger -> Result ("<Player Action> -> <Observable Screen Result>", <= 14 words).';
 }

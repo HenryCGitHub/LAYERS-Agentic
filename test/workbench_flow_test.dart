@@ -8731,11 +8731,23 @@ Done When: Playtester completes 3 consecutive salvage runs and docks without cli
     );
 
     test(
-      'LayersTextStyleGuide exposes runbookInstructionSchemaDesc formatting',
+      'LayersTextStyleGuide exposes Feature-First tuning and guard schema descriptions without micro-step rules',
       () {
         expect(
-          LayersTextStyleGuide.runbookInstructionSchemaDesc,
-          contains('newline-separated'),
+          LayersTextStyleGuide.tuningParamSchemaDesc,
+          contains('paramName: numericValue unit'),
+        );
+        expect(
+          LayersTextStyleGuide.stateGuardSchemaDesc,
+          contains('[STATE GUARD]'),
+        );
+        expect(
+          LayersTextStyleGuide.playtestGuardSchemaDesc,
+          contains('[PLAYTEST GUARD]'),
+        );
+        expect(
+          LayersTextStyleGuide.compactStyleRules,
+          contains('Stop at the Feature Specification level'),
         );
       },
     );
