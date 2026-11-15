@@ -1,747 +1,400 @@
 extends SceneTree
 
-func _init() -> void:
-	call_deferred("_run_smoke")
+const SMOKE_SCENE_PATH := "res://scenes/smoke_arena.tscn"
+const SMOKE_SCRIPT_PATH := "res://scripts/smoke_player.gd"
+const CONFIG_PATH := "res://.layers/link_config.cfg"
+const CACHE_PATH := "res://.layers/cached_epic.json"
+
+var _created_dirs: PackedStringArray = PackedStringArray()
 
 
-func _write_text(res_path: String, content: String) -> bool:
-	var f := FileAccess.open(res_path, FileAccess.WRITE)
-	if f == null:
+func _initialize() -> void:
+	var ok: bool = _run_smoke_suite()
+	_cleanup_smoke_files()
+	if not ok:
+		quit(1)
+		return
+	print("GODOT_SMOKE_OK")
+	quit(0)
+
+
+func _fail(msg: String) -> void:
+	printerr("SMOKE_FAIL: ", msg)
+
+
+func _ensure_res_dir(res_dir: String) -> void:
+	var abs_dir: String = ProjectSettings.globalize_path(res_dir)
+	if not DirAccess.dir_exists_absolute(abs_dir):
+		var err: int = DirAccess.make_dir_recursive_absolute(abs_dir)
+		if err == OK:
+			_created_dirs.append(res_dir)
+
+
+func _write_smoke_fixtures() -> bool:
+	_ensure_res_dir("res://scenes")
+	_ensure_res_dir("res://scripts")
+
+	var f_gd: FileAccess = FileAccess.open(SMOKE_SCRIPT_PATH, FileAccess.WRITE)
+	if f_gd == null:
+		_fail("Failed to write temporary smoke script.")
 		return false
-	f.store_string(content)
-	f.close()
+	f_gd.store_string("extends CharacterBody3D\n\nfunc _ready() -> void:\n\tpass\n")
+	f_gd.flush()
+	f_gd.close()
+
+	var root: Node3D = Node3D.new()
+	root.name = "SmokeArena"
+	var body: CharacterBody3D = CharacterBody3D.new()
+	body.name = "Player"
+	root.add_child(body)
+	body.owner = root
+	var col: CollisionShape3D = CollisionShape3D.new()
+	col.name = "CollisionShape3D"
+	body.add_child(col)
+	col.owner = root
+	var cam: Camera3D = Camera3D.new()
+	cam.name = "Camera3D"
+	body.add_child(cam)
+	cam.owner = root
+
+	var packed: PackedScene = PackedScene.new()
+	var pack_err: int = packed.pack(root)
+	root.free()
+	if pack_err != OK:
+		_fail("Failed to pack smoke_arena.tscn.")
+		return false
+	var save_err: int = ResourceSaver.save(packed, SMOKE_SCENE_PATH)
+	if save_err != OK:
+		_fail("Failed to save smoke_arena.tscn.")
+		return false
 	return true
 
 
-func _run_smoke() -> void:
-	var plugin_scripts := [
-		"res://addons/layers/layers_step_executor.gd",
-		"res://addons/layers/layers_sync_client.gd",
-		"res://addons/layers/layers_dock.gd",
-		"res://addons/layers/layers_plugin.gd",
-	]
-	for sp in plugin_scripts:
-		var scr := ResourceLoader.load(sp, "", ResourceLoader.CACHE_MODE_IGNORE)
-		if scr == null or not (scr is GDScript):
-			printerr("FAIL: Could not load plugin script ", sp)
-			quit(1)
-			return
-		var gds := scr as GDScript
-		if not sp.ends_with("layers_plugin.gd") and not gds.can_instantiate():
-			printerr("FAIL: Plugin script cannot instantiate: ", sp)
-			quit(1)
-			return
+func _cleanup_smoke_files() -> void:
+	for p in [SMOKE_SCENE_PATH, SMOKE_SCRIPT_PATH, CONFIG_PATH, CACHE_PATH]:
+		var abs_p: String = ProjectSettings.globalize_path(p)
+		if FileAccess.file_exists(abs_p):
+			DirAccess.remove_absolute(abs_p)
+	for d in ["res://.layers", "res://scenes", "res://scripts"]:
+		var abs_d: String = ProjectSettings.globalize_path(d)
+		if DirAccess.dir_exists_absolute(abs_d):
+			var da: DirAccess = DirAccess.open(abs_d)
+			if da != null:
+				da.list_dir_begin()
+				var first: String = da.get_next()
+				while first == "." or first == "..":
+					first = da.get_next()
+				da.list_dir_end()
+				if first.is_empty():
+					DirAccess.remove_absolute(abs_d)
 
-	var exec_scr := ResourceLoader.load("res://addons/layers/layers_step_executor.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+
+func _collect_buttons_by_text(node: Node, needle: String, out: Array[Button]) -> void:
+	if node is Button:
+		var b: Button = node as Button
+		if b.text.find(needle) != -1:
+			out.append(b)
+	for ch in node.get_children():
+		if ch is Node:
+			_collect_buttons_by_text(ch as Node, needle, out)
+
+
+func _collect_checkboxes(node: Node, out: Array[CheckBox]) -> void:
+	if node is CheckBox:
+		out.append(node as CheckBox)
+	for ch in node.get_children():
+		if ch is Node:
+			_collect_checkboxes(ch as Node, out)
+
+
+func _run_smoke_suite() -> bool:
+	# 1. Compile-check all 4 addon GDScripts cleanly with CACHE_MODE_REPLACE
+	var plugin_scr: Variant = ResourceLoader.load(
+		"res://addons/layers/layers_plugin.gd", "", ResourceLoader.CACHE_MODE_REPLACE
+	)
+	var sync_scr: Variant = ResourceLoader.load(
+		"res://addons/layers/layers_sync_client.gd", "", ResourceLoader.CACHE_MODE_REPLACE
+	)
+	var exec_scr: Variant = ResourceLoader.load(
+		"res://addons/layers/layers_step_executor.gd", "", ResourceLoader.CACHE_MODE_REPLACE
+	)
+	var dock_scr: Variant = ResourceLoader.load(
+		"res://addons/layers/layers_dock.gd", "", ResourceLoader.CACHE_MODE_REPLACE
+	)
+	if plugin_scr == null or sync_scr == null or exec_scr == null or dock_scr == null:
+		_fail("One or more addon GDScripts failed to load.")
+		return false
+
+	if not _write_smoke_fixtures():
+		return false
+
+	# 2. Verify read-only inspector & context helper (layers_step_executor.gd v3.0.0)
 	var exec: Variant = exec_scr.new()
 	if exec == null:
-		printerr("FAIL: Could not instantiate layers_step_executor.gd")
-		quit(1)
-		return
+		_fail("Failed to instantiate layers_step_executor.gd.")
+		return false
 
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://scripts"))
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://scenes"))
-
-	var fighter_src := """extends CharacterBody3D
-
-@onready var visual_rig: Node3D = $VisualRig
-@onready var claw_pivot: Node3D = $ClawPivot
-
-func _physics_process(_delta: float) -> void:
-\tvar dir := Vector3(1.0, 0.0, 1.0).normalized()
-\tvisual_rig.rotation.y = atan2(dir.x, dir.z)
-\tclaw_pivot.rotation.y = deg_to_rad(30.0)
-"""
-	var enemy_src := """extends CharacterBody3D
-
-@export var strikeRange: float = 2.4
-@onready var strike_area: Area3D = $StrikeArea
-var hp: float = 30.0
-
-func _ready() -> void:
-\tstrike_area.body_entered.connect(_on_hit)
-
-func _physics_process(_delta: float) -> void:
-\tif Input.is_action_just_pressed("crab_enemy_action"):
-\t\tstrike_area.monitoring = true
-\tvar dir := Vector3(0.0, 0.0, 1.0)
-\trotation.y = atan2(dir.x, dir.z)
-\tvelocity = -global_transform.basis.z * 8.0
-
-func _on_hit(_body: Node3D) -> void:
-\tpass
-
-func take_damage(amount: float) -> void:
-\thp -= amount
-"""
-	if not _write_text("res://scripts/smoke_fighter.gd", fighter_src) or not _write_text("res://scripts/smoke_enemy.gd", enemy_src):
-		printerr("FAIL: Could not write smoke GDScript fixtures.")
-		quit(1)
-		return
-
-	var fighter_scr := ResourceLoader.load("res://scripts/smoke_fighter.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as Script
-
-	var root := CharacterBody3D.new()
-	root.name = "SmokeFighter"
-	root.collision_layer = 1
-	root.collision_mask = 1
-	root.set_script(fighter_scr)
-
-	var rig := Node3D.new()
-	rig.name = "VisualRig"
-	root.add_child(rig)
-	rig.owner = root
-
-	var pivot := Node3D.new()
-	pivot.name = "ClawPivot"
-	root.add_child(pivot)
-	pivot.owner = root
-
-	var hitbox := Area3D.new()
-	hitbox.name = "ClawHitbox"
-	hitbox.position = Vector3(0.0, 0.5, -1.1)
-	hitbox.collision_mask = 1
-	pivot.add_child(hitbox)
-	hitbox.owner = root
-
-	var cshape := CollisionShape3D.new()
-	cshape.name = "CollisionShape3D"
-	cshape.position = Vector3(0.0, 0.5, 1.0)
-	cshape.shape = BoxShape3D.new()
-	hitbox.add_child(cshape)
-	cshape.owner = root
-
-	var ps := PackedScene.new()
-	if ps.pack(root) != OK or ResourceSaver.save(ps, "res://scenes/smoke_fighter.tscn") != OK:
-		root.free()
-		printerr("FAIL: Could not save smoke_fighter.tscn")
-		quit(1)
-		return
-	root.free()
-
-	var findings: PackedStringArray = exec.call(
-		"diagnose_project_combat_and_wiring",
-		["res://scenes/smoke_fighter.tscn"],
-		{
-			"res://scripts/smoke_fighter.gd": fighter_src,
-			"res://scripts/smoke_enemy.gd": enemy_src,
-		},
-		null
-	)
-	var blob := "\n".join(findings)
-	var expected_tags := [
-		"[HITBOX OFFSET CANCELLED]",
-		"[UNROTATED HITBOX PIVOT]",
-		"[NON-PLAYER INPUT]",
-		"[3D BASIS FLIP]",
-		"[HITBOX OVERLAP]",
-		"[SILENT HIT FEEDBACK]",
-	]
-	for tag in expected_tags:
-		if not (tag in blob):
-			printerr("FAIL: Missing diagnostic tag ", tag, "\nGot:\n", blob)
-			quit(1)
-			return
-
-	var ps_reload := ResourceLoader.load("res://scenes/smoke_fighter.tscn", "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
-	var inst := ps_reload.instantiate()
-	var ops := [
-		{"op": "reparent_node", "nodePath": "ClawPivot", "newParentPath": "VisualRig"},
-		{"op": "set_property", "nodePath": "VisualRig/ClawPivot/ClawHitbox", "properties": {"position": [0.0, 0.5, 1.1]}},
-		{"op": "set_property", "nodePath": "VisualRig/ClawPivot/ClawHitbox/CollisionShape3D", "properties": {"position": [0.0, 0.0, 0.0], "size": [1.4, 0.8, 1.4]}},
-	]
-	var applied_count := int(exec.call("apply_scene_ops_to_root", inst, ops))
-	if applied_count < 3:
-		inst.free()
-		printerr("FAIL: Expected >= 3 applied scene ops, got ", applied_count)
-		quit(1)
-		return
-	var moved_cs := inst.get_node_or_null("VisualRig/ClawPivot/ClawHitbox/CollisionShape3D")
-	if moved_cs == null:
-		inst.free()
-		printerr("FAIL: reparent_node did not move ClawPivot under VisualRig")
-		quit(1)
-		return
-	if moved_cs.owner != inst:
-		inst.free()
-		printerr("FAIL: reparent_node left inconsistent child owner on CollisionShape3D")
-		quit(1)
-		return
-
-	var ps_fixed := PackedScene.new()
-	ps_fixed.pack(inst)
-	ResourceSaver.save(ps_fixed, "res://scenes/smoke_fighter.tscn")
-	inst.free()
-
-	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://scripts/smoke_enemy.gd"))
-	var findings_missing_onready: PackedStringArray = exec.call(
-		"diagnose_project_combat_and_wiring",
-		["res://scenes/smoke_fighter.tscn"],
-		{"res://scripts/smoke_fighter.gd": fighter_src},
-		null
-	)
-	var caught_missing_onready := false
-	for mf in findings_missing_onready:
-		if "[MISSING @ONREADY NODE]" in mf and "$ClawPivot" in mf:
-			caught_missing_onready = true
-			break
-	if not caught_missing_onready:
-		printerr("FAIL: diagnose_project_combat_and_wiring did not catch missing @onready $ClawPivot after reparenting, got:\n", "\n".join(findings_missing_onready))
-		quit(1)
-		return
-
-	fighter_src = fighter_src.replace("$ClawPivot", "$VisualRig/ClawPivot")
-	_write_text("res://scripts/smoke_fighter.gd", fighter_src)
-	var findings_after: PackedStringArray = exec.call(
-		"diagnose_project_combat_and_wiring",
-		["res://scenes/smoke_fighter.tscn"],
-		{"res://scripts/smoke_fighter.gd": fighter_src},
-		null
-	)
-	if not findings_after.is_empty():
-		printerr("FAIL: Expected 0 diagnostics after reparent/offset fix, got:\n", "\n".join(findings_after))
-		quit(1)
-		return
-
-	exec.call("apply_input_ops", [
-		{"action": "dash", "keys": ["Shift"]},
-		{"action": "crab_enemy_action", "keys": ["Space"]},
-	])
-	if not InputMap.has_action("dash"):
-		printerr("FAIL: apply_input_ops did not register 'dash'")
-		quit(1)
-		return
-	if InputMap.has_action("crab_enemy_action"):
-		printerr("FAIL: apply_input_ops should suppress bogus 'crab_enemy_action'")
-		quit(1)
-		return
-	exec.call("apply_input_ops", [{"action": "dash", "remove": true}])
-	if InputMap.has_action("dash"):
-		printerr("FAIL: apply_input_ops remove=true did not erase 'dash'")
-		quit(1)
-		return
-
-	var orig_fighter_disk := FileAccess.get_file_as_string("res://scripts/smoke_fighter.gd")
-	var undo_bundle := {
-		"mode": "direct_agent",
-		"summary": "Temp AI tweak for snapshot test",
-		"scriptUpdates": [
-			{"resPath": "res://scripts/smoke_fighter.gd", "content": "extends CharacterBody3D\n\nvar tweaked_speed: float = 99.0\n"},
-			{"resPath": "res://scripts/smoke_new_ai_helper.gd", "content": "extends Node\n\nvar created_by_ai: bool = true\n"},
-		],
-		"inputOps": [
-			{"action": "smoke_ai_jump", "keys": ["Space"]},
-		],
-		"sceneOps": [],
-	}
-	var pre_snap: Dictionary = exec.call("capture_bundle_snapshot", null, undo_bundle, "res://scenes/smoke_fighter.tscn")
-	var bundle_res: Dictionary = exec.call("apply_agent_bundle", null, null, undo_bundle, "res://scenes/smoke_fighter.tscn")
-	if not bool(bundle_res.get("ok", false)) or not FileAccess.file_exists("res://scripts/smoke_new_ai_helper.gd") or not InputMap.has_action("smoke_ai_jump"):
-		printerr("FAIL: apply_agent_bundle did not apply scriptUpdates/inputOps in smoke probe")
-		quit(1)
-		return
-	var restore_res: Dictionary = exec.call("restore_bundle_snapshot", null, pre_snap)
-	if not bool(restore_res.get("ok", false)):
-		printerr("FAIL: restore_bundle_snapshot returned ok=false")
-		quit(1)
-		return
-	var restored_scripts: PackedStringArray = restore_res.get("restored_scripts", PackedStringArray())
-	if not restored_scripts.has("res://scripts/smoke_fighter.gd") or restored_scripts.has("res://scripts/smoke_new_ai_helper.gd"):
-		printerr("FAIL: restore_bundle_snapshot restored_scripts mismatch: ", restored_scripts)
-		quit(1)
-		return
-	if FileAccess.get_file_as_string("res://scripts/smoke_fighter.gd") != orig_fighter_disk:
-		printerr("FAIL: restore_bundle_snapshot did not restore exact smoke_fighter.gd contents")
-		quit(1)
-		return
-	if FileAccess.file_exists("res://scripts/smoke_new_ai_helper.gd"):
-		printerr("FAIL: restore_bundle_snapshot did not remove newly created smoke_new_ai_helper.gd")
-		quit(1)
-		return
-	if InputMap.has_action("smoke_ai_jump"):
-		printerr("FAIL: restore_bundle_snapshot did not remove newly registered 'smoke_ai_jump' InputMap action")
-		quit(1)
-		return
-	if ProjectSettings.has_setting("input/smoke_ai_jump"):
-		printerr("FAIL: restore_bundle_snapshot left 'input/smoke_ai_jump' in ProjectSettings")
-		quit(1)
-		return
-	ProjectSettings.save()
-	InputMap.load_from_project_settings()
-	if InputMap.has_action("smoke_ai_jump"):
-		printerr("FAIL: 'smoke_ai_jump' resurrected after ProjectSettings.save() and reload")
-		quit(1)
-		return
-
-	var sync_scr := ResourceLoader.load("res://addons/layers/layers_sync_client.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
-	var sync_node: Node = sync_scr.new()
-	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://.layers"))
-	var legacy_cache_json := JSON.stringify({
-		"ok": true,
-		"codeFiles": [
-			{"resPath": "res://scripts/legacy.gd", "content": "extends Node\n"}
-		]
-	})
-	if not _write_text("res://.layers/epic_cache.json", legacy_cache_json):
-		sync_node.free()
-		printerr("FAIL: could not write temporary legacy epic_cache.json")
-		quit(1)
-		return
-	sync_node.call("_update_cached_code_files", {"res://scripts/smoke_fighter.gd": orig_fighter_disk})
-	var reloaded_cache: Dictionary = sync_node.call("load_cached_epic")
-	sync_node.free()
-	var cache_cf: Variant = reloaded_cache.get("codeFiles", null)
-	var cleanup_ok := true
-	for tmp_f in ["res://.layers/epic_cache.json", "res://.layers/.gdignore", "res://.layers/.gitignore"]:
-		if FileAccess.file_exists(tmp_f):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp_f))
-	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.layers"))
-	if typeof(cache_cf) != TYPE_DICTIONARY:
-		printerr("FAIL: expected reloaded codeFiles to be Dictionary, got type ", typeof(cache_cf))
-		quit(1)
-		return
-	var cache_cf_dict: Dictionary = cache_cf
-	if cache_cf_dict.get("res://scripts/legacy.gd", "") != "extends Node\n" or cache_cf_dict.get("res://scripts/smoke_fighter.gd", "") != orig_fighter_disk:
-		cleanup_ok = false
-	if not cleanup_ok:
-		printerr("FAIL: _update_cached_code_files / load_cached_epic lost migrated or synced script entry")
-		quit(1)
-		return
-
-	var broken_bundle := {
-		"mode": "direct_agent",
-		"summary": "Broken compile probe",
-		"scriptUpdates": [
-			{"resPath": "res://scripts/smoke_fighter.gd", "content": "extends CharacterBody3D\nfunc broken(:\n"},
-		],
-		"sceneOps": [],
-	}
-	Engine.print_error_messages = false
-	var broken_res: Dictionary = exec.call("apply_agent_bundle", null, null, broken_bundle, "res://scenes/smoke_fighter.tscn")
-	Engine.print_error_messages = true
-	var compile_errs: PackedStringArray = broken_res.get("compile_errors", PackedStringArray())
-	var failed_updates: Dictionary = broken_res.get("failed_script_updates", {}) if typeof(broken_res.get("failed_script_updates", null)) == TYPE_DICTIONARY else {}
-	if compile_errs.size() != 1 or not failed_updates.has("res://scripts/smoke_fighter.gd"):
-		printerr("FAIL: expected compile_errors.size()==1 and failed_script_updates to contain smoke_fighter.gd")
-		quit(1)
-		return
-	if FileAccess.get_file_as_string("res://scripts/smoke_fighter.gd") != orig_fighter_disk:
-		printerr("FAIL: broken scriptUpdate should not overwrite orig_fighter_disk")
-		quit(1)
-		return
-
-	var real_scene_snap: Dictionary = exec.call("capture_rich_scene_snapshot", null, PackedStringArray(["res://scenes/smoke_fighter.tscn"]))
-	var ctx_md: String = exec.call(
-		"format_feature_context_markdown",
-		{"id": "f1", "title": "Smoke Jump", "doneWhen": "Press Space -> Player jumps"},
-		{"res://scripts/smoke_fighter.gd": orig_fighter_disk},
-		real_scene_snap,
-		{"jump": ["Space"]},
-		["SCRIPT ERROR: sample"],
-		["[3D BASIS FLIP] sample"]
-	)
-	for needle in ["## LAYERS Godot Context", "smoke_fighter.tscn", "CharacterBody3D", "Area3D", "jump", "SCRIPT ERROR: sample", "[3D BASIS FLIP] sample"]:
-		if not ctx_md.contains(needle):
-			printerr("FAIL: format_feature_context_markdown missing expected substring: ", needle)
-			quit(1)
-			return
-
-	var integrity_probe: Dictionary = exec.call("verify_built_feature_integrity", null, {"id": "f1", "primaryAsset": "res://scenes/smoke_fighter.tscn"}, {}, "")
-	if not integrity_probe.has("project_diagnostics"):
-		printerr("FAIL: verify_built_feature_integrity missing 'project_diagnostics' key")
-		quit(1)
-		return
-
-	var dock_scr := ResourceLoader.load("res://addons/layers/layers_dock.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
-	var dock_probe: Node = dock_scr.new()
-	var box1 := HBoxContainer.new()
-	dock_probe.call("_maybe_add_open_script_button", box1, PackedStringArray(["res://scripts/smoke_fighter.gd"]))
-	if box1.get_child_count() != 1 or not (box1.get_child(0) is Button) or (box1.get_child(0) is MenuButton) or (box1.get_child(0) as Button).text != "Open Script":
-		box1.free()
-		dock_probe.free()
-		printerr("FAIL: _maybe_add_open_script_button 1-script mode did not produce flat 'Open Script' Button")
-		quit(1)
-		return
-	box1.free()
-
-	if not _write_text("res://scripts/smoke_second.gd", "extends Node\n"):
-		dock_probe.free()
-		printerr("FAIL: could not write smoke_second.gd")
-		quit(1)
-		return
-	var box2 := HBoxContainer.new()
-	dock_probe.call("_maybe_add_open_script_button", box2, PackedStringArray(["res://scripts/smoke_fighter.gd", "res://scripts/smoke_second.gd"]))
-	if box2.get_child_count() != 1 or not (box2.get_child(0) is MenuButton) or (box2.get_child(0) as MenuButton).text != "Open Script (2)" or (box2.get_child(0) as MenuButton).get_popup().item_count != 2:
-		box2.free()
-		dock_probe.free()
-		printerr("FAIL: _maybe_add_open_script_button multi-script mode did not produce 'Open Script (2)' MenuButton with 2 popup items")
-		quit(1)
-		return
-	box2.free()
-	dock_probe.set("_executor", exec)
-	dock_probe.set("_diagnostics_dirty", false)
-	exec.call("invalidate_eval_cache")
-	var eval_built: Dictionary = exec.call("evaluate_feature", {"id": "f1", "primaryAsset": "res://scenes/smoke_fighter.tscn"}, null, {}, "")
-	if not bool(eval_built.get("has_built_artifacts", false)) or not (eval_built.get("script_paths", []) as Array).has("res://scripts/smoke_fighter.gd"):
-		dock_probe.free()
-		printerr("FAIL: evaluate_feature did not detect built scene + attached script from disk: ", eval_built)
-		quit(1)
-		return
-	if (exec.get("_eval_cache") as Dictionary).is_empty():
-		dock_probe.free()
-		printerr("FAIL: evaluate_feature did not populate _eval_cache")
-		quit(1)
-		return
-	if not dock_probe.has_method("on_editor_scene_saved"):
-		dock_probe.free()
-		printerr("FAIL: layers_dock.gd missing on_editor_scene_saved")
-		quit(1)
-		return
-	dock_probe.call("on_editor_scene_saved", "res://scenes/smoke_fighter.tscn")
-	if not bool(dock_probe.get("_diagnostics_dirty")) or not (exec.get("_eval_cache") as Dictionary).is_empty():
-		dock_probe.free()
-		printerr("FAIL: on_editor_scene_saved did not invalidate _eval_cache and mark _diagnostics_dirty=true")
-		quit(1)
-		return
-
-	if not dock_probe.has_method("_format_capped_issue_list"):
-		dock_probe.free()
-		printerr("FAIL: layers_dock.gd missing _format_capped_issue_list")
-		quit(1)
-		return
-	var fmt_res: Variant = dock_probe.call("_format_capped_issue_list", ["Err A", "Err B", "Err C", "Err D"], 3, "4 static wiring/combat issues")
-	if typeof(fmt_res) != TYPE_DICTIONARY:
-		dock_probe.free()
-		printerr("FAIL: _format_capped_issue_list did not return a Dictionary")
-		quit(1)
-		return
-	var fmt_dict: Dictionary = fmt_res
-	var fmt_inline: String = String(fmt_dict.get("inline_text", ""))
-	var fmt_tip: String = String(fmt_dict.get("tooltip_text", ""))
-	if not fmt_inline.contains("• Err A") or not fmt_inline.contains("• Err B") or not fmt_inline.contains("• Err C") or not fmt_inline.contains("+1 more") or fmt_inline.contains("• Err D") or not fmt_tip.contains("1. Err A") or not fmt_tip.contains("4. Err D"):
-		dock_probe.free()
-		printerr("FAIL: _format_capped_issue_list output mismatch: ", fmt_dict)
-		quit(1)
-		return
-
-	if not _write_text("res://scenes/smoke_arena.tscn", "[gd_scene format=3]\n\n[node name=\"Arena\" type=\"Node3D\"]\n"):
-		dock_probe.free()
-		printerr("FAIL: could not write temporary smoke_arena.tscn")
-		quit(1)
-		return
-	var sc_box1 := HBoxContainer.new()
-	dock_probe.call("_maybe_add_open_scene_button", sc_box1, PackedStringArray(["res://scenes/smoke_fighter.tscn"]), "res://scenes/smoke_arena.tscn")
-	if sc_box1.get_child_count() != 1 or not (sc_box1.get_child(0) is Button) or (sc_box1.get_child(0) is MenuButton) or (sc_box1.get_child(0) as Button).text != "Open Scene":
-		sc_box1.free()
-		dock_probe.free()
-		printerr("FAIL: _maybe_add_open_scene_button 1-scene mode did not produce flat 'Open Scene' Button")
-		quit(1)
-		return
-	sc_box1.free()
-
-	var sc_box2 := HBoxContainer.new()
-	dock_probe.call("_maybe_add_open_scene_button", sc_box2, PackedStringArray(["res://scenes/smoke_fighter.tscn", "res://scenes/smoke_arena.tscn"]), "res://scenes/smoke_arena.tscn")
-	if sc_box2.get_child_count() != 1 or not (sc_box2.get_child(0) is MenuButton) or (sc_box2.get_child(0) as MenuButton).text != "Open Scene (2)" or (sc_box2.get_child(0) as MenuButton).get_popup().item_count != 2 or not (sc_box2.get_child(0) as MenuButton).get_popup().get_item_text(0).contains("smoke_fighter.tscn") or not (sc_box2.get_child(0) as MenuButton).get_popup().get_item_text(1).contains("Arena"):
-		sc_box2.free()
-		dock_probe.free()
-		printerr("FAIL: _maybe_add_open_scene_button multi-scene mode did not produce 'Open Scene (2)' MenuButton with Feature/Arena items")
-		quit(1)
-		return
-	sc_box2.free()
-	if FileAccess.file_exists("res://scenes/smoke_arena.tscn"):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path("res://scenes/smoke_arena.tscn"))
-	dock_probe.free()
-
-	var new_bundle := {
-		"mode": "direct_agent",
-		"summary": "Create new AI script probe",
-		"scriptUpdates": [
-			{"resPath": "res://scripts/smoke_ai_new.gd", "content": "extends Node\n"},
-		],
-		"sceneOps": [],
-	}
-	var new_snap: Dictionary = exec.call("capture_bundle_snapshot", null, new_bundle, "res://scenes/smoke_fighter.tscn")
-	exec.call("apply_agent_bundle", null, null, new_bundle, "res://scenes/smoke_fighter.tscn")
-	if not FileAccess.file_exists("res://scripts/smoke_ai_new.gd"):
-		printerr("FAIL: apply_agent_bundle did not create smoke_ai_new.gd")
-		quit(1)
-		return
-	var undo_new_res: Dictionary = exec.call("restore_bundle_snapshot", null, new_snap)
-	if FileAccess.file_exists("res://scripts/smoke_ai_new.gd") or not (undo_new_res.get("removed_scripts", PackedStringArray()) as PackedStringArray).has("res://scripts/smoke_ai_new.gd"):
-		printerr("FAIL: restore_bundle_snapshot did not remove smoke_ai_new.gd or report it in removed_scripts: ", undo_new_res)
-		quit(1)
-		return
-
-	exec.call("invalidate_eval_cache")
-	var eval_unbuilt: Dictionary = exec.call("evaluate_feature", {"id": "f2", "isBuiltInGodot": false, "primaryAsset": "res://scenes/smoke_fighter.tscn"}, null, {}, "")
-	if bool(eval_unbuilt.get("has_built_artifacts", true)):
-		printerr("FAIL: evaluate_feature should return has_built_artifacts=false when isBuiltInGodot=false")
-		quit(1)
-		return
-
-	var sync_probe: Node = sync_scr.new()
-	if not sync_probe.has_method("save_cached_epic"):
-		sync_probe.free()
-		printerr("FAIL: layers_sync_client.gd missing save_cached_epic")
-		quit(1)
-		return
-	sync_probe.call("save_cached_epic", {
-		"ok": true,
-		"codeFiles": {"res://scripts/smoke_fighter.gd": orig_fighter_disk},
-		"activeEpic": {"features": [{"id": "f1", "isBuiltInGodot": false}]},
-	})
-	var persisted_cache: Dictionary = sync_probe.call("load_cached_epic")
-	for tmp_f in ["res://.layers/epic_cache.json", "res://.layers/.gdignore", "res://.layers/.gitignore"]:
-		if FileAccess.file_exists(tmp_f):
-			DirAccess.remove_absolute(ProjectSettings.globalize_path(tmp_f))
-	DirAccess.remove_absolute(ProjectSettings.globalize_path("res://.layers"))
-	var persisted_feats: Array = (persisted_cache.get("activeEpic", {}) as Dictionary).get("features", [])
-	if persisted_feats.is_empty() or bool((persisted_feats[0] as Dictionary).get("isBuiltInGodot", true)):
-		sync_probe.free()
-		printerr("FAIL: save_cached_epic / load_cached_epic did not persist reverted isBuiltInGodot=false: ", persisted_cache)
-		quit(1)
-		return
-	sync_probe.set("_link_token", "lyr_smoke_test_token_1234567890")
-	sync_probe.set("_agent_busy", true)
-	if not bool(sync_probe.call("has_active_agent_request")):
-		sync_probe.free()
-		printerr("FAIL: has_active_agent_request did not reflect _agent_busy=true")
-		quit(1)
-		return
-	sync_probe.call("fetch_active_epic")
-	if bool(sync_probe.get("_is_busy")):
-		sync_probe.free()
-		printerr("FAIL: fetch_active_epic should be suppressed while _agent_busy=true")
-		quit(1)
-		return
-	if not bool(sync_probe.call("cancel_agent_request")) or bool(sync_probe.call("has_active_agent_request")):
-		sync_probe.free()
-		printerr("FAIL: cancel_agent_request did not reset _agent_busy")
-		quit(1)
-		return
-	sync_probe.set("_script_sync_in_flight", {"res://scripts/smoke_fighter.gd": orig_fighter_disk})
-	sync_probe.set("_script_sync_busy", true)
-	sync_probe.call("_on_script_sync_http_completed", HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
-	if not (sync_probe.get("_pending_live_scripts") as Dictionary).has("res://scripts/smoke_fighter.gd"):
-		sync_probe.free()
-		printerr("FAIL: failed script sync was not re-queued for retry")
-		quit(1)
-		return
-	sync_probe.set("_pending_live_scripts", {})
-	sync_probe.set("_script_sync_in_flight", {"res://scripts/smoke_fighter.gd": orig_fighter_disk})
-	sync_probe.set("_script_sync_busy", true)
-	sync_probe.call("_on_script_sync_http_completed", HTTPRequest.RESULT_CANT_CONNECT, 0, PackedStringArray(), PackedByteArray())
-	if not (sync_probe.get("_pending_live_scripts") as Dictionary).is_empty():
-		sync_probe.free()
-		printerr("FAIL: failed script sync retry was not bounded to 1 attempt")
-		quit(1)
-		return
-	sync_probe.free()
-
-	# v2.7.9 SEA Red/Green Probes:
-	# 1. Exact compile error line capture + gdscript:// noise filter
-	if not exec.has_method("format_compile_error_entry") or not exec.has_method("_create_compile_probe_logger"):
-		printerr("FAIL: exec missing format_compile_error_entry or _create_compile_probe_logger")
-		quit(1)
-		return
-	var formatted_compile_err: String = exec.call("format_compile_error_entry", "Parse Error", "Expected parameter name.", "gdscript://-99.gd", 4)
-	if not ("Line 4:" in formatted_compile_err and "Expected parameter name." in formatted_compile_err):
-		printerr("FAIL: format_compile_error_entry did not preserve line & rationale: ", formatted_compile_err)
-		quit(1)
-		return
-	if not bool(exec.call("_is_ignored_godot_error_noise", "ERROR: Parse Error in gdscript://-99.gd")):
-		printerr("FAIL: _is_ignored_godot_error_noise did not filter gdscript:// temp compile probes")
-		quit(1)
-		return
-	var probe_logger: Variant = exec.call("_create_compile_probe_logger")
-	if probe_logger == null:
-		printerr("FAIL: _create_compile_probe_logger returned null")
-		quit(1)
-		return
-	var empty_bt: Array[ScriptBacktrace] = []
-	probe_logger.call("_log_error", "reload", "gdscript://-99.gd", 4, "Parse Error", "Expected parameter name.", false, 0, empty_bt)
-	probe_logger.call("_log_error", "other", "res://addons/layers/layers_dock.gd", 10, "Error", "Should ignore non-temp error", false, 0, empty_bt)
-	var captured_compile_msgs: PackedStringArray = probe_logger.get("messages")
-	if captured_compile_msgs.size() != 1 or not ("Line 4:" in captured_compile_msgs[0] and "Expected parameter name." in captured_compile_msgs[0]):
-		printerr("FAIL: _CompileProbeLogger did not isolate gdscript:// line/parse error cleanly: ", captured_compile_msgs)
-		quit(1)
-		return
-
-	# 2. Headless disk PackedScene sceneOps creation + [EMPTY COLLISION SHAPE] detection + rollback
-	if not exec.has_method("_load_or_create_disk_scene_root"):
-		printerr("FAIL: exec missing _load_or_create_disk_scene_root")
-		quit(1)
-		return
-	var pickup_script_src := "extends Area3D\n@onready var shape: CollisionShape3D = $CollisionShape3D\n"
-	var pickup_bundle := {
-		"mode": "build_feature",
-		"summary": "Headless pickup sceneOps probe",
-		"scriptUpdates": [
+	var feat_probe: Dictionary = {
+		"id": "f_smoke_1",
+		"title": "Smoke Player",
+		"goal": "Move around arena smoothly with camera follow",
+		"primaryAsset": SMOKE_SCENE_PATH,
+		"scriptPaths": [SMOKE_SCRIPT_PATH],
+		"coveredScope": ["WASD movement", "Jump impulse"],
+		"edgeCases": [
 			{
-				"resPath": "res://scripts/smoke_pickup.gd",
-				"attachTo": ".",
-				"scenePath": "res://scenes/smoke_pickup.tscn",
-				"content": pickup_script_src,
+				"index": 0,
+				"rawText": "[STATE GUARD] Clamp sprint speed",
+				"text": "Clamp sprint speed",
+				"signedOff": false,
+			},
+			{
+				"index": 1,
+				"rawText": "[STATE GUARD] Reset jump on floor",
+				"text": "Reset jump on floor",
+				"signedOff": true,
 			},
 		],
-		"sceneOps": [
+		"openIssues": [
 			{
-				"op": "ensure_node",
-				"scenePath": "res://scenes/smoke_pickup.tscn",
-				"parentPath": ".",
-				"nodeName": "CollisionShape3D",
-				"nodeType": "CollisionShape3D",
-			},
+				"id": "iss_1",
+				"text": "%s:3 Player slides down ramp" % SMOKE_SCRIPT_PATH,
+			}
 		],
+		"doneWhen": "F6 -> player moves cleanly with 0 console errors",
+		"checkpointId": "cp_1",
+		"isPlaytestPassed": false,
+		"isCompleted": false,
 	}
-	var pickup_snap: Dictionary = exec.call("capture_bundle_snapshot", null, pickup_bundle, "res://scenes/smoke_pickup.tscn")
-	var pickup_apply: Dictionary = exec.call("apply_agent_bundle", null, null, pickup_bundle, "res://scenes/smoke_pickup.tscn")
-	var pickup_ok := FileAccess.file_exists("res://scenes/smoke_pickup.tscn") and int(pickup_apply.get("applied_ops", 0)) > 0
-	var pickup_diags: PackedStringArray = exec.call(
-		"diagnose_project_combat_and_wiring",
-		["res://scenes/smoke_pickup.tscn"],
-		{"res://scripts/smoke_pickup.gd": pickup_script_src},
-		null
-	)
-	var caught_empty_shape := false
-	for pd in pickup_diags:
-		if "[EMPTY COLLISION SHAPE]" in pd and "CollisionShape3D" in pd:
-			caught_empty_shape = true
-			break
-	exec.call("restore_bundle_snapshot", null, pickup_snap)
-	if FileAccess.file_exists("res://scenes/smoke_pickup.tscn") or FileAccess.file_exists("res://scripts/smoke_pickup.gd"):
-		printerr("FAIL: restore_bundle_snapshot did not remove smoke_pickup artifacts")
-		quit(1)
-		return
-	if not pickup_ok:
-		printerr("FAIL: apply_agent_bundle(null, null, ...) did not create disk PackedScene smoke_pickup.tscn: ", pickup_apply)
-		quit(1)
-		return
-	if not caught_empty_shape:
-		printerr("FAIL: diagnose_project_combat_and_wiring did not catch [EMPTY COLLISION SHAPE] on smoke_pickup.tscn, got:\n", "\n".join(pickup_diags))
-		quit(1)
-		return
 
-	# 3. Copy Context coveredScope formatting
-	var ctx_scope_md: String = exec.call(
-		"format_feature_context_markdown",
-		{"id": "f_ctx", "title": "Player Jump", "coveredScope": ["+Coyote timer"]},
-		{},
-		{},
-		{},
-		[],
-		PackedStringArray()
-	)
-	if not ("- In Scope:" in ctx_scope_md and "  - +Coyote timer" in ctx_scope_md):
-		printerr("FAIL: format_feature_context_markdown missing coveredScope '- In Scope:' block:\n", ctx_scope_md)
-		quit(1)
-		return
+	var paths: Dictionary = exec.call("resolve_feature_paths", feat_probe, SMOKE_SCENE_PATH)
+	if str(paths.get("primary_scene", "")) != SMOKE_SCENE_PATH:
+		_fail("resolve_feature_paths missed primary_scene: %s" % str(paths))
+		return false
+	var resolved_scripts: Variant = paths.get("script_paths", PackedStringArray())
+	if not (SMOKE_SCRIPT_PATH in resolved_scripts):
+		_fail("resolve_feature_paths missed smoke_player.gd.")
+		return false
 
-	# 4. Dock Rebuild confirmation + Sync static diagnostic reset
-	var dock_script_path: String = exec.get_script().resource_path.get_base_dir().path_join("layers_dock.gd")
-	var dock_script_res: Script = load(dock_script_path)
-	var v279_dock: Control = dock_script_res.new()
-	if not v279_dock.has_method("_on_rebuild_feature_requested"):
-		v279_dock.free()
-		printerr("FAIL: layers_dock missing _on_rebuild_feature_requested")
-		quit(1)
-		return
-	v279_dock.call("_on_rebuild_feature_requested", {"id": "f1", "title": "Smoke Jump"})
-	var pending_feat: Dictionary = v279_dock.get("_pending_rebuild_feat")
-	var confirm_dlg: Variant = v279_dock.get("_rebuild_confirm_dialog")
-	if String(pending_feat.get("id", "")) != "f1" or confirm_dlg == null or not ("Smoke Jump" in String(confirm_dlg.get("dialog_text"))):
-		v279_dock.free()
-		printerr("FAIL: _on_rebuild_feature_requested did not populate _pending_rebuild_feat or _rebuild_confirm_dialog")
-		quit(1)
-		return
-	v279_dock.set("_diagnostics_dirty", false)
-	v279_dock.set("_ignored_diagnostic_signatures", {"diag_sig_1": true})
-	v279_dock.set("_ignored_error_signatures", {"SCRIPT ERROR: old": true})
-	v279_dock.call("_on_sync_pressed")
-	var diag_cleared := (v279_dock.get("_ignored_diagnostic_signatures") as Dictionary).is_empty()
-	var err_kept := (v279_dock.get("_ignored_error_signatures") as Dictionary).has("SCRIPT ERROR: old")
-	var dirty_reset := bool(v279_dock.get("_diagnostics_dirty"))
-	v279_dock.free()
-	if not (diag_cleared and err_kept and dirty_reset):
-		printerr("FAIL: _on_sync_pressed did not clear _ignored_diagnostic_signatures while preserving _ignored_error_signatures")
-		quit(1)
-		return
+	var eval_res: Dictionary = exec.call("evaluate_feature", feat_probe, null, SMOKE_SCENE_PATH)
+	if str(eval_res.get("primary_scene", "")) != SMOKE_SCENE_PATH:
+		_fail("evaluate_feature missed primary_scene.")
+		return false
+	var cache_before: Dictionary = exec.get("_eval_cache")
+	if cache_before.is_empty():
+		_fail("evaluate_feature did not populate _eval_cache.")
+		return false
+	exec.call("invalidate_eval_cache")
+	var cache_after: Dictionary = exec.get("_eval_cache")
+	if not cache_after.is_empty():
+		_fail("invalidate_eval_cache did not clear _eval_cache.")
+		return false
 
-	# --- v2.8.0 SEA regression probes ---
-	# 1. Disk UI scene root class inference via infer_scene_root_type
-	var v280_hud_root: Variant = exec.call("_load_or_create_disk_scene_root", "res://scenes/v280_hud_overlay.tscn", "")
-	var v280_hud_ok := (v280_hud_root is CanvasLayer)
-	if v280_hud_root is Object:
-		(v280_hud_root as Object).free()
-	if not v280_hud_ok:
-		printerr("FAIL: _load_or_create_disk_scene_root did not infer CanvasLayer for v280_hud_overlay.tscn")
-		quit(1)
-		return
-
-	# 2. Unsaved ScriptEditor buffer overlay filtering
-	if not exec.has_method("merge_script_buffer_overrides"):
-		printerr("FAIL: exec missing merge_script_buffer_overrides")
-		quit(1)
-		return
-	var v280_merged_scripts: Dictionary = exec.call(
+	var merged: Dictionary = exec.call(
 		"merge_script_buffer_overrides",
-		{"res://scripts/a.gd": "extends Node\n"},
-		{
-			"res://scripts/a.gd": "extends Node3D\n@export var speed: float = 9.0\n",
-			"res://addons/layers/layers_dock.gd": "ignored_plugin_script",
-		}
+		{SMOKE_SCRIPT_PATH: "# disk"},
+		{SMOKE_SCRIPT_PATH: "# unsaved"}
 	)
-	if not ("speed: float = 9.0" in String(v280_merged_scripts.get("res://scripts/a.gd", ""))) or v280_merged_scripts.has("res://addons/layers/layers_dock.gd"):
-		printerr("FAIL: merge_script_buffer_overrides did not overlay unsaved buffer or filter addons/: ", v280_merged_scripts)
-		quit(1)
-		return
+	if str(merged.get(SMOKE_SCRIPT_PATH, "")) != "# unsaved":
+		_fail("merge_script_buffer_overrides did not prefer live buffer.")
+		return false
 
-	# 3. Jump target extraction (script:line + diagnostic .tscn/.gd)
-	if not exec.has_method("extract_issue_jump_target") or not exec.has_method("extract_issue_jump_targets"):
-		printerr("FAIL: exec missing extract_issue_jump_target / extract_issue_jump_targets")
-		quit(1)
-		return
-	var v280_jump_gd_path := "res://scripts/v280_jump_probe.gd"
-	var v280_jump_tscn_path := "res://scenes/v280_jump_probe.tscn"
-	_write_text(v280_jump_gd_path, "extends CharacterBody3D\n@onready var claw_pivot: Node3D = $ClawPivot\n")
-	_write_text(v280_jump_tscn_path, "[gd_scene format=3]\n[node name=\"V280JumpProbe\" type=\"CharacterBody3D\"]\n")
-	var v280_line_target: Dictionary = exec.call(
+	var scene_snap: Dictionary = exec.call(
+		"capture_rich_scene_snapshot", null, PackedStringArray([SMOKE_SCENE_PATH])
+	)
+	var scene_snap_json: String = JSON.stringify(scene_snap)
+	if scene_snap_json.find("CharacterBody3D") == -1 or scene_snap_json.find("CollisionShape3D") == -1:
+		_fail("capture_rich_scene_snapshot missed scene hierarchy nodes: %s" % scene_snap_json)
+		return false
+
+	var input_snap: Dictionary = exec.call("capture_input_map_snapshot")
+	if typeof(input_snap) != TYPE_DICTIONARY:
+		_fail("capture_input_map_snapshot did not return Dictionary.")
+		return false
+
+	if not bool(exec.call("_is_ignored_godot_error_noise", "ERROR: progress_dialog.cpp: already open")):
+		_fail("_is_ignored_godot_error_noise failed to filter editor noise.")
+		return false
+	if bool(exec.call("_is_ignored_godot_error_noise", "SCRIPT ERROR: Invalid get index 'hp' on base: Nil")):
+		_fail("_is_ignored_godot_error_noise wrongly ignored real script error.")
+		return false
+
+	var jump_target: Dictionary = exec.call(
 		"extract_issue_jump_target",
-		"SCRIPT ERROR: Invalid get index (res://scripts/v280_jump_probe.gd:42 in _physics_process)",
-		PackedStringArray()
+		"%s:3 Player slides down ramp" % SMOKE_SCRIPT_PATH,
+		[SMOKE_SCRIPT_PATH]
 	)
-	var v280_diag_targets: Array = exec.call(
-		"extract_issue_jump_targets",
-		["[MISSING @ONREADY NODE] v280_jump_probe.tscn :: v280_jump_probe.gd references missing child $ClawPivot on '.'."],
-		PackedStringArray()
+	if str(jump_target.get("path", "")) != SMOKE_SCRIPT_PATH or int(jump_target.get("line", -1)) != 3:
+		_fail("extract_issue_jump_target failed: %s" % str(jump_target))
+		return false
+
+	var md: String = exec.call(
+		"format_feature_context_markdown",
+		feat_probe,
+		{SMOKE_SCRIPT_PATH: "extends CharacterBody3D\n"},
+		scene_snap,
+		input_snap,
+		["SCRIPT ERROR: Test error"]
 	)
-	if FileAccess.file_exists(v280_jump_gd_path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(v280_jump_gd_path))
-	if FileAccess.file_exists(v280_jump_tscn_path):
-		DirAccess.remove_absolute(ProjectSettings.globalize_path(v280_jump_tscn_path))
-	if String(v280_line_target.get("path", "")) != v280_jump_gd_path or int(v280_line_target.get("line", 0)) != 42:
-		printerr("FAIL: extract_issue_jump_target failed on script:line error: ", v280_line_target)
-		quit(1)
-		return
-	var v280_diag_paths := PackedStringArray()
-	for v280_dt in v280_diag_targets:
-		if typeof(v280_dt) == TYPE_DICTIONARY:
-			v280_diag_paths.append(String((v280_dt as Dictionary).get("path", "")))
-	if not (v280_jump_tscn_path in v280_diag_paths) or not (v280_jump_gd_path in v280_diag_paths):
-		printerr("FAIL: extract_issue_jump_targets did not resolve both .tscn and .gd from diagnostic row: ", v280_diag_targets)
-		quit(1)
-		return
+	for required_md in [
+		"Smoke Player",
+		"Goal:",
+		"Playtest Guards",
+		"[ ] Clamp sprint speed",
+		"[x] Reset jump on floor",
+		"Open Playtest Issues",
+		"Player slides down ramp",
+		"Done When",
+		SMOKE_SCRIPT_PATH,
+		"CharacterBody3D",
+	]:
+		if md.find(required_md) == -1:
+			_fail("format_feature_context_markdown missing '%s'" % required_md)
+			return false
 
-	# 4. Sync client set_feature_built & deletedPaths surface
-	var v280_sync_path: String = exec.get_script().resource_path.get_base_dir().path_join("layers_sync_client.gd")
-	var v280_sync_scr: Script = load(v280_sync_path)
-	var v280_sync_client: Node = v280_sync_scr.new()
-	var v280_sync_ok := v280_sync_client.has_method("set_feature_built") and v280_sync_client.has_method("sync_live_scripts")
-	v280_sync_client.free()
-	if not v280_sync_ok:
-		printerr("FAIL: layers_sync_client missing set_feature_built / sync_live_scripts")
-		quit(1)
-		return
+	# 3. Verify 2-way Sync Client v3.0.0 surface + offline cache roundtrip
+	var sync: Variant = sync_scr.new()
+	if sync == null:
+		_fail("Failed to instantiate layers_sync_client.gd.")
+		return false
+	for required_method in [
+		"fetch_active_epic",
+		"set_playtest_passed",
+		"toggle_guard",
+		"log_playtest_issue",
+		"resolve_playtest_issue",
+		"save_cached_epic",
+		"load_cached_epic",
+		"check_for_plugin_update",
+		"download_and_apply_plugin_update",
+	]:
+		if not sync.has_method(required_method):
+			sync.free()
+			_fail("layers_sync_client missing method: %s" % required_method)
+			return false
+	for removed_method in [
+		"build_feature",
+		"direct_agent",
+		"sync_live_scripts",
+		"set_feature_built",
+		"has_active_agent_request",
+		"cancel_agent_request",
+	]:
+		if sync.has_method(removed_method):
+			sync.free()
+			_fail("layers_sync_client still exposes removed method: %s" % removed_method)
+			return false
 
-	print("GODOT_SMOKE_OK")
-	quit(0)
+	var sample_payload: Dictionary = {
+		"ok": true,
+		"projectTitle": "Smoke Test Game",
+		"releaseVersion": "v0.1",
+		"epicPosition": 1,
+		"totalEpics": 1,
+		"arenaScenePath": SMOKE_SCENE_PATH,
+		"activeEpic": {
+			"id": "ep_1",
+			"code": "E01",
+			"title": "Movement",
+			"features": [feat_probe],
+		},
+	}
+	sync.call("save_cached_epic", sample_payload)
+	var loaded_cache: Dictionary = sync.call("load_cached_epic")
+	if str(loaded_cache.get("projectTitle", "")) != "Smoke Test Game":
+		sync.free()
+		_fail("load_cached_epic roundtrip mismatch: %s" % str(loaded_cache))
+		return false
+	sync.free()
+
+	# 4. Verify Pure Spec, Playtest & 2-Way Dock UI (layers_dock.gd v3.0.0)
+	var dock: Variant = dock_scr.new()
+	if dock == null:
+		_fail("Failed to instantiate layers_dock.gd.")
+		return false
+	dock.set("_executor", exec)
+	dock.set("_payload", sample_payload)
+	dock.call("_build_ui")
+
+	var footer_box: Variant = dock.get("_footer_box")
+	if footer_box == null:
+		dock.free()
+		_fail("_build_ui did not create _footer_box.")
+		return false
+
+	dock.call("_render_active_feature_workspace", feat_probe)
+
+	# Gate button must always stay unlocked/visible even when not passed & guards unchecked
+	if not bool((footer_box as Control).visible):
+		dock.free()
+		_fail("_footer_box hidden on unpassed feature.")
+		return false
+	var cta_btn: Button = dock.get("_primary_cta_btn") as Button
+	if cta_btn == null or cta_btn.disabled or cta_btn.text.find("Playtest Passed") == -1:
+		dock.free()
+		_fail("Primary CTA button invalid on unpassed feature.")
+		return false
+
+	# Playtest guards render as CheckBox items
+	var body_container: Node = dock.get("_body_container") as Node
+	var guard_boxes: Array[CheckBox] = []
+	_collect_checkboxes(body_container, guard_boxes)
+	if guard_boxes.size() != 2:
+		dock.free()
+		_fail("Expected 2 CheckBox guards, got %d" % guard_boxes.size())
+		return false
+
+	# Resolve button exists for open [FIX] issue
+	var resolve_btns: Array[Button] = []
+	_collect_buttons_by_text(body_container, "Resolve", resolve_btns)
+	if resolve_btns.is_empty():
+		dock.free()
+		_fail("Expected 'Resolve' button for open [FIX] issue.")
+		return false
+
+	# Optimistic local guard toggle, issue log, issue resolve & cache invalidation
+	dock.call("_on_guard_toggled", true, feat_probe, 0, "[STATE GUARD] Clamp sprint speed")
+	var guards_arr: Array = feat_probe.get("edgeCases", [])
+	if not bool((guards_arr[0] as Dictionary).get("signedOff", false)):
+		dock.free()
+		_fail("_on_guard_toggled failed to update signedOff state.")
+		return false
+
+	dock.call("_submit_log_issue", feat_probe, "Jump sticks on ceiling")
+	var issues_after_log: Array = feat_probe.get("openIssues", [])
+	if issues_after_log.size() != 2:
+		dock.free()
+		_fail("_submit_log_issue did not append optimistic issue.")
+		return false
+
+	dock.call("_on_resolve_issue_pressed", feat_probe, "iss_1")
+	var issues_after_resolve: Array = feat_probe.get("openIssues", [])
+	if issues_after_resolve.size() != 1:
+		dock.free()
+		_fail("_on_resolve_issue_pressed did not remove iss_1.")
+		return false
+
+	dock.call("on_editor_scene_saved", SMOKE_SCENE_PATH)
+
+	# Verify Open Scene & Open Script helpers handle single & multi paths cleanly
+	var row_probe: HBoxContainer = HBoxContainer.new()
+	dock.call(
+		"_maybe_add_open_scene_button",
+		row_probe,
+		PackedStringArray([SMOKE_SCENE_PATH, "res://scenes/other.tscn"]),
+		SMOKE_SCENE_PATH
+	)
+	dock.call(
+		"_maybe_add_open_script_button",
+		row_probe,
+		PackedStringArray([SMOKE_SCRIPT_PATH])
+	)
+	if row_probe.get_child_count() != 2:
+		row_probe.free()
+		dock.free()
+		_fail("Expected Open Scene (2) + Open Script buttons.")
+		return false
+
+	row_probe.free()
+	dock.free()
+	return true

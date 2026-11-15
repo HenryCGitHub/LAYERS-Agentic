@@ -20,7 +20,6 @@ func _enter_tree() -> void:
 		return
 	_dock = dock_script.new()
 	_dock.editor_interface = get_editor_interface()
-	_dock.undo_redo = get_undo_redo()
 	add_control_to_dock(DOCK_SLOT_RIGHT_UL, _dock)
 
 	if not scene_changed.is_connected(_on_editor_scene_changed):

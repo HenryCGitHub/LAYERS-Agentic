@@ -1591,7 +1591,7 @@ func _physics_process(delta: float) -> void:
     );
 
     test(
-      'Native Godot 4 plugin addon V2.6 files, Cloud Functions direct_agent/build_feature/sync_scripts & web/layers_godot_plugin.zip enforce native EditorTheme GUI, Feature-First workflow, export tuners, input auto-discovery, eval caching & 2-way sync',
+      'Native Godot 4 plugin addon V3.0 files, Cloud Functions /godotLink routes & web/layers_godot_plugin.zip enforce Pure Spec, Playtest & 2-Way Sync Dock without AI builder bloat',
       () {
         final cfg = File('godot_plugin/addons/layers/plugin.cfg');
         final pluginGd = File('godot_plugin/addons/layers/layers_plugin.gd');
@@ -1616,14 +1616,16 @@ func _physics_process(delta: float) -> void:
         final dockText = dockGd.readAsStringSync();
         final fnText = functionsJs.readAsStringSync();
 
-        expect(cfgText, contains('version="2.8.0"'));
+        expect(cfgText, contains('version="3.0.0"'));
         expect(cfgText, contains('script="layers_plugin.gd"'));
         final untypedConstArrayPattern = RegExp(r'const\s+\w+\s*:=\s*\[');
         expect(untypedConstArrayPattern.hasMatch(pluginText), isFalse);
         expect(untypedConstArrayPattern.hasMatch(syncText), isFalse);
         expect(untypedConstArrayPattern.hasMatch(executorText), isFalse);
         expect(untypedConstArrayPattern.hasMatch(dockText), isFalse);
-        expect(pluginText, contains('get_undo_redo()'));
+
+        // Plugin entrypoint: clean lifecycle + live CACHE_MODE_REPLACE reload
+        expect(pluginText, isNot(contains('get_undo_redo()')));
         expect(pluginText, contains('get_editor_interface()'));
         expect(pluginText, contains('scene_changed'));
         expect(pluginText, contains('on_editor_scene_changed'));
@@ -1633,30 +1635,27 @@ func _physics_process(delta: float) -> void:
         expect(pluginText, isNot(contains('preload(')));
         expect(executorText, isNot(contains('preload(')));
 
+        // Sync Client: pure 2-way sync actions & OTA self-updater (no AI build/script-sync routes)
         expect(syncText, contains('.gdignore'));
         expect(syncText, contains('.gitignore'));
         expect(syncText, contains('/godotLink/epic'));
         expect(syncText, contains('/godotLink/update'));
-        expect(syncText, isNot(contains('func toggle_step')));
-        expect(syncText, isNot(contains('func diagnose_fix')));
-        expect(syncText, isNot(contains('func is_agent_busy')));
-        expect(syncText, isNot(contains('func complete_feature_steps')));
-        expect(syncText, contains('_normalize_code_files_dict'));
         expect(syncText, contains('func save_cached_epic'));
-        expect(syncText, contains('"sync_scripts"'));
-        expect(syncText, contains('sync_live_scripts'));
-        expect(syncText, contains('scripts_synced'));
-        expect(syncText, contains('build_feature'));
-        expect(syncText, contains('direct_agent'));
-        expect(syncText, contains('inputMapSnapshot'));
-        expect(syncText, contains('projectDiagnostics'));
-        expect(syncText, contains('agent_bundle_received'));
-        expect(syncText, contains('func set_feature_built'));
-        expect(syncText, contains('deletedPaths'));
-        expect(syncText, contains('func has_active_agent_request'));
-        expect(syncText, contains('func cancel_agent_request'));
-        expect(syncText, isNot(contains('_active_request_kind')));
-        expect(syncText, isNot(contains('_latest_known_remote_ver')));
+        expect(syncText, contains('func load_cached_epic'));
+        expect(syncText, contains('func set_playtest_passed'));
+        expect(syncText, contains('func toggle_guard'));
+        expect(syncText, contains('func log_playtest_issue'));
+        expect(syncText, contains('func resolve_playtest_issue'));
+        expect(syncText, contains('"set_playtest"'));
+        expect(syncText, contains('"toggle_guard"'));
+        expect(syncText, contains('"log_issue"'));
+        expect(syncText, contains('"resolve_issue"'));
+        expect(syncText, isNot(contains('build_feature')));
+        expect(syncText, isNot(contains('direct_agent')));
+        expect(syncText, isNot(contains('sync_scripts')));
+        expect(syncText, isNot(contains('sync_live_scripts')));
+        expect(syncText, isNot(contains('agent_bundle_received')));
+        expect(syncText, isNot(contains('set_feature_built')));
         expect(syncText, contains('check_for_plugin_update'));
         expect(syncText, contains('download_and_apply_plugin_update'));
         expect(syncText, contains('layers_step_executor.gd'));
@@ -1669,57 +1668,36 @@ func _physics_process(delta: float) -> void:
         );
         expect(syncText, contains('layers_godot_plugin.zip'));
 
-        expect(dockText, contains('get_edited_scene_root()'));
+        // Dock UI: Pure Spec, Playtest Guards, Console Error Capture & Unlockable Playtest Gate
         expect(dockText, contains('get_editor_scale()'));
         expect(dockText, contains('EditorIcons'));
         expect(dockText, contains('EditorFonts'));
         expect(dockText, contains('RichTextLabel.new()'));
         expect(dockText, contains('TextEdit.new()'));
-        expect(dockText, isNot(contains('Tree.new()')));
-        expect(dockText, isNot(contains('CodeEdit.new()')));
+        expect(dockText, contains('MenuButton.new()'));
         expect(dockText, contains('layers_step_executor.gd'));
-        expect(dockText, isNot(contains('Broken? Ask Agent to Fix')));
-        expect(dockText, isNot(contains('Fix Latest Playtest Error (0)')));
-        expect(dockText, contains('Undo Last AI'));
-        expect(dockText, contains('_footer_box.visible = can_pass_playtest and not gate_passed'));
         expect(dockText, contains('Copy Context'));
         expect(dockText, contains('Reopen Gate'));
-        expect(dockText, contains('save_all_scenes'));
-        expect(dockText, contains('save_all_scripts'));
+        expect(dockText, contains('Playtest Guards (%d/%d)'));
+        expect(dockText, contains('Playtest Scene (F6)'));
+        expect(dockText, contains('Stop Playtest (F8)'));
+        expect(dockText, contains('Playtest Console & Issues'));
+        expect(dockText, contains('+ Log Playtest Issue'));
+        expect(dockText, contains('Resolve ✓'));
+        expect(dockText, contains('Playtest Passed — Next Feature'));
+        expect(dockText, contains('_footer_box.visible = not gate_passed'));
+        expect(dockText, contains('Open Scene'));
+        expect(dockText, contains('Open Scene (%d)'));
+        expect(dockText, contains('Open Script'));
+        expect(dockText, contains('Open Script (%d)'));
         expect(dockText, contains('_maybe_add_issue_jump_button'));
-        expect(dockText, contains('_in_flight_feature_id'));
-        expect(dockText, isNot(contains('build_feature_local')));
-        expect(dockText, contains('_on_cancel_agent_pressed'));
-        expect(dockText, contains('_sync_feature_picker_lock'));
         expect(dockText, contains('func on_editor_scene_saved'));
         expect(dockText, contains('_format_capped_issue_list'));
         expect(dockText, contains('_maybe_add_open_scene_button'));
-        expect(dockText, contains('Open Scene (%d)'));
-        expect(dockText, contains('MenuButton.new()'));
-        expect(dockText, contains('ConfirmationDialog.new()'));
-        expect(dockText, contains('_on_rebuild_feature_requested'));
-        expect(dockText, contains('_ignored_diagnostic_signatures.clear()'));
-        expect(dockText, contains('snap.get("feature_id"'));
-        expect(dockText, contains('_pre_repair_warnings'));
-        expect(dockText, contains('_is_feature_checkpoint_built'));
-        expect(dockText, contains('OS.add_logger'));
-        expect(dockText, contains('Build Feature in Godot'));
-        expect(dockText, contains('Apply to Scene & Script'));
-        expect(dockText, contains('Playtest in Arena'));
-        expect(dockText, contains('Stop Playtest (F8)'));
-        expect(dockText, contains('Open Scene'));
-        expect(dockText, contains('Open Script'));
-        expect(dockText, contains('_pending_bundle_is_auto_repair'));
+        expect(dockText, contains('_maybe_add_open_script_button'));
+        expect(dockText, contains('save_all_scenes'));
         expect(dockText, contains('is_playing_scene'));
-        expect(dockText, contains('collect_project_scene_paths'));
-        expect(dockText, contains('capture_input_map_snapshot'));
-        expect(dockText, contains('diagnose_project_combat_and_wiring'));
-        expect(dockText, contains('read_all_live_project_scripts'));
-        expect(dockText, contains('Fix Detected Issues'));
-        expect(dockText, contains('sync_live_scripts'));
-        expect(dockText, contains('_bundle_apply_timer'));
-        expect(dockText, contains('_post_playtest_log_timer'));
-        expect(dockText, contains('verify_built_feature_integrity'));
+        expect(dockText, contains('read_editor_and_playtest_errors'));
         expect(dockText, contains('OS.shell_open'));
         expect(dockText, contains('ResourceLoader.CACHE_MODE_REPLACE'));
         expect(dockText, isNot(contains('preload(')));
@@ -1730,107 +1708,58 @@ func _physics_process(delta: float) -> void:
         expect(dockText, contains('Check for Plugin Update'));
         expect(dockText, contains('Update Now'));
         expect(dockText, contains('set_plugin_enabled'));
+        expect(dockText, isNot(contains('Build Feature in Godot')));
+        expect(dockText, isNot(contains('Apply to Scene & Script')));
+        expect(dockText, isNot(contains('Undo Last AI')));
+        expect(dockText, isNot(contains('Fix Detected Issues')));
+        expect(dockText, isNot(contains('sync_live_scripts')));
 
-        expect(executorText, contains('ClassDB.class_exists'));
-        expect(executorText, contains('save_scene()'));
-        expect(executorText, contains('_collect_tscn_script_paths_from_disk'));
-        expect(executorText, isNot(contains('func parse_signal_specs')));
-        expect(executorText, isNot(contains('func parse_scene_node_specs')));
-        expect(executorText, contains('undo_redo'));
-        expect(executorText, contains('apply_agent_bundle'));
-        expect(executorText, contains('preserve_existing_visuals'));
-        expect(executorText, contains('verify_built_feature_integrity'));
-        expect(executorText, contains('project_diagnostics'));
-        expect(executorText, contains('project_inputs'));
-        expect(executorText, isNot(contains('func _find_node_by_script_filename')));
-        expect(executorText, contains('compile_errors'));
-        expect(executorText, contains('failed_script_updates'));
-        expect(executorText, contains('format_feature_context_markdown'));
-        expect(executorText, contains('sceneFilePath'));
-        expect(executorText, isNot(contains('func extract_feature_export_tuners')));
-        expect(executorText, isNot(contains('func apply_fix_patch')));
-        expect(executorText, isNot(contains('func read_live_scripts_for_feature')));
-        expect(executorText, isNot(contains('func build_feature_local')));
-        expect(executorText, isNot(contains('func evaluate_step')));
-        expect(executorText, isNot(contains('func merge_step_code_into_existing')));
-        expect(executorText, contains('_unset_subtree_owners'));
-        expect(executorText, contains('capture_bundle_snapshot'));
-        expect(executorText, contains('restore_bundle_snapshot'));
-        expect(executorText, contains('restored_scripts'));
-        expect(executorText, contains('removed_scripts'));
-        expect(executorText, isNot(contains('"input map" in col0')));
-        expect(executorText, contains('is_likely_gdscript_snippet'));
-        expect(executorText, contains('can_attach_script_to_node'));
-        expect(executorText, contains('class _CompileProbeLogger extends Logger'));
-        expect(executorText, contains('[MISSING @ONREADY NODE]'));
-        expect(executorText, contains('[EMPTY COLLISION SHAPE]'));
-        expect(executorText, contains('_load_or_create_disk_scene_root'));
-        expect(executorText, isNot(contains('for dk in ["findings", "warnings", "issues"]')));
-        expect(executorText, contains('evaluate_feature'));
+        // Read-only inspector & context exporter
         expect(executorText, contains('invalidate_eval_cache'));
-        expect(executorText, contains('infer_scene_root_type'));
-        expect(executorText, contains('upgrade_scene_root_type_on_disk'));
-        expect(executorText, contains('apply_input_ops'));
-        expect(executorText, contains('register_missing_script_input_actions'));
-        expect(executorText, contains('add_to_group'));
-        expect(executorText, contains('ResourceLoader.CACHE_MODE_REUSE'));
-        expect(executorText, contains('reload_script_safely'));
-        expect(executorText, contains('sanitize_null_script_exports'));
-        expect(executorText, contains('ensure_scene_exists_and_open'));
-        expect(executorText, contains('heal_empty_project_input_actions'));
+        expect(executorText, contains('resolve_feature_paths'));
+        expect(executorText, contains('evaluate_feature'));
+        expect(executorText, contains('ensure_project_file_logging'));
         expect(executorText, contains('read_recent_godot_log_errors'));
         expect(executorText, contains('read_editor_and_playtest_errors'));
-        expect(executorText, contains('reparent_node'));
-        expect(executorText, contains('capture_input_map_snapshot'));
-        expect(executorText, contains('diagnose_project_combat_and_wiring'));
-        expect(executorText, contains('merge_script_buffer_overrides'));
         expect(executorText, contains('extract_issue_jump_targets'));
+        expect(executorText, contains('collect_project_scene_paths'));
+        expect(executorText, contains('merge_script_buffer_overrides'));
+        expect(executorText, contains('read_all_live_project_scripts'));
+        expect(executorText, contains('capture_rich_scene_snapshot'));
+        expect(executorText, contains('capture_input_map_snapshot'));
+        expect(executorText, contains('format_feature_context_markdown'));
         expect(executorText, contains('get_open_scene_roots'));
-        expect(executorText, contains('shapeProps'));
-        expect(executorText, contains('collisionLayer'));
+        expect(executorText, isNot(contains('apply_agent_bundle')));
+        expect(executorText, isNot(contains('capture_bundle_snapshot')));
+        expect(executorText, isNot(contains('restore_bundle_snapshot')));
+        expect(executorText, isNot(contains('verify_built_feature_integrity')));
+        expect(executorText, isNot(contains('diagnose_project_combat_and_wiring')));
+        expect(executorText, isNot(contains('class _CompileProbeLogger')));
+        expect(executorText, isNot(contains('check_gdscript_compiles')));
 
-        expect(fnText, contains('decodeThreeAreaNotesJs'));
-        expect(fnText, contains('extractBareGdScriptPathJs'));
-        expect(fnText, contains('markFeatureBuiltInGodotJs'));
-        expect(fnText, contains('isBuiltInGodot'));
+        // Cloud Functions /godotLink slimmed to pure spec & 2-way playtest/guard/issue sync
         expect(fnText, contains('coveredScope'));
+        expect(fnText, contains('edgeCases'));
+        expect(fnText, contains('openIssues'));
+        expect(fnText, contains('doneWhen'));
         expect(fnText, contains('last_godot_sync_ms'));
-        expect(fnText, contains('"diagnose_fix"'));
-        expect(fnText, contains('"build_feature"'));
-        expect(fnText, contains('"direct_agent"'));
-        expect(fnText, contains('"sync_scripts"'));
-        expect(fnText, isNot(contains('complete_feature_steps')));
-        expect(fnText, isNot(contains('markFeatureScaffoldStepsCompletedJs')));
-        expect(fnText, isNot(contains('updateLeafStepCompletion')));
-        expect(fnText, isNot(contains('"toggle_step"')));
-        expect(fnText, contains('"set_godot_built"'));
-        expect(fnText, contains('deletedPaths'));
-        expect(fnText, contains('"add_to_group"'));
-        expect(fnText, contains('"reparent_node"'));
-        expect(fnText, contains('inputMapSnapshot'));
-        expect(fnText, contains('projectDiagnostics'));
-        expect(fnText, contains('get_overlapping_bodies'));
-        expect(fnText, contains('16384'));
-        expect(fnText, contains('inputOps'));
-        expect(fnText, contains('sceneOps'));
-        expect(fnText, contains('scriptUpdates'));
-        expect(fnText, contains('codeFiles'));
+        expect(fnText, contains('"set_playtest"'));
+        expect(fnText, contains('"toggle_guard"'));
+        expect(fnText, contains('"log_issue"'));
+        expect(fnText, contains('"resolve_issue"'));
+        expect(fnText, contains('signedOffGuards'));
+        expect(fnText, isNot(contains('build_feature')));
+        expect(fnText, isNot(contains('direct_agent')));
+        expect(fnText, isNot(contains('diagnose_fix')));
+        expect(fnText, isNot(contains('sync_scripts')));
+        expect(fnText, isNot(contains('set_godot_built')));
+        expect(fnText, isNot(contains('runGodotAgentWithGemini')));
+        expect(fnText, isNot(contains('diagnoseGodotIssueWithGemini')));
+        expect(fnText, isNot(contains('handleGodotAgentActionRoute')));
+        expect(fnText, isNot(contains('handleSyncLiveScriptsRoute')));
+        expect(fnText, isNot(contains('flattenCheckpointSteps')));
         expect(fnText, contains('gemini-4-hydrogen'));
         expect(fnText, contains('gemini-flash-latest'));
-
-        // TaskHowToBlueprint cleanly strips V2.1 [[DIAGNOSIS]] & [[SCRIPT_PATCH]] markers
-        const rawNotesWithPatch =
-            'Apply respawn guard cleanly.\n[[AREA2]]\nOceanZone.respawn_marker: Marker3D\n[[VERIFY_MODE]]\nplaytest\n[[STEP_ROLE]]\nfix\n[[DIAGNOSIS]]\n_on_body_entered only calls pass.\n[[SCRIPT_PATCH]]\n{"resPath":"res://scripts/boundary_guard.gd"}';
-        final decoded = TaskHowToBlueprint.decodeThreeAreaNotes(
-          rawNotesWithPatch,
-        );
-        expect(decoded.cleanInstruction, equals('Apply respawn guard cleanly.'));
-        expect(
-          decoded.area2Inspector,
-          equals('OceanZone.respawn_marker: Marker3D'),
-        );
-        expect(decoded.verifyMode, equals('playtest'));
-        expect(decoded.stepRole, equals('fix'));
 
         final zipBytes = zipFile.readAsBytesSync();
         expect(zipBytes.length, greaterThan(1000));

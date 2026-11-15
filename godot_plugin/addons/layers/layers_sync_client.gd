@@ -4,15 +4,10 @@ extends Node
 signal epic_updated(payload: Dictionary)
 signal sync_failed(message: String)
 signal busy_changed(is_busy: bool)
-signal agent_bundle_received(agent_bundle: Dictionary, payload: Dictionary)
-signal scripts_synced(synced_count: int)
 signal update_available(local_ver: String, remote_ver: String)
 signal update_check_finished(up_to_date: bool, local_ver: String, remote_ver: String)
 signal update_ready_to_reload(new_ver: String, updated_gd_paths: PackedStringArray)
 signal update_failed(message: String)
-
-var _agent_http: HTTPRequest = null
-var _agent_busy: bool = false
 
 const DEFAULT_SYNC_BASE_URL := "https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy"
 const CONFIG_DIR := "res://.layers"
@@ -26,26 +21,19 @@ const REMOTE_ZIP_FALLBACK_URL := "https://henrycgithub.github.io/LAYERS-Agentic/
 
 var _http: HTTPRequest
 var _update_http: HTTPRequest
-var _script_sync_http: HTTPRequest
 var _link_token: String = ""
 var _sync_base_url: String = DEFAULT_SYNC_BASE_URL
 var _is_busy: bool = false
-var _pending_request: Dictionary = {}
+var _pending_queue: Array[Dictionary] = []
 var _update_busy: bool = false
 var _update_mode: String = ""
 var _update_silent: bool = true
 var _update_zip_attempt_idx: int = 0
-var _script_sync_busy: bool = false
-var _pending_live_scripts: Dictionary = {}
-var _pending_deleted_scripts: Dictionary = {}
-var _script_sync_in_flight: Dictionary = {}
-var _script_delete_in_flight: PackedStringArray = PackedStringArray()
-var _script_sync_retried_paths: Dictionary = {}
 
 
 func _ready() -> void:
 	_http = HTTPRequest.new()
-	_http.timeout = 95.0
+	_http.timeout = 45.0
 	add_child(_http)
 	_http.request_completed.connect(_on_request_completed)
 
@@ -53,11 +41,6 @@ func _ready() -> void:
 	_update_http.timeout = 30.0
 	add_child(_update_http)
 	_update_http.request_completed.connect(_on_update_http_completed)
-
-	_script_sync_http = HTTPRequest.new()
-	_script_sync_http.timeout = 20.0
-	add_child(_script_sync_http)
-	_script_sync_http.request_completed.connect(_on_script_sync_http_completed)
 
 	load_config()
 
@@ -96,10 +79,7 @@ func save_link_token(token: String, base_url: String = DEFAULT_SYNC_BASE_URL) ->
 
 func clear_link_token() -> void:
 	_link_token = ""
-	_pending_request = {}
-	_pending_live_scripts.clear()
-	_pending_deleted_scripts.clear()
-	_script_sync_retried_paths.clear()
+	_pending_queue.clear()
 	if FileAccess.file_exists(LINK_CFG_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(LINK_CFG_PATH))
 	if FileAccess.file_exists(CACHE_JSON_PATH):
@@ -112,16 +92,20 @@ func load_cached_epic() -> Dictionary:
 	var file := FileAccess.open(CACHE_JSON_PATH, FileAccess.READ)
 	if file == null:
 		return {}
-	var parsed = JSON.parse_string(file.get_as_text())
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	if typeof(parsed) == TYPE_DICTIONARY:
-		if parsed.has("codeFiles") and typeof(parsed.get("codeFiles")) != TYPE_DICTIONARY:
-			parsed["codeFiles"] = _normalize_code_files_dict(parsed.get("codeFiles"))
-		return parsed
+		return parsed as Dictionary
 	return {}
 
 
+func save_cached_epic(payload: Dictionary) -> void:
+	if payload.is_empty():
+		return
+	_write_cache(payload)
+
+
 func fetch_active_epic() -> void:
-	if not has_link_token() or _agent_busy:
+	if not has_link_token():
 		return
 	_dispatch_or_queue({
 		"kind": "get_epic",
@@ -147,7 +131,13 @@ func set_playtest_passed(feature_id: String, checkpoint_id: String, passed: bool
 	})
 
 
-func set_feature_built(feature_id: String, checkpoint_id: String, built: bool) -> void:
+func toggle_guard(
+	feature_id: String,
+	checkpoint_id: String,
+	guard_index: int,
+	guard_text: String,
+	signed_off: bool
+) -> void:
 	if not has_link_token():
 		return
 	_dispatch_or_queue({
@@ -157,8 +147,48 @@ func set_feature_built(feature_id: String, checkpoint_id: String, built: bool) -
 		"body": JSON.stringify({
 			"featureId": feature_id,
 			"checkpointId": checkpoint_id,
-			"action": "set_godot_built",
-			"built": built,
+			"action": "toggle_guard",
+			"guardIndex": guard_index,
+			"guardText": guard_text,
+			"signedOff": signed_off,
+		}),
+	})
+
+
+func log_playtest_issue(feature_id: String, checkpoint_id: String, issue_text: String) -> void:
+	if not has_link_token():
+		return
+	var clean_issue: String = issue_text.strip_edges()
+	if clean_issue.is_empty():
+		return
+	_dispatch_or_queue({
+		"kind": "update",
+		"method": HTTPClient.METHOD_POST,
+		"path": "/godotLink/update",
+		"body": JSON.stringify({
+			"featureId": feature_id,
+			"checkpointId": checkpoint_id,
+			"action": "log_issue",
+			"issueText": clean_issue,
+		}),
+	})
+
+
+func resolve_playtest_issue(feature_id: String, checkpoint_id: String, issue_id: String) -> void:
+	if not has_link_token():
+		return
+	var clean_id: String = issue_id.strip_edges()
+	if clean_id.is_empty():
+		return
+	_dispatch_or_queue({
+		"kind": "update",
+		"method": HTTPClient.METHOD_POST,
+		"path": "/godotLink/update",
+		"body": JSON.stringify({
+			"featureId": feature_id,
+			"checkpointId": checkpoint_id,
+			"action": "resolve_issue",
+			"issueId": clean_id,
 		}),
 	})
 
@@ -183,20 +213,18 @@ func _dispatch_or_queue(req: Dictionary) -> void:
 	if _http == null:
 		return
 	if _is_busy:
-		# Prioritize updates over background GET refreshes
-		if req.get("kind") == "update" or _pending_request.is_empty():
-			_pending_request = req
+		var req_kind: String = str(req.get("kind", ""))
+		if req_kind == "update":
+			_pending_queue.append(req)
+		elif req_kind == "get_epic" and _pending_queue.is_empty():
+			_pending_queue.append(req)
 		return
 	_start_request(req)
 
 
-func _emit_busy_state() -> void:
-	busy_changed.emit(_is_busy or _agent_busy)
-
-
 func _start_request(req: Dictionary) -> void:
 	_is_busy = true
-	_emit_busy_state()
+	busy_changed.emit(true)
 
 	var url := "%s%s" % [_sync_base_url, str(req.get("path", ""))]
 	var headers := PackedStringArray([
@@ -209,36 +237,35 @@ func _start_request(req: Dictionary) -> void:
 	var err := _http.request(url, headers, method, body)
 	if err != OK:
 		_is_busy = false
-		_emit_busy_state()
+		busy_changed.emit(false)
 		sync_failed.emit("HTTP request failed (%s)" % error_string(err))
 
 
 func _on_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_is_busy = false
-	_emit_busy_state()
+	busy_changed.emit(false)
 
 	var text := body.get_string_from_utf8()
-	var parsed = JSON.parse_string(text)
+	var parsed: Variant = JSON.parse_string(text)
 
 	if result != HTTPRequest.RESULT_SUCCESS:
 		sync_failed.emit("Offline or network error (%d)" % result)
 	elif response_code < 200 or response_code >= 300:
 		var err_msg := "Sync error (%d)" % response_code
 		if typeof(parsed) == TYPE_DICTIONARY:
-			var err_obj = parsed.get("error", {})
-			if typeof(err_obj) == TYPE_DICTIONARY and err_obj.has("message"):
-				err_msg = str(err_obj["message"])
+			var err_obj: Variant = (parsed as Dictionary).get("error", {})
+			if typeof(err_obj) == TYPE_DICTIONARY and (err_obj as Dictionary).has("message"):
+				err_msg = str((err_obj as Dictionary)["message"])
 		sync_failed.emit(err_msg)
-	elif typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
-		if not _agent_busy:
-			_write_cache(parsed)
-			epic_updated.emit(parsed)
+	elif typeof(parsed) == TYPE_DICTIONARY and (parsed as Dictionary).get("ok", false) == true:
+		var payload_dict: Dictionary = parsed as Dictionary
+		_write_cache(payload_dict)
+		epic_updated.emit(payload_dict)
 	else:
 		sync_failed.emit("Unexpected sync response.")
 
-	if not _pending_request.is_empty():
-		var next_req := _pending_request
-		_pending_request = {}
+	if not _pending_queue.is_empty():
+		var next_req: Dictionary = _pending_queue.pop_front()
 		_start_request(next_req)
 
 
@@ -247,12 +274,6 @@ func _write_cache(payload: Dictionary) -> void:
 	var file := FileAccess.open(CACHE_JSON_PATH, FileAccess.WRITE)
 	if file != null:
 		file.store_string(JSON.stringify(payload))
-
-
-func save_cached_epic(payload: Dictionary) -> void:
-	if payload.is_empty():
-		return
-	_write_cache(payload)
 
 
 func get_local_plugin_version() -> String:
@@ -463,278 +484,3 @@ func _apply_downloaded_zip_bytes(zip_bytes: PackedByteArray) -> void:
 	_update_mode = ""
 	var new_ver := get_local_plugin_version()
 	update_ready_to_reload.emit(new_ver, updated_gd_paths)
-
-
-func _ensure_agent_http() -> void:
-	if _agent_http != null and is_instance_valid(_agent_http):
-		return
-	_agent_http = HTTPRequest.new()
-	_agent_http.timeout = 95.0
-	add_child(_agent_http)
-	_agent_http.request_completed.connect(_on_agent_http_completed)
-
-
-func build_feature(
-	feature_id: String,
-	checkpoint_id: String,
-	scene_snapshot: Variant,
-	live_scripts: Dictionary,
-	arena_scene_path: String = "",
-	feature_scene_path: String = "",
-	input_map_snapshot: Dictionary = {},
-	project_diagnostics: Array = []
-) -> void:
-	var payload := {
-		"action": "build_feature",
-		"featureId": feature_id,
-		"checkpointId": checkpoint_id,
-		"sceneSnapshot": scene_snapshot,
-		"liveScripts": live_scripts,
-		"arenaScenePath": arena_scene_path,
-		"featureScenePath": feature_scene_path,
-	}
-	if not input_map_snapshot.is_empty():
-		payload["inputMapSnapshot"] = input_map_snapshot
-	if not project_diagnostics.is_empty():
-		payload["projectDiagnostics"] = project_diagnostics
-	_post_agent_update(payload)
-
-
-func direct_agent(
-	feature_id: String,
-	checkpoint_id: String,
-	prompt_text: String,
-	scene_snapshot: Variant,
-	live_scripts: Dictionary,
-	arena_scene_path: String = "",
-	feature_scene_path: String = "",
-	error_text: String = "",
-	input_map_snapshot: Dictionary = {},
-	project_diagnostics: Array = []
-) -> void:
-	var payload := {
-		"action": "direct_agent",
-		"featureId": feature_id,
-		"checkpointId": checkpoint_id,
-		"prompt": prompt_text,
-		"errorText": error_text,
-		"sceneSnapshot": scene_snapshot,
-		"liveScripts": live_scripts,
-		"arenaScenePath": arena_scene_path,
-		"featureScenePath": feature_scene_path,
-	}
-	if not input_map_snapshot.is_empty():
-		payload["inputMapSnapshot"] = input_map_snapshot
-	if not project_diagnostics.is_empty():
-		payload["projectDiagnostics"] = project_diagnostics
-	_post_agent_update(payload)
-
-
-func sync_live_scripts(
-	live_scripts: Dictionary,
-	deleted_paths: PackedStringArray = PackedStringArray()
-) -> void:
-	if not has_link_token() or (live_scripts.is_empty() and deleted_paths.is_empty()):
-		return
-	for raw_path in live_scripts.keys():
-		var p := str(raw_path).strip_edges()
-		if p.begins_with("res://") and p.ends_with(".gd"):
-			var code := str(live_scripts[raw_path])
-			if not code.strip_edges().is_empty():
-				_script_sync_retried_paths.erase(p)
-				_pending_deleted_scripts.erase(p)
-				_pending_live_scripts[p] = code
-	for raw_del in deleted_paths:
-		var dp := str(raw_del).strip_edges()
-		if dp.begins_with("res://") and dp.ends_with(".gd") and not live_scripts.has(dp):
-			_script_sync_retried_paths.erase(dp)
-			_pending_live_scripts.erase(dp)
-			_pending_deleted_scripts[dp] = true
-	if _pending_live_scripts.is_empty() and _pending_deleted_scripts.is_empty():
-		return
-	if _script_sync_busy:
-		return
-	_flush_pending_script_sync()
-
-
-func _flush_pending_script_sync() -> void:
-	if _script_sync_busy or (_pending_live_scripts.is_empty() and _pending_deleted_scripts.is_empty()) or not has_link_token():
-		return
-	if _script_sync_http == null:
-		return
-	_script_sync_in_flight = _pending_live_scripts.duplicate()
-	_pending_live_scripts.clear()
-	_script_delete_in_flight = PackedStringArray()
-	for raw_dp in _pending_deleted_scripts.keys():
-		_script_delete_in_flight.append(str(raw_dp))
-	_pending_deleted_scripts.clear()
-	_script_sync_busy = true
-
-	var url := "%s/godotLink/update" % _sync_base_url.trim_suffix("/")
-	var headers := PackedStringArray([
-		"Content-Type: application/json",
-		"Authorization: Bearer %s" % _link_token,
-	])
-	var payload := {
-		"action": "sync_scripts",
-		"scripts": _script_sync_in_flight,
-	}
-	if not _script_delete_in_flight.is_empty():
-		var del_arr: Array = []
-		for dp in _script_delete_in_flight:
-			del_arr.append(dp)
-		payload["deletedPaths"] = del_arr
-	var body_str := JSON.stringify(payload)
-	var err := _script_sync_http.request(url, headers, HTTPClient.METHOD_POST, body_str)
-	if err != OK:
-		_script_sync_busy = false
-		_script_sync_in_flight.clear()
-		_script_delete_in_flight = PackedStringArray()
-
-
-func _on_script_sync_http_completed(
-	result: int,
-	response_code: int,
-	_headers: PackedStringArray,
-	body: PackedByteArray
-) -> void:
-	_script_sync_busy = false
-	var synced_snapshot: Dictionary = _script_sync_in_flight.duplicate()
-	var deleted_snapshot: PackedStringArray = _script_delete_in_flight.duplicate()
-	_script_sync_in_flight.clear()
-	_script_delete_in_flight = PackedStringArray()
-
-	var synced_ok := false
-	if result == HTTPRequest.RESULT_SUCCESS and response_code >= 200 and response_code < 300:
-		var parsed: Variant = JSON.parse_string(body.get_string_from_utf8())
-		if typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
-			synced_ok = true
-			for rk in synced_snapshot.keys():
-				_script_sync_retried_paths.erase(str(rk))
-			for dk in deleted_snapshot:
-				_script_sync_retried_paths.erase(str(dk))
-			_update_cached_code_files(synced_snapshot, deleted_snapshot)
-			scripts_synced.emit(int(parsed.get("syncedCount", synced_snapshot.size())) + int(parsed.get("deletedCount", 0)))
-
-	if not synced_ok:
-		for rk in synced_snapshot.keys():
-			var rp := str(rk)
-			if not _pending_live_scripts.has(rp) and not _pending_deleted_scripts.has(rp) and not _script_sync_retried_paths.has(rp):
-				_script_sync_retried_paths[rp] = true
-				_pending_live_scripts[rp] = synced_snapshot[rk]
-		for dk in deleted_snapshot:
-			var dp := str(dk)
-			if not _pending_deleted_scripts.has(dp) and not _pending_live_scripts.has(dp) and not _script_sync_retried_paths.has(dp):
-				_script_sync_retried_paths[dp] = true
-				_pending_deleted_scripts[dp] = true
-
-	if not _pending_live_scripts.is_empty() or not _pending_deleted_scripts.is_empty():
-		_flush_pending_script_sync()
-
-
-func _normalize_code_files_dict(raw_val: Variant) -> Dictionary:
-	if typeof(raw_val) == TYPE_DICTIONARY:
-		return (raw_val as Dictionary).duplicate()
-	var migrated := {}
-	if typeof(raw_val) == TYPE_ARRAY:
-		for cf in (raw_val as Array):
-			if typeof(cf) == TYPE_DICTIONARY:
-				var d: Dictionary = cf
-				var rp := str(d.get("resPath", d.get("path", ""))).strip_edges()
-				if not rp.is_empty():
-					migrated[rp] = str(d.get("content", ""))
-	return migrated
-
-
-func _update_cached_code_files(
-	live_scripts: Dictionary,
-	deleted_paths: PackedStringArray = PackedStringArray()
-) -> void:
-	if live_scripts.is_empty() and deleted_paths.is_empty():
-		return
-	var cached := load_cached_epic()
-	if cached.is_empty():
-		return
-	var code_files := _normalize_code_files_dict(cached.get("codeFiles", {}))
-	for rp_raw in live_scripts.keys():
-		var rp := str(rp_raw).strip_edges()
-		if not rp.is_empty():
-			code_files[rp] = str(live_scripts[rp_raw])
-	for dp_raw in deleted_paths:
-		var dp := str(dp_raw).strip_edges()
-		if not dp.is_empty():
-			code_files.erase(dp)
-	cached["codeFiles"] = code_files
-	_write_cache(cached)
-
-
-func has_active_agent_request() -> bool:
-	return _agent_busy
-
-
-func cancel_agent_request() -> bool:
-	if not _agent_busy:
-		return false
-	if _agent_http != null and is_instance_valid(_agent_http):
-		_agent_http.cancel_request()
-	_agent_busy = false
-	_emit_busy_state()
-	return true
-
-
-func _post_agent_update(payload_body: Dictionary) -> void:
-	if _link_token.is_empty():
-		sync_failed.emit("Link token not configured. Open Settings to paste your Project Link Token.")
-		return
-	if _agent_busy:
-		return
-	_ensure_agent_http()
-	_agent_busy = true
-	_emit_busy_state()
-
-	var url := "%s/godotLink/update" % _sync_base_url.trim_suffix("/")
-	var headers := PackedStringArray([
-		"Content-Type: application/json",
-		"Authorization: Bearer %s" % _link_token,
-	])
-	var json_str := JSON.stringify(payload_body)
-	var err := _agent_http.request(url, headers, HTTPClient.METHOD_POST, json_str)
-	if err != OK:
-		_agent_busy = false
-		_emit_busy_state()
-		sync_failed.emit("Failed to send Agent request (HTTPRequest error %d)." % err)
-
-
-func _on_agent_http_completed(
-	result: int,
-	response_code: int,
-	_headers: PackedStringArray,
-	body: PackedByteArray
-) -> void:
-	if not _agent_busy:
-		return
-	_agent_busy = false
-	_emit_busy_state()
-	if result != HTTPRequest.RESULT_SUCCESS:
-		sync_failed.emit("Network error communicating with LAYERS Agent (code %d)." % result)
-		return
-	var text := body.get_string_from_utf8()
-	var parsed: Variant = JSON.parse_string(text)
-	if response_code < 200 or response_code >= 300:
-		var err_msg := "Agent request failed (HTTP %d)." % response_code
-		if typeof(parsed) == TYPE_DICTIONARY and parsed.has("error"):
-			var err_obj: Variant = parsed.get("error")
-			if typeof(err_obj) == TYPE_DICTIONARY:
-				err_msg = String(err_obj.get("message", err_msg))
-			elif typeof(err_obj) == TYPE_STRING:
-				err_msg = String(err_obj)
-		sync_failed.emit(err_msg)
-		return
-	if typeof(parsed) == TYPE_DICTIONARY and parsed.get("ok", false) == true:
-		_write_cache(parsed)
-		if parsed.has("agentBundle") and typeof(parsed.get("agentBundle")) == TYPE_DICTIONARY:
-			agent_bundle_received.emit(parsed.get("agentBundle"), parsed)
-		else:
-			epic_updated.emit(parsed)
-	else:
-		sync_failed.emit("Unexpected Agent response from LAYERS Cloud.")
