@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
+import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
@@ -676,6 +677,231 @@ void main() {
         } finally {
           GeminiAgentClient.testHttpPost = prevHttp;
           GeminiAgentClient.authTokenProvider = prevAuthProvider;
+        }
+      },
+    );
+
+    test(
+      '10. Stage 1 Epics carry coreLoopBeat provenance into MCP payload & offline spark detects framing',
+      () async {
+        final shellbreaker = UnrealSparkPresets.byId('shellbreaker');
+        expect(shellbreaker.initialEpics.first.coreLoopBeat, isNotEmpty);
+        final payload = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: shellbreaker,
+          epic: shellbreaker.initialEpics.first,
+        );
+        expect(
+          payload,
+          contains(
+            '- Core Loop Beat: ${shellbreaker.initialEpics.first.coreLoopBeat}',
+          ),
+        );
+
+        final customSpec = await ProjectConceptAgent.draftSpecFromSpark(
+          sparkPrompt:
+              'Third-person grappling hook glider game with deployable jump pads',
+          apiKey: '',
+        );
+        expect(customSpec.cameraChoiceId, equals('tps'));
+        expect(customSpec.initialEpics.length, inInclusiveRange(2, 4));
+        expect(
+          customSpec.initialEpics.every((e) => e.coreLoopBeat.isNotEmpty),
+          isTrue,
+        );
+        expect(
+          customSpec.initialEpics.first.controls
+              .any((c) => c.action.contains('IA_Look')),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      '11. Selecting a Stage 1 Camera Decision syncs E01 controls, checks & tail tuning without shifting index 0',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        final beforeE01 = wb.conceptDraft!.initialEpics.first;
+        expect(beforeE01.tuning.first.key, equals('MoveSpeed'));
+
+        wb.selectCameraDecisionOption('tps');
+        final afterE01 = wb.conceptDraft!.initialEpics.first;
+        expect(afterE01.tuning.first.key, equals('MoveSpeed'));
+        expect(
+          afterE01.tuning
+              .firstWhere((t) => t.key == 'SpringArmLength')
+              .value,
+          equals('380'),
+        );
+        expect(
+          afterE01.tuning.firstWhere((t) => t.key == 'CameraFOV').value,
+          equals('68'),
+        );
+        expect(
+          afterE01.controls.any((c) => c.action.contains('IA_Look')),
+          isTrue,
+        );
+        expect(
+          afterE01.checks.any(
+            (c) =>
+                c.text.toLowerCase().contains('springarm') ||
+                c.text.toLowerCase().contains('reticle'),
+          ),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      '12. Stage 1 §05 reorder/remove controls preserve lineageKey & drive active Epic order in Stage 2',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        final down0 = find.byKey(const ValueKey('stage1_epic_down_0'));
+        await tester.ensureVisible(down0);
+        await tester.tap(down0);
+        await tester.pumpAndSettle();
+
+        expect(wb.conceptDraft!.initialEpics[0].code, equals('E01'));
+        expect(wb.conceptDraft!.initialEpics[0].lineageKey, equals('e02'));
+        expect(
+          wb.conceptDraft!.initialEpics[0].title,
+          equals('Twin-Stick Burst Cannon & Recoil'),
+        );
+        expect(wb.conceptDraft!.initialEpics[1].code, equals('E02'));
+        expect(wb.conceptDraft!.initialEpics[1].lineageKey, equals('e01'));
+
+        final remove2 = find.byKey(const ValueKey('stage1_epic_remove_2'));
+        await tester.ensureVisible(remove2);
+        await tester.tap(remove2);
+        await tester.pumpAndSettle();
+        expect(wb.conceptDraft!.initialEpics, hasLength(2));
+
+        await tester.tap(
+          find.byKey(const ValueKey('approve_launch_workbench_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(wb.activeReleaseEpics, hasLength(2));
+        expect(wb.selectedEpicSpec?.lineageKey, equals('e02'));
+      },
+    );
+
+    test(
+      '13. Re-approving edited Stage 1 Spec performs non-destructive lineage sync into existing v0.1 Epics',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        final relId = wb.approveRootSpecAndLaunchWorkbench()!;
+
+        final initialEpics = wb.epicsForRelease(relId);
+        expect(initialEpics, hasLength(3));
+        final e01DocId = initialEpics[0].id;
+        final e02DocId = initialEpics[1].id;
+
+        // Pass E01, check Check 1 & flag 1 open [FIX] on E02, keep E03 untouched
+        wb.passActiveEpic(e01DocId);
+        wb.togglePieCheck(e02DocId, initialEpics[1].checks.first.id, true);
+        wb.flagEpicFix(e02DocId, 'Spread bolts clip pillars');
+
+        // Go back to Stage 1, edit E02, remove untouched E03, add a new v0.1 Epic E04
+        wb.setStage(WorkbenchStage.projectPitch);
+        final draft = wb.conceptDraft!;
+        draft.initialEpics[1].goal = 'Updated burst cannon goal from Stage 1.';
+        draft.initialEpics[1].tuning.first.value = '2950';
+        draft.initialEpics.removeAt(2);
+        draft.initialEpics.add(
+          EpicSpec(
+            id: 'sb_e04_turret',
+            code: 'E03',
+            lineageKey: 'e04_turret',
+            title: 'Deployable Crab Decoy',
+            goal: 'Drop decoy turret that pulls grunt threat for 4.0s.',
+            checks: [
+              EpicPieCheck(
+                id: 'decoy_c1',
+                text: 'Drop decoy -> nearby grunt targets decoy cleanly',
+              ),
+            ],
+          ),
+        );
+
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final synced = wb.epicsForRelease(relId);
+        expect(synced, hasLength(3));
+
+        // E01 stays passed
+        expect(synced[0].isPassed, isTrue);
+
+        // E02 receives Stage 1 updates while preserving passed check + open [FIX]
+        expect(
+          synced[1].goal,
+          equals('Updated burst cannon goal from Stage 1.'),
+        );
+        expect(synced[1].tuning.first.value, equals('2950'));
+        expect(synced[1].checks.first.passed, isTrue);
+        expect(synced[1].openFixesCount, equals(1));
+        expect(synced[1].openFixes.first.text, equals('Spread bolts clip pillars'));
+
+        // Untouched E03 was pruned and replaced by the new Stage 1 Epic
+        expect(synced[2].lineageKey, equals('e04_turret'));
+        expect(synced[2].code, equals('E03'));
+        expect(wb.selectedEpicId, equals(synced[1].id));
+      },
+    );
+
+    test(
+      '14. ReleasePlannerAgent passes Stage 1 §01-§04 Core Loop, Camera, Input & Hard Scope Cuts to Gemini',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        wb.updateAiConfig(apiKey: 'mock-key-1234');
+
+        String capturedPrompt = '';
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          capturedPrompt = prompt;
+          return {
+            'presets': [
+              {
+                'id': 'p1',
+                'label': 'Test Preset',
+                'desc': 'Add dash upgrade',
+                'upgrades': ['up_1'],
+                'newEpics': ['E04'],
+              },
+            ],
+            'upgrades': [],
+            'newEpics': [],
+          };
+        };
+
+        try {
+          await wb.openProgressiveReleaseCopilot();
+          expect(capturedPrompt, contains('Core Loop (§01):'));
+          expect(capturedPrompt, contains('Camera Contract (§02):'));
+          expect(capturedPrompt, contains('Input Contract (§02):'));
+          expect(capturedPrompt, contains('Design Pillars (§03):'));
+          expect(capturedPrompt, contains('Trade-Offs (§03):'));
+          expect(
+            capturedPrompt,
+            contains('Hard Scope Cuts — DO NOT VIOLATE (§04):'),
+          );
+          expect(capturedPrompt, contains('No main menu, title screen'));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
         }
       },
     );

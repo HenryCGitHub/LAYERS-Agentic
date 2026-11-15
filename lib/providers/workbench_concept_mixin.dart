@@ -143,13 +143,70 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       if (opt.id == optionId) {
         draft.cameraChoiceId = opt.id;
         draft.cameraContract = opt.contractValue;
+        ProjectConceptAgent.syncEpicCameraFraming(
+          draft,
+          optionId: opt.id,
+          contractValue: opt.contractValue,
+        );
         draft.lastCoDesignNote =
-            'Camera contract set to ${opt.label}.';
+            'Camera contract & E01 look framing set to ${opt.label}.';
         _ensureActiveProjectDocument(draft);
         notifyListeners();
         return;
       }
     }
+  }
+
+  void _renumberInitialEpics(ProjectConceptBlueprint draft) {
+    for (int i = 0; i < draft.initialEpics.length; i++) {
+      final ep = draft.initialEpics[i];
+      ep.code = 'E${(i + 1).toString().padLeft(2, '0')}';
+      if (ep.lineageKey.trim().isEmpty) {
+        ep.lineageKey = 'epic_${i + 1}';
+      }
+      if (!ep.isPassed &&
+          ep.lifecycle != EpicLifecycle.upgrading &&
+          ep.lifecycle != EpicLifecycle.newEpic) {
+        ep.lifecycle = i == 0 ? EpicLifecycle.active : EpicLifecycle.queued;
+      }
+    }
+  }
+
+  /// Reorders a Stage 1 `§05` prototype Epic (`delta = -1` up, `+1` down) while keeping `id` & `lineageKey`.
+  void moveInitialEpic(int index, int delta) {
+    final draft = _conceptDraft;
+    if (draft == null) return;
+    final newIndex = index + delta;
+    if (index < 0 ||
+        index >= draft.initialEpics.length ||
+        newIndex < 0 ||
+        newIndex >= draft.initialEpics.length ||
+        newIndex == index) {
+      return;
+    }
+    final moved = draft.initialEpics.removeAt(index);
+    draft.initialEpics.insert(newIndex, moved);
+    _renumberInitialEpics(draft);
+    draft.lastCoDesignNote =
+        'Reordered §05 queue: ${moved.title} -> ${moved.code}.';
+    _ensureActiveProjectDocument(draft);
+    notifyListeners();
+  }
+
+  /// Prunes a Stage 1 `§05` prototype Epic (keeping at least 1 Epic in `v0.1`).
+  void removeInitialEpicAt(int index) {
+    final draft = _conceptDraft;
+    if (draft == null ||
+        draft.initialEpics.length <= 1 ||
+        index < 0 ||
+        index >= draft.initialEpics.length) {
+      return;
+    }
+    final removed = draft.initialEpics.removeAt(index);
+    _renumberInitialEpics(draft);
+    draft.lastCoDesignNote = 'Removed ${removed.title} from Stage 1 §05.';
+    _ensureActiveProjectDocument(draft);
+    notifyListeners();
   }
 
   void updateRootSpecSections({
@@ -182,7 +239,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  /// Approves `PROJECT_SPEC.md` and materializes strict `v0.1 · Prototype` release + 6-section Epics,
+  /// Approves `PROJECT_SPEC.md` and materializes or non-destructively reconciles `v0.1 · Prototype` Epics,
   /// transitioning straight to Stage 2 (`2. Epic Specs`).
   String? approveRootSpecAndLaunchWorkbench() {
     var draft = _conceptDraft;
@@ -210,8 +267,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
     final relId = v01Rel?.id ?? '${pid}_rel_v01';
     final epicIds = <String>[];
+    final existingDocs = epicDocsForRelease(relId);
 
-    if (v01Rel == null || epicDocsForRelease(relId).isEmpty) {
+    if (v01Rel == null || existingDocs.isEmpty) {
       for (int i = 0; i < draft.initialEpics.length; i++) {
         final rawEpic = draft.initialEpics[i];
         final epId = '${relId}_epic_${i + 1}';
@@ -221,8 +279,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           lifecycleOverride:
               i == 0 ? EpicLifecycle.active : EpicLifecycle.queued,
         );
-        cleanEpic.code = 'E0${i + 1}';
-        cleanEpic.lineageKey = 'e0${i + 1}';
+        cleanEpic.code = 'E${(i + 1).toString().padLeft(2, '0')}';
+        cleanEpic.lineageKey = rawEpic.lineageKey.trim().isEmpty
+            ? 'e0${i + 1}'
+            : rawEpic.lineageKey.trim();
         final epDoc = cleanEpic.toTierDocument(
           docId: epId,
           parentReleaseId: relId,
@@ -232,19 +292,151 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         epicIds.add(epId);
       }
     } else {
-      for (final d in epicDocsForRelease(relId)) {
-        epicIds.add(d.id);
+      final existingSpecs = [
+        for (int i = 0; i < existingDocs.length; i++)
+          EpicSpec.fromDocument(existingDocs[i], indexHint: i),
+      ];
+      final matched = List<bool>.filled(existingDocs.length, false);
+
+      int? findMatchIdx(EpicSpec incoming) {
+        final inKey = incoming.lineageKey.trim().toLowerCase();
+        if (inKey.isNotEmpty) {
+          for (int j = 0; j < existingSpecs.length; j++) {
+            if (!matched[j] &&
+                existingSpecs[j].lineageKey.trim().toLowerCase() == inKey) {
+              return j;
+            }
+          }
+        }
+        for (int j = 0; j < existingDocs.length; j++) {
+          if (!matched[j] && existingDocs[j].id == incoming.id) {
+            return j;
+          }
+        }
+        final inTitle = incoming.title.trim().toLowerCase();
+        if (inTitle.isNotEmpty) {
+          for (int j = 0; j < existingSpecs.length; j++) {
+            if (!matched[j] &&
+                existingSpecs[j].title.trim().toLowerCase() == inTitle) {
+              return j;
+            }
+          }
+        }
+        return null;
       }
+
+      final reconciledSpecs = <EpicSpec>[];
+      final reconciledBaseDocs = <TierDocument?>[];
+
+      for (int i = 0; i < draft.initialEpics.length; i++) {
+        final incoming = draft.initialEpics[i];
+        final matchIdx = findMatchIdx(incoming);
+        if (matchIdx != null) {
+          matched[matchIdx] = true;
+          final existingDoc = existingDocs[matchIdx];
+          final existingSpec = existingSpecs[matchIdx];
+          if (existingSpec.isPassed) {
+            reconciledSpecs.add(existingSpec.deepCopy(idOverride: existingDoc.id));
+            reconciledBaseDocs.add(existingDoc);
+          } else {
+            final merged = incoming.deepCopy(
+              idOverride: existingDoc.id,
+              releaseVersionOverride: 'v0.1',
+              lifecycleOverride: existingSpec.lifecycle,
+            );
+            merged.fixes = [for (final f in existingSpec.fixes) f.copyWith()];
+            merged.baselineSummary = List<String>.from(existingSpec.baselineSummary);
+            merged.upgradeDeltas = List<String>.from(existingSpec.upgradeDeltas);
+            for (final check in merged.checks) {
+              final wasPassed = existingSpec.checks.any(
+                (old) =>
+                    old.passed &&
+                    (old.id == check.id ||
+                        old.text.trim().toLowerCase() ==
+                            check.text.trim().toLowerCase()),
+              );
+              if (wasPassed) check.passed = true;
+            }
+            reconciledSpecs.add(merged);
+            reconciledBaseDocs.add(existingDoc);
+          }
+        } else {
+          final newEpId =
+              '${relId}_epic_${DateTime.now().microsecondsSinceEpoch}_$i';
+          final created = incoming.deepCopy(
+            idOverride: newEpId,
+            releaseVersionOverride: 'v0.1',
+          );
+          if (created.lineageKey.trim().isEmpty) {
+            created.lineageKey = 'epic_${reconciledSpecs.length + 1}';
+          }
+          reconciledSpecs.add(created);
+          reconciledBaseDocs.add(null);
+        }
+      }
+
+      final user = _authService.currentUser;
+      for (int j = 0; j < existingDocs.length; j++) {
+        if (matched[j]) continue;
+        final existingDoc = existingDocs[j];
+        final existingSpec = existingSpecs[j];
+        if (existingSpec.isPassed ||
+            existingSpec.openFixes.isNotEmpty ||
+            existingSpec.passedChecksCount > 0) {
+          reconciledSpecs.add(existingSpec.deepCopy(idOverride: existingDoc.id));
+          reconciledBaseDocs.add(existingDoc);
+        } else {
+          documents.remove(existingDoc.id);
+          LocalVaultService.deleteDocument(existingDoc.id);
+          if (user != null) {
+            _firestoreService.deleteDocument(
+              uid: user.uid,
+              docId: existingDoc.id,
+            );
+          }
+        }
+      }
+
+      bool assignedActive = false;
+      for (int i = 0; i < reconciledSpecs.length; i++) {
+        final spec = reconciledSpecs[i];
+        spec.code = 'E${(i + 1).toString().padLeft(2, '0')}';
+        if (spec.lineageKey.trim().isEmpty) {
+          spec.lineageKey = 'e0${i + 1}';
+        }
+        if (!spec.isPassed &&
+            spec.lifecycle != EpicLifecycle.upgrading &&
+            spec.lifecycle != EpicLifecycle.newEpic) {
+          if (!assignedActive) {
+            spec.lifecycle = EpicLifecycle.active;
+            assignedActive = true;
+          } else {
+            spec.lifecycle = EpicLifecycle.queued;
+          }
+        }
+
+        final baseDoc = reconciledBaseDocs[i];
+        final updatedDoc = baseDoc != null
+            ? spec.applyToDocument(baseDoc)
+            : spec.toTierDocument(docId: spec.id, parentReleaseId: relId);
+        documents[updatedDoc.id] = updatedDoc;
+        _persistDocument(updatedDoc);
+        epicIds.add(updatedDoc.id);
+      }
+
+      draft.initialEpics = [for (final s in reconciledSpecs) s.deepCopy()];
+      _conceptDraft = draft;
     }
 
     final relDoc = TierDocument(
       id: relId,
-      title: 'v0.1 · Prototype',
+      title: v01Rel?.title ?? 'v0.1 · Prototype',
       tier: TierType.release,
       parentId: pid,
       childrenIds: epicIds,
       estimatedDuration: '${epicIds.length} Epics',
       sections: <String, String>{
+        if (v01Rel != null) ...v01Rel.sections,
         'release_version': 'v0.1',
         'goal': draft.pitch,
         'doneWhen': draft.releaseDoneWhen,
@@ -257,7 +449,14 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       proj.childrenIds = [relId, ...proj.childrenIds];
     }
     _activeReleaseId = relId;
-    _selectedEpicId = epicIds.isNotEmpty ? epicIds.first : null;
+    final firstUnpassedId = epicIds.firstWhere(
+      (id) {
+        final d = documents[id];
+        return d != null && !EpicSpec.fromDocument(d).isPassed;
+      },
+      orElse: () => epicIds.isNotEmpty ? epicIds.first : '',
+    );
+    _selectedEpicId = firstUnpassedId.isNotEmpty ? firstUnpassedId : null;
     _currentStage = WorkbenchStage.releaseWorkbench;
     _showRawEpicPayload = false;
     _syncActiveProjectMetadata();

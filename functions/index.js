@@ -335,6 +335,7 @@ function parseEpicSpecJs(epicDoc, indexHint = 0) {
     title: String(epicDoc?.title || parsed.title || "Untitled System").trim(),
     releaseVersion,
     lifecycle,
+    coreLoopBeat: String(parsed.coreLoopBeat || "").trim(),
     goal: String(parsed.goal || sec.goal || "").trim(),
     links: normalizeStringArrayJs(parsed.links || parsed.plugsInto),
     outOfScope: normalizeStringArrayJs(parsed.outOfScope),
@@ -438,6 +439,9 @@ function renderServerUnrealMcpPayloadJs({
   );
   lines.push("");
   lines.push("## §01 System Intent & Actor Links");
+  if (epicSpec.coreLoopBeat) {
+    lines.push(`- Core Loop Beat: ${epicSpec.coreLoopBeat}`);
+  }
   lines.push(`- Goal: ${epicSpec.goal}`);
   if (epicSpec.links.length > 0) {
     lines.push(`- Links: ${epicSpec.links.join(" · ")}`);

@@ -542,6 +542,7 @@ class UnrealSparkPresets {
           title: 'Player Mech Movement & Claw Dash',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.active,
+          coreLoopBeat: 'Beats 1–2 · Skim, Aim & Claw Dash',
           goal:
               'Move smoothly across the arena plane, rotate upper chassis toward mouse cursor, and execute an invulnerable forward claw dash.',
           links: const [
@@ -617,6 +618,7 @@ class UnrealSparkPresets {
           title: 'Twin-Stick Burst Cannon & Recoil',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.queued,
+          coreLoopBeat: 'Beat 3 · Burst Cannon Fire',
           goal:
               'Fire 3-round high-velocity kinetic bolts toward cursor aim with punchy muzzle recoil and heat cooldown.',
           links: const [
@@ -678,6 +680,7 @@ class UnrealSparkPresets {
           title: 'Crustacean Grunt & Armor Break',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.queued,
+          coreLoopBeat: 'Beats 3–4 · Armor Crack & Reposition',
           goal:
               'Patrol and telegraph melee pincer lunges while requiring a Claw Dash hit to shatter front shell armor.',
           links: const [
@@ -934,6 +937,7 @@ class UnrealSparkPresets {
           title: 'Hover Skiff Suspension & Drift Carve',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.active,
+          coreLoopBeat: 'Beats 1–2 · Carve Canyon Line & Hold Apex Drift',
           goal:
               'Maintain steady ground-hugging hover height over canyon slopes while carving responsive high-angle drifts.',
           links: const [
@@ -996,6 +1000,7 @@ class UnrealSparkPresets {
           title: 'Boost Thruster & Plasma Heat Gauge',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.queued,
+          coreLoopBeat: 'Beat 3 · Chain Boost & Thruster Surge',
           goal:
               'Spend accumulated boost meter for an immediate velocity surge without overheating past limit.',
           links: const [
@@ -1042,6 +1047,7 @@ class UnrealSparkPresets {
           title: 'Canyon Checkpoint Gates & Lap Timer',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.queued,
+          coreLoopBeat: 'Beats 3–4 · Checkpoint Gates & Lap Closure',
           goal:
               'Track ordered spline gates, reward clean gate pass with speed pulse, and display final lap time.',
           links: const [
@@ -1137,6 +1143,7 @@ class UnrealSparkPresets {
           title: 'Keeper Movement & Heavy Axe Cleave',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.active,
+          coreLoopBeat: 'Beat 1 · Swing Torch Axe',
           goal:
               'Move across the courtyard and unleash a directional 140 deg cleave arc knocking back shadow stalkers.',
           links: const [
@@ -1189,6 +1196,7 @@ class UnrealSparkPresets {
           title: 'Brazier Placement & Light Decay Radius',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.queued,
+          coreLoopBeat: 'Beats 2–3 · Plant Brazier & Hold Safe Radius',
           goal:
               'Deploy temporary field braziers that project a shrinking safe light ring forcing enemies to recoil.',
           links: const [
@@ -1234,6 +1242,7 @@ class UnrealSparkPresets {
           title: 'Shadow Stalker Patrol & Light Recoil',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.queued,
+          coreLoopBeat: 'Beats 3–4 · Shadow Recoil & Ash Shards',
           goal:
               'Stalk the keeper from perimeter darkness and recoil dramatically whenever bright brazier light expands over them.',
           links: const [

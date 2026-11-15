@@ -215,6 +215,13 @@ ${LayersTextStyleGuide.compactStyleRules}
 
 You are planning Unreal Engine release `$targetVersion` for project `${rootSpec.normalizedTitle}`.
 Vision: ${rootSpec.pitch}
+Core Loop (§01): ${rootSpec.coreLoop.join(' -> ')}
+Camera Contract (§02): ${rootSpec.cameraContract}
+Character Scale (§02): ${rootSpec.characterScale}
+Input Contract (§02): ${rootSpec.inputContract}
+Design Pillars (§03): ${rootSpec.pillars.join(' | ')}
+Trade-Offs (§03): ${rootSpec.tradeOffs.map((t) => t.formatted).join(' | ')}
+Hard Scope Cuts — DO NOT VIOLATE (§04): ${rootSpec.outOfScope.join(' | ')}
 ${directionPrompt.trim().isNotEmpty ? 'User Direction Request: "${directionPrompt.trim()}"' : ''}
 
 CURRENT BASELINE EPICS:
@@ -224,7 +231,9 @@ Generate:
 1. 2 distinct Release Direction Presets (`presets`) matching IDs of upgrades/newEpics.
 2. Small additive `[UPGRADE]` delta options for relevant baseline Epics (`lineageKey`).
 3. 1-2 complete `[NEW]` 6-section Unreal Epics with codes `E0${currentEpics.length + 1}` onward using 1 UU = 1 cm tuning units.
-Never recreate existing baseline Epics or add Feature sub-tickets.
+CRITICAL RULES:
+- Every `[UPGRADE]` delta and `[NEW]` Epic MUST obey §02 Camera/Scale/Input contracts (1 UU = 1 cm), reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.
+- Never recreate existing baseline Epics or add Feature sub-tickets.
 ''';
 
     final res = await GeminiAgentClient.generateJson(

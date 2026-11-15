@@ -383,7 +383,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                           ),
                         ),
                         icon: const Icon(Icons.check_circle_outline, size: 16),
-                        label: const Text('Approve & Launch Unreal Workbench →'),
+                        label: Text(
+                          wb.projectReleases.isNotEmpty
+                              ? 'Sync & Open Unreal Workbench →'
+                              : 'Approve & Launch Unreal Workbench →',
+                        ),
                       ),
                     ],
                   ),
@@ -788,68 +792,202 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 style: GoogleFonts.jetBrainsMono(fontSize: 12, color: cyan),
               ),
               const SizedBox(height: 12),
-              for (final ep in spec.initialEpics)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgSurfaceFor(isDark),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(color: border),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: cyan.withValues(alpha: 0.14),
-                          borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-                        ),
-                        child: Text(
-                          '${ep.code} · ${ep.releaseVersion}',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: cyan,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              ep.title,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w600,
-                                color: textPrimary,
-                              ),
-                            ),
-                            const SizedBox(height: 3),
-                            Text(
-                              ep.goal,
-                              style: TextStyle(fontSize: 12.5, color: textSecondary),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        '${ep.checks.length} Checks\n${ep.tuning.length} Tuning',
-                        textAlign: TextAlign.right,
-                        style: GoogleFonts.jetBrainsMono(fontSize: 11, color: textMuted),
-                      ),
-                    ],
-                  ),
+              for (int i = 0; i < spec.initialEpics.length; i++)
+                _buildStage1EpicCard(
+                  wb: wb,
+                  spec: spec,
+                  epic: spec.initialEpics[i],
+                  index: i,
+                  isDark: isDark,
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
+                  textMuted: textMuted,
+                  border: border,
+                  cyan: cyan,
+                  green: green,
                 ),
             ],
           ),
         ),
         const SizedBox(height: 36),
       ],
+    );
+  }
+
+  Widget _buildStage1EpicCard({
+    required WorkbenchProvider wb,
+    required ProjectConceptBlueprint spec,
+    required EpicSpec epic,
+    required int index,
+    required bool isDark,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color textMuted,
+    required Color border,
+    required Color cyan,
+    required Color green,
+  }) {
+    final beatText = epic.coreLoopBeat.trim().isNotEmpty
+        ? epic.coreLoopBeat.trim()
+        : (index < spec.coreLoop.length
+            ? 'Beat ${index + 1} · ${spec.coreLoop[index]}'
+            : '');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurfaceFor(isDark),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(
+          color: index == 0 ? green.withValues(alpha: 0.45) : border,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: cyan.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+                ),
+                child: Text(
+                  '${epic.code} · ${epic.releaseVersion}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: cyan,
+                  ),
+                ),
+              ),
+              if (index == 0) ...[
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: green.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+                  ),
+                  child: Text(
+                    '#1 Build First',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: green,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  epic.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                if (beatText.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    beatText,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: cyan.withValues(alpha: 0.9),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 3),
+                Text(
+                  epic.goal,
+                  style: TextStyle(fontSize: 12.5, color: textSecondary),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${epic.checks.length} Checks · ${epic.tuning.length} Tuning',
+                textAlign: TextAlign.right,
+                style: GoogleFonts.jetBrainsMono(fontSize: 11, color: textMuted),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    key: ValueKey('stage1_epic_up_$index'),
+                    tooltip: 'Move earlier in PIE queue',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 26,
+                      minHeight: 26,
+                    ),
+                    iconSize: 16,
+                    color: index > 0 ? textSecondary : textMuted.withValues(alpha: 0.3),
+                    onPressed: index > 0
+                        ? () => wb.moveInitialEpic(index, -1)
+                        : null,
+                    icon: const Icon(Icons.keyboard_arrow_up_rounded),
+                  ),
+                  IconButton(
+                    key: ValueKey('stage1_epic_down_$index'),
+                    tooltip: 'Move later in PIE queue',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 26,
+                      minHeight: 26,
+                    ),
+                    iconSize: 16,
+                    color: index < spec.initialEpics.length - 1
+                        ? textSecondary
+                        : textMuted.withValues(alpha: 0.3),
+                    onPressed: index < spec.initialEpics.length - 1
+                        ? () => wb.moveInitialEpic(index, 1)
+                        : null,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  ),
+                  IconButton(
+                    key: ValueKey('stage1_epic_remove_$index'),
+                    tooltip: 'Remove from v0.1 scope',
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 26,
+                      minHeight: 26,
+                    ),
+                    iconSize: 15,
+                    color: spec.initialEpics.length > 1
+                        ? AppTheme.accentRedFor(isDark)
+                        : textMuted.withValues(alpha: 0.3),
+                    onPressed: spec.initialEpics.length > 1
+                        ? () => wb.removeInitialEpicAt(index)
+                        : null,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

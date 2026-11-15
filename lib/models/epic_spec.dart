@@ -348,6 +348,7 @@ class EpicSpec {
   EpicLifecycle lifecycle;
 
   // §01 System Intent & Actor Links
+  String coreLoopBeat;
   String goal;
   List<String> links;
   List<String> outOfScope;
@@ -383,6 +384,7 @@ class EpicSpec {
     required this.title,
     this.releaseVersion = 'v0.1',
     this.lifecycle = EpicLifecycle.queued,
+    this.coreLoopBeat = '',
     required this.goal,
     List<String>? links,
     List<String>? outOfScope,
@@ -454,6 +456,7 @@ class EpicSpec {
       title: title,
       releaseVersion: releaseVersionOverride ?? releaseVersion,
       lifecycle: lifecycleOverride ?? lifecycle,
+      coreLoopBeat: coreLoopBeat,
       goal: goal,
       links: List<String>.from(links),
       outOfScope: List<String>.from(outOfScope),
@@ -479,6 +482,7 @@ class EpicSpec {
         'title': title,
         'releaseVersion': releaseVersion,
         'lifecycle': lifecycle.name,
+        'coreLoopBeat': coreLoopBeat,
         'goal': goal,
         'links': links,
         'outOfScope': outOfScope,
@@ -512,6 +516,7 @@ class EpicSpec {
       title: (json['title'] ?? 'Untitled System').toString().trim(),
       releaseVersion: (json['releaseVersion'] ?? 'v0.1').toString().trim(),
       lifecycle: EpicLifecycle.fromString(json['lifecycle']?.toString()),
+      coreLoopBeat: (json['coreLoopBeat'] ?? '').toString().trim(),
       goal: (json['goal'] ?? '').toString().trim(),
       links: _strList(json['links'] ?? json['plugsInto']),
       outOfScope: _strList(json['outOfScope']),
@@ -608,6 +613,7 @@ class EpicSpec {
             lifecycle: (doc.sections['lifecycle'] ?? '').trim().isNotEmpty
                 ? EpicLifecycle.fromString(doc.sections['lifecycle'])
                 : parsed.lifecycle,
+            coreLoopBeat: parsed.coreLoopBeat,
             goal: parsed.goal.isNotEmpty
                 ? parsed.goal
                 : (doc.sections['goal'] ?? ''),
@@ -662,6 +668,7 @@ class EpicSpec {
       title: title,
       releaseVersion: releaseVersion,
       lifecycle: lifecycle,
+      coreLoopBeat: coreLoopBeat,
       goal: goal,
       links: links,
       outOfScope: outOfScope,

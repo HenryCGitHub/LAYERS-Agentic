@@ -102,6 +102,9 @@ class UnrealMcpPayloadBuilder {
     );
     b.writeln();
     b.writeln('## §01 System Intent & Actor Links');
+    if (epic.coreLoopBeat.trim().isNotEmpty) {
+      b.writeln('- Core Loop Beat: ${epic.coreLoopBeat.trim()}');
+    }
     b.writeln('- Goal: ${epic.goal.trim()}');
     if (epic.links.isNotEmpty) {
       b.writeln('- Links: ${epic.links.join(' · ')}');

@@ -122,7 +122,8 @@ def _verify_non_trigger_guards() -> None:
     assert "injectSteps" in out, "Expected injectSteps for /auto-grill"
 
 
-def _verify_auto_goal_continuous() -> None:
+def _verify_auto_goal_bounded() -> None:
+  # Default /auto-goal without [N] defaults to maxRounds == 3 hands-off discovering sweep
   with tempfile.TemporaryDirectory() as td:
     tmp_dir = Path(td)
     out = _run_hook(
@@ -131,38 +132,26 @@ def _verify_auto_goal_continuous() -> None:
     )
     st = _load_state(tmp_dir)
     assert st.get("active") is True and st.get("mode") == "goal", st
-    assert st.get("phase") == "select_goal" and st.get("round") == 1, st
+    assert st.get("phase") == "discovering" and st.get("round") == 1, st
+    assert st.get("maxRounds") == 3 and st.get("focus") == "unreal bridge", st
     msg1 = out["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "ask_question" in msg1, msg1
+    assert "Round 1/3" in msg1 and "skip `ask_question`" in msg1, msg1
 
-    # Premature exit_plan_mode is blocked until user picks a Goal via ask_question
-    deny_out = _run_hook(
+    # Hands-off auto-goal allows exit_plan_mode immediately (unlike /auto-gg select_goal)
+    allow_out = _run_hook(
         "pre_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "premature"}}},
+        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "do"}}},
     )
-    assert deny_out.get("decision") == "deny", deny_out
+    assert allow_out.get("decision") == "allow", allow_out
 
-    # Stopping while in select_goal nudges ask_question
+    # Stopping while discovering nudges exit_plan_mode (never requires ask_question)
     stop_nudge = _run_hook(
         "stop",
         {"artifactDirectoryPath": str(tmp_dir), "terminationReason": "NO_TOOL_CALL", "fullyIdle": True},
         force_dirty="0",
     )
     assert stop_nudge.get("decision") == "continue", stop_nudge
-
-    # Picking a goal unlocks exit_plan_mode
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "answered", st
-
-    allow_out = _run_hook(
-        "pre_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "do"}}},
-    )
-    assert allow_out.get("decision") == "allow", allow_out
+    assert "exit_plan_mode" in stop_nudge.get("reason", ""), stop_nudge
 
     _run_hook(
         "post_tool",
@@ -190,36 +179,30 @@ def _verify_auto_goal_continuous() -> None:
     st = _load_state(tmp_dir)
     assert st.get("phase") == "building", st
 
-    # Round completion handoff advances to Round 2 select_goal
+    # Advance Round 1 -> Round 2 (same lastUserInput on Round 2 pre_invocation still injects Round 2/3)
     _run_hook(
         "post_tool",
         {
             "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped bridge test"}},
+            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped R1"}},
         },
         force_dirty="0",
     )
     st = _load_state(tmp_dir)
-    assert st.get("phase") == "select_goal" and st.get("round") == 2, st
+    assert st.get("phase") == "discovering" and st.get("round") == 2 and st.get("maxRounds") == 3, st
 
     out2 = _run_hook(
         "pre_invocation",
         {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal unreal bridge"},
     )
     msg2 = out2["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "Round 2" in msg2, f"Expected Round 2 prompt injection, got: {msg2}"
+    assert "Round 2/3" in msg2, f"Expected Round 2/3 prompt injection, got: {msg2}"
 
-    # Advance Round 2 to building, then send "finsh the last loop and pause"
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
-    )
+    # Pause before finishing round 3 via "finsh the last loop and pause"
     _run_hook(
         "post_tool",
         {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "round2"}}},
     )
-    assert _load_state(tmp_dir).get("phase") == "building"
-
     _run_hook(
         "pre_invocation",
         {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "finsh the last loop and pause"},
@@ -231,19 +214,78 @@ def _verify_auto_goal_continuous() -> None:
         "post_tool",
         {
             "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Finished round 2"}},
+            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped R2"}},
         },
         force_dirty="0",
     )
     st = _load_state(tmp_dir)
     assert st.get("active") is False and st.get("phase") == "idle" and st.get("pauseAfterRound") is False, st
+    assert st.get("pendingCompletionNotice") is True, st
 
-    # Explicit stop ends active loop immediately
+    done_out = _run_hook(
+        "pre_invocation",
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "finsh the last loop and pause"},
+    )
+    done_msg = done_out["injectSteps"][0]["systemMessage"]["systemMessage"]
+    assert "[Auto-Goal Complete" in done_msg and "Shipped R1" in done_msg and "Shipped R2" in done_msg, done_msg
+    assert _load_state(tmp_dir).get("pendingCompletionNotice") is False
+
+  # Explicit count `auto goal 2 unreal` + hyphenated focus guard `3-tier hierarchy`
+  with tempfile.TemporaryDirectory() as td:
+    tmp_dir = Path(td)
     _run_hook(
         "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal unreal bridge"},
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "auto goal 2 unreal"},
     )
-    assert _load_state(tmp_dir).get("active") is True
+    st = _load_state(tmp_dir)
+    assert st.get("active") is True and st.get("mode") == "goal", st
+    assert st.get("maxRounds") == 2 and st.get("focus") == "unreal", st
+
+    _run_hook(
+        "post_tool",
+        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "r1"}}},
+    )
+    _run_hook(
+        "post_tool",
+        {
+            "artifactDirectoryPath": str(tmp_dir),
+            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped R1"}},
+        },
+        force_dirty="0",
+    )
+    assert _load_state(tmp_dir).get("round") == 2 and _load_state(tmp_dir).get("active") is True
+
+    _run_hook(
+        "post_tool",
+        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "r2"}}},
+    )
+    _run_hook(
+        "post_tool",
+        {
+            "artifactDirectoryPath": str(tmp_dir),
+            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped R2"}},
+        },
+        force_dirty="0",
+    )
+    st = _load_state(tmp_dir)
+    assert st.get("active") is False and st.get("phase") == "idle" and st.get("pendingCompletionNotice") is True, st
+    done_out = _run_hook(
+        "pre_invocation",
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "auto goal 2 unreal"},
+    )
+    done_msg = done_out["injectSteps"][0]["systemMessage"]["systemMessage"]
+    assert "[Auto-Goal Complete — 2/2 Rounds Shipped]" in done_msg, done_msg
+    assert "Shipped R1" in done_msg and "Shipped R2" in done_msg, done_msg
+
+    # Hyphenated focus word must NOT be stripped as loop count
+    _run_hook(
+        "pre_invocation",
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal 3-tier hierarchy"},
+    )
+    st = _load_state(tmp_dir)
+    assert st.get("maxRounds") == 3 and st.get("focus") == "3-tier hierarchy", st
+
+    # Explicit stop ends active loop immediately
     _run_hook(
         "pre_invocation",
         {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "stop auto goal"},
@@ -289,7 +331,7 @@ def _verify_auto_grill_single_pass() -> None:
 
 
 def _verify_auto_gg_two_step() -> None:
-  # Branch A: select_goal -> grill_chosen -> answered -> building -> Round 2
+  # Branch A: /auto-gg defaults to maxRounds == 0 (open-ended): select_goal -> grill_chosen -> answered -> building -> Round 2
   with tempfile.TemporaryDirectory() as td:
     tmp_dir = Path(td)
     _run_hook(
@@ -299,6 +341,7 @@ def _verify_auto_gg_two_step() -> None:
     st = _load_state(tmp_dir)
     assert st.get("active") is True and st.get("mode") == "gg", st
     assert st.get("phase") == "select_goal" and st.get("round") == 1, st
+    assert st.get("maxRounds") == 0 and st.get("focus") == "stage 2", st
 
     deny_gg = _run_hook(
         "pre_tool",
@@ -344,9 +387,67 @@ def _verify_auto_gg_two_step() -> None:
         force_dirty="0",
     )
     st = _load_state(tmp_dir)
-    assert st.get("phase") == "select_goal" and st.get("round") == 2, st
+    assert st.get("phase") == "select_goal" and st.get("round") == 2 and st.get("active") is True, st
 
-  # Branch B: zero UX ambiguity -> exit_plan_mode directly from grill_chosen
+  # Branch B: /auto-gg 2 stage 2 stops automatically after Round 2 with completion notice
+  with tempfile.TemporaryDirectory() as td:
+    tmp_dir = Path(td)
+    out = _run_hook(
+        "pre_invocation",
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-gg 2 stage 2"},
+    )
+    st = _load_state(tmp_dir)
+    assert st.get("active") is True and st.get("mode") == "gg", st
+    assert st.get("maxRounds") == 2 and st.get("focus") == "stage 2", st
+    assert "Round 1/2" in out["injectSteps"][0]["systemMessage"]["systemMessage"], out
+
+    # Round 1 complete
+    _run_hook(
+        "post_tool",
+        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
+    )
+    _run_hook(
+        "post_tool",
+        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "gg1"}}},
+    )
+    _run_hook(
+        "post_tool",
+        {
+            "artifactDirectoryPath": str(tmp_dir),
+            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] GG R1"}},
+        },
+        force_dirty="0",
+    )
+    assert _load_state(tmp_dir).get("round") == 2 and _load_state(tmp_dir).get("active") is True
+
+    # Round 2 complete -> auto-stops with completion notice
+    _run_hook(
+        "post_tool",
+        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
+    )
+    _run_hook(
+        "post_tool",
+        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "gg2"}}},
+    )
+    _run_hook(
+        "post_tool",
+        {
+            "artifactDirectoryPath": str(tmp_dir),
+            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] GG R2"}},
+        },
+        force_dirty="0",
+    )
+    st = _load_state(tmp_dir)
+    assert st.get("active") is False and st.get("phase") == "idle" and st.get("pendingCompletionNotice") is True, st
+    done_out = _run_hook(
+        "pre_invocation",
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-gg 2 stage 2"},
+    )
+    done_msg = done_out["injectSteps"][0]["systemMessage"]["systemMessage"]
+    assert "[Auto GG Complete — 2/2 Rounds Shipped]" in done_msg, done_msg
+    assert "GG R1" in done_msg and "GG R2" in done_msg, done_msg
+
+  # Branch C: zero UX ambiguity -> exit_plan_mode directly from grill_chosen
   with tempfile.TemporaryDirectory() as td:
     tmp_dir = Path(td)
     _run_hook(
@@ -387,7 +488,7 @@ def _verify_auto_gg_two_step() -> None:
 def main() -> int:
   _verify_skills_and_discovery()
   _verify_non_trigger_guards()
-  _verify_auto_goal_continuous()
+  _verify_auto_goal_bounded()
   _verify_auto_grill_single_pass()
   _verify_auto_gg_two_step()
   print("WORKFLOW_SMOKE_OK")

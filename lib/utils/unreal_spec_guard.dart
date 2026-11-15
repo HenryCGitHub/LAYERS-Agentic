@@ -154,6 +154,7 @@ class UnrealSpecGuard {
           ? forceReleaseVersion
           : raw.releaseVersion.trim(),
       lifecycle: raw.lifecycle,
+      coreLoopBeat: sanitizeLine(raw.coreLoopBeat),
       goal: sanitizeLine(raw.goal),
       links: sanitizeList(raw.links),
       outOfScope: sanitizeList(raw.outOfScope),
@@ -181,7 +182,12 @@ class UnrealSpecGuard {
         sanitizeEpicSpec(
           spec.initialEpics[i],
           forceReleaseVersion: 'v0.1',
-        )..releaseVersion = 'v0.1',
+        )
+          ..releaseVersion = 'v0.1'
+          ..code = 'E${(i + 1).toString().padLeft(2, '0')}'
+          ..lineageKey = (spec.initialEpics[i].lineageKey.trim().isEmpty
+              ? 'epic_${i + 1}'
+              : spec.initialEpics[i].lineageKey.trim()),
     ];
 
     return ProjectConceptBlueprint(

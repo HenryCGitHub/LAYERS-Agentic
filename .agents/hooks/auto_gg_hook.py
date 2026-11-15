@@ -28,13 +28,18 @@ SLASH_TRIGGER_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 BARE_TRIGGER_RE = re.compile(
-    r"^\s*auto[\s_-]*(gg|goal|grill)\b(?:\s+([A-Za-z]+))?(.*)$",
+    r"^\s*auto[\s_-]*(gg|goal|grill)\b(?:\s+(\S+))?(.*)$",
     re.IGNORECASE | re.DOTALL,
 )
 ACTION_TRIGGER_RE = re.compile(
     r"\b(?:start|run|begin|launch|kick\s*off|resume|continue)\s+auto[\s_-]*(gg|goal|grill)\b(.*)$",
     re.IGNORECASE | re.DOTALL,
 )
+MAX_ROUNDS_PREFIX_RE = re.compile(
+    r"^(\d+)(?![-A-Za-z_])(?:\s+(?:loops?|rounds?|iterations?))?\b(.*)$",
+    re.IGNORECASE | re.DOTALL,
+)
+ROUND_COMPLETE_PREFIX_RE = re.compile(r"^\[round-complete\]\s*", re.IGNORECASE)
 CONVERSATIONAL_FOLLOWERS = {
     "should",
     "would",
@@ -68,10 +73,13 @@ def _default_state() -> dict:
       "mode": "gg",
       "phase": "idle",
       "round": 0,
+      "maxRounds": 0,
       "focus": "",
       "lastSeenInput": "",
       "injectedRound": 0,
       "pauseAfterRound": False,
+      "completedSummaries": [],
+      "pendingCompletionNotice": False,
       "grillRetries": 0,
       "planExitRetries": 0,
       "handoffRetries": 0,
@@ -79,6 +87,8 @@ def _default_state() -> dict:
 
 
 def _start_phase_for_mode(mode: str) -> str:
+  if mode == "goal":
+    return "discovering"
   if mode == "grill":
     return "grilling_ux"
   return "select_goal"
@@ -103,6 +113,8 @@ def _load_state(path: Path) -> dict:
       state.update(raw)
   except (OSError, json.JSONDecodeError):
     pass
+  if not isinstance(state.get("completedSummaries"), list):
+    state["completedSummaries"] = []
   return state
 
 
@@ -115,10 +127,24 @@ def _clean_focus(raw: str) -> str:
   return re.sub(r"^[\s:,-]+", "", raw).strip()
 
 
-def _parse_start_trigger(text: str) -> tuple[str, str] | None:
+def _extract_max_rounds_and_focus(mode: str, raw_tail: str) -> tuple[int, str]:
+  cleaned = _clean_focus(raw_tail)
+  if mode == "grill":
+    return 1, cleaned
+  m = MAX_ROUNDS_PREFIX_RE.match(cleaned)
+  if m:
+    max_rounds = max(1, min(50, int(m.group(1))))
+    return max_rounds, _clean_focus(m.group(2))
+  default_max = 3 if mode == "goal" else 0
+  return default_max, cleaned
+
+
+def _parse_start_trigger(text: str) -> tuple[str, int, str] | None:
   m_slash = SLASH_TRIGGER_RE.match(text)
   if m_slash:
-    return m_slash.group(1).lower(), _clean_focus(m_slash.group(2))
+    mode = m_slash.group(1).lower()
+    max_rounds, focus = _extract_max_rounds_and_focus(mode, m_slash.group(2))
+    return mode, max_rounds, focus
 
   if text.rstrip().endswith("?"):
     return None
@@ -128,38 +154,67 @@ def _parse_start_trigger(text: str) -> tuple[str, str] | None:
     follower = (m_bare.group(2) or "").lower()
     if follower in CONVERSATIONAL_FOLLOWERS:
       return None
+    mode = m_bare.group(1).lower()
     tail = f"{m_bare.group(2) or ''} {m_bare.group(3) or ''}"
-    return m_bare.group(1).lower(), _clean_focus(tail)
+    max_rounds, focus = _extract_max_rounds_and_focus(mode, tail)
+    return mode, max_rounds, focus
 
   m_action = ACTION_TRIGGER_RE.search(text)
   if m_action:
     prefix = text[: m_action.start()]
     if HYPOTHETICAL_PREFIX_RE.search(prefix):
       return None
-    return m_action.group(1).lower(), _clean_focus(m_action.group(2))
+    mode = m_action.group(1).lower()
+    max_rounds, focus = _extract_max_rounds_and_focus(mode, m_action.group(2))
+    return mode, max_rounds, focus
 
   return None
+
+
+def _round_label(state: dict) -> str:
+  cur = int(state.get("round", 1))
+  mx = int(state.get("maxRounds", 0))
+  return f"Round {cur}/{mx}" if mx > 0 else f"Round {cur}"
+
+
+def _record_round_summary(state: dict, reason: str) -> None:
+  summary = ROUND_COMPLETE_PREFIX_RE.sub("", reason.strip()).strip()
+  if not summary:
+    summary = "Verified and committed round changes"
+  cur = int(state.get("round", 1))
+  summaries = list(state.get("completedSummaries") or [])
+  summaries.append(f"Round {cur}: {summary}")
+  state["completedSummaries"] = summaries
+
+
+def _should_finish_loop(state: dict) -> bool:
+  if state.get("pauseAfterRound"):
+    return True
+  mx = int(state.get("maxRounds", 0))
+  cur = int(state.get("round", 1))
+  return mx > 0 and cur >= mx
 
 
 def _build_pre_invocation_message(state: dict) -> str:
   mode = str(state.get("mode", "gg"))
   cur_round = int(state.get("round", 1))
+  round_label = _round_label(state)
   focus = str(state.get("focus", "")).strip()
   focus_clause = f" (Focus: {focus})" if focus else ""
   discover_arg = f" {focus}" if focus else ""
 
   if mode == "goal":
     return (
-        f"[Auto-Goal Active — Round {cur_round}{focus_clause}] "
-        "Follow `.agents/skills/auto-goal/SKILL.md`: "
+        f"[Auto-Goal Active — {round_label}{focus_clause}] "
+        f"Follow `.agents/skills/auto-goal/SKILL.md`: Bounded hands-off sweep ({round_label}). "
         "1) Run `PYTHONDONTWRITEBYTECODE=1 python3 "
         f".agents/skills/auto-goal/scripts/discover_signals.py{discover_arg}` "
-        "and inspect top candidate files; "
-        "2) Call `ask_question` with 1 Goal Choice question listing 3-4 concrete "
-        "ranked goals (`(Recommended)` first, each stating what changes and why) "
-        "so the user chooses what to work on next; "
-        "3) Lock the chosen 3-part Goal Contract, execute `Red -> ./scripts/verify_loop.sh -> Commit`, "
-        f"and call `enter_plan_mode(reason='[round-complete] ...')` for Round {cur_round + 1}."
+        "and inspect candidate files; "
+        "2) Auto-select the #1 highest-confidence bug, Stage 1/2/Unreal bridge parity gap, "
+        "or test coverage target (STRICTLY NO speculative UI features; skip `ask_question`); "
+        f"3) Print a 1-line `[{round_label} Goal]` banner, lock the 3-part Goal Contract, "
+        "execute `Red -> ./scripts/verify_loop.sh -> Commit`, and call "
+        "`enter_plan_mode(reason='[round-complete] <1-line summary>')`."
     )
 
   if mode == "grill":
@@ -173,7 +228,7 @@ def _build_pre_invocation_message(state: dict) -> str:
     )
 
   return (
-      f"[Auto GG Active — Round {cur_round}{focus_clause}] "
+      f"[Auto GG Active — {round_label}{focus_clause}] "
       "Follow `.agents/skills/auto-gg/SKILL.md`: "
       "Step 1 (`select_goal`): Run `PYTHONDONTWRITEBYTECODE=1 python3 "
       f".agents/skills/auto-goal/scripts/discover_signals.py{discover_arg}` "
@@ -196,6 +251,7 @@ def _handle_pre_invocation(payload: dict) -> dict:
       state["active"] = False
       state["phase"] = "idle"
       state["pauseAfterRound"] = False
+      state["pendingCompletionNotice"] = False
       _save_state(state_path, state)
       return {}
 
@@ -206,24 +262,45 @@ def _handle_pre_invocation(payload: dict) -> dict:
 
     parsed = _parse_start_trigger(last_input)
     if parsed is not None:
-      mode, focus = parsed
-      was_same_active = bool(state.get("active", False)) and state.get("mode") == mode
-      prev_round = int(state.get("round", 0))
+      mode, max_rounds, focus = parsed
       state["active"] = True
       state["mode"] = mode
       state["phase"] = _start_phase_for_mode(mode)
-      state["round"] = max(1, prev_round + 1) if was_same_active else 1
+      state["round"] = 1
+      state["maxRounds"] = max_rounds
       state["focus"] = focus
       state["injectedRound"] = 0
       state["pauseAfterRound"] = False
-      state["grillRetries"] = 0
-      state["planExitRetries"] = 0
-      state["handoffRetries"] = 0
+      state["completedSummaries"] = []
+      state["pendingCompletionNotice"] = False
+      _reset_retries(state)
       _save_state(state_path, state)
     elif state.get("active") or state_path.is_file():
       _save_state(state_path, state)
 
   mode = str(state.get("mode", "gg"))
+  if not state.get("active") and state.get("pendingCompletionNotice"):
+    state["pendingCompletionNotice"] = False
+    _save_state(state_path, state)
+    mode_title = "Auto-Goal" if mode == "goal" else "Auto GG"
+    summaries = list(state.get("completedSummaries") or [])
+    mx = int(state.get("maxRounds", 0))
+    count_label = f"{len(summaries)}/{mx}" if mx > 0 else str(len(summaries))
+    joined = " | ".join(summaries) if summaries else "Completed requested rounds"
+    return {
+        "injectSteps": [
+            {
+                "systemMessage": {
+                    "systemMessage": (
+                        f"[{mode_title} Complete — {count_label} Rounds Shipped] "
+                        f"Bounded loop finished ({joined}). Output a concise numbered summary "
+                        "of the shipped rounds and stop cleanly without starting another round."
+                    )
+                }
+            }
+        ]
+    }
+
   cur_round = int(state.get("round", 1))
   if (
       state.get("active")
@@ -285,7 +362,7 @@ def _handle_pre_tool(payload: dict) -> dict:
   mode = str(state.get("mode", "gg"))
   phase = str(state.get("phase", "idle"))
 
-  if name == "exit_plan_mode" and mode in ("goal", "gg") and phase == "select_goal":
+  if name == "exit_plan_mode" and mode == "gg" and phase == "select_goal":
     return {
         "decision": "deny",
         "reason": (
@@ -320,6 +397,7 @@ def _handle_post_tool(payload: dict) -> dict:
       state["active"] = False
       state["phase"] = "idle"
       state["pauseAfterRound"] = False
+      state["pendingCompletionNotice"] = False
     elif mode == "gg" and phase == "select_goal":
       state["phase"] = "grill_chosen"
       _reset_retries(state)
@@ -334,10 +412,14 @@ def _handle_post_tool(payload: dict) -> dict:
   elif name == "enter_plan_mode":
     reason = str(args.get("reason", ""))
     is_round_complete = "[round-complete]" in reason.lower()
-    if is_round_complete and state.get("pauseAfterRound"):
+    if is_round_complete:
+      _record_round_summary(state, reason)
+    if is_round_complete and (mode == "grill" or _should_finish_loop(state)):
       state["active"] = False
       state["phase"] = "idle"
       state["pauseAfterRound"] = False
+      if mode in ("goal", "gg"):
+        state["pendingCompletionNotice"] = True
       _reset_retries(state)
       _save_state(state_path, state)
       return {}
@@ -346,12 +428,8 @@ def _handle_post_tool(payload: dict) -> dict:
       state["planExitRetries"] = 0
       _save_state(state_path, state)
     elif mode == "grill":
-      if is_round_complete:
-        state["active"] = False
-        state["phase"] = "idle"
-      else:
-        state["phase"] = "answered"
-        _reset_retries(state)
+      state["phase"] = "answered"
+      _reset_retries(state)
       _save_state(state_path, state)
     elif phase in ("building", "answered", "grill_chosen", "reviewing"):
       state["round"] = int(state.get("round", 1)) + 1
@@ -379,6 +457,7 @@ def _handle_stop(payload: dict) -> dict:
 
   mode = str(state.get("mode", "gg"))
   cur_round = int(state.get("round", 1))
+  round_label = _round_label(state)
   phase = str(state.get("phase", "idle"))
 
   if mode == "grill":
@@ -410,7 +489,7 @@ def _handle_stop(payload: dict) -> dict:
       }
     return {"decision": "allow"}
 
-  if mode in ("goal", "gg") and phase == "building" and state.get("pauseAfterRound"):
+  if mode in ("goal", "gg") and phase == "building" and _should_finish_loop(state):
     state["active"] = False
     state["phase"] = "idle"
     state["pauseAfterRound"] = False
@@ -419,19 +498,8 @@ def _handle_stop(payload: dict) -> dict:
     return {"decision": "allow"}
 
   if mode == "goal":
-    if phase == "select_goal" and int(state.get("grillRetries", 0)) < 1:
-      state["grillRetries"] = 1
-      _save_state(state_path, state)
-      return {
-          "decision": "continue",
-          "reason": (
-              f"[Auto-Goal — Round {cur_round}] Call `ask_question` presenting "
-              "3-4 ranked Goal options (`(Recommended)` first) so the user can "
-              "choose which goal to work on next."
-          ),
-      }
     if (
-        phase in ("answered", "reviewing")
+        phase in ("discovering", "answered", "reviewing")
         and int(state.get("planExitRetries", 0)) < 1
     ):
       state["planExitRetries"] = 1
@@ -439,14 +507,14 @@ def _handle_stop(payload: dict) -> dict:
       return {
           "decision": "continue",
           "reason": (
-              f"[Auto-Goal — Round {cur_round}] Lock the chosen Goal Contract "
-              "and call `exit_plan_mode` now to build it."
+              f"[Auto-Goal — {round_label}] Print a 1-line `[{round_label} Goal]` banner, "
+              "lock the #1 non-UI bug/parity/test Goal Contract, and call `exit_plan_mode` now."
           ),
       }
     if phase == "building" and int(state.get("handoffRetries", 0)) < 1:
       next_round = cur_round + 1
       state["round"] = next_round
-      state["phase"] = "select_goal"
+      state["phase"] = "discovering"
       state["injectedRound"] = 0
       _reset_retries(state)
       state["handoffRetries"] = 1
@@ -468,8 +536,8 @@ def _handle_stop(payload: dict) -> dict:
     return {
         "decision": "continue",
         "reason": (
-            f"[Auto GG — Round {cur_round}] Call `ask_question` with ONLY 1 "
-            f"Goal Choice question for Round {cur_round} (`(Recommended)` first)."
+            f"[Auto GG — {round_label}] Call `ask_question` with ONLY 1 "
+            f"Goal Choice question for {round_label} (`(Recommended)` first)."
         ),
     }
 
@@ -482,9 +550,9 @@ def _handle_stop(payload: dict) -> dict:
     return {
         "decision": "continue",
         "reason": (
-            f"[Auto GG — Round {cur_round}] Grill the chosen goal via `ask_question` "
+            f"[Auto GG — {round_label}] Grill the chosen goal via `ask_question` "
             "(if a genuine UX fork exists) or call `exit_plan_mode` now to build "
-            f"Round {cur_round}."
+            f"{round_label}."
         ),
     }
 
