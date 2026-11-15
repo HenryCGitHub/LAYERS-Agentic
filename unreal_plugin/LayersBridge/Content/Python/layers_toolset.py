@@ -83,6 +83,61 @@ class LayersToolset(_ToolsetBase):  # type: ignore[misc]
         f"Resolved PIE [FIX] on {active.get('code', '')} ({open_count} remaining).\n\n{md}"
     ).strip()
 
+  def layers_toggle_pie_check(
+      self,
+      check_id: str,
+      passed: bool = True,
+      epic_id: str = "",
+  ) -> str:
+    """Marks a `§06` PIE acceptance check passed or unverified on the Epic."""
+    clean_id = str(check_id or "").strip()
+    if not clean_id:
+      return "LAYERS Error: check_id cannot be empty."
+    res = self.sync_client.post_epic_update(
+        "toggle_check",
+        epic_id=epic_id,
+        checkId=clean_id,
+        passed=bool(passed),
+    )
+    if not res.get("ok"):
+      return f"LAYERS Error: {res.get('error', 'Failed to toggle PIE check.')}"
+    active = res.get("activeEpic") or {}
+    checks = active.get("checks") or []
+    passed_count = sum(1 for c in checks if c.get("passed"))
+    md = str(res.get("mcpPayloadMarkdown") or "").strip()
+    return (
+        f"Updated PIE Check ({passed_count}/{len(checks)} passed) on "
+        f"{active.get('code', '')} · {active.get('title', '')}.\n\n{md}"
+    ).strip()
+
+  def layers_update_epic_tuning(
+      self,
+      key: str,
+      value: str,
+      unit: str = "",
+      epic_id: str = "",
+  ) -> str:
+    """Updates or inserts a `§04` spatial/exposed tuning parameter on the Epic."""
+    clean_key = str(key or "").strip()
+    clean_val = str(value or "").strip()
+    if not clean_key or not clean_val:
+      return "LAYERS Error: key and value cannot be empty."
+    res = self.sync_client.post_epic_update(
+        "update_tuning",
+        epic_id=epic_id,
+        key=clean_key,
+        value=clean_val,
+        unit=str(unit or "").strip(),
+    )
+    if not res.get("ok"):
+      return f"LAYERS Error: {res.get('error', 'Failed to update Epic tuning.')}"
+    active = res.get("activeEpic") or {}
+    md = str(res.get("mcpPayloadMarkdown") or "").strip()
+    return (
+        f"Updated §04 Tuning `{clean_key}` = `{clean_val}` on "
+        f"{active.get('code', '')} · {active.get('title', '')}.\n\n{md}"
+    ).strip()
+
   def layers_pass_active_epic(self, epic_id: str = "") -> str:
     """Signs off all checks/fixes on the active Epic and advances to the next Epic."""
     res = self.sync_client.post_epic_update("pass_epic", epic_id=epic_id)
@@ -98,6 +153,20 @@ class LayersToolset(_ToolsetBase):  # type: ignore[misc]
         f"Passed! Advanced to Epic {res.get('epicPosition', 0)}/{res.get('totalEpics', 0)}: "
         f"{nxt.get('code', '')} · {nxt.get('title', '')}"
     )
+
+  def layers_reopen_epic(self, epic_id: str = "") -> str:
+    """Reopens an Epic by document ID or code (e.g. `E01`) for fresh PIE verification."""
+    res = self.sync_client.post_epic_update(
+        "reopen_epic",
+        epic_id=str(epic_id or "").strip(),
+    )
+    if not res.get("ok"):
+      return f"LAYERS Error: {res.get('error', 'Failed to reopen Epic.')}"
+    active = res.get("activeEpic") or {}
+    md = str(res.get("mcpPayloadMarkdown") or "").strip()
+    return (
+        f"Reopened {active.get('code', '')} · {active.get('title', '')} for PIE verification.\n\n{md}"
+    ).strip()
 
 
 def register_layers_toolset(
@@ -152,5 +221,35 @@ def layers_resolve_pie_fix(fix_id: str, epic_id: str = "") -> str:
   return get_registered_toolset().layers_resolve_pie_fix(fix_id, epic_id=epic_id)
 
 
+def layers_toggle_pie_check(
+    check_id: str,
+    passed: bool = True,
+    epic_id: str = "",
+) -> str:
+  return get_registered_toolset().layers_toggle_pie_check(
+      check_id,
+      passed=passed,
+      epic_id=epic_id,
+  )
+
+
+def layers_update_epic_tuning(
+    key: str,
+    value: str,
+    unit: str = "",
+    epic_id: str = "",
+) -> str:
+  return get_registered_toolset().layers_update_epic_tuning(
+      key,
+      value,
+      unit=unit,
+      epic_id=epic_id,
+  )
+
+
 def layers_pass_active_epic(epic_id: str = "") -> str:
   return get_registered_toolset().layers_pass_active_epic(epic_id=epic_id)
+
+
+def layers_reopen_epic(epic_id: str = "") -> str:
+  return get_registered_toolset().layers_reopen_epic(epic_id=epic_id)

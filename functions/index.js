@@ -193,6 +193,64 @@ function computeEpicPassedJs(spec) {
   return checks.length > 0 && checks.every((c) => Boolean(c?.passed)) && openFixes.length === 0;
 }
 
+function normalizeTuningUnitJs(key, rawUnit) {
+  const cleanUnit = String(rawUnit || "").trim();
+  const lowerUnit = cleanUnit.toLowerCase();
+  const lowerKey = String(key || "").toLowerCase();
+  if (lowerUnit === "px" || lowerUnit === "pixels") return "cm";
+  if (lowerUnit.startsWith("px/")) return `cm/${cleanUnit.slice(3)}`;
+  if (cleanUnit) return cleanUnit;
+  if (
+    lowerKey.includes("speed") ||
+    lowerKey.includes("velocity") ||
+    lowerKey.includes("impulse")
+  ) {
+    return "cm/s";
+  }
+  if (
+    lowerKey.includes("distance") ||
+    lowerKey.includes("radius") ||
+    lowerKey.includes("height") ||
+    lowerKey.includes("range") ||
+    lowerKey.includes("offset") ||
+    lowerKey.includes("width")
+  ) {
+    return "cm";
+  }
+  if (
+    lowerKey.includes("angle") ||
+    lowerKey.includes("fov") ||
+    lowerKey.includes("pitch") ||
+    lowerKey.includes("deg")
+  ) {
+    return "deg";
+  }
+  if (
+    lowerKey.includes("time") ||
+    lowerKey.includes("duration") ||
+    lowerKey.includes("cooldown") ||
+    lowerKey.includes("delay") ||
+    lowerKey.includes("window")
+  ) {
+    return "s";
+  }
+  if (
+    lowerKey.includes("mult") ||
+    lowerKey.includes("scale") ||
+    lowerKey.includes("factor")
+  ) {
+    return "x";
+  }
+  if (
+    lowerKey.includes("hp") ||
+    lowerKey.includes("health") ||
+    lowerKey.includes("damage")
+  ) {
+    return "hp";
+  }
+  return "count";
+}
+
 function parseEpicSpecJs(epicDoc, indexHint = 0) {
   const sec =
     epicDoc?.sections && typeof epicDoc.sections === "object"
@@ -647,6 +705,59 @@ function computeActiveUnrealEpicPayload({
   };
 }
 
+function resolveTargetEpicDocIdJs({
+  docsById,
+  projectId,
+  requestedEpicId = "",
+  webStudioUrl = DEFAULT_WEB_STUDIO_URL,
+}) {
+  const reqId = String(requestedEpicId || "").trim();
+  if (!reqId) {
+    const payload = computeActiveUnrealEpicPayload({
+      docsById,
+      projectId,
+      webStudioUrl,
+    });
+    return String(payload.activeEpic?.id || "").trim();
+  }
+
+  const directDoc = docsById.get(reqId);
+  if (directDoc && String(directDoc.tier || "").toUpperCase() === "EPIC") {
+    return reqId;
+  }
+
+  const lowerReq = reqId.toLowerCase();
+  const projectDoc = docsById.get(projectId);
+  const savedRelId = String(projectDoc?.sections?.active_release_id || "").trim();
+
+  const epicDocs = [];
+  for (const d of docsById.values()) {
+    if (d && String(d.tier || "").toUpperCase() === "EPIC") {
+      epicDocs.push(d);
+    }
+  }
+
+  const ordered = savedRelId
+    ? [
+        ...epicDocs.filter((d) => d.parentId === savedRelId),
+        ...epicDocs.filter((d) => d.parentId !== savedRelId),
+      ]
+    : epicDocs;
+
+  for (let i = 0; i < ordered.length; i += 1) {
+    const doc = ordered[i];
+    const parsed = parseEpicSpecJs(doc, i);
+    if (
+      parsed.code.toLowerCase() === lowerReq ||
+      parsed.lineageKey.toLowerCase() === lowerReq
+    ) {
+      return String(doc.id);
+    }
+  }
+
+  return reqId;
+}
+
 function applyUnrealEpicMutationJs({
   epicDoc,
   action,
@@ -665,17 +776,71 @@ function applyUnrealEpicMutationJs({
 
   if (action === "toggle_check") {
     const checkId = String(body.checkId || "").trim();
-    const checkIdx = Number.isInteger(Number(body.checkIndex))
-      ? Number(body.checkIndex)
-      : -1;
+    const checkIdx =
+      body.checkIndex !== undefined &&
+      body.checkIndex !== null &&
+      String(body.checkIndex).trim() !== "" &&
+      Number.isInteger(Number(body.checkIndex))
+        ? Number(body.checkIndex)
+        : -1;
+    const oneBasedIdx = /^\d+$/.test(checkId) ? Number(checkId) - 1 : -1;
+    const lowerCheckId = checkId.toLowerCase();
+
+    let matchedIdx = -1;
     for (let i = 0; i < spec.checks.length; i += 1) {
       if ((checkId && spec.checks[i].id === checkId) || i === checkIdx) {
-        spec.checks[i].passed =
-          typeof body.passed === "boolean"
-            ? body.passed
-            : !spec.checks[i].passed;
+        matchedIdx = i;
         break;
       }
+    }
+    if (matchedIdx < 0 && oneBasedIdx >= 0 && oneBasedIdx < spec.checks.length) {
+      matchedIdx = oneBasedIdx;
+    }
+    if (matchedIdx < 0 && lowerCheckId) {
+      matchedIdx = spec.checks.findIndex((c) =>
+        c.text.toLowerCase().includes(lowerCheckId)
+      );
+    }
+    if (matchedIdx < 0) {
+      const err = new Error(
+        `Matching PIE check not found for "${checkId || checkIdx}".`
+      );
+      err.statusCode = 404;
+      throw err;
+    }
+    spec.checks[matchedIdx].passed =
+      typeof body.passed === "boolean"
+        ? body.passed
+        : !spec.checks[matchedIdx].passed;
+    if (spec.lifecycle === "queued") {
+      spec.lifecycle = "active";
+    }
+  } else if (action === "update_tuning" || action === "set_tuning") {
+    const cleanKey = String(body.key || "").trim();
+    const rawVal =
+      body.value === undefined || body.value === null
+        ? ""
+        : String(body.value).trim();
+    if (!cleanKey || !rawVal) {
+      const err = new Error(
+        "Expected non-empty key and value for update_tuning."
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+    const rawUnit = String(body.unit || "").trim();
+    const existing = spec.tuning.find(
+      (t) => t.key.toLowerCase() === cleanKey.toLowerCase()
+    );
+    if (existing) {
+      existing.value = rawVal;
+      existing.unit = normalizeTuningUnitJs(existing.key, rawUnit || existing.unit);
+    } else {
+      spec.tuning.push({
+        key: cleanKey,
+        value: rawVal,
+        unit: normalizeTuningUnitJs(cleanKey, rawUnit),
+      });
     }
     if (spec.lifecycle === "queued") {
       spec.lifecycle = "active";
@@ -1388,18 +1553,18 @@ exports.geminiProxy = onRequest(
         .collection("documents");
 
       let targetEpicId = String(body.epicId || "").trim();
-      if (action !== "sync_uproject" && !targetEpicId) {
+      if (action !== "sync_uproject") {
         const preSnap = await docsCol.get();
         const preDocs = new Map();
         for (const d of preSnap.docs) {
           preDocs.set(d.id, { id: d.id, ...(d.data() || {}) });
         }
-        const prePayload = computeActiveUnrealEpicPayload({
+        targetEpicId = resolveTargetEpicDocIdJs({
           docsById: preDocs,
           projectId: linkAuth.projectId,
+          requestedEpicId: targetEpicId,
           webStudioUrl: linkAuth.webStudioUrl,
         });
-        targetEpicId = String(prePayload.activeEpic?.id || "").trim();
         if (!targetEpicId) {
           res.status(404).json({
             error: { code: 404, message: "No active Epic found to update." },
@@ -1622,9 +1787,11 @@ exports.geminiProxy = onRequest(
 
 exports._testHelpers = {
   hashLinkToken,
+  normalizeTuningUnitJs,
   parseRootSpecJs,
   parseEpicSpecJs,
   renderServerUnrealMcpPayloadJs,
   computeActiveUnrealEpicPayload,
+  resolveTargetEpicDocIdJs,
   applyUnrealEpicMutationJs,
 };

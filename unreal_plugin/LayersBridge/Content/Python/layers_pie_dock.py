@@ -80,8 +80,29 @@ class LayersPieGateDock:
         fixId=str(fix_id or "latest").strip(),
     )
 
+  def update_tuning(
+      self,
+      key: str,
+      value: str,
+      unit: str = "",
+      epic_id: str = "",
+  ) -> dict[str, Any]:
+    return self.sync_client.post_epic_update(
+        "update_tuning",
+        epic_id=epic_id,
+        key=str(key or "").strip(),
+        value=str(value or "").strip(),
+        unit=str(unit or "").strip(),
+    )
+
   def pass_epic(self) -> dict[str, Any]:
     return self.sync_client.post_epic_update("pass_epic")
+
+  def reopen_epic(self, epic_id: str = "") -> dict[str, Any]:
+    return self.sync_client.post_epic_update(
+        "reopen_epic",
+        epic_id=str(epic_id or "").strip(),
+    )
 
   def open_web_studio(self) -> str:
     url = str(

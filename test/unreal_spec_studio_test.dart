@@ -652,6 +652,14 @@ void main() {
             findsOneWidget,
           );
           expect(
+            find.textContaining('layers_update_epic_tuning'),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining('layers_toggle_pie_check'),
+            findsOneWidget,
+          );
+          expect(
             find.text('lyr_initial_unreal_token_111122223333'),
             findsOneWidget,
           );

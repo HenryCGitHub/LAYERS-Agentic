@@ -85,7 +85,7 @@ Future<void> showConnectUnrealPluginDialog(
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Pure-Python `.uplugin` (Zero C++ compile). Exposes `layers_get_active_epic_spec`, `layers_log_pie_fix`, `layers_resolve_pie_fix`, and `layers_pass_active_epic` directly on Epic\'s official ModelContextProtocol server.',
+                      'Pure-Python `.uplugin` (Zero C++ compile). Exposes `layers_get_active_epic_spec`, `layers_toggle_pie_check`, `layers_update_epic_tuning`, `layers_log_pie_fix`, `layers_resolve_pie_fix`, `layers_pass_active_epic`, and `layers_reopen_epic` on Unreal MCP.',
                       style: TextStyle(fontSize: 12.5, color: secondary, height: 1.4),
                     ),
                     const SizedBox(height: 16),

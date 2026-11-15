@@ -136,7 +136,7 @@ extension _ShellDialogsExt on WorkbenchShell {
                                   const SizedBox(height: 3),
                                   Text(
                                     isSynced
-                                        ? 'All Stage 1 Concepts and Stage 2 Release Workbench Checkpoints sync live to Firebase project layers-b8a16.'
+                                        ? 'All Stage 1 Project Specs and Stage 2 Epic Specs sync live to Firebase project layers-b8a16.'
                                         : 'Every change is automatically saved to browser local storage. Sign in with Google to sync across devices via Cloud Firestore.',
                                     style: GoogleFonts.inter(
                                       fontSize: 11.5,

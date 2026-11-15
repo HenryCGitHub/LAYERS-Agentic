@@ -178,12 +178,12 @@ const server = http.createServer((req, res) => {
     if (urlPath === "/unrealLink/update") {
       const action = String(body.action || "");
       let targetEpicId = String(body.epicId || "").trim();
-      if (!targetEpicId && action !== "sync_uproject") {
-        const current = helpers.computeActiveUnrealEpicPayload({
+      if (action !== "sync_uproject") {
+        targetEpicId = helpers.resolveTargetEpicDocIdJs({
           docsById,
           projectId: "proj_smoke",
+          requestedEpicId: targetEpicId,
         });
-        targetEpicId = String(current.activeEpic?.id || "");
       }
       if (action !== "sync_uproject") {
         const epicDoc = docsById.get(targetEpicId);
@@ -422,6 +422,18 @@ def main() -> int:
       assert "# ACTIVE EPIC SPEC · E01 · Crab Locomotion & Dash" in spec_md
       assert "### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK" in spec_md
 
+      # 1b. Update existing §04 tuning + insert new §04 tuning (with unit normalization)
+      tune_md = toolset.layers_update_epic_tuning("DashDistance", "460")
+      assert "- DashDistance: 460 cm" in tune_md
+      new_tune_md = toolset.layers_update_epic_tuning("ArenaRadius", "1800", unit="pixels")
+      assert "- ArenaRadius: 1800 cm" in new_tune_md
+
+      # 1c. Toggle individual §06 PIE check by 1-based check number ("1")
+      chk_md = toolset.layers_toggle_pie_check("1", passed=True)
+      assert "1/2" in chk_md
+      assert "[PASSED] Check 1:" in chk_md
+      assert "[VERIFY] Check 2:" in chk_md
+
       # 2. Log PIE [FIX] and confirm switch to FOCUSED PIE REVISION PASS
       fix_md = toolset.layers_log_pie_fix("Boom clips ceiling during dash jump")
       assert "### FOCUSED PIE REVISION PASS (1 OPEN [FIX])" in fix_md
@@ -443,6 +455,17 @@ def main() -> int:
       assert "# ACTIVE EPIC SPEC · E02 · Claw Blaster & Hitstop" in e02_md
       done_msg = toolset.layers_pass_active_epic()
       assert "All Epics passed PIE acceptance gate" in done_msg
+
+      # 5b. Reopen E01 by Epic code ("E01"), update tuning via dock, and re-pass E01
+      reopen_md = toolset.layers_reopen_epic("E01")
+      assert "Reopened E01" in reopen_md
+      assert "# ACTIVE EPIC SPEC · E01 · Crab Locomotion & Dash" in reopen_md
+      assert "[VERIFY] Check 1:" in reopen_md
+      dock_tune = dock.update_tuning("MaxWalkSpeed", "650", "cm/s")
+      assert dock_tune.get("ok") is True
+      assert "- MaxWalkSpeed: 650 cm/s" in str(dock_tune.get("mcpPayloadMarkdown") or "")
+      repass_res = dock.pass_epic()
+      assert repass_res.get("allEpicsCompleted") is True
 
       # 6. Check token config persistence helper
       dock.configure_token("lyr_saved_token_check_0001", f"http://127.0.0.1:{port}")
