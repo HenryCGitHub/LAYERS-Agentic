@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: deploy-gh-pages
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -24,6 +28,41 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Install & check Cloud Functions + Godot plugin zip parity
+        run: |
+          npm --prefix functions ci --no-audit --no-fund
+          node --check functions/index.js
+          python3 - <<'PY'
+          import hashlib, os, sys, zipfile
+          src_dir = os.path.join("godot_plugin", "addons", "layers")
+          zip_path = os.path.join("web", "layers_godot_plugin.zip")
+          if not os.path.isfile(zip_path):
+            print(f"MISSING zip: {zip_path}", file=sys.stderr)
+            sys.exit(1)
+          expected = {}
+          for base, _, files in os.walk(src_dir):
+            for name in files:
+              if name == ".DS_Store":
+                continue
+              full = os.path.join(base, name)
+              rel = os.path.relpath(full, "godot_plugin").replace(os.sep, "/")
+              with open(full, "rb") as fh:
+                expected[rel] = hashlib.sha256(fh.read()).hexdigest()
+          actual = {}
+          with zipfile.ZipFile(zip_path, "r") as zf:
+            for info in zf.infolist():
+              if info.is_dir():
+                continue
+              name = info.filename.replace("\\", "/")
+              if os.path.basename(name) == ".DS_Store":
+                continue
+              actual[name] = hashlib.sha256(zf.read(info)).hexdigest()
+          if expected != actual:
+            print("Plugin zip out of sync!", file=sys.stderr)
+            sys.exit(1)
+          print("ZIP_PARITY_OK")
+          PY
 
       - name: Run static analysis
         run: |
@@ -48,10 +87,10 @@ jobs:
       - name: Build Flutter Web (Release)
         run: |
           if [ -d "godot_plugin/addons/layers" ]; then
-            (cd godot_plugin && rm -f ../web/layers_godot_plugin.zip && zip -rq ../web/layers_godot_plugin.zip addons/layers)
+            (cd godot_plugin && rm -f ../web/layers_godot_plugin.zip && zip -rq ../web/layers_godot_plugin.zip addons/layers -x "*/.DS_Store")
           fi
           echo "Building clean public web bundle (users enter API key locally in AI Settings)."
-          flutter build web --release --base-href "/LAYERS-Agentic/"
+          flutter build web --release --base-href "/LAYERS-Agentic/" --no-web-resources-cdn --pwa-strategy=none
           touch build/web/.nojekyll
 
       - name: Deploy to gh-pages

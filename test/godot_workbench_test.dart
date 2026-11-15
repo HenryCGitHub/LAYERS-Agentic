@@ -2520,12 +2520,37 @@ void main() {
       },
     );
 
+    String buildFunctionsNodeBootstrap(String indexJsPath) {
+      final normalizedPath = indexJsPath.replaceAll(r'\', '/');
+      return '''
+const Module = require("module");
+const origLoad = Module._load;
+Module._load = function (request, parent, isMain) {
+  try {
+    return origLoad.apply(this, arguments);
+  } catch (err) {
+    if (!err || err.code !== "MODULE_NOT_FOUND") throw err;
+    if (request === "nodemailer") return { createTransport: () => ({ sendMail: async () => ({}) }) };
+    if (request === "firebase-functions/v2/https") return { onRequest: (_opts, handler) => handler || _opts };
+    if (request === "firebase-functions/params") return { defineSecret: (name) => ({ name, value: () => "" }) };
+    if (request === "firebase-admin/app") return { initializeApp: () => ({}) };
+    if (request === "firebase-admin/auth") return { getAuth: () => ({}) };
+    if (request === "firebase-admin/firestore") return { getFirestore: () => ({}), FieldValue: { serverTimestamp: () => null } };
+    throw err;
+  }
+};
+const _testHelpers = require(${jsonEncode(normalizedPath)})._testHelpers;
+''';
+    }
+
     test(
       'Cloud Functions parseStructuredScopeFieldsJs extracts 1-line goal, deltas & Done When',
       () {
-        final script = r'''
+        final script =
+            buildFunctionsNodeBootstrap('./functions/index.js') +
+            r'''
 const assert = require("assert");
-const { parseStructuredScopeFieldsJs, dedupeScopeBulletsJs, computeActiveEpicPayload } = require("./functions/index.js")._testHelpers;
+const { parseStructuredScopeFieldsJs, dedupeScopeBulletsJs, computeActiveEpicPayload } = _testHelpers;
 
 const rawScope = "Goal: +hitstop freeze frame, +stagger flash material, +wall bounce slam\n\nIn Scope:\n• Staggered vulnerability state\n• +60ms hitstop freeze frame\n• +stagger flash shader\n\nDone When: Land parry or finisher -> enemy flashes white, pauses 60ms";
 const parsed = parseStructuredScopeFieldsJs(rawScope);
@@ -2688,6 +2713,58 @@ process.stdout.write("JS_SCOPE_PARSE_OK\n");
           reason: 'stderr: ${result.stderr}\nstdout: ${result.stdout}',
         );
         expect(result.stdout.toString(), contains('JS_SCOPE_PARSE_OK'));
+      },
+    );
+
+    test(
+      'Cloud Functions _testHelpers load cleanly in Node even without functions/node_modules installed (GitHub Actions CI parity)',
+      () {
+        final tempDir = Directory.systemTemp.createTempSync('layers_ci_no_nm_');
+        addTearDown(() {
+          if (tempDir.existsSync()) {
+            tempDir.deleteSync(recursive: true);
+          }
+        });
+        final isolatedIndex = File('${tempDir.path}/index.js');
+        File('functions/index.js').copySync(isolatedIndex.path);
+        final script =
+            buildFunctionsNodeBootstrap(isolatedIndex.path) +
+            r'''
+const assert = require("assert");
+const { parseStructuredScopeFieldsJs, computeActiveEpicPayload } = _testHelpers;
+const parsed = parseStructuredScopeFieldsJs("Goal: Dash\n\nIn Scope:\n• Shift burst\n\nDone When: Press Shift -> dash fires");
+assert.strictEqual(parsed.goal, "Dash");
+assert.strictEqual(parsed.doneWhen, "Press Shift → dash fires");
+const docs = new Map([
+  ["p1", { id: "p1", tier: "PROJECT", title: "Demo", childrenIds: ["r1"], sections: { active_release_id: "r1" } }],
+  ["r1", { id: "r1", tier: "RELEASE", parentId: "p1", title: "v0.1", childrenIds: ["e1"], sections: { versionTag: "v0.1" } }],
+  ["e1", { id: "e1", tier: "EPIC", parentId: "r1", title: "Move", childrenIds: ["f1"] }],
+  ["f1", { id: "f1", tier: "FEATURE", parentId: "e1", title: "Dash", sections: { goal: "Dash", states: JSON.stringify([{ id: "c1", parameters: { releaseVersion: "v0.1" } }]) } }]
+]);
+const payload = computeActiveEpicPayload({ docsById: docs, projectId: "p1", webStudioUrl: "https://example.com" });
+assert.strictEqual(payload.activeEpic.features[0].id, "f1");
+process.stdout.write("JS_NO_NODE_MODULES_OK\n");
+''';
+        final result = Process.runSync('node', ['-e', script]);
+        expect(
+          result.exitCode,
+          0,
+          reason: 'stderr: ${result.stderr}\nstdout: ${result.stdout}',
+        );
+        expect(result.stdout.toString(), contains('JS_NO_NODE_MODULES_OK'));
+      },
+    );
+
+    test(
+      'GitHub Actions deploy.yml installs functions deps, checks zip parity, and aligns Flutter web build flags with scripts/deploy.sh',
+      () {
+        final workflowFile = File('.github/workflows/deploy.yml');
+        expect(workflowFile.existsSync(), isTrue);
+        final yml = workflowFile.readAsStringSync();
+        expect(yml, contains('npm --prefix functions ci'));
+        expect(yml, contains('node --check functions/index.js'));
+        expect(yml, contains('--no-web-resources-cdn'));
+        expect(yml, contains('--pwa-strategy=none'));
       },
     );
 
