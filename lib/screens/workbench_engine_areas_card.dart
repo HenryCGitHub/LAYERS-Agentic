@@ -40,14 +40,29 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
         ? SectionTextUtils.formatConciseFeatureGoal(rawGoal)
         : node.cleanStageTitle;
 
-    final scopeSource = node.coveredScope.isNotEmpty
-        ? node.coveredScope
-        : SectionTextUtils.resolveInScope(feat.sections);
-    final inScopeBullets = [
-      for (final item in scopeSource)
-        if (_formatPlainEnglishScopeBullet(item).isNotEmpty)
-          _formatPlainEnglishScopeBullet(item),
-    ];
+    final activeVer = widget.workbench.activeReleaseVersionTag;
+    final rawCpVer = (node.parameters['releaseVersion'] ?? '').trim();
+    final featPhase = (feat.phase ?? '').trim();
+    final cpVer = rawCpVer.isNotEmpty
+        ? rawCpVer
+        : (featPhase.isNotEmpty ? featPhase : activeVer);
+    final rawScopeItems = SectionTextUtils.resolveCheckpointInScope(
+      checkpointScope: node.coveredScope,
+      sections: feat.sections,
+      releaseVersion: cpVer,
+    );
+    final inScopeBullets = SectionTextUtils.dedupeScopeBullets(
+      [
+        for (final item in rawScopeItems)
+          if (_formatPlainEnglishScopeBullet(item).isNotEmpty)
+            _formatPlainEnglishScopeBullet(item),
+      ],
+      releaseVersion: cpVer,
+    );
+    final inScopeHeaderLabel = SectionTextUtils.resolveInScopeHeaderLabel(
+      inScopeBullets,
+      releaseVersion: cpVer,
+    );
 
     final endGoal = SectionTextUtils.resolveCheckpointDoneWhen(
       playtestGoalParam: node.parameters['playtestGoal'],
@@ -63,7 +78,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
     node.flattenLegacyNestedChecklistIfNeeded();
     final openFixEntries = node.openFixItems;
 
-    final activeVer = widget.workbench.activeReleaseVersionTag;
     final hasNextCp = states.any(
       (s) => s.id != node.id && s.releaseVersion == activeVer && !s.isCompleted,
     );
@@ -183,7 +197,8 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'IN SCOPE',
+                inScopeHeaderLabel,
+                key: ValueKey('in_scope_header_${node.id}'),
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: fontMicro,
                   fontWeight: weightBold,
@@ -516,181 +531,6 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             ),
           ],
 
-          // 3. DONE WHEN (Playtest Check — 1-Click Inline Editable)
-          if (endGoal.isNotEmpty ||
-              _activeStage2InlineEditKey == 'edit_done_when_${node.id}') ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(13),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF080E17) : bgRecessed,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isPassed
-                      ? accentEmerald.withValues(alpha: 0.45)
-                      : const Color(0xFF1E3A34),
-                ),
-              ),
-              child: _activeStage2InlineEditKey == 'edit_done_when_${node.id}'
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Text(
-                          '✓ DONE WHEN (PLAYTEST IN GODOT)',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: fontMicro,
-                            fontWeight: weightBold,
-                            letterSpacing: 0.6,
-                            color: const Color(0xFF34D399),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        _buildStage2InlineEditor(
-                          editKey: 'edit_done_when_${node.id}',
-                          inputKey: ValueKey('edit_done_when_input_${node.id}'),
-                          saveBtnKey: ValueKey('save_done_when_btn_${node.id}'),
-                          cancelBtnKey:
-                              ValueKey('cancel_done_when_btn_${node.id}'),
-                          hintText:
-                              'Player action -> observable screen result...',
-                          onSave: (val) {
-                            widget.workbench.updateActiveFeatureSpec(
-                              featureId: feat.id,
-                              states: states,
-                              activeNode: node,
-                              doneWhen: val,
-                            );
-                            _rebuild();
-                          },
-                        ),
-                      ],
-                    )
-                  : InkWell(
-                      key: ValueKey('edit_done_when_btn_${node.id}'),
-                      borderRadius: BorderRadius.circular(6),
-                      onTap: () => _startStage2InlineEdit(
-                        'edit_done_when_${node.id}',
-                        endGoal,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '✓ DONE WHEN (PLAYTEST IN GODOT)',
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: fontMicro,
-                                  fontWeight: weightBold,
-                                  letterSpacing: 0.6,
-                                  color: const Color(0xFF34D399),
-                                ),
-                              ),
-                              Text(
-                                '✎',
-                                style: GoogleFonts.inter(
-                                  fontSize: 10,
-                                  color: const Color(0xFF64748B),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            endGoal,
-                            style: GoogleFonts.inter(
-                              fontSize: fontItem,
-                              fontWeight: weightSemi,
-                              height: 1.45,
-                              color: textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-            ),
-          ],
-
-          // Optional: Open [FIX] Issues logged from Web Studio or Godot
-          if (openFixEntries.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'OPEN PLAYTEST ISSUES (${openFixEntries.length})',
-              style: GoogleFonts.jetBrainsMono(
-                fontSize: fontMicro,
-                fontWeight: weightBold,
-                letterSpacing: 0.6,
-                color: const Color(0xFFFBBF24),
-              ),
-            ),
-            const SizedBox(height: 8),
-            for (int fIdx = 0; fIdx < openFixEntries.length; fIdx++)
-              Builder(
-                builder: (context) {
-                  final fixTask = openFixEntries[fIdx];
-                  final label = fixTask.text
-                      .replaceFirst(
-                        RegExp(r'^\[FIX\]\s*', caseSensitive: false),
-                        '',
-                      )
-                      .trim();
-                  return InkWell(
-                    key: ValueKey('open_fix_item_${node.id}_$fIdx'),
-                    borderRadius: BorderRadius.circular(6),
-                    onTap: () {
-                      fixTask.completed = true;
-                      widget.workbench.updateFeatureStates(feat.id, states);
-                      _rebuild();
-                    },
-                    child: Container(
-                      margin: EdgeInsets.only(
-                        bottom: fIdx == openFixEntries.length - 1 ? 0 : 6,
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1D160B),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.bug_report_outlined,
-                            size: 14,
-                            color: Color(0xFFFBBF24),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              label,
-                              style: GoogleFonts.inter(
-                                fontSize: fontBody,
-                                color: const Color(0xFFFDE68A),
-                              ),
-                            ),
-                          ),
-                          Text(
-                            'Resolve ✓',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 9.5,
-                              fontWeight: weightBold,
-                              color: const Color(0xFFFBBF24),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-          ],
-
           // Optional: Plain-English State & Boundary Guards (Checkable + 1-Click Inline Editable)
           const SizedBox(height: 16),
           Row(
@@ -934,6 +774,182 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
             ),
           ],
 
+          // Open [FIX] Issues logged from Web Studio or Godot
+          if (openFixEntries.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            Text(
+              'OPEN PLAYTEST ISSUES (${openFixEntries.length})',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: fontMicro,
+                fontWeight: weightBold,
+                letterSpacing: 0.6,
+                color: const Color(0xFFFBBF24),
+              ),
+            ),
+            const SizedBox(height: 8),
+            for (int fIdx = 0; fIdx < openFixEntries.length; fIdx++)
+              Builder(
+                builder: (context) {
+                  final fixTask = openFixEntries[fIdx];
+                  final label = fixTask.text
+                      .replaceFirst(
+                        RegExp(r'^\[FIX\]\s*', caseSensitive: false),
+                        '',
+                      )
+                      .trim();
+                  return InkWell(
+                    key: ValueKey('open_fix_item_${node.id}_$fIdx'),
+                    borderRadius: BorderRadius.circular(6),
+                    onTap: () {
+                      fixTask.completed = true;
+                      widget.workbench.updateFeatureStates(feat.id, states);
+                      _rebuild();
+                    },
+                    child: Container(
+                      margin: EdgeInsets.only(
+                        bottom: fIdx == openFixEntries.length - 1 ? 0 : 6,
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1D160B),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.bug_report_outlined,
+                            size: 14,
+                            color: Color(0xFFFBBF24),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              label,
+                              style: GoogleFonts.inter(
+                                fontSize: fontBody,
+                                color: const Color(0xFFFDE68A),
+                              ),
+                            ),
+                          ),
+                          Text(
+                            'Resolve ✓',
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 9.5,
+                              fontWeight: weightBold,
+                              color: const Color(0xFFFBBF24),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+          ],
+
+          // DONE WHEN (Playtest Check — 1-Click Inline Editable, anchored right above Pass CTA)
+          if (endGoal.isNotEmpty ||
+              _activeStage2InlineEditKey == 'edit_done_when_${node.id}') ...[
+            const SizedBox(height: 16),
+            Container(
+              key: ValueKey('done_when_section_${node.id}'),
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: isDark ? const Color(0xFF080E17) : bgRecessed,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isPassed
+                      ? accentEmerald.withValues(alpha: 0.45)
+                      : const Color(0xFF1E3A34),
+                ),
+              ),
+              child: _activeStage2InlineEditKey == 'edit_done_when_${node.id}'
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          '✓ DONE WHEN (PLAYTEST IN GODOT)',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: fontMicro,
+                            fontWeight: weightBold,
+                            letterSpacing: 0.6,
+                            color: const Color(0xFF34D399),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        _buildStage2InlineEditor(
+                          editKey: 'edit_done_when_${node.id}',
+                          inputKey: ValueKey('edit_done_when_input_${node.id}'),
+                          saveBtnKey: ValueKey('save_done_when_btn_${node.id}'),
+                          cancelBtnKey:
+                              ValueKey('cancel_done_when_btn_${node.id}'),
+                          hintText:
+                              'Player action -> observable screen result...',
+                          onSave: (val) {
+                            widget.workbench.updateActiveFeatureSpec(
+                              featureId: feat.id,
+                              states: states,
+                              activeNode: node,
+                              doneWhen: val,
+                            );
+                            _rebuild();
+                          },
+                        ),
+                      ],
+                    )
+                  : InkWell(
+                      key: ValueKey('edit_done_when_btn_${node.id}'),
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () => _startStage2InlineEdit(
+                        'edit_done_when_${node.id}',
+                        endGoal,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                '✓ DONE WHEN (PLAYTEST IN GODOT)',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: fontMicro,
+                                  fontWeight: weightBold,
+                                  letterSpacing: 0.6,
+                                  color: const Color(0xFF34D399),
+                                ),
+                              ),
+                              Text(
+                                '✎',
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  color: const Color(0xFF64748B),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            endGoal,
+                            style: GoogleFonts.inter(
+                              fontSize: fontItem,
+                              fontWeight: weightSemi,
+                              height: 1.45,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+
           // 1-Click Footer Actions
           const SizedBox(height: 18),
           Wrap(
@@ -971,34 +987,68 @@ extension _WorkbenchEngineAreasExt on _ReleaseWorkbenchScreenState {
                   ),
                 ),
               ),
-              ElevatedButton.icon(
-                key: ValueKey('playtest_gate_pass_btn_${node.id}'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isPassed
-                      ? accentEmerald.withValues(alpha: 0.22)
-                      : accentEmerald,
-                  foregroundColor:
-                      isPassed ? accentEmerald : const Color(0xFF042117),
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  if (isPassed)
+                    OutlinedButton.icon(
+                      key: ValueKey('playtest_gate_reopen_btn_${node.id}'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textSecondary,
+                        side: BorderSide(color: borderSubtle),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                      onPressed: () =>
+                          _reopenCheckpointPlaytestGate(feat, states, node),
+                      icon: const Icon(Icons.replay_rounded, size: 15),
+                      label: Text(
+                        '↺ Reopen Gate',
+                        style: GoogleFonts.inter(
+                          fontSize: fontBody,
+                          fontWeight: weightSemi,
+                        ),
+                      ),
+                    ),
+                  ElevatedButton.icon(
+                    key: ValueKey('playtest_gate_pass_btn_${node.id}'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentEmerald,
+                      foregroundColor: const Color(0xFF042117),
+                      disabledBackgroundColor:
+                          accentEmerald.withValues(alpha: 0.22),
+                      disabledForegroundColor: accentEmerald,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                    ),
+                    onPressed: isPassed
+                        ? null
+                        : () => _passCheckpointPlaytestAndAdvance(
+                              feat,
+                              states,
+                              node,
+                            ),
+                    icon: const Icon(Icons.verified_rounded, size: 16),
+                    label: Text(
+                      isPassed
+                          ? '✓ Playtest Passed'
+                          : (hasNextCp
+                              ? '✓ Pass Playtest & Next Checkpoint →'
+                              : '✓ Pass Playtest & Next Feature →'),
+                      style: GoogleFonts.inter(
+                        fontSize: fontBody,
+                        fontWeight: weightBold,
+                      ),
+                    ),
                   ),
-                ),
-                onPressed: () =>
-                    _passCheckpointPlaytestAndAdvance(feat, states, node),
-                icon: const Icon(Icons.verified_rounded, size: 16),
-                label: Text(
-                  isPassed
-                      ? '✓ Playtest Passed'
-                      : (hasNextCp
-                          ? '✓ Pass Playtest & Next Checkpoint →'
-                          : '✓ Pass Playtest & Next Feature →'),
-                  style: GoogleFonts.inter(
-                    fontSize: fontBody,
-                    fontWeight: weightBold,
-                  ),
-                ),
+                ],
               ),
             ],
           ),

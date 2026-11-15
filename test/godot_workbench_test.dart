@@ -3242,5 +3242,187 @@ process.stdout.write("JS_SCOPE_PARSE_OK\n");
         );
       },
     );
+
+    testWidgets(
+      'Feature Card renders Godot-aligned Goal -> In Scope (v0.X) -> Tuning -> Guards -> Issues -> Done When order and 1-click Reopen Gate',
+      (WidgetTester tester) async {
+        expect(
+          SectionTextUtils.dedupeScopeBullets([
+            'Staggered vulnerability state',
+            '+60ms hitstop freeze frame',
+            '+stagger flash shader',
+          ]),
+          ['+60ms hitstop freeze frame', '+stagger flash shader'],
+        );
+        expect(
+          SectionTextUtils.dedupeScopeBullets([
+            'Base Dash',
+            '  base dash  ',
+            '',
+          ]),
+          ['Base Dash'],
+        );
+
+        tester.view.physicalSize = const Size(1440, 920);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final provider = WorkbenchProvider();
+        final proj = TierDocument(
+          id: 'proj_align_r31',
+          title: 'Claw Prototype',
+          tier: TierType.project,
+          sections: {
+            'active_release_id': 'rel_align_r31',
+            'current_stage': WorkbenchStage.releaseWorkbench.name,
+          },
+          childrenIds: ['rel_align_r31'],
+        );
+        final rel = TierDocument(
+          id: 'rel_align_r31',
+          title: 'v0.3 Feel Pass',
+          tier: TierType.release,
+          parentId: proj.id,
+          phase: 'v0.3',
+          childrenIds: ['epic_align_r31'],
+        );
+        final epic = TierDocument(
+          id: 'epic_align_r31',
+          title: 'Claw & Shell Parry',
+          tier: TierType.epic,
+          parentId: rel.id,
+          phase: 'v0.3',
+          childrenIds: ['feat_align_r31'],
+        );
+        final cp = FeatureStateNode(
+          id: 'cp_align_r31',
+          name: '03 · VERTICAL SLICE',
+          trigger: 'Land parry -> enemy flashes white, pauses 60ms',
+          coveredScope: [
+            'Staggered vulnerability state',
+            '+60ms hitstop freeze frame',
+            '+stagger flash shader',
+          ],
+          tuningParams: ['hitstopDuration: 0.06 s'],
+          edgeCases: ['[STATE GUARD] Ignore enemy attack input while staggered'],
+          parameters: {'releaseVersion': 'v0.3'},
+          checklist: [
+            Subtask(
+              id: 'fix_align_r31',
+              text: '[FIX] Flash shader flickers on exit',
+              codeLanguage: 'fix',
+              codeTargetFile: 'playtest_fix',
+            ),
+          ],
+        );
+        final feat = TierDocument(
+          id: 'feat_align_r31',
+          title: 'Enemy Stagger State',
+          tier: TierType.feature,
+          parentId: epic.id,
+          phase: 'v0.3',
+          sections: {
+            'goal': '+hitstop freeze frame, +stagger flash material',
+            'in_scope':
+                '- Staggered vulnerability state\n- +60ms hitstop freeze frame\n- +stagger flash shader',
+            'done_when': 'Land parry -> enemy flashes white, pauses 60ms',
+          },
+        );
+        FeatureStateNode.saveStatesToDocument(feat, [cp]);
+
+        provider.documents[proj.id] = proj;
+        provider.documents[rel.id] = rel;
+        provider.documents[epic.id] = epic;
+        provider.documents[feat.id] = feat;
+        provider.switchProject(proj.id);
+        provider.selectFeature(feat.id, triggerAiSynthesis: false);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.darkTheme,
+            home: Scaffold(
+              body: ListenableBuilder(
+                listenable: provider,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: provider),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // 1. Delta In Scope header + base bullet suppressed when +delta bullets exist
+        expect(find.text('IN SCOPE (v0.3)'), findsOneWidget);
+        expect(find.textContaining('+60ms hitstop freeze frame'), findsOneWidget);
+        expect(find.text('Staggered vulnerability state'), findsNothing);
+
+        // 2. Vertical ordering matches Godot Dock 1:1
+        final goalY = tester
+            .getTopLeft(find.byKey(ValueKey('task_sheet_feature_goal_${cp.id}')))
+            .dy;
+        final scopeY = tester
+            .getTopLeft(find.byKey(ValueKey('in_scope_header_${cp.id}')))
+            .dy;
+        final tuningY = tester
+            .getTopLeft(find.byKey(ValueKey('tuning_var_item_${cp.id}_0')))
+            .dy;
+        final guardY = tester
+            .getTopLeft(find.byKey(ValueKey('playtest_guard_check_${cp.id}_0')))
+            .dy;
+        final fixY = tester
+            .getTopLeft(find.byKey(ValueKey('open_fix_item_${cp.id}_0')))
+            .dy;
+        final doneWhenY = tester
+            .getTopLeft(find.byKey(ValueKey('done_when_section_${cp.id}')))
+            .dy;
+        final passBtnY = tester
+            .getTopLeft(find.byKey(ValueKey('playtest_gate_pass_btn_${cp.id}')))
+            .dy;
+
+        expect(goalY, lessThan(scopeY));
+        expect(scopeY, lessThan(tuningY));
+        expect(tuningY, lessThan(guardY));
+        expect(guardY, lessThan(fixY));
+        expect(fixY, lessThan(doneWhenY));
+        expect(doneWhenY, lessThan(passBtnY));
+
+        // 3. Sign off guard, Pass Playtest -> disabled ✓ Playtest Passed + 1-click ↺ Reopen Gate
+        final guardFinder =
+            find.byKey(ValueKey('playtest_guard_check_${cp.id}_0'));
+        await tester.ensureVisible(guardFinder);
+        await tester.tap(guardFinder);
+        await tester.pumpAndSettle();
+
+        final passBtnFinder =
+            find.byKey(ValueKey('playtest_gate_pass_btn_${cp.id}'));
+        await tester.ensureVisible(passBtnFinder);
+        await tester.tap(passBtnFinder);
+        await tester.pumpAndSettle();
+
+        final passedBtn = tester.widget<ElevatedButton>(passBtnFinder);
+        expect(passedBtn.onPressed, isNull);
+        expect(find.text('✓ Playtest Passed'), findsOneWidget);
+
+        final reopenBtnFinder =
+            find.byKey(ValueKey('playtest_gate_reopen_btn_${cp.id}'));
+        expect(reopenBtnFinder, findsOneWidget);
+        expect(find.text('↺ Reopen Gate'), findsOneWidget);
+
+        // 4. Tap 1-click ↺ Reopen Gate -> restores unpassed state while keeping resolved fixes & guard sign-off
+        await tester.ensureVisible(reopenBtnFinder);
+        await tester.tap(reopenBtnFinder);
+        await tester.pumpAndSettle();
+
+        final afterReopen = FeatureStateNode.getStatesForDocument(
+          provider.documents[feat.id]!,
+        ).first;
+        expect(afterReopen.isPlaytestPassed, isFalse);
+        expect(afterReopen.openFixCount, equals(0));
+        expect(afterReopen.signedOffGuardsCount, equals(1));
+        expect(provider.getDocumentProgress(feat.id), equals(50));
+      },
+    );
   });
 }

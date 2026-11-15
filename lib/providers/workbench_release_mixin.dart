@@ -1940,16 +1940,21 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
     if (resolvedGoal.isNotEmpty) {
       sb.writeln('- **Goal**: $resolvedGoal');
     }
-    final scopeItems = (cpNode != null && cpNode.coveredScope.isNotEmpty)
-        ? cpNode.coveredScope
-        : SectionTextUtils.resolveInScope(feat.sections);
+    final scopeVersion = cpNode?.releaseVersion;
+    final scopeItems = SectionTextUtils.resolveCheckpointInScope(
+      checkpointScope: cpNode?.coveredScope,
+      sections: feat.sections,
+      releaseVersion: scopeVersion,
+    );
     if (scopeItems.isNotEmpty) {
-      sb.writeln('- **In Scope**:');
+      final scopeHeader = SectionTextUtils.resolveInScopeHeaderLabel(
+        scopeItems,
+        releaseVersion: scopeVersion,
+        uppercase: false,
+      );
+      sb.writeln('- **$scopeHeader**:');
       for (final item in scopeItems) {
-        final clean = item.trim();
-        if (clean.isNotEmpty) {
-          sb.writeln('  - $clean');
-        }
+        sb.writeln('  - $item');
       }
     }
     final cleanDone = SectionTextUtils.resolveCheckpointDoneWhen(
@@ -2686,9 +2691,11 @@ Call `commit_live_feature_enrichment` with the enriched feature details.''';
         : SectionTextUtils.resolveGoal(feat.sections).trim();
 
     final rawScope = inScope ??
-        (activeNode.coveredScope.isNotEmpty
-            ? List<String>.from(activeNode.coveredScope)
-            : SectionTextUtils.resolveInScope(feat.sections));
+        SectionTextUtils.resolveCheckpointInScope(
+          checkpointScope: activeNode.coveredScope,
+          sections: feat.sections,
+          releaseVersion: activeNode.releaseVersion,
+        );
     final nextScope = [
       for (final s in rawScope)
         if (s.replaceFirst(_scopeBulletStripRegex, '').trim().isNotEmpty)

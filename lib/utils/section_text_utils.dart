@@ -416,6 +416,70 @@ class SectionTextUtils {
     return fallback.replaceAll(_causalArrowNormalizeRegex, ' → ').trim();
   }
 
+  static final RegExp _leadingPlusRegex = RegExp(r'^\+\s*');
+
+  /// Cleans, deduplicates (case-insensitive), and on `v0.2+` prefers `+delta`
+  /// scope bullets over legacy cumulative base bullets (mirroring Godot Dock).
+  static List<String> dedupeScopeBullets(
+    Iterable<String> rawItems, {
+    String? releaseVersion,
+  }) {
+    final cleaned = <String>[];
+    for (final raw in rawItems) {
+      var item = raw.replaceAll(_bulletPrefixStripRegex, '').trim();
+      if (item.isEmpty) continue;
+      if (item.startsWith('+')) {
+        item = '+${item.replaceFirst(_leadingPlusRegex, '').trim()}';
+      }
+      if (item != '+' && item.isNotEmpty) {
+        cleaned.add(item);
+      }
+    }
+    if (cleaned.isEmpty) return const [];
+
+    final ver = (releaseVersion ?? '').trim().toLowerCase();
+    final allowDeltaFilter = ver.isEmpty || (ver != 'v0.1' && ver != '0.1');
+    final plusItems = cleaned.where((e) => e.startsWith('+')).toList();
+    final source =
+        (allowDeltaFilter && plusItems.isNotEmpty) ? plusItems : cleaned;
+
+    final seen = <String>{};
+    final result = <String>[];
+    for (final item in source) {
+      final key = item.replaceFirst(_leadingPlusRegex, '').toLowerCase();
+      if (key.isEmpty || !seen.add(key)) continue;
+      result.add(item);
+    }
+    return result;
+  }
+
+  /// Resolves deduplicated In Scope bullets for a checkpoint or feature section.
+  static List<String> resolveCheckpointInScope({
+    List<String>? checkpointScope,
+    required Map<String, String> sections,
+    String? releaseVersion,
+  }) {
+    final raw = (checkpointScope != null && checkpointScope.isNotEmpty)
+        ? checkpointScope
+        : resolveInScope(sections);
+    return dedupeScopeBullets(raw, releaseVersion: releaseVersion);
+  }
+
+  /// Returns `'IN SCOPE (v0.X)'` (or `'In Scope (v0.X)'`) when `+delta` items
+  /// exist on `v0.2+`, matching Godot Dock's delta scope header.
+  static String resolveInScopeHeaderLabel(
+    Iterable<String> scopeItems, {
+    String? releaseVersion,
+    bool uppercase = true,
+  }) {
+    final ver = (releaseVersion ?? '').trim();
+    final hasPlusDelta = scopeItems.any((s) => s.trim().startsWith('+'));
+    final showVer =
+        hasPlusDelta && ver.isNotEmpty && ver.toLowerCase() != 'v0.1';
+    final base = uppercase ? 'IN SCOPE' : 'In Scope';
+    return showVer ? '$base ($ver)' : base;
+  }
+
   /// Resolves bulleted tuning variables from `sections['tuning']` or `sections['variables']`.
   static List<String> resolveTuningParams(Map<String, String> sections) {
     final raw = (sections['tuning'] ?? sections['variables'] ?? '').trim();

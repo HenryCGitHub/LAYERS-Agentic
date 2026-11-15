@@ -15,18 +15,26 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
     node.isPlaytestPassed = true;
   }
 
+  void _reopenCheckpointPlaytestGate(
+    TierDocument feat,
+    List<FeatureStateNode> states,
+    FeatureStateNode node,
+  ) {
+    node.isPlaytestPassed = false;
+    _rebuild(() {
+      _awaitingPlaytestVerification.remove(node.id);
+      _inlineBugDrawerNodeId = null;
+    });
+    widget.workbench.updateFeatureStates(feat.id, states);
+  }
+
   void _passCheckpointPlaytestAndAdvance(
     TierDocument feat,
     List<FeatureStateNode> states,
     FeatureStateNode node,
   ) {
     if (node.isPlaytestPassed || node.isCompleted) {
-      node.isPlaytestPassed = false;
-      _rebuild(() {
-        _awaitingPlaytestVerification.remove(node.id);
-        _inlineBugDrawerNodeId = null;
-      });
-      widget.workbench.updateFeatureStates(feat.id, states);
+      _reopenCheckpointPlaytestGate(feat, states, node);
       return;
     }
 
@@ -214,7 +222,7 @@ extension _WorkbenchCheckpointWorkspaceExt on _ReleaseWorkbenchScreenState {
           value: 'toggle_complete_all',
           height: 34,
           child: Text(
-            isPassed ? '↺ Mark Feature Unpassed' : '✓ Toggle Feature Passed',
+            isPassed ? '↺ Reopen Gate' : '✓ Toggle Feature Passed',
             style: GoogleFonts.inter(
               fontSize: 12.5,
               color: isPassed ? textSecondary : accentEmerald,
