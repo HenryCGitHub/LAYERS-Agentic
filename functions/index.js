@@ -196,11 +196,12 @@ function parseRootSpecJs(projectDoc) {
 
 function computeEpicPassedJs(spec) {
   if (!spec) return false;
-  if (String(spec.lifecycle || "").toLowerCase() === "stable") return true;
   const checks = Array.isArray(spec.checks) ? spec.checks : [];
   const fixes = Array.isArray(spec.fixes) ? spec.fixes : [];
   const openFixes = fixes.filter((f) => !f?.resolved);
-  return checks.length > 0 && checks.every((c) => Boolean(c?.passed)) && openFixes.length === 0;
+  if (openFixes.length > 0) return false;
+  if (String(spec.lifecycle || "").toLowerCase() === "stable") return true;
+  return checks.length > 0 && checks.every((c) => Boolean(c?.passed));
 }
 
 function normalizeTuningUnitJs(key, rawUnit) {
@@ -689,8 +690,10 @@ function computeActiveUnrealEpicPayload({
   const prefIdx = prefId
     ? parsedEpics.findIndex((e) => e.id === prefId)
     : -1;
-  const firstUnpassedIdx = parsedEpics.findIndex((e) => !e.isPassed);
-  const allEpicsCompleted = firstUnpassedIdx === -1;
+  const firstUnsignedIdx = parsedEpics.findIndex(
+    (e) => !e.isPassed || String(e.lifecycle || "").toLowerCase() !== "stable"
+  );
+  const allEpicsCompleted = parsedEpics.length > 0 && firstUnsignedIdx === -1;
 
   let activeIdx = -1;
   if (prefIdx >= 0) {
@@ -701,8 +704,8 @@ function computeActiveUnrealEpicPayload({
       String(parsedEpics[selIdx].lifecycle || "").toLowerCase() !== "stable")
   ) {
     activeIdx = selIdx;
-  } else if (firstUnpassedIdx >= 0) {
-    activeIdx = firstUnpassedIdx;
+  } else if (firstUnsignedIdx >= 0) {
+    activeIdx = firstUnsignedIdx;
   } else {
     activeIdx = parsedEpics.length - 1;
   }
@@ -919,17 +922,22 @@ function applyUnrealEpicMutationJs({
       createdAtMs: Number(nowMs) || Date.now(),
     });
     if (spec.lifecycle === "stable" || spec.lifecycle === "queued") {
-      spec.lifecycle = "active";
+      spec.lifecycle =
+        Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0
+          ? "upgrading"
+          : "active";
     }
   } else if (action === "resolve_fix") {
     const targetId = String(body.fixId || "").trim();
     const nextResolved = body.resolved !== false;
     let matched = false;
     if (targetId === "latest") {
-      const target = spec.fixes.find((f) => !f.resolved);
-      if (target) {
-        target.resolved = nextResolved;
-        matched = true;
+      for (let i = spec.fixes.length - 1; i >= 0; i -= 1) {
+        if (!spec.fixes[i].resolved) {
+          spec.fixes[i].resolved = nextResolved;
+          matched = true;
+          break;
+        }
       }
     } else if (targetId) {
       for (const f of spec.fixes) {
@@ -940,8 +948,12 @@ function applyUnrealEpicMutationJs({
       }
     }
     if (!matched && !targetId) {
-      const target = spec.fixes.find((f) => !f.resolved);
-      if (target) target.resolved = nextResolved;
+      for (let i = spec.fixes.length - 1; i >= 0; i -= 1) {
+        if (!spec.fixes[i].resolved) {
+          spec.fixes[i].resolved = nextResolved;
+          break;
+        }
+      }
     }
   } else if (action === "pass_epic") {
     for (const f of spec.fixes) f.resolved = true;

@@ -127,7 +127,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       );
       if (spec.lifecycle == EpicLifecycle.stable ||
           spec.lifecycle == EpicLifecycle.queued) {
-        spec.lifecycle = EpicLifecycle.active;
+        spec.lifecycle = spec.upgradeDeltas.isNotEmpty
+            ? EpicLifecycle.upgrading
+            : EpicLifecycle.active;
       }
     });
   }

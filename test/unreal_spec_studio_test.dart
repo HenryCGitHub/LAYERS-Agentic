@@ -1098,6 +1098,33 @@ void main() {
         expect(passedSpec.isPassed, isTrue);
         expect(passedSpec.lifecycle, equals(EpicLifecycle.stable));
 
+        // Open [FIX] overrides stable lifecycle visually & semantically, and restores upgrading on v0.2
+        final stableWithOpenFix = EpicSpec(
+          id: 'open_fix_check',
+          code: 'E01',
+          title: 'Fix Override',
+          goal: 'Check open fix gate.',
+          lifecycle: EpicLifecycle.stable,
+          fixes: [EpicPieFix(id: 'fx_1', text: 'Dash glitch', resolved: false)],
+        );
+        expect(stableWithOpenFix.isPassed, isFalse);
+        expect(stableWithOpenFix.statusLabel, equals('1 [FIX] Open'));
+
+        wb.flagEpicFix(upgradingEpic.id, 'Hit-stop freezes camera shake');
+        final flaggedUpgrading =
+            wb.epicsForRelease(wb.activeReleaseId!).firstWhere(
+                  (e) => e.id == upgradingEpic.id,
+                );
+        expect(flaggedUpgrading.isPassed, isFalse);
+        expect(flaggedUpgrading.lifecycle, equals(EpicLifecycle.upgrading));
+        expect(flaggedUpgrading.statusLabel, equals('1 [FIX] Open'));
+
+        wb.resolveEpicFix(
+          upgradingEpic.id,
+          flaggedUpgrading.openFixes.first.id,
+        );
+        wb.passActiveEpic(upgradingEpic.id);
+
         // Reopen -> restores EpicLifecycle.upgrading, keeps locked baseline checks passed, resets delta checks only
         wb.reopenEpic(upgradingEpic.id);
         final reopened = wb.epicsForRelease(wb.activeReleaseId!).firstWhere(

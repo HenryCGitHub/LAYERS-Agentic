@@ -542,14 +542,22 @@ def main() -> int:
       assert "2/2 passed) on E01" in chk2_md, chk2_md
       assert "# ACTIVE EPIC SPEC · E01" in chk2_md, chk2_md
 
-      # 2. Log PIE [FIX] and confirm switch to FOCUSED PIE REVISION PASS + toolbar Fix label
+      # 2. Log 2 PIE [FIX] items and confirm switch to FOCUSED PIE REVISION PASS + LIFO latest resolution
       fix_md = toolset.layers_log_pie_fix("Boom clips ceiling during dash jump")
       assert "### FOCUSED PIE REVISION PASS (1 OPEN [FIX])" in fix_md
       assert "- [FIX] Boom clips ceiling during dash jump" in fix_md
       assert dock.compute_primary_toolbar_action()["mode"] == "fix"
       assert dock.compute_primary_toolbar_action()["label"] == "🔧 Fix E01 (1)"
 
-      # 3. Resolve [FIX] and stay focused on E01 with FULL-EPIC footer & Pass E01 toolbar CTA
+      fix2_md = toolset.layers_log_pie_fix("Dash trail flickers on slope")
+      assert "### FOCUSED PIE REVISION PASS (2 OPEN [FIX])" in fix2_md
+      assert dock.compute_primary_toolbar_action()["label"] == "🔧 Fix E01 (2)"
+
+      # 3. Resolve "latest" -> resolves #2 (newest) first, keeping older #1 open; then resolves #1
+      resolved_latest = toolset.layers_resolve_pie_fix("latest")
+      assert "1 remaining" in resolved_latest, resolved_latest
+      assert "- [FIX] Boom clips ceiling during dash jump" in resolved_latest
+      assert "- [FIX] Dash trail flickers on slope" not in resolved_latest
       resolved_md = toolset.layers_resolve_pie_fix("latest")
       assert "Resolved PIE [FIX] on E01" in resolved_md, resolved_md
       assert "0 remaining" in resolved_md
@@ -564,12 +572,18 @@ def main() -> int:
       assert pass_res.get("ok") is True and pass_res.get("mode") == "passed", pass_res
       assert dock.compute_primary_toolbar_action()["label"] == "⚡ Build E02"
 
-      # 5. Fetch E02 & confirm Check 1 is still unverified before passing E02
+      # 5. Fetch E02, check its Check 1 -> stays uncompleted until explicit Pass E02 ✓ sign-off
       e02_md = toolset.layers_get_active_epic_spec()
       assert "# ACTIVE EPIC SPEC · E02 · Claw Blaster & Hitstop" in e02_md
       assert "[VERIFY] Check 1:" in e02_md, e02_md
+      toolset.layers_toggle_pie_check("1", passed=True)
+      assert dock.last_payload is not None
+      assert dock.last_payload.get("allEpicsCompleted") is False, dock.last_payload
+      assert dock.compute_primary_toolbar_action()["mode"] == "pass"
+      assert dock.compute_primary_toolbar_action()["label"] == "✓ Pass E02 →"
       done_msg = toolset.layers_pass_active_epic()
       assert "All Epics passed PIE acceptance gate" in done_msg
+      assert (dock.last_payload or {}).get("allEpicsCompleted") is True
 
       # 5b. Reopen E01 by Epic code ("E01"), update tuning via dock, and re-pass E01
       reopen_md = toolset.layers_reopen_epic("E01")
