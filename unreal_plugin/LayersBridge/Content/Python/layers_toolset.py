@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from layers_project_probe import probe_uproject_context
@@ -22,6 +23,21 @@ except Exception:
 _ACTIVE_TOOLSET: "LayersToolset | None" = None
 
 
+def _normalize_key_token(raw: str) -> str:
+  return re.sub(r"[^a-z0-9]+", "", str(raw or "").lower())
+
+
+def _infer_tuning_type_tag(value: str, unit: str, target_engine: str) -> str:
+  is_ue6 = str(target_engine or "").strip() == "ue6Verse"
+  clean_val = str(value or "").strip().lower()
+  clean_unit = str(unit or "").strip().lower()
+  if clean_unit in ("bool", "boolean") or clean_val in ("true", "false"):
+    return "logic" if is_ue6 else "bool"
+  if clean_unit == "count" and re.fullmatch(r"-?\d+", clean_val):
+    return "int" if is_ue6 else "int32"
+  return "float"
+
+
 def _format_mutation_receipt(
     summary: str,
     res: dict[str, Any],
@@ -33,21 +49,23 @@ def _format_mutation_receipt(
   code = str(active.get("code") or "E01").strip() or "E01"
   title = str(active.get("title") or "Active Epic").strip()
   ver = str(active.get("releaseVersion") or res.get("releaseVersion") or "v0.1").strip()
+  target_engine = str(res.get("targetEngine") or "ue5Mcp").strip()
   lines = [
       summary.strip(),
       f"# ACTIVE EPIC SPEC · {code} · {title} ({ver})",
   ]
   if updated_tuning_key:
-    target_lower = updated_tuning_key.strip().lower()
+    target_token = _normalize_key_token(updated_tuning_key)
     for item in active.get("tuning") or []:
       if not isinstance(item, dict):
         continue
       k = str(item.get("key") or "").strip()
-      if k.lower() == target_lower:
+      if _normalize_key_token(k) == target_token:
         val = str(item.get("value") or "0").strip()
         unit = str(item.get("unit") or "").strip()
         suffix = f" {unit}" if unit else ""
-        lines.append(f"- {k}: {val}{suffix}")
+        prop_type = _infer_tuning_type_tag(val, unit, target_engine)
+        lines.append(f"- {k}: {val}{suffix} [{prop_type}]")
   for idx, chk in enumerate(active.get("checks") or []):
     if not isinstance(chk, dict):
       continue

@@ -85,7 +85,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     required String value,
     required String unit,
   }) {
-    final cleanKey = key.trim();
+    final cleanKey = UnrealSpecGuard.sanitizeTuningKey(key, fallback: '');
     if (cleanKey.isEmpty) return;
     _updateAndPersistEpic(epicId, (spec) {
       final nextVal = value.trim().isEmpty ? '0' : value.trim();

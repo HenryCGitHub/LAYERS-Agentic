@@ -204,18 +204,66 @@ function computeEpicPassedJs(spec) {
   return checks.length === 0 || checks.every((c) => Boolean(c?.passed));
 }
 
+function sanitizeTuningKeyJs(rawKey, fallback = "TuningVar") {
+  const trimmed = String(rawKey || "").trim();
+  if (!trimmed) return fallback;
+  if (/^[A-Za-z][A-Za-z0-9]*$/.test(trimmed)) {
+    if (
+      trimmed.length >= 2 &&
+      trimmed[0] === "b" &&
+      trimmed[1] === trimmed[1].toUpperCase() &&
+      trimmed[1] !== trimmed[1].toLowerCase()
+    ) {
+      return trimmed;
+    }
+    return trimmed[0].toUpperCase() + trimmed.slice(1);
+  }
+  const tokens = trimmed.split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (tokens.length === 0) return fallback;
+  const joined = tokens.map((t) => t[0].toUpperCase() + t.slice(1)).join("");
+  if (/^[0-9]/.test(joined)) return `Param${joined}`;
+  return joined;
+}
+
 function normalizeTuningUnitJs(key, rawUnit) {
   const cleanUnit = String(rawUnit || "").trim();
   const lowerUnit = cleanUnit.toLowerCase();
   const lowerKey = String(key || "").toLowerCase();
-  if (lowerUnit === "px" || lowerUnit === "pixels") return "cm";
+  if (
+    lowerUnit === "px" ||
+    lowerUnit === "pixels" ||
+    lowerUnit === "pixel" ||
+    lowerUnit === "uu"
+  ) {
+    return "cm";
+  }
   if (lowerUnit.startsWith("px/")) return `cm/${cleanUnit.slice(3)}`;
   if (lowerUnit.startsWith("pixels/")) return `cm/${cleanUnit.slice(7)}`;
+  if (
+    lowerUnit === "sec" ||
+    lowerUnit === "secs" ||
+    lowerUnit === "second" ||
+    lowerUnit === "seconds"
+  ) {
+    return "s";
+  }
+  if (lowerUnit === "deg" || lowerUnit === "degree" || lowerUnit === "degrees") {
+    return "deg";
+  }
+  if (
+    lowerUnit === "pct" ||
+    lowerUnit === "percent" ||
+    lowerUnit === "percentage"
+  ) {
+    return "%";
+  }
   if (cleanUnit) return cleanUnit;
   if (
     lowerKey.includes("speed") ||
     lowerKey.includes("velocity") ||
-    lowerKey.includes("impulse")
+    lowerKey.includes("impulse") ||
+    lowerKey.includes("accel") ||
+    lowerKey.includes("decel")
   ) {
     return "cm/s";
   }
@@ -225,7 +273,10 @@ function normalizeTuningUnitJs(key, rawUnit) {
     lowerKey.includes("height") ||
     lowerKey.includes("range") ||
     lowerKey.includes("offset") ||
-    lowerKey.includes("width")
+    lowerKey.includes("width") ||
+    lowerKey.includes("length") ||
+    lowerKey.includes("springarm") ||
+    lowerKey.includes("boomarm")
   ) {
     return "cm";
   }
@@ -233,6 +284,9 @@ function normalizeTuningUnitJs(key, rawUnit) {
     lowerKey.includes("angle") ||
     lowerKey.includes("fov") ||
     lowerKey.includes("pitch") ||
+    lowerKey.includes("yaw") ||
+    lowerKey.includes("roll") ||
+    lowerKey.includes("spread") ||
     lowerKey.includes("deg")
   ) {
     return "deg";
@@ -247,6 +301,16 @@ function normalizeTuningUnitJs(key, rawUnit) {
     return "s";
   }
   if (
+    lowerKey.includes("chance") ||
+    lowerKey.includes("percent") ||
+    lowerKey.includes("pct")
+  ) {
+    return "%";
+  }
+  if (lowerKey.includes("rate")) {
+    return "%/s";
+  }
+  if (
     lowerKey.includes("mult") ||
     lowerKey.includes("scale") ||
     lowerKey.includes("factor")
@@ -256,11 +320,30 @@ function normalizeTuningUnitJs(key, rawUnit) {
   if (
     lowerKey.includes("hp") ||
     lowerKey.includes("health") ||
-    lowerKey.includes("damage")
+    lowerKey.includes("damage") ||
+    lowerKey.includes("armor") ||
+    lowerKey.includes("shield")
   ) {
     return "hp";
   }
   return "count";
+}
+
+function inferTuningPropertyTypeJs(value, unit, isUe6Verse = false) {
+  const cleanVal = String(value || "").trim().toLowerCase();
+  const cleanUnit = String(unit || "").trim().toLowerCase();
+  if (
+    cleanUnit === "bool" ||
+    cleanUnit === "boolean" ||
+    cleanVal === "true" ||
+    cleanVal === "false"
+  ) {
+    return isUe6Verse ? "logic" : "bool";
+  }
+  if (cleanUnit === "count" && /^-?\d+$/.test(cleanVal)) {
+    return isUe6Verse ? "int" : "int32";
+  }
+  return "float";
 }
 
 function parseEpicSpecJs(epicDoc, indexHint = 0) {
@@ -334,11 +417,14 @@ function parseEpicSpecJs(epicDoc, indexHint = 0) {
   const tuning = Array.isArray(parsed.tuning)
     ? parsed.tuning
         .filter((t) => t && typeof t === "object")
-        .map((t) => ({
-          key: String(t.key || "param").trim(),
-          value: String(t.value || "0").trim(),
-          unit: String(t.unit || "").trim(),
-        }))
+        .map((t) => {
+          const cleanKey = sanitizeTuningKeyJs(t.key, "TuningVar");
+          return {
+            key: cleanKey,
+            value: String(t.value ?? "0").trim() || "0",
+            unit: normalizeTuningUnitJs(cleanKey, t.unit),
+          };
+        })
     : [];
 
   const spec = {
@@ -564,7 +650,8 @@ function renderServerUnrealMcpPayloadJs({
   } else {
     for (const t of epicSpec.tuning) {
       const unitSuffix = t.unit ? ` ${t.unit}` : "";
-      lines.push(`- ${t.key}: ${t.value}${unitSuffix}`);
+      const propType = inferTuningPropertyTypeJs(t.value, t.unit, isUe6);
+      lines.push(`- ${t.key}: ${t.value}${unitSuffix} [${propType}]`);
     }
   }
 
@@ -918,7 +1005,7 @@ function applyUnrealEpicMutationJs({
           : "active";
     }
   } else if (action === "update_tuning" || action === "set_tuning") {
-    const cleanKey = String(body.key || "").trim();
+    const cleanKey = sanitizeTuningKeyJs(body.key, "");
     const rawVal =
       body.value === undefined || body.value === null
         ? ""
@@ -1934,7 +2021,9 @@ exports.geminiProxy = onRequest(
 exports._testHelpers = {
   hashLinkToken,
   UNREAL_UPDATE_VALID_ACTIONS,
+  sanitizeTuningKeyJs,
   normalizeTuningUnitJs,
+  inferTuningPropertyTypeJs,
   sanitizeUprojectContextJs,
   parseRootSpecJs,
   parseEpicSpecJs,

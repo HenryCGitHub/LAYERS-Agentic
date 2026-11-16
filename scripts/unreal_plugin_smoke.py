@@ -689,19 +689,25 @@ def main() -> int:
 
       # 1b. Update existing §04 tuning + insert new §04 tuning (with unit normalization)
       tune_md = toolset.layers_update_epic_tuning("DashDistance", "460")
-      assert "- DashDistance: 460 cm" in tune_md
+      assert "- DashDistance: 460 cm [float]" in tune_md, tune_md
       assert "# ROOT_MCP_CONTEXT" not in tune_md, tune_md
       assert len(tune_md) < len(spec_md) * 0.45, (len(tune_md), len(spec_md))
       new_tune_md = toolset.layers_update_epic_tuning("ArenaRadius", "1800", unit="pixels")
-      assert "- ArenaRadius: 1800 cm" in new_tune_md
+      assert "- ArenaRadius: 1800 cm [float]" in new_tune_md, new_tune_md
       slide_tune_md = toolset.layers_update_epic_tuning("SlideSpeed", "900", unit="pixels/s")
-      assert "- SlideSpeed: 900 cm/s" in slide_tune_md, slide_tune_md
+      assert "- SlideSpeed: 900 cm/s [float]" in slide_tune_md, slide_tune_md
       zero_tune_md = toolset.layers_update_epic_tuning("CameraLag", 0)  # type: ignore[arg-type]
-      assert "- CameraLag: 0 count" in zero_tune_md, zero_tune_md
+      assert "- CameraLag: 0 count [int32]" in zero_tune_md, zero_tune_md
       zero_dock_res = dock.update_tuning("WarmupDelay", 0.0, "s")  # type: ignore[arg-type]
-      assert zero_dock_res.get("ok") is True and "- WarmupDelay: 0.0 s" in str(
+      assert zero_dock_res.get("ok") is True and "- WarmupDelay: 0.0 s [float]" in str(
           zero_dock_res.get("mcpPayloadMarkdown") or ""
       ), zero_dock_res
+      crit_md = toolset.layers_update_epic_tuning("crit_chance", "25")
+      assert "- CritChance: 25 % [float]" in crit_md, crit_md
+      space_md = toolset.layers_update_epic_tuning("max walk speed", "660")
+      assert "- MaxWalkSpeed: 660 cm/s [float]" in space_md, space_md
+      full_after_tune = toolset.layers_get_active_epic_spec()
+      assert full_after_tune.count("- MaxWalkSpeed:") == 1, full_after_tune
 
       # 1c. Toggle individual §06 PIE checks (including final check) without jumping off E01
       chk_md = toolset.layers_toggle_pie_check("1", passed=True)
@@ -942,6 +948,43 @@ def main() -> int:
       const resBySub = h.applyUnrealEpicMutationJs({ epicDoc: { id: 'ep_active_gate', sections: resByIndex.sections }, action: 'resolve_fix', body: { fixId: 'muzzle spark' }, nowMs: 2103 });
       if (resBySub.epicSpec.fixes[1].resolved !== true) {
         throw new Error('Expected case-insensitive substring resolve_fix to resolve second fix');
+      }
+      const ue6Doc = {
+        id: 'ep_ue6',
+        sections: {
+          code: 'E01',
+          lineage_key: 'e01',
+          release_version: 'v0.1',
+          lifecycle: 'active',
+          epic_spec_json: JSON.stringify({
+            id: 'ep_ue6',
+            code: 'E01',
+            lineageKey: 'e01',
+            title: 'Verse Dash',
+            releaseVersion: 'v0.1',
+            lifecycle: 'active',
+            goal: 'Air dash in Verse',
+            tuning: [
+              { key: 'WaveCount', value: '3', unit: 'count' },
+              { key: 'bAllowAirDash', value: 'true', unit: 'bool' },
+              { key: 'braking_decel', value: '950', unit: '' }
+            ],
+            checks: [{ id: 'c1', text: 'Dash bursts cleanly', passed: false }]
+          })
+        }
+      };
+      const ue6Md = h.renderServerUnrealMcpPayloadJs({
+        rootSpec: { normalizedTitle: 'T', targetEngine: 'ue6Verse', pitch: 'P' },
+        epicSpec: h.parseEpicSpecJs(ue6Doc)
+      });
+      if (!ue6Md.includes('- WaveCount: 3 count [int]')) {
+        throw new Error('Expected UE6 Verse [int] hint, got: ' + ue6Md);
+      }
+      if (!ue6Md.includes('- bAllowAirDash: true bool [logic]')) {
+        throw new Error('Expected UE6 Verse [logic] hint, got: ' + ue6Md);
+      }
+      if (!ue6Md.includes('- BrakingDecel: 950 cm/s [float]')) {
+        throw new Error('Expected PascalCase + cm/s [float] hint, got: ' + ue6Md);
       }
       """
       reopen_proc = subprocess.run(["node", "-e", reopen_v02_js], cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=10)

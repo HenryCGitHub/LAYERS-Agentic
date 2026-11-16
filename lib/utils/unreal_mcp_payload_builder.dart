@@ -1,5 +1,6 @@
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
+import 'unreal_spec_guard.dart';
 
 /// Deterministic single-source-of-truth Markdown compiler for Unreal MCP payloads.
 /// Matches `buildRootMcpMarkdown` and `buildEpicMcpMarkdown` in the approved v3 spec UI
@@ -217,9 +218,15 @@ class UnrealMcpPayloadBuilder {
     if (epic.tuning.isEmpty) {
       b.writeln('- None');
     } else {
+      final isUe6 = target == UnrealTargetEngine.ue6Verse;
       for (final t in epic.tuning) {
         final unitSuffix = t.unit.trim().isEmpty ? '' : ' ${t.unit.trim()}';
-        b.writeln('- ${t.key}: ${t.value}$unitSuffix');
+        final propType = UnrealSpecGuard.inferUnrealPropertyType(
+          t.value,
+          t.unit,
+          isUe6Verse: isUe6,
+        );
+        b.writeln('- ${t.key}: ${t.value}$unitSuffix [$propType]');
       }
     }
 

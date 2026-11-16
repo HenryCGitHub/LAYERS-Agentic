@@ -1853,5 +1853,92 @@ void main() {
         );
       },
     );
+
+    test(
+      '27. UnrealSpecGuard normalizes PascalCase §04 keys, infers missing units, and annotates UE5 vs UE6 Verse property types',
+      () {
+        expect(
+          UnrealSpecGuard.sanitizeTuningKey('max walk speed'),
+          equals('MaxWalkSpeed'),
+        );
+        expect(
+          UnrealSpecGuard.sanitizeTuningKey('crit_chance'),
+          equals('CritChance'),
+        );
+        expect(
+          UnrealSpecGuard.sanitizeTuningKey('1st wave count'),
+          equals('Param1stWaveCount'),
+        );
+        expect(
+          UnrealSpecGuard.sanitizeTuningKey('bCanDash'),
+          equals('bCanDash'),
+        );
+        expect(
+          UnrealSpecGuard.sanitizeTuningKey('   ', fallback: ''),
+          equals(''),
+        );
+
+        expect(
+          UnrealSpecGuard.normalizeUnrealUnit('BrakingDecel', ''),
+          equals('cm/s'),
+        );
+        expect(
+          UnrealSpecGuard.normalizeUnrealUnit('CritChance', ''),
+          equals('%'),
+        );
+        expect(
+          UnrealSpecGuard.normalizeUnrealUnit('BoostDrainRate', ''),
+          equals('%/s'),
+        );
+        expect(
+          UnrealSpecGuard.normalizeUnrealUnit('AimSpread', ''),
+          equals('deg'),
+        );
+        expect(
+          UnrealSpecGuard.normalizeUnrealUnit('ShieldPool', ''),
+          equals('hp'),
+        );
+        expect(
+          UnrealSpecGuard.normalizeUnrealUnit('Cooldown', 'seconds'),
+          equals('s'),
+        );
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final e01Id = wb.selectedEpicId!;
+        final countBefore = wb.selectedEpicSpec!.tuning.length;
+        wb.addEpicTuningParam(e01Id, key: 'move speed', value: '700', unit: '');
+        expect(wb.selectedEpicSpec!.tuning, hasLength(countBefore));
+        expect(wb.selectedEpicSpec!.tuning.first.key, equals('MoveSpeed'));
+        expect(wb.selectedEpicSpec!.tuning.first.value, equals('700'));
+        expect(wb.selectedEpicSpec!.tuning.first.unit, equals('cm/s'));
+
+        final epTest = wb.selectedEpicSpec!.deepCopy();
+        epTest.tuning = [
+          EpicTuningParam(key: 'MoveSpeed', value: '700', unit: 'cm/s'),
+          EpicTuningParam(key: 'WaveCount', value: '3', unit: 'count'),
+          EpicTuningParam(key: 'bCanDash', value: 'true', unit: 'bool'),
+        ];
+
+        final ue5Md = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: wb.conceptDraft!,
+          epic: epTest,
+          targetOverride: UnrealTargetEngine.ue5Mcp,
+        );
+        expect(ue5Md, contains('- MoveSpeed: 700 cm/s [float]'));
+        expect(ue5Md, contains('- WaveCount: 3 count [int32]'));
+        expect(ue5Md, contains('- bCanDash: true bool [bool]'));
+
+        final ue6Md = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: wb.conceptDraft!,
+          epic: epTest,
+          targetOverride: UnrealTargetEngine.ue6Verse,
+        );
+        expect(ue6Md, contains('- MoveSpeed: 700 cm/s [float]'));
+        expect(ue6Md, contains('- WaveCount: 3 count [int]'));
+        expect(ue6Md, contains('- bCanDash: true bool [logic]'));
+      },
+    );
   });
 }

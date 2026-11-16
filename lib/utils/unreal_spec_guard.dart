@@ -63,18 +63,72 @@ class UnrealSpecGuard {
     return result;
   }
 
+  /// Normalizes a `§04` tuning identifier into a valid PascalCase Unreal / Verse variable name
+  /// (preserving canonical Unreal `b` boolean prefixes like `bCanDash`).
+  static String sanitizeTuningKey(
+    String rawKey, {
+    String fallback = 'TuningVar',
+  }) {
+    final trimmed = rawKey.trim();
+    if (trimmed.isEmpty) return fallback;
+    if (RegExp(r'^[A-Za-z][A-Za-z0-9]*$').hasMatch(trimmed)) {
+      if (trimmed.length >= 2 &&
+          trimmed[0] == 'b' &&
+          trimmed[1] == trimmed[1].toUpperCase() &&
+          trimmed[1] != trimmed[1].toLowerCase()) {
+        return trimmed;
+      }
+      return '${trimmed[0].toUpperCase()}${trimmed.substring(1)}';
+    }
+    final tokens = trimmed
+        .split(RegExp(r'[^A-Za-z0-9]+'))
+        .where((t) => t.isNotEmpty)
+        .toList();
+    if (tokens.isEmpty) return fallback;
+    final joined = tokens
+        .map((t) => '${t[0].toUpperCase()}${t.substring(1)}')
+        .join();
+    if (RegExp(r'^[0-9]').hasMatch(joined)) {
+      return 'Param$joined';
+    }
+    return joined;
+  }
+
   /// Normalizes Unreal tuning unit strings (`1 UU = 1 cm`).
   static String normalizeUnrealUnit(String key, String rawUnit) {
     final clean = rawUnit.trim();
     final lowerUnit = clean.toLowerCase();
     final lowerKey = key.toLowerCase();
-    if (lowerUnit == 'px' || lowerUnit == 'pixels') return 'cm';
+    if (lowerUnit == 'px' ||
+        lowerUnit == 'pixels' ||
+        lowerUnit == 'pixel' ||
+        lowerUnit == 'uu') {
+      return 'cm';
+    }
     if (lowerUnit.startsWith('px/')) return 'cm/${clean.substring(3)}';
     if (lowerUnit.startsWith('pixels/')) return 'cm/${clean.substring(7)}';
+    if (lowerUnit == 'sec' ||
+        lowerUnit == 'secs' ||
+        lowerUnit == 'second' ||
+        lowerUnit == 'seconds') {
+      return 's';
+    }
+    if (lowerUnit == 'deg' ||
+        lowerUnit == 'degree' ||
+        lowerUnit == 'degrees') {
+      return 'deg';
+    }
+    if (lowerUnit == 'pct' ||
+        lowerUnit == 'percent' ||
+        lowerUnit == 'percentage') {
+      return '%';
+    }
     if (clean.isNotEmpty) return clean;
     if (lowerKey.contains('speed') ||
         lowerKey.contains('velocity') ||
-        lowerKey.contains('impulse')) {
+        lowerKey.contains('impulse') ||
+        lowerKey.contains('accel') ||
+        lowerKey.contains('decel')) {
       return 'cm/s';
     }
     if (lowerKey.contains('distance') ||
@@ -82,12 +136,18 @@ class UnrealSpecGuard {
         lowerKey.contains('height') ||
         lowerKey.contains('range') ||
         lowerKey.contains('offset') ||
-        lowerKey.contains('width')) {
+        lowerKey.contains('width') ||
+        lowerKey.contains('length') ||
+        lowerKey.contains('springarm') ||
+        lowerKey.contains('boomarm')) {
       return 'cm';
     }
     if (lowerKey.contains('angle') ||
         lowerKey.contains('fov') ||
         lowerKey.contains('pitch') ||
+        lowerKey.contains('yaw') ||
+        lowerKey.contains('roll') ||
+        lowerKey.contains('spread') ||
         lowerKey.contains('deg')) {
       return 'deg';
     }
@@ -98,6 +158,14 @@ class UnrealSpecGuard {
         lowerKey.contains('window')) {
       return 's';
     }
+    if (lowerKey.contains('chance') ||
+        lowerKey.contains('percent') ||
+        lowerKey.contains('pct')) {
+      return '%';
+    }
+    if (lowerKey.contains('rate')) {
+      return '%/s';
+    }
     if (lowerKey.contains('mult') ||
         lowerKey.contains('scale') ||
         lowerKey.contains('factor')) {
@@ -105,10 +173,32 @@ class UnrealSpecGuard {
     }
     if (lowerKey.contains('hp') ||
         lowerKey.contains('health') ||
-        lowerKey.contains('damage')) {
+        lowerKey.contains('damage') ||
+        lowerKey.contains('armor') ||
+        lowerKey.contains('shield')) {
       return 'hp';
     }
     return 'count';
+  }
+
+  /// Infers Unreal Blueprint / C++ or UE6 Verse property type for `§04` tuning lines.
+  static String inferUnrealPropertyType(
+    String value,
+    String unit, {
+    bool isUe6Verse = false,
+  }) {
+    final cleanVal = value.trim().toLowerCase();
+    final cleanUnit = unit.trim().toLowerCase();
+    if (cleanUnit == 'bool' ||
+        cleanUnit == 'boolean' ||
+        cleanVal == 'true' ||
+        cleanVal == 'false') {
+      return isUe6Verse ? 'logic' : 'bool';
+    }
+    if (cleanUnit == 'count' && RegExp(r'^-?\d+$').hasMatch(cleanVal)) {
+      return isUe6Verse ? 'int' : 'int32';
+    }
+    return 'float';
   }
 
   /// Cleans an AI-generated [EpicSpec] in place/copy so units, release tag, and wording conform cleanly.
@@ -118,11 +208,14 @@ class UnrealSpecGuard {
   }) {
     final cleanedTuning = <EpicTuningParam>[
       for (final t in raw.tuning)
-        EpicTuningParam(
-          key: t.key.trim().isEmpty ? 'TuningVar' : t.key.trim(),
-          value: t.value.trim().isEmpty ? '0' : t.value.trim(),
-          unit: normalizeUnrealUnit(t.key, t.unit),
-        ),
+        () {
+          final cleanKey = sanitizeTuningKey(t.key);
+          return EpicTuningParam(
+            key: cleanKey,
+            value: t.value.trim().isEmpty ? '0' : t.value.trim(),
+            unit: normalizeUnrealUnit(cleanKey, t.unit),
+          );
+        }(),
     ];
 
     final cleanedControls = <EpicControlBinding>[
