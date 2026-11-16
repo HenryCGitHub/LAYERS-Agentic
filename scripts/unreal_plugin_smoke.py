@@ -640,6 +640,13 @@ def main() -> int:
         assert "ModelContextProtocol.StartServer" in unreal_state["console_commands"]
         assert "layers_get_active_epic_spec" in captured_builds[-1][1]
         assert "FULL-EPIC AUTONOMOUS BUILD" in captured_builds[-1][1]
+        assert (
+            "Target Test Level: L_Arena_Proto -> Spawn BP_CrabPlayer + 2 BP_TargetDummy actors."
+            in captured_builds[-1][1]
+        ), captured_builds[-1][1]
+        assert "UE 5.9 Blueprint + DataAsset" in captured_builds[-1][1], (
+            captured_builds[-1][1]
+        )
         handoff_res = dock.build_active_epic(agent_cli="clipboard", background=False)
         assert handoff_res.get("mode") == "clipboard_handoff", handoff_res
       finally:
@@ -756,6 +763,10 @@ def main() -> int:
       assert dock.compute_primary_toolbar_action()["mode"] == "fix"
       assert dock.compute_primary_toolbar_action()["label"] == "🔧 Fix E01 (1)"
       assert play_tb.entries["LayersPrimaryAction"].label == "🔧 Fix E01 (1)"
+      fix_prompt = dock.build_agent_prompt()
+      assert "FOCUSED PIE REVISION PASS" in fix_prompt, fix_prompt
+      assert "(id: " in fix_prompt, fix_prompt
+      assert "Target Test Level: L_Arena_Proto" in fix_prompt, fix_prompt
 
       fix2_md = toolset.layers_log_pie_fix("Dash trail flickers on slope")
       assert "### FOCUSED PIE REVISION PASS (2 OPEN [FIX])" in fix2_md
@@ -775,10 +786,20 @@ def main() -> int:
       assert dock.compute_primary_toolbar_action()["label"] == "✓ Pass E01 →"
 
       # 4. Launch PIE from dock & sign off E01 via primary toolbar -> advances cleanly to Build E02
+      layers_project_probe.record_pie_error("LogBlueprint: Warning: Accessed None")
+      layers_project_probe.record_pie_error("LogBlueprint: Warning: Accessed None")
+      layers_project_probe.record_pie_error("LogPhysics: Warning: Capsule overlap")
+      layers_project_probe.record_pie_error("LogBlueprint: Warning: Accessed None")
+      dedup_errs = layers_project_probe.probe_uproject_context()["recent_errors"]
+      assert dedup_errs == [
+          "LogPhysics: Warning: Capsule overlap",
+          "LogBlueprint: Warning: Accessed None",
+      ], dedup_errs
       assert dock.launch_pie() is True
       assert unreal_state["pie_started"] is True
       pass_res = init_unreal.trigger_toolbar_primary_action()
       assert pass_res.get("ok") is True and pass_res.get("mode") == "passed", pass_res
+      assert layers_project_probe.probe_uproject_context()["recent_errors"] == []
       assert dock.compute_primary_toolbar_action()["label"] == "⚡ Build E02"
 
       # 5. Fetch E02, check its Check 1 -> stale E01 LayersCheck_2 cleared; stays uncompleted until Pass E02 ✓
@@ -1046,12 +1067,14 @@ def main() -> int:
       assert final_pass.get("allEpicsCompleted") is True
       assert "[ALL EPICS PASSED ✓]" in dock.render_dock_summary_text()
 
-      # 6. Check token + agent_cli persistence helper & stale last_payload reset on token change
+      # 6. Check token + agent_cli persistence helper & stale last_payload/PIE error reset on token change
+      layers_project_probe.record_pie_error("Stale project warning")
       dock.configure_token(
           "lyr_saved_token_check_0001",
           f"http://127.0.0.1:{port}",
           agent_cli="claude",
       )
+      assert layers_project_probe.probe_uproject_context()["recent_errors"] == []
       assert dock.last_payload is None
       assert "SHELLBREAKER" not in dock.render_dock_summary_text()
       cfg_file = saved_dir / "Config" / "LayersBridge.json"

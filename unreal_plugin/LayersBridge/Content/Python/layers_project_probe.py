@@ -24,11 +24,12 @@ _LAST_PROBE_TS: float = 0.0
 _LAST_UNREAL_MOD_ID: int | None = None
 
 
-def invalidate_uproject_context_cache() -> None:
+def invalidate_uproject_context_cache(*, clear_fallback: bool = False) -> None:
   global _LAST_MAIN_THREAD_CONTEXT, _LAST_PROBE_TS, _LAST_UNREAL_MOD_ID
-  _LAST_MAIN_THREAD_CONTEXT = None
   _LAST_PROBE_TS = 0.0
   _LAST_UNREAL_MOD_ID = None
+  if clear_fallback:
+    _LAST_MAIN_THREAD_CONTEXT = None
 
 
 def _empty_context() -> dict[str, Any]:
@@ -67,6 +68,8 @@ def record_pie_error(message: str) -> None:
   clean = str(message or "").strip()
   if not clean:
     return
+  if clean in _RECENT_PIE_ERRORS:
+    _RECENT_PIE_ERRORS.remove(clean)
   _RECENT_PIE_ERRORS.append(clean)
   if len(_RECENT_PIE_ERRORS) > 12:
     del _RECENT_PIE_ERRORS[:-12]

@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from layers_project_probe import probe_uproject_context
+from layers_project_probe import (
+    clear_pie_errors,
+    invalidate_uproject_context_cache,
+    probe_uproject_context,
+)
 from layers_sync_client import LayersSyncClient
 
 try:
@@ -218,6 +222,8 @@ class LayersToolset(_ToolsetBase):  # type: ignore[misc]
     res = self.sync_client.post_epic_update("pass_epic", epic_id=epic_id)
     if not res.get("ok"):
       return f"LAYERS Error: {res.get('error', 'Failed to pass Epic.')}"
+    clear_pie_errors()
+    invalidate_uproject_context_cache()
     if res.get("allEpicsCompleted"):
       return (
           f"Release {res.get('releaseVersion', '')} complete! "

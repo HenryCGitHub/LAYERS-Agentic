@@ -11,7 +11,11 @@ import threading
 from typing import Any, Callable
 import webbrowser
 
-from layers_project_probe import probe_uproject_context
+from layers_project_probe import (
+    clear_pie_errors,
+    invalidate_uproject_context_cache,
+    probe_uproject_context,
+)
 from layers_sync_client import LayersSyncClient
 
 _MAIN_THREAD_QUEUE: deque[Callable[[], None]] = deque()
@@ -149,12 +153,16 @@ class LayersPieGateDock:
       sync_base_url: str | None = None,
       agent_cli: str | None = None,
   ) -> str:
+    prev_token = str(self.sync_client.link_token or "").strip()
     path = self.sync_client.configure(
         link_token=link_token,
         sync_base_url=sync_base_url,
         agent_cli=agent_cli,
         persist=True,
     )
+    if str(self.sync_client.link_token or "").strip() != prev_token:
+      clear_pie_errors()
+      invalidate_uproject_context_cache(clear_fallback=True)
     self.last_status_message = f"Saved LayersBridge token config -> {path}"
     refresh_toolbar_widgets(self)
     return self.last_status_message
@@ -233,20 +241,36 @@ class LayersPieGateDock:
     return f"{base} · {len(fixes)} FIX" if fixes else base
 
   def build_agent_prompt(self) -> str:
-    active = (self.last_payload or {}).get("activeEpic") or {}
+    payload = self.last_payload or {}
+    active = payload.get("activeEpic") or {}
     code = str(active.get("code") or "E01").strip() or "E01"
     title = str(active.get("title") or "Active Epic").strip()
+    ver = str(active.get("releaseVersion") or payload.get("releaseVersion") or "v0.1").strip() or "v0.1"
+    target_engine = str(payload.get("targetEngine") or "ue5Mcp").strip()
+    arch_label = (
+        "UE6 Verse"
+        if target_engine == "ue6Verse"
+        else "UE 5.9 Blueprint + DataAsset"
+    )
+    level_staging = str(active.get("levelStaging") or "").strip()
+    level_clause = f"Target Test Level: {level_staging}. " if level_staging else ""
     fixes = active.get("openFixes") or []
     if fixes:
-      fix_list = "; ".join(
-          str(f.get("text") or "").strip()
-          for f in fixes
-          if str(f.get("text") or "").strip()
-      )
+      formatted_fixes: list[str] = []
+      for f in fixes:
+        if not isinstance(f, dict):
+          continue
+        txt = str(f.get("text") or "").strip()
+        if not txt:
+          continue
+        fid = str(f.get("id") or "").strip()
+        formatted_fixes.append(f"{txt} (id: {fid})" if fid else txt)
+      fix_list = "; ".join(formatted_fixes)
       return (
           f"In Unreal MCP (http://127.0.0.1:8000/mcp), call "
           f"layers_get_active_epic_spec right now and execute the "
-          f"FOCUSED PIE REVISION PASS for {code} ({title}). "
+          f"FOCUSED PIE REVISION PASS for {code} ({title}, {ver}, {arch_label}). "
+          f"{level_clause}"
           f"Open [FIX] items: {fix_list}. Apply targeted fixes, verify in PIE, "
           f"and report via layers_resolve_pie_fix and layers_toggle_pie_check. "
           f"Do not call layers_pass_active_epic (leave final sign-off for human PIE review)."
@@ -254,7 +278,8 @@ class LayersPieGateDock:
     return (
         f"In Unreal MCP (http://127.0.0.1:8000/mcp), call "
         f"layers_get_active_epic_spec right now and execute the "
-        f"FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK for {code} ({title}). "
+        f"FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK for {code} ({title}, {ver}, {arch_label}). "
+        f"{level_clause}"
         f"Implement §01-§06 matching ROOT_MCP_CONTEXT, expose all §04 tuning variables, "
         f"and report PIE verification via layers_toggle_pie_check. "
         f"Do not call layers_pass_active_epic (leave final sign-off for human PIE review)."
@@ -378,8 +403,10 @@ class LayersPieGateDock:
         self._record_build_log(self.last_status_message)
       finally:
         self.is_building = False
-        ctx = probe_uproject_context()
+        ctx = probe_uproject_context(force_refresh=True)
         self.sync_client.fetch_active_epic(uproject_context=ctx)
+        if threading.current_thread() is not threading.main_thread():
+          run_on_game_thread(invalidate_uproject_context_cache)
         refresh_toolbar_widgets(self)
 
     if background:
@@ -514,6 +541,9 @@ class LayersPieGateDock:
 
   def pass_epic(self, epic_id: str = "") -> dict[str, Any]:
     res = self.sync_client.post_epic_update("pass_epic", epic_id=epic_id)
+    if res.get("ok"):
+      clear_pie_errors()
+      invalidate_uproject_context_cache()
     refresh_toolbar_widgets(self)
     return res
 
