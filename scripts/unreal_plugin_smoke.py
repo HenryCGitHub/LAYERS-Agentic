@@ -824,6 +824,18 @@ def main() -> int:
       if (!v03Md.includes('- Locked Baseline: v0.2: +55ms Hit-Stop')) {
         throw new Error('Expected Locked Baseline in v0.3 payload');
       }
+      if (!v03Md.includes('- +Dash echo') || v03Md.includes('- + +')) {
+        throw new Error('Expected clean - +Dash echo bullet, got: ' + v03Md);
+      }
+      if (v03Md.includes('end-to-end')) {
+        throw new Error('Unexpected end-to-end jargon in server payload');
+      }
+      const fs = require('fs');
+      const fnSrc = fs.readFileSync('./functions/index.js', 'utf8');
+      const getMatches = fnSrc.match(/docsCol\.get\(\)/g) || [];
+      if (getMatches.length !== 1) {
+        throw new Error('Expected 1 docsCol.get() in /unrealLink/update, got ' + getMatches.length);
+      }
       const v03Reopen = h.applyUnrealEpicMutationJs({ epicDoc: v03Doc, action: 'reopen_epic', body: {}, nowMs: 2000 });
       if (v03Reopen.epicSpec.checks[0].passed !== true) {
         throw new Error('Expected v0.2 locked check to remain passed on v0.3 reopen');

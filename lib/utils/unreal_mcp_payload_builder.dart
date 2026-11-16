@@ -36,10 +36,12 @@ class UnrealMcpPayloadBuilder {
     for (final tradeOff in rootSpec.tradeOffs) {
       b.writeln('- Trade-Off: ${tradeOff.formatted}');
     }
-    b.writeln();
-    b.writeln('## §04 Hard Scope Cuts (Do Not Build)');
-    for (final cut in rootSpec.outOfScope) {
-      b.writeln('- $cut');
+    if (rootSpec.outOfScope.isNotEmpty) {
+      b.writeln();
+      b.writeln('## §04 Hard Scope Cuts (Do Not Build)');
+      for (final cut in rootSpec.outOfScope) {
+        b.writeln('- $cut');
+      }
     }
 
     if (liveUprojectContext != null && liveUprojectContext.isNotEmpty) {
@@ -81,6 +83,7 @@ class UnrealMcpPayloadBuilder {
     UnrealTargetEngine? targetOverride,
     Map<String, dynamic>? liveUprojectContext,
     bool includeRootContext = true,
+    bool includeExecutionFooter = true,
   }) {
     final target = targetOverride ?? rootSpec.targetEngine;
     final b = StringBuffer();
@@ -124,7 +127,10 @@ class UnrealMcpPayloadBuilder {
         '## ${epic.releaseVersion} Upgrade Deltas (atop locked v0.1 baseline)',
       );
       for (final delta in epic.upgradeDeltas) {
-        b.writeln('- + $delta');
+        final cleanDelta = delta.trim().replaceFirst(RegExp(r'^\+\s*'), '');
+        if (cleanDelta.isNotEmpty) {
+          b.writeln('- +$cleanDelta');
+        }
       }
     }
 
@@ -140,11 +146,15 @@ class UnrealMcpPayloadBuilder {
 
     b.writeln();
     b.writeln('## §03 State Flow & Interrupt Rules');
-    for (final s in epic.states) {
-      b.writeln('- State: $s');
-    }
-    for (final rule in epic.interrupts) {
-      b.writeln('- Interrupt: $rule');
+    if (epic.states.isEmpty && epic.interrupts.isEmpty) {
+      b.writeln('- Stateless / event-driven Epic');
+    } else {
+      for (final s in epic.states) {
+        b.writeln('- State: $s');
+      }
+      for (final rule in epic.interrupts) {
+        b.writeln('- Interrupt: $rule');
+      }
     }
 
     b.writeln();
@@ -193,11 +203,11 @@ class UnrealMcpPayloadBuilder {
       b.writeln(
         'Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact and report modified Blueprint/Verse assets + PIE verify steps.',
       );
-    } else {
+    } else if (includeExecutionFooter) {
       b.writeln();
       b.writeln('### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK');
       b.writeln(
-        'Implement §01-§06 end-to-end in a single Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check before returning for human PIE sign-off.',
+        'Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check before returning for human PIE sign-off.',
       );
     }
 
@@ -238,6 +248,7 @@ class UnrealMcpPayloadBuilder {
             rootSpec: rootSpec,
             epic: epic,
             includeRootContext: false,
+            includeExecutionFooter: epic.openFixes.isNotEmpty,
           ),
         );
       }
@@ -264,17 +275,28 @@ class UnrealMcpPayloadBuilder {
     b.writeln('# ACTIVE RELEASE BUNDLE · $releaseLabel');
     final effectiveEpics =
         releaseEpics.isNotEmpty ? releaseEpics : rootSpec.initialEpics;
-    for (final epic in effectiveEpics) {
+    for (int i = 0; i < effectiveEpics.length; i++) {
+      final epic = effectiveEpics[i];
       b.writeln();
       b.writeln(
         buildEpicMcpPayload(
           rootSpec: rootSpec,
           epic: epic,
           includeRootContext: false,
+          includeExecutionFooter: epic.openFixes.isNotEmpty,
         ),
       );
+      if (i < effectiveEpics.length - 1) {
+        b.writeln();
+        b.writeln('---');
+      }
+    }
+    if (effectiveEpics.isNotEmpty) {
       b.writeln();
-      b.writeln('---');
+      b.writeln('### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK');
+      b.writeln(
+        'Implement §01-§06 per Epic in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check before returning for human PIE sign-off.',
+      );
     }
     return b.toString().trimRight();
   }

@@ -557,7 +557,9 @@ class LayersPieGateDock:
         f"Web Studio: {payload.get('webStudioUrl', '')}",
     ])
     for delta in active.get("upgradeDeltas") or []:
-      lines.append(f"  + {delta}")
+      clean_delta = str(delta or "").strip().lstrip("+").strip()
+      if clean_delta:
+        lines.append(f"  +{clean_delta}")
     for chk in checks:
       mark = "[x]" if chk.get("passed") else "[ ]"
       lines.append(f"  {mark} {chk.get('text', '')}")

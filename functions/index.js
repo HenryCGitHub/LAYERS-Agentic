@@ -415,10 +415,12 @@ function renderServerUnrealMcpPayloadJs({
   for (const tradeOff of rootSpec.tradeOffs || []) {
     lines.push(`- Trade-Off: ${tradeOff}`);
   }
-  lines.push("");
-  lines.push("## §04 Hard Scope Cuts (Do Not Build)");
-  for (const cut of rootSpec.outOfScope || []) {
-    lines.push(`- ${cut}`);
+  if (Array.isArray(rootSpec.outOfScope) && rootSpec.outOfScope.length > 0) {
+    lines.push("");
+    lines.push("## §04 Hard Scope Cuts (Do Not Build)");
+    for (const cut of rootSpec.outOfScope) {
+      lines.push(`- ${cut}`);
+    }
   }
 
   if (uprojectContext && typeof uprojectContext === "object" && Object.keys(uprojectContext).length > 0) {
@@ -477,7 +479,8 @@ function renderServerUnrealMcpPayloadJs({
       `## ${epicSpec.releaseVersion} Upgrade Deltas (atop locked v0.1 baseline)`
     );
     for (const delta of epicSpec.upgradeDeltas) {
-      lines.push(`- + ${delta}`);
+      const cleanDelta = String(delta || "").trim().replace(/^\+\s*/, "");
+      if (cleanDelta) lines.push(`- +${cleanDelta}`);
     }
   }
 
@@ -493,11 +496,15 @@ function renderServerUnrealMcpPayloadJs({
 
   lines.push("");
   lines.push("## §03 State Flow & Interrupt Rules");
-  for (const s of epicSpec.states) {
-    lines.push(`- State: ${s}`);
-  }
-  for (const rule of epicSpec.interrupts) {
-    lines.push(`- Interrupt: ${rule}`);
+  if (epicSpec.states.length === 0 && epicSpec.interrupts.length === 0) {
+    lines.push("- Stateless / event-driven Epic");
+  } else {
+    for (const s of epicSpec.states) {
+      lines.push(`- State: ${s}`);
+    }
+    for (const rule of epicSpec.interrupts) {
+      lines.push(`- Interrupt: ${rule}`);
+    }
   }
 
   lines.push("");
@@ -549,7 +556,7 @@ function renderServerUnrealMcpPayloadJs({
     lines.push("");
     lines.push("### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK");
     lines.push(
-      "Implement §01-§06 end-to-end in a single Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check before returning for human PIE sign-off."
+      "Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check before returning for human PIE sign-off."
     );
   }
 
@@ -1618,15 +1625,16 @@ exports.geminiProxy = onRequest(
         .doc(linkAuth.uid)
         .collection("documents");
 
+      const docsSnap = await docsCol.get();
+      const docsById = new Map();
+      for (const d of docsSnap.docs) {
+        docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
+      }
+
       let targetEpicId = String(body.epicId || "").trim();
       if (action !== "sync_uproject") {
-        const preSnap = await docsCol.get();
-        const preDocs = new Map();
-        for (const d of preSnap.docs) {
-          preDocs.set(d.id, { id: d.id, ...(d.data() || {}) });
-        }
         targetEpicId = resolveTargetEpicDocIdJs({
-          docsById: preDocs,
+          docsById,
           projectId: linkAuth.projectId,
           requestedEpicId: targetEpicId,
           webStudioUrl: linkAuth.webStudioUrl,
@@ -1641,6 +1649,7 @@ exports.geminiProxy = onRequest(
       }
 
       const nowMs = Date.now();
+      let updatedEpicDoc = null;
       if (action !== "sync_uproject") {
         const epicRef = docsCol.doc(targetEpicId);
         try {
@@ -1664,6 +1673,13 @@ exports.geminiProxy = onRequest(
               isCompleted: mutated.isCompleted,
               updatedAt: FieldValue.serverTimestamp(),
             });
+            updatedEpicDoc = {
+              id: snap.id,
+              ...epicData,
+              sections: mutated.sections,
+              subtasks: mutated.subtasks,
+              isCompleted: mutated.isCompleted,
+            };
           });
         } catch (err) {
           const code = err?.statusCode || 500;
@@ -1674,10 +1690,8 @@ exports.geminiProxy = onRequest(
         }
       }
 
-      const docsSnap = await docsCol.get();
-      const docsById = new Map();
-      for (const d of docsSnap.docs) {
-        docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
+      if (targetEpicId && updatedEpicDoc) {
+        docsById.set(targetEpicId, updatedEpicDoc);
       }
       const inMemProj = docsById.get(linkAuth.projectId);
       if (inMemProj) {

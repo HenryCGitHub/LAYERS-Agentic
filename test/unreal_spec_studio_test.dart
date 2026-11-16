@@ -1721,5 +1721,41 @@ void main() {
         expect(wb.selectedEpicSpec!.tuning.last.value, equals('0'));
       },
     );
+
+    test(
+      '24. UnrealMcpPayloadBuilder strips double-plus delta clutter, handles stateless §03 Epics, and deduplicates multi-Epic bundle footers',
+      () {
+        final shellbreaker = UnrealSparkPresets.byId('shellbreaker');
+        final epic = shellbreaker.initialEpics.first.deepCopy(
+          releaseVersionOverride: 'v0.2',
+          lifecycleOverride: EpicLifecycle.upgrading,
+        );
+        epic.upgradeDeltas = ['+55ms Hit-Stop'];
+        epic.states = [];
+        epic.interrupts = [];
+
+        final payload = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: shellbreaker,
+          epic: epic,
+        );
+        expect(payload, contains('- +55ms Hit-Stop'));
+        expect(payload, isNot(contains('- + +')));
+        expect(payload, isNot(contains('end-to-end')));
+        expect(payload, contains('- Stateless / event-driven Epic'));
+
+        final bundle = UnrealMcpPayloadBuilder.buildReleaseMcpBundle(
+          rootSpec: shellbreaker,
+          releaseLabel: 'v0.1 · Prototype',
+          releaseEpics: shellbreaker.initialEpics,
+        );
+        expect(
+          '### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK'
+              .allMatches(bundle)
+              .length,
+          equals(1),
+        );
+        expect(bundle.trimRight().endsWith('---'), isFalse);
+      },
+    );
   });
 }
