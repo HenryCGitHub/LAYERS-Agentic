@@ -203,14 +203,27 @@ class UnrealMcpPayloadBuilder {
   static String buildFullProjectSpecMarkdown({
     required ProjectConceptBlueprint rootSpec,
     required Map<String, List<EpicSpec>> epicsByReleaseLabel,
+    Map<String, dynamic>? liveUprojectContext,
   }) {
     final b = StringBuffer();
-    b.writeln(buildRootMcpContext(rootSpec));
+    b.writeln(
+      buildRootMcpContext(
+        rootSpec,
+        liveUprojectContext: liveUprojectContext,
+      ),
+    );
     b.writeln();
     b.writeln('---');
     b.writeln();
     b.writeln('# Release Roadmap & Unreal MCP Epic Specs');
-    for (final entry in epicsByReleaseLabel.entries) {
+    final effectiveReleases = epicsByReleaseLabel.isNotEmpty
+        ? epicsByReleaseLabel
+        : (rootSpec.initialEpics.isNotEmpty
+            ? <String, List<EpicSpec>>{
+                'v0.1 · Prototype': rootSpec.initialEpics,
+              }
+            : const <String, List<EpicSpec>>{});
+    for (final entry in effectiveReleases.entries) {
       b.writeln();
       b.writeln('## Release ${entry.key}');
       for (final epic in entry.value) {
@@ -244,7 +257,9 @@ class UnrealMcpPayloadBuilder {
     b.writeln();
     b.writeln('---');
     b.writeln('# ACTIVE RELEASE BUNDLE · $releaseLabel');
-    for (final epic in releaseEpics) {
+    final effectiveEpics =
+        releaseEpics.isNotEmpty ? releaseEpics : rootSpec.initialEpics;
+    for (final epic in effectiveEpics) {
       b.writeln();
       b.writeln(
         buildEpicMcpPayload(

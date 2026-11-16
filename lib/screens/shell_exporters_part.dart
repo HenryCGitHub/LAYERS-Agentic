@@ -25,6 +25,7 @@ extension _WorkbenchShellExporters on WorkbenchShell {
     final md = UnrealMcpPayloadBuilder.buildFullProjectSpecMarkdown(
       rootSpec: rootSpec,
       epicsByReleaseLabel: epicsByRelease,
+      liveUprojectContext: wb.latestLiveUprojectContext,
     );
 
     final safeSlug = rootSpec.normalizedTitle

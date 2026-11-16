@@ -448,15 +448,41 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (!proj.childrenIds.contains(relId)) {
       proj.childrenIds = [relId, ...proj.childrenIds];
     }
-    _activeReleaseId = relId;
-    final firstUnpassedId = epicIds.firstWhere(
-      (id) {
-        final d = documents[id];
-        return d != null && !EpicSpec.fromDocument(d).isPassed;
-      },
-      orElse: () => epicIds.isNotEmpty ? epicIds.first : '',
-    );
-    _selectedEpicId = firstUnpassedId.isNotEmpty ? firstUnpassedId : null;
+    final prevActiveRel =
+        _activeReleaseId != null ? documents[_activeReleaseId!] : null;
+    final keepExistingHigherRelease = prevActiveRel != null &&
+        prevActiveRel.tier == TierType.release &&
+        prevActiveRel.parentId == pid &&
+        prevActiveRel.id != relId;
+    if (keepExistingHigherRelease) {
+      _activeReleaseId = prevActiveRel.id;
+      final activeDocs = epicDocsForRelease(prevActiveRel.id);
+      final keepsSelected = _selectedEpicId != null &&
+          activeDocs.any((d) => d.id == _selectedEpicId);
+      if (!keepsSelected) {
+        final fallback = activeDocs.firstWhere(
+          (d) => !EpicSpec.fromDocument(d).isPassed,
+          orElse: () => activeDocs.isNotEmpty
+              ? activeDocs.first
+              : TierDocument(
+                  id: '',
+                  title: '',
+                  tier: TierType.epic,
+                ),
+        );
+        _selectedEpicId = fallback.id.isNotEmpty ? fallback.id : null;
+      }
+    } else {
+      _activeReleaseId = relId;
+      final firstUnpassedId = epicIds.firstWhere(
+        (id) {
+          final d = documents[id];
+          return d != null && !EpicSpec.fromDocument(d).isPassed;
+        },
+        orElse: () => epicIds.isNotEmpty ? epicIds.first : '',
+      );
+      _selectedEpicId = firstUnpassedId.isNotEmpty ? firstUnpassedId : null;
+    }
     _currentStage = WorkbenchStage.releaseWorkbench;
     _showRawEpicPayload = false;
     _syncActiveProjectMetadata();

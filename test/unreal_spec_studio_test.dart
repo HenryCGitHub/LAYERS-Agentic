@@ -961,5 +961,89 @@ void main() {
         expect(deltaChecks.every((c) => !c.passed), isTrue);
       },
     );
+
+    test(
+      '16. Pre-launch Stage 1 exports include v0.1 initialEpics & Stage 1 re-approve preserves active v0.2+ release focus',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+
+        final preLaunchFull =
+            UnrealMcpPayloadBuilder.buildFullProjectSpecMarkdown(
+          rootSpec: wb.conceptDraft!,
+          epicsByReleaseLabel: const {},
+        );
+        expect(preLaunchFull, contains('## Release v0.1 · Prototype'));
+        expect(
+          preLaunchFull,
+          contains('# ACTIVE EPIC SPEC · E01 · Player Mech Movement & Claw Dash'),
+        );
+
+        final preLaunchBundle = UnrealMcpPayloadBuilder.buildReleaseMcpBundle(
+          rootSpec: wb.conceptDraft!,
+          releaseLabel: 'v0.1 · Prototype',
+          releaseEpics: wb.activeReleaseEpics,
+        );
+        expect(
+          preLaunchBundle,
+          contains('# ACTIVE RELEASE BUNDLE · v0.1 · Prototype'),
+        );
+        expect(
+          preLaunchBundle,
+          contains('# ACTIVE EPIC SPEC · E01 · Player Mech Movement & Claw Dash'),
+        );
+
+        wb.approveRootSpecAndLaunchWorkbench();
+        await wb.openProgressiveReleaseCopilot();
+        wb.applyProgressivePreset(wb.progressiveDraft!.presets.first.id);
+        final v02RelId = wb.commitProgressiveReleaseDraft()!;
+        final v02EpicId = wb.selectedEpicId!;
+
+        wb.setStage(WorkbenchStage.projectPitch);
+        wb.updateRootSpecSections(pitch: 'Updated global vision for v0.2');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        expect(wb.activeReleaseId, equals(v02RelId));
+        expect(wb.activeReleaseVersionTag, equals('v0.2'));
+        expect(wb.selectedEpicId, equals(v02EpicId));
+        expect(
+          wb.activeRootMcpMarkdown,
+          contains('Updated global vision for v0.2'),
+        );
+      },
+    );
+
+    test(
+      '17. duplicateProject & collision importProjectFromJson clear stale last_unreal_sync_ms and remap embedded epic_spec_json IDs',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        wb.activeProject!.sections['last_unreal_sync_ms'] = '1700000000000';
+        wb.activeReleaseEpicDocs.first.sections['last_unreal_sync_ms'] =
+            '1700000000000';
+        expect(wb.isActiveProjectSyncedWithUnreal, isTrue);
+
+        final exported = wb.exportProjectToJson();
+        final dupId = wb.duplicateProject(wb.activeProjectId!)!;
+        expect(wb.activeProjectId, equals(dupId));
+        expect(wb.isActiveProjectSyncedWithUnreal, isFalse);
+        for (final doc in wb.activeReleaseEpicDocs) {
+          final decoded =
+              jsonDecode(doc.sections['epic_spec_json']!) as Map<String, dynamic>;
+          expect(decoded['id'], equals(doc.id));
+        }
+
+        final importedId = wb.importProjectFromJson(exported)!;
+        expect(wb.activeProjectId, equals(importedId));
+        expect(wb.isActiveProjectSyncedWithUnreal, isFalse);
+        for (final doc in wb.activeReleaseEpicDocs) {
+          final decoded =
+              jsonDecode(doc.sections['epic_spec_json']!) as Map<String, dynamic>;
+          expect(decoded['id'], equals(doc.id));
+        }
+      },
+    );
   });
 }

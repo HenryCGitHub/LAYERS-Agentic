@@ -836,6 +836,27 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     return collectedIds;
   }
 
+  void _remapEmbeddedEpicJsonAndClearSync(
+    Map<String, String> sections, {
+    String? newEpicDocId,
+    required bool clearUnrealSync,
+  }) {
+    if (clearUnrealSync) {
+      sections.remove('last_unreal_sync_ms');
+      sections.remove('unreal_live_context_json');
+    }
+    if (newEpicDocId != null) {
+      final rawSpec = sections['epic_spec_json'];
+      if (rawSpec != null && rawSpec.isNotEmpty) {
+        try {
+          final map = Map<String, dynamic>.from(jsonDecode(rawSpec) as Map);
+          map['id'] = newEpicDocId;
+          sections['epic_spec_json'] = jsonEncode(map);
+        } catch (_) {}
+      }
+    }
+  }
+
   /// Deep-clones an existing project across all 3 tiers (`Project -> Release -> Epic`),
   /// persists to LocalVault & Cloud Firestore, and switches to the copy.
   String? duplicateProject(String projectId) {
@@ -845,6 +866,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final newId = 'proj_${DateTime.now().microsecondsSinceEpoch}';
     final copyTitle = '${src.title} (Copy)';
     final copiedSections = Map<String, String>.from(src.sections);
+    _remapEmbeddedEpicJsonAndClearSync(copiedSections, clearUnrealSync: true);
 
     final rawConcept = copiedSections['concept_blueprint_json'];
     if (rawConcept != null && rawConcept.isNotEmpty) {
@@ -884,10 +906,16 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         if (oldEpic == null || oldEpic.tier != TierType.epic) continue;
         final newEpicId = '${newRelId}_epic_${eIdx + 1}';
         mappedEpicIds[oldEpicId] = newEpicId;
+        final epicSections = Map<String, String>.from(oldEpic.sections);
+        _remapEmbeddedEpicJsonAndClearSync(
+          epicSections,
+          newEpicDocId: newEpicId,
+          clearUnrealSync: true,
+        );
         final clonedEpic = oldEpic.copyWith(
           id: newEpicId,
           parentId: newRelId,
-          sections: Map<String, String>.from(oldEpic.sections),
+          sections: epicSections,
           subtasks: oldEpic.subtasks.map((st) => st.copyWith()).toList(),
         );
         documents[newEpicId] = clonedEpic;
@@ -895,11 +923,13 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         newEpicIds.add(newEpicId);
       }
 
+      final relSections = Map<String, String>.from(oldRel.sections);
+      _remapEmbeddedEpicJsonAndClearSync(relSections, clearUnrealSync: true);
       final newRelDoc = oldRel.copyWith(
         id: newRelId,
         parentId: newId,
         childrenIds: newEpicIds,
-        sections: Map<String, String>.from(oldRel.sections),
+        sections: relSections,
       );
       documents[newRelId] = newRelDoc;
       _persistDocument(newRelDoc);
@@ -1008,6 +1038,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         final newParentId = d.parentId != null ? remapId(d.parentId!) : null;
         final newChildrenIds = d.childrenIds.map(remapId).toList();
         final newSections = Map<String, String>.from(d.sections);
+
+        _remapEmbeddedEpicJsonAndClearSync(
+          newSections,
+          newEpicDocId: d.tier == TierType.epic ? newId : null,
+          clearUnrealSync: hasCollision,
+        );
 
         String importedTitle = d.title;
         if (d.tier == TierType.project) {
