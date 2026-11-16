@@ -81,7 +81,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                         border: Border.all(color: cyan.withValues(alpha: 0.35)),
                       ),
                       child: Text(
-                        'STAGE 1 · UNREAL MCP ROOT SPEC',
+                        'STAGE 1 · PROJECT SPEC',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
@@ -104,7 +104,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 ),
                 const SizedBox(height: 18),
                 Text(
-                  'Describe your Unreal game in one sentence.',
+                  'Describe the game you want to build.',
                   style: AppTheme.displayFont(
                     fontSize: 30,
                     fontWeight: FontWeight.w700,
@@ -114,7 +114,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'LAYERS drafts a clean PROJECT_SPEC.md with 1 UU = 1 cm Unreal contracts and strictly v0.1 prototype Epics before anything hits Unreal MCP.',
+                  'Turn a one-sentence idea into a playable v0.1 Unreal spec — camera, controls, tuning, and first Epics.',
                   style: TextStyle(
                     fontSize: 14,
                     color: textSecondary,
@@ -140,7 +140,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                         style: TextStyle(fontSize: 15, color: textPrimary),
                         decoration: InputDecoration(
                           hintText:
-                              'e.g. Top-down twin-stick crustacean mech arena shooter with claw dash armor breaks and 3-wave combat...',
+                              'e.g. Top-down mech arena brawler where a forward claw dash shatters enemy shell armor...',
                           hintStyle: TextStyle(color: textMuted, fontSize: 14),
                           border: InputBorder.none,
                           enabledBorder: InputBorder.none,
@@ -195,7 +195,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                             label: Text(
                               wb.isAgentBusy
                                   ? (wb.agentProgressStep ?? 'Drafting...')
-                                  : 'Draft Project Spec ✦',
+                                  : 'Draft Project Spec',
                             ),
                           ),
                         ],
@@ -205,7 +205,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'OR START FROM AN UNREAL STARTER SPEC',
+                  'OR PICK A STARTER SPEC',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
@@ -228,7 +228,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                                 wb.loadPresetSpark(preset.id);
                               },
                         child: Container(
-                          width: 236,
+                          width: 240,
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: AppTheme.bgSurfaceFor(isDark),
@@ -465,7 +465,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                           onPressed: wb.isAgentBusy
                               ? null
                               : () => _submitCoDesign(wb),
-                          child: Text(wb.isAgentBusy ? 'Applying...' : 'Apply ✦'),
+                          child: Text(wb.isAgentBusy ? 'Applying...' : 'Apply'),
                         ),
                       ],
                     ),

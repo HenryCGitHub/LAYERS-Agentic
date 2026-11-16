@@ -271,8 +271,18 @@ class AppTheme {
       cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          backgroundColor: focalAccentDark,
+          foregroundColor: focalAccentFgDark,
+          disabledBackgroundColor: bgSurfaceActive,
+          disabledForegroundColor: textMuted,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          textStyle: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
+            borderRadius: BorderRadius.circular(radiusSm),
           ),
         ),
       ),
@@ -365,8 +375,18 @@ class AppTheme {
       cardTheme: const CardThemeData(elevation: 0, margin: EdgeInsets.zero),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
+          backgroundColor: focalAccentLight,
+          foregroundColor: focalAccentFgLight,
+          disabledBackgroundColor: bgSurfaceActiveLight,
+          disabledForegroundColor: textMutedLight,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          textStyle: GoogleFonts.inter(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
+            borderRadius: BorderRadius.circular(radiusSm),
           ),
         ),
       ),

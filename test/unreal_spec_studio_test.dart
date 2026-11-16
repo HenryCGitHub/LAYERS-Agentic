@@ -1045,5 +1045,37 @@ void main() {
         }
       },
     );
+
+    testWidgets(
+      '18. Stage 1 Spark screen uses plain-English copy, drops duplicate ✦ sparkle & renders high-contrast primary ElevatedButton',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final darkBtnStyle = AppTheme.darkTheme.elevatedButtonTheme.style!;
+        expect(
+          darkBtnStyle.backgroundColor!.resolve(const <WidgetState>{}),
+          equals(AppTheme.focalAccentDark),
+        );
+        expect(
+          darkBtnStyle.foregroundColor!.resolve(const <WidgetState>{}),
+          equals(AppTheme.focalAccentFgDark),
+        );
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        expect(find.text('STAGE 1 · PROJECT SPEC'), findsOneWidget);
+        expect(find.text('STAGE 1 · UNREAL MCP ROOT SPEC'), findsNothing);
+        expect(find.text('Describe the game you want to build.'), findsOneWidget);
+        expect(find.text('Draft Project Spec'), findsOneWidget);
+        expect(find.textContaining('✦'), findsNothing);
+      },
+    );
   });
 }

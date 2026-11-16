@@ -467,7 +467,7 @@ class WorkbenchProvider extends ChangeNotifier {
   String releaseConciseLabel(TierDocument relDoc) => releaseDisplayName(relDoc);
 
   String get nextReleaseActionLabel =>
-      '+ Plan ${ReleasePlannerAgent.nextMinorVersionTag(activeReleaseVersionTag)} Release ✦';
+      '+ Plan ${ReleasePlannerAgent.nextMinorVersionTag(activeReleaseVersionTag)} Release';
 
   bool get isActiveReleaseComplete {
     final epics = activeReleaseEpics;
