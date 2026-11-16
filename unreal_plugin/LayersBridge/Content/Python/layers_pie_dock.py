@@ -12,7 +12,7 @@ from typing import Any, Callable
 import webbrowser
 
 from layers_project_probe import probe_uproject_context
-from layers_sync_client import DEFAULT_SYNC_BASE_URL, LayersSyncClient
+from layers_sync_client import LayersSyncClient
 
 _MAIN_THREAD_QUEUE: deque[Callable[[], None]] = deque()
 _QUEUE_LOCK = threading.Lock()
@@ -146,7 +146,7 @@ class LayersPieGateDock:
   def configure_token(
       self,
       link_token: str,
-      sync_base_url: str = DEFAULT_SYNC_BASE_URL,
+      sync_base_url: str | None = None,
       agent_cli: str | None = None,
   ) -> str:
     path = self.sync_client.configure(
@@ -492,13 +492,13 @@ class LayersPieGateDock:
   def update_tuning(
       self,
       key: str,
-      value: str,
+      value: Any,
       unit: str = "",
       epic_id: str = "",
   ) -> dict[str, Any]:
-    clean_key = str(key or "").strip()
-    clean_val = str(value or "").strip()
-    if not clean_key or not clean_val:
+    clean_key = "" if key is None else str(key).strip()
+    clean_val = "" if value is None else str(value).strip()
+    if not clean_key or clean_val == "":
       return {"ok": False, "error": "key and value cannot be empty."}
     res = self.sync_client.post_epic_update(
         "update_tuning",

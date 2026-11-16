@@ -563,15 +563,7 @@ function computeActiveUnrealEpicPayload({
   uprojectContext = null,
   preferredEpicId = "",
 }) {
-  let projectDoc = docsById.get(projectId) || null;
-  if (!projectDoc) {
-    for (const d of docsById.values()) {
-      if (String(d?.tier || "").toUpperCase() === "PROJECT") {
-        projectDoc = d;
-        break;
-      }
-    }
-  }
+  const projectDoc = projectId ? docsById.get(projectId) || null : null;
   if (!projectDoc) {
     return {
       ok: false,
@@ -1713,6 +1705,12 @@ exports.geminiProxy = onRequest(
         uprojectContext,
         preferredEpicId: isInPlaceMutation ? targetEpicId : "",
       });
+      if (!payload.ok) {
+        res.status(404).json({
+          error: { code: 404, message: payload.error || "Project not found." },
+        });
+        return;
+      }
 
       const nextProjSec = {
         last_unreal_sync_ms: String(nowMs),

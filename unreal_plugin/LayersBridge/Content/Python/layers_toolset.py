@@ -117,14 +117,14 @@ class LayersToolset(_ToolsetBase):  # type: ignore[misc]
   def layers_update_epic_tuning(
       self,
       key: str,
-      value: str,
+      value: Any,
       unit: str = "",
       epic_id: str = "",
   ) -> str:
     """Updates or inserts a `§04` spatial/exposed tuning parameter on the Epic."""
-    clean_key = str(key or "").strip()
-    clean_val = str(value or "").strip()
-    if not clean_key or not clean_val:
+    clean_key = "" if key is None else str(key).strip()
+    clean_val = "" if value is None else str(value).strip()
+    if not clean_key or clean_val == "":
       return "LAYERS Error: key and value cannot be empty."
     res = self.sync_client.post_epic_update(
         "update_tuning",
@@ -239,7 +239,7 @@ def layers_toggle_pie_check(
 
 def layers_update_epic_tuning(
     key: str,
-    value: str,
+    value: Any,
     unit: str = "",
     epic_id: str = "",
 ) -> str:

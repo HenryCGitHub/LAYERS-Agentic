@@ -88,13 +88,26 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final cleanKey = key.trim();
     if (cleanKey.isEmpty) return;
     _updateAndPersistEpic(epicId, (spec) {
-      spec.tuning.add(
-        EpicTuningParam(
-          key: cleanKey,
-          value: value.trim().isEmpty ? '0' : value.trim(),
-          unit: UnrealSpecGuard.normalizeUnrealUnit(cleanKey, unit),
-        ),
+      final nextVal = value.trim().isEmpty ? '0' : value.trim();
+      final existingIdx = spec.tuning.indexWhere(
+        (t) => t.key.trim().toLowerCase() == cleanKey.toLowerCase(),
       );
+      if (existingIdx >= 0) {
+        final existing = spec.tuning[existingIdx];
+        existing.value = nextVal;
+        existing.unit = UnrealSpecGuard.normalizeUnrealUnit(
+          existing.key,
+          unit.trim().isEmpty ? existing.unit : unit,
+        );
+      } else {
+        spec.tuning.add(
+          EpicTuningParam(
+            key: cleanKey,
+            value: nextVal,
+            unit: UnrealSpecGuard.normalizeUnrealUnit(cleanKey, unit),
+          ),
+        );
+      }
     });
   }
 

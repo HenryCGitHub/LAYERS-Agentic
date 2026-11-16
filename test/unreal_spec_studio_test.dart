@@ -1690,5 +1690,36 @@ void main() {
         }
       },
     );
+
+    test(
+      '23. addEpicTuningParam upserts case-insensitive tuning keys in place without duplicating §04 rows',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final e01Id = wb.selectedEpicId!;
+        final initialLen = wb.selectedEpicSpec!.tuning.length;
+
+        wb.addEpicTuningParam(
+          e01Id,
+          key: 'movespeed',
+          value: '710',
+          unit: 'px/s',
+        );
+        expect(wb.selectedEpicSpec!.tuning, hasLength(initialLen));
+        expect(wb.selectedEpicSpec!.tuning.first.key, equals('MoveSpeed'));
+        expect(wb.selectedEpicSpec!.tuning.first.value, equals('710'));
+        expect(wb.selectedEpicSpec!.tuning.first.unit, equals('cm/s'));
+
+        wb.addEpicTuningParam(
+          e01Id,
+          key: 'TurnSnap',
+          value: '0',
+          unit: 'deg',
+        );
+        expect(wb.selectedEpicSpec!.tuning, hasLength(initialLen + 1));
+        expect(wb.selectedEpicSpec!.tuning.last.value, equals('0'));
+      },
+    );
   });
 }

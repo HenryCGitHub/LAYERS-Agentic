@@ -618,6 +618,12 @@ def main() -> int:
       assert "- ArenaRadius: 1800 cm" in new_tune_md
       slide_tune_md = toolset.layers_update_epic_tuning("SlideSpeed", "900", unit="pixels/s")
       assert "- SlideSpeed: 900 cm/s" in slide_tune_md, slide_tune_md
+      zero_tune_md = toolset.layers_update_epic_tuning("CameraLag", 0)  # type: ignore[arg-type]
+      assert "- CameraLag: 0 count" in zero_tune_md, zero_tune_md
+      zero_dock_res = dock.update_tuning("WarmupDelay", 0.0, "s")  # type: ignore[arg-type]
+      assert zero_dock_res.get("ok") is True and "- WarmupDelay: 0.0 s" in str(
+          zero_dock_res.get("mcpPayloadMarkdown") or ""
+      ), zero_dock_res
 
       # 1c. Toggle individual §06 PIE checks (including final check) without jumping off E01
       chk_md = toolset.layers_toggle_pie_check("1", passed=True)
@@ -819,6 +825,10 @@ def main() -> int:
       if (v03Reopen.epicSpec.checks[1].passed !== false) {
         throw new Error('Expected v0.3 delta check to reset on v0.3 reopen');
       }
+      const delCheck = h.computeActiveUnrealEpicPayload({ docsById: crossDocs, projectId: 'proj_deleted' });
+      if (delCheck.ok !== false) {
+        throw new Error('Expected ok: false when linked projectId was deleted');
+      }
       """
       reopen_proc = subprocess.run(["node", "-e", reopen_v02_js], cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=10)
       assert reopen_proc.returncode == 0, f"v0.2 reopen check failed: {reopen_proc.stderr}"
@@ -869,6 +879,11 @@ def main() -> int:
       cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
       assert cfg_data["link_token"] == "lyr_saved_token_check_0001"
       assert cfg_data["agent_cli"] == "claude"
+      dock.configure_token("lyr_saved_token_check_0002")
+      cfg_data_2 = json.loads(cfg_file.read_text(encoding="utf-8"))
+      assert cfg_data_2["link_token"] == "lyr_saved_token_check_0002"
+      assert cfg_data_2["sync_base_url"] == f"http://127.0.0.1:{port}", cfg_data_2
+      assert cfg_data_2["agent_cli"] == "claude", cfg_data_2
 
     print("UNREAL_SMOKE_OK")
     return 0
