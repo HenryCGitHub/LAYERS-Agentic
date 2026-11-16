@@ -733,6 +733,52 @@ def main() -> int:
       if (out.isCompleted !== false) throw new Error('Expected isCompleted false');
       const e10 = h.parseEpicSpecJs({}, 9);
       if (e10.code !== 'E10') throw new Error('Expected E10 padding, got ' + e10.code);
+
+      // 5c-1. Toggling all checks to true keeps active lifecycle & isCompleted === false until explicit pass_epic
+      const activeDoc = {
+        id: 'ep_active_gate',
+        sections: {
+          code: 'E01',
+          lineage_key: 'e01',
+          release_version: 'v0.1',
+          lifecycle: 'active',
+          epic_spec_json: JSON.stringify({
+            id: 'ep_active_gate',
+            code: 'E01',
+            lineageKey: 'e01',
+            title: 'Movement',
+            releaseVersion: 'v0.1',
+            lifecycle: 'active',
+            goal: 'Move cleanly',
+            checks: [{ id: 'c1', text: 'Move test', passed: false }]
+          })
+        }
+      };
+      const chkOut = h.applyUnrealEpicMutationJs({ epicDoc: activeDoc, action: 'toggle_check', body: { checkId: 'c1', passed: true }, nowMs: 1235 });
+      if (chkOut.epicSpec.lifecycle !== 'active') throw new Error('Expected active before pass_epic, got ' + chkOut.epicSpec.lifecycle);
+      if (chkOut.isCompleted !== false) throw new Error('Expected isCompleted false before pass_epic');
+      const passOut = h.applyUnrealEpicMutationJs({ epicDoc: { id: 'ep_active_gate', sections: chkOut.sections }, action: 'pass_epic', body: {}, nowMs: 1236 });
+      if (passOut.epicSpec.lifecycle !== 'stable' || passOut.isCompleted !== true) throw new Error('Expected stable + isCompleted true after pass_epic');
+
+      // 5c-2. Unchecking a check on a stable v0.2 doc demotes lifecycle to upgrading & isCompleted === false
+      const unchkOut = h.applyUnrealEpicMutationJs({ epicDoc: v02Doc, action: 'toggle_check', body: { checkId: 'c1', passed: false }, nowMs: 1237 });
+      if (unchkOut.epicSpec.lifecycle !== 'upgrading') throw new Error('Expected upgrading demotion on uncheck, got ' + unchkOut.epicSpec.lifecycle);
+      if (unchkOut.isCompleted !== false) throw new Error('Expected isCompleted false after uncheck');
+
+      // 5c-3. resolveTargetEpicDocIdJs ignores stale v0.1 selected_epic_id when active_release_id is v0.2
+      const crossDocs = new Map();
+      crossDocs.set('proj_x', {
+        id: 'proj_x',
+        tier: 'project',
+        childrenIds: ['rel_v01', 'rel_v02'],
+        sections: { active_release_id: 'rel_v02', selected_epic_id: 'rel_v01_ep1' }
+      });
+      crossDocs.set('rel_v01', { id: 'rel_v01', tier: 'release', parentId: 'proj_x', childrenIds: ['rel_v01_ep1'], sections: { release_version: 'v0.1' } });
+      crossDocs.set('rel_v02', { id: 'rel_v02', tier: 'release', parentId: 'proj_x', childrenIds: ['rel_v02_ep1'], sections: { release_version: 'v0.2' } });
+      crossDocs.set('rel_v01_ep1', { id: 'rel_v01_ep1', tier: 'epic', parentId: 'rel_v01', sections: { code: 'E01', lifecycle: 'active' } });
+      crossDocs.set('rel_v02_ep1', { id: 'rel_v02_ep1', tier: 'epic', parentId: 'rel_v02', sections: { code: 'E01', lifecycle: 'queued' } });
+      const resolvedId = h.resolveTargetEpicDocIdJs({ docsById: crossDocs, projectId: 'proj_x', requestedEpicId: '' });
+      if (resolvedId !== 'rel_v02_ep1') throw new Error('Expected rel_v02_ep1, got ' + resolvedId);
       """
       reopen_proc = subprocess.run(["node", "-e", reopen_v02_js], cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=10)
       assert reopen_proc.returncode == 0, f"v0.2 reopen check failed: {reopen_proc.stderr}"

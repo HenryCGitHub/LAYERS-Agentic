@@ -200,8 +200,8 @@ function computeEpicPassedJs(spec) {
   const fixes = Array.isArray(spec.fixes) ? spec.fixes : [];
   const openFixes = fixes.filter((f) => !f?.resolved);
   if (openFixes.length > 0) return false;
-  if (String(spec.lifecycle || "").toLowerCase() === "stable") return true;
-  return checks.length > 0 && checks.every((c) => Boolean(c?.passed));
+  if (String(spec.lifecycle || "").toLowerCase() !== "stable") return false;
+  return checks.length === 0 || checks.every((c) => Boolean(c?.passed));
 }
 
 function normalizeTuningUnitJs(key, rawUnit) {
@@ -690,22 +690,18 @@ function computeActiveUnrealEpicPayload({
   const prefIdx = prefId
     ? parsedEpics.findIndex((e) => e.id === prefId)
     : -1;
-  const firstUnsignedIdx = parsedEpics.findIndex(
-    (e) => !e.isPassed || String(e.lifecycle || "").toLowerCase() !== "stable"
-  );
+  const firstUnsignedIdx = parsedEpics.findIndex((e) => !e.isPassed);
   const allEpicsCompleted = parsedEpics.length > 0 && firstUnsignedIdx === -1;
 
   let activeIdx = -1;
   if (prefIdx >= 0) {
     activeIdx = prefIdx;
-  } else if (
-    selIdx >= 0 &&
-    (!parsedEpics[selIdx].isPassed ||
-      String(parsedEpics[selIdx].lifecycle || "").toLowerCase() !== "stable")
-  ) {
+  } else if (selIdx >= 0 && !parsedEpics[selIdx].isPassed) {
     activeIdx = selIdx;
   } else if (firstUnsignedIdx >= 0) {
     activeIdx = firstUnsignedIdx;
+  } else if (selIdx >= 0) {
+    activeIdx = selIdx;
   } else {
     activeIdx = parsedEpics.length - 1;
   }
@@ -747,18 +743,6 @@ function resolveTargetEpicDocIdJs({
 }) {
   const reqId = String(requestedEpicId || "").trim();
   if (!reqId) {
-    const projectDoc = docsById.get(projectId);
-    const selectedId = String(projectDoc?.sections?.selected_epic_id || "").trim();
-    if (selectedId) {
-      const selDoc = docsById.get(selectedId);
-      if (selDoc && String(selDoc.tier || "").toUpperCase() === "EPIC") {
-        const selSpec = parseEpicSpecJs(selDoc);
-        const lifecycle = String(selSpec.lifecycle || "").toLowerCase();
-        if (!selSpec.isPassed || lifecycle !== "stable") {
-          return selectedId;
-        }
-      }
-    }
     const payload = computeActiveUnrealEpicPayload({
       docsById,
       projectId,
@@ -869,8 +853,14 @@ function applyUnrealEpicMutationJs({
       typeof body.passed === "boolean"
         ? body.passed
         : !spec.checks[matchedIdx].passed;
+    const anyUnchecked = spec.checks.some((c) => !c.passed);
     if (spec.lifecycle === "queued") {
       spec.lifecycle = "active";
+    } else if (spec.lifecycle === "stable" && anyUnchecked) {
+      spec.lifecycle =
+        Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0
+          ? "upgrading"
+          : "active";
     }
   } else if (action === "update_tuning" || action === "set_tuning") {
     const cleanKey = String(body.key || "").trim();

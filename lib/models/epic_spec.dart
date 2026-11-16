@@ -428,10 +428,13 @@ class EpicSpec {
 
   int get passedChecksCount => checks.where((c) => c.passed).length;
 
+  bool get allChecksPassed =>
+      checks.isNotEmpty && checks.every((c) => c.passed);
+
   bool get isPassed =>
       openFixes.isEmpty &&
-      (lifecycle == EpicLifecycle.stable ||
-          (checks.isNotEmpty && checks.every((c) => c.passed)));
+      lifecycle == EpicLifecycle.stable &&
+      (checks.isEmpty || checks.every((c) => c.passed));
 
   int get progressPercent {
     if (isPassed) return 100;
@@ -441,8 +444,8 @@ class EpicSpec {
 
   String get statusLabel {
     if (openFixesCount > 0) return '$openFixesCount [FIX] Open';
-    if (lifecycle == EpicLifecycle.stable) return 'Baseline ✓';
-    if (isPassed) return 'Passed ✓';
+    if (isPassed) return 'Baseline ✓';
+    if (allChecksPassed) return 'Ready to Pass';
     if (lifecycle == EpicLifecycle.upgrading) return 'Upgrading $releaseVersion';
     if (lifecycle == EpicLifecycle.newEpic) return 'NEW $releaseVersion';
     if (passedChecksCount > 0 || lifecycle == EpicLifecycle.active) {

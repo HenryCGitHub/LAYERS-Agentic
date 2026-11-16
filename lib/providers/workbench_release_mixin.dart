@@ -56,8 +56,13 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           break;
         }
       }
+      final anyUnchecked = spec.checks.any((c) => !c.passed);
       if (spec.lifecycle == EpicLifecycle.queued) {
         spec.lifecycle = EpicLifecycle.active;
+      } else if (spec.lifecycle == EpicLifecycle.stable && anyUnchecked) {
+        spec.lifecycle = spec.upgradeDeltas.isNotEmpty
+            ? EpicLifecycle.upgrading
+            : EpicLifecycle.active;
       }
     });
   }

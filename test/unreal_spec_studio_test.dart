@@ -1338,5 +1338,58 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      '20. Checking all §06 PIE checks keeps Pass Epic button visible (Ready to Pass) until explicit sign-off, and unchecking demotes stable',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final e01Id = wb.selectedEpicId!;
+        final e01 = wb.selectedEpicSpec!;
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        for (final chk in e01.checks) {
+          wb.togglePieCheck(e01Id, chk.id, true);
+        }
+        await tester.pumpAndSettle();
+
+        expect(wb.selectedEpicSpec!.allChecksPassed, isTrue);
+        expect(wb.selectedEpicSpec!.isPassed, isFalse);
+        expect(wb.selectedEpicSpec!.statusLabel, equals('Ready to Pass'));
+        expect(find.byKey(const ValueKey('pass_epic_btn')), findsOneWidget);
+        expect(find.byKey(const ValueKey('reopen_epic_btn')), findsNothing);
+
+        final passBtn = find.byKey(const ValueKey('pass_epic_btn'));
+        await tester.ensureVisible(passBtn);
+        await tester.tap(passBtn);
+        await tester.pumpAndSettle();
+
+        final signedE01 = wb.epicsForRelease(wb.activeReleaseId!).firstWhere(
+              (e) => e.id == e01Id,
+            );
+        expect(signedE01.isPassed, isTrue);
+        expect(signedE01.lifecycle, equals(EpicLifecycle.stable));
+        expect(signedE01.statusLabel, equals('Baseline ✓'));
+        expect(wb.selectedEpicSpec?.code, equals('E02'));
+
+        wb.togglePieCheck(e01Id, e01.checks.first.id, false);
+        await tester.pumpAndSettle();
+        final demotedE01 = wb.epicsForRelease(wb.activeReleaseId!).firstWhere(
+              (e) => e.id == e01Id,
+            );
+        expect(demotedE01.lifecycle, equals(EpicLifecycle.active));
+        expect(demotedE01.isPassed, isFalse);
+      },
+    );
   });
 }
