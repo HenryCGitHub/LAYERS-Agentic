@@ -139,7 +139,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   void selectCameraDecisionOption(String optionId) {
     final draft = _conceptDraft;
     if (draft == null) return;
-    for (final opt in draft.cameraDecisionOptions) {
+    for (final opt in draft.effectiveCameraDecisionOptions) {
       if (opt.id == optionId) {
         draft.cameraChoiceId = opt.id;
         draft.cameraContract = opt.contractValue;
@@ -155,6 +155,51 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         return;
       }
     }
+  }
+
+  void selectCoreFeelOption(String feelId) {
+    final draft = _conceptDraft;
+    if (draft == null) return;
+    final chosen = ProjectConceptBlueprint.coreFeelOptionById(feelId);
+    ProjectConceptAgent.syncEpicCoreFeel(draft, feelId: chosen.id);
+    draft.lastCoDesignNote =
+        'Core feel & E01 locomotion set to ${chosen.label}.';
+    _ensureActiveProjectDocument(draft);
+    notifyListeners();
+  }
+
+  /// Clears the active unapproved draft back to empty Stage 1 intake, or opens a fresh Stage 1
+  /// project when existing approved Releases exist so saved project work is preserved.
+  void resetStage1ToNewIdea() {
+    final target = targetEngine;
+    if (projectReleases.isNotEmpty) {
+      createNewProject();
+      setTargetEngine(target);
+      return;
+    }
+    final orphanId = _activeProjectId;
+    if (orphanId != null) {
+      _persistTimers.remove(orphanId)?.cancel();
+      documents.remove(orphanId);
+      LocalVaultService.deleteDocument(orphanId);
+      final user = _authService.currentUser;
+      if (user != null) {
+        _firestoreService.deleteDocument(uid: user.uid, docId: orphanId);
+      }
+    }
+    _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    _activeReleaseId = null;
+    _selectedEpicId = null;
+    _progressiveDraft = null;
+    _executionLog.clear();
+    _conceptDraft = ProjectConceptBlueprint(targetEngine: target);
+    _showingSparkPicker = true;
+    _showRawRootContext = false;
+    _showRawEpicPayload = false;
+    _offlineErrorMessage = null;
+    _currentStage = WorkbenchStage.projectPitch;
+    _persistSettings();
+    notifyListeners();
   }
 
   void _renumberInitialEpics(ProjectConceptBlueprint draft) {

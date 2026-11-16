@@ -29,6 +29,7 @@ class UnrealMcpPayloadBuilder {
     b.writeln('- Asset Policy: ${rootSpec.assetPolicy.trim()}');
     b.writeln();
     b.writeln('## §03 Pillars & Conflict Trade-Offs');
+    b.writeln('- Core Feel: ${rootSpec.selectedCoreFeelOption.label}');
     for (final pillar in rootSpec.pillars) {
       b.writeln('- Pillar: $pillar');
     }

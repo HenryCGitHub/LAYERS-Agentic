@@ -254,7 +254,7 @@ void main() {
     );
 
     testWidgets(
-      '5. Stage 1 Project Spec: Spark presets, Target Engine toggle, Camera fork, Co-Designer & Approve -> Stage 2',
+      '5. Unified Single-Space Stage 1: Idea intake + empty §01-§05 outline -> live Blueprint, Camera/Feel forks, Top Refine bar & Approve -> Stage 2',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 1000);
         tester.view.devicePixelRatio = 1.0;
@@ -269,21 +269,58 @@ void main() {
 
         expect(find.byType(ProjectPitchScreen), findsOneWidget);
         expect(
-          find.byKey(const ValueKey('preset_pill_shellbreaker')),
+          find.byKey(const ValueKey('spark_prompt_input')),
           findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('draft_spark_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('stage1_blueprint_empty_outline')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('PROJECT BLUEPRINT PREVIEW · §01–§05'),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('preset_pill_shellbreaker')),
+          findsNothing,
         );
         expect(
           find.byKey(const ValueKey('preset_pill_railjack')),
-          findsOneWidget,
+          findsNothing,
         );
         expect(
           find.byKey(const ValueKey('preset_pill_emberkeep')),
-          findsOneWidget,
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('stage1_unified_refine_bar')),
+          findsNothing,
         );
 
-        await tester.tap(find.byKey(const ValueKey('preset_pill_shellbreaker')));
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_prompt_input')),
+          'Top-down crustacean mech brawler with claw dash armor breaks',
+        );
+        await tester.tap(find.byKey(const ValueKey('draft_spark_btn')));
         await tester.pumpAndSettle();
 
+        expect(find.byKey(const ValueKey('spark_prompt_input')), findsNothing);
+        expect(
+          find.byKey(const ValueKey('stage1_unified_refine_bar')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('stage1_codesign_input')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('stage1_codesign_apply_btn')),
+          findsOneWidget,
+        );
         expect(wb.conceptDraft?.normalizedTitle, equals('SHELLBREAKER'));
         expect(
           wb.conceptDraft?.initialEpics.every((e) => e.releaseVersion == 'v0.1'),
@@ -298,18 +335,89 @@ void main() {
         await tester.pumpAndSettle();
         expect(wb.showRawRootContext, isTrue);
         expect(
-          find.textContaining('Verse Components + Scene Graph Entities'),
+          find.textContaining(
+            'Target Architecture: Verse Components + Scene Graph Entities',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Core Feel: Snappy Arcade'),
           findsOneWidget,
         );
 
         await tester.tap(find.byKey(const ValueKey('stage1_tab_clean')));
         await tester.pumpAndSettle();
 
+        expect(
+          find.byKey(const ValueKey('camera_opt_isometric')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('camera_opt_topdown')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('camera_opt_tps')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('camera_opt_fps')),
+          findsOneWidget,
+        );
+
+        await tester.ensureVisible(find.byKey(const ValueKey('camera_opt_fps')));
+        await tester.tap(find.byKey(const ValueKey('camera_opt_fps')));
+        await tester.pumpAndSettle();
+        expect(wb.conceptDraft?.cameraChoiceId, equals('fps'));
+        expect(
+          wb.conceptDraft?.cameraContract,
+          contains('First-Person Camera'),
+        );
+        expect(wb.conceptDraft?.inputContract, contains('IA_Look'));
+        expect(
+          wb.conceptDraft?.initialEpics.first.controls.any(
+            (c) => c.action.contains('IA_Look'),
+          ),
+          isTrue,
+        );
+
         await tester.ensureVisible(find.byKey(const ValueKey('camera_opt_tps')));
         await tester.tap(find.byKey(const ValueKey('camera_opt_tps')));
         await tester.pumpAndSettle();
         expect(wb.conceptDraft?.cameraChoiceId, equals('tps'));
         expect(wb.conceptDraft?.cameraContract, contains('SpringArm 380 cm'));
+
+        await tester.ensureVisible(find.byKey(const ValueKey('feel_opt_heavy')));
+        await tester.tap(find.byKey(const ValueKey('feel_opt_heavy')));
+        await tester.pumpAndSettle();
+        expect(wb.conceptDraft?.feelChoiceId, equals('heavy'));
+        expect(
+          wb.conceptDraft?.tradeOffs.first.prefer,
+          equals('Committed heavy windups'),
+        );
+        expect(
+          wb.conceptDraft?.initialEpics.first.tuning.first.key,
+          equals('MoveSpeed'),
+        );
+        expect(
+          wb.conceptDraft?.initialEpics.first.tuning.last.key,
+          equals('BrakingDecel'),
+        );
+        expect(
+          wb.conceptDraft?.initialEpics.first.tuning.last.value,
+          equals('1400'),
+        );
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('feel_opt_physics')),
+        );
+        await tester.tap(find.byKey(const ValueKey('feel_opt_physics')));
+        await tester.pumpAndSettle();
+        expect(wb.conceptDraft?.feelChoiceId, equals('physics'));
+        expect(
+          wb.conceptDraft?.tradeOffs.first.prefer,
+          equals('Velocity carry & drift banking'),
+        );
 
         final prevMock = GeminiAgentClient.testMockResponder;
         GeminiAgentClient.testMockResponder = (prompt, model) async {
@@ -323,6 +431,10 @@ void main() {
         };
         try {
           wb.updateAiConfig(apiKey: 'mock-key-1234');
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('stage1_unified_refine_bar')),
+          );
+          await tester.pumpAndSettle();
           await tester.enterText(
             find.byKey(const ValueKey('stage1_codesign_input')),
             'Make it faster',
@@ -1075,6 +1187,73 @@ void main() {
         expect(find.text('Describe the game you want to build.'), findsOneWidget);
         expect(find.text('Draft Project Spec'), findsOneWidget);
         expect(find.textContaining('✦'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      '19. Unified Stage 1 New Idea reset_spark_btn clears unapproved draft cleanly without leaving orphan vault docs & preserves approved projects',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_prompt_input')),
+          'First-person grapple parkour arena with heavy slam attacks',
+        );
+        await tester.tap(find.byKey(const ValueKey('draft_spark_btn')));
+        await tester.pumpAndSettle();
+
+        expect(wb.conceptDraft?.cameraChoiceId, equals('fps'));
+        expect(wb.conceptDraft?.feelChoiceId, equals('heavy'));
+        expect(wb.documents, hasLength(1));
+
+        await tester.tap(find.byKey(const ValueKey('reset_spark_btn')));
+        await tester.pumpAndSettle();
+
+        expect(wb.conceptDraft?.hasSpec, isFalse);
+        expect(
+          find.byKey(const ValueKey('spark_prompt_input')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('stage1_blueprint_empty_outline')),
+          findsOneWidget,
+        );
+        expect(wb.documents, isEmpty);
+
+        // Approved projects remain intact in vault when starting a New Idea from Stage 1
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_prompt_input')),
+          'Top-down crustacean mech brawler with claw dash',
+        );
+        await tester.tap(find.byKey(const ValueKey('draft_spark_btn')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(const ValueKey('approve_launch_workbench_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(wb.savedProjects, hasLength(1));
+
+        wb.setStage(WorkbenchStage.projectPitch);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('reset_spark_btn')));
+        await tester.pumpAndSettle();
+
+        expect(wb.savedProjects, hasLength(1));
+        expect(wb.conceptDraft?.hasSpec, isFalse);
+        expect(
+          find.byKey(const ValueKey('spark_prompt_input')),
+          findsOneWidget,
+        );
       },
     );
   });

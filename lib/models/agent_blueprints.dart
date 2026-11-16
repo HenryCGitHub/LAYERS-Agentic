@@ -73,6 +73,21 @@ class TradeOffRule {
   }
 }
 
+/// Clickable Core Feel option inside Stage 1 (`§03` Core Feel & Trade-Offs).
+class CoreFeelOption {
+  final String id;
+  final String label;
+  final TradeOffRule tradeOff;
+  final String brakingDecelCmPerSec;
+
+  const CoreFeelOption({
+    required this.id,
+    required this.label,
+    required this.tradeOff,
+    required this.brakingDecelCmPerSec,
+  });
+}
+
 /// Stage 1 Unreal Root Project Specification (`PROJECT_SPEC.md` -> `ROOT_MCP_CONTEXT`).
 /// Pure high-level foundation: 1 UU = 1 cm spatial contracts, pillars, trade-offs, hard cuts,
 /// and strictly `v0.1` prototype Epics in §05.
@@ -94,6 +109,7 @@ class ProjectConceptBlueprint {
   List<ConceptSectionOption> cameraDecisionOptions;
 
   // §03 Design Pillars & Conflict Trade-Offs
+  String feelChoiceId;
   List<String> pillars;
   List<TradeOffRule> tradeOffs;
 
@@ -128,6 +144,7 @@ class ProjectConceptBlueprint {
     this.assetPolicy =
         'Prototype Greybox Primitives (Engine/BasicShapes) + Debug Materials; UDataAsset for tuning',
     List<ConceptSectionOption>? cameraDecisionOptions,
+    this.feelChoiceId = 'snappy',
     List<String>? pillars,
     List<TradeOffRule>? tradeOffs,
     List<String>? outOfScope,
@@ -173,7 +190,67 @@ class ProjectConceptBlueprint {
           'SpringArm 360 cm · SocketOffset (0, 65, 55) cm · 68 deg FOV · CameraLag 11.0',
       note: 'Close-quarters weight and horizon depth over multi-enemy flank readability.',
     ),
+    ConceptSectionOption(
+      id: 'fps',
+      label: 'First-Person (90 deg FOV)',
+      contractValue:
+          'First-Person Camera · EyeHeight 64 cm · 90 deg FOV · 1:1 yaw/pitch',
+      note: 'Immediate eye-level aim precision with narrow peripheral awareness.',
+    ),
   ];
+
+  static const List<CoreFeelOption> coreFeelOptions = [
+    CoreFeelOption(
+      id: 'snappy',
+      label: 'Snappy Arcade',
+      tradeOff: TradeOffRule(
+        prefer: 'Instant arcade acceleration',
+        avoid: 'Heavy momentum turn inertia',
+      ),
+      brakingDecelCmPerSec: '2400',
+    ),
+    CoreFeelOption(
+      id: 'heavy',
+      label: 'Heavy Deliberate',
+      tradeOff: TradeOffRule(
+        prefer: 'Committed heavy windups',
+        avoid: 'Zero-recovery animation cancel spam',
+      ),
+      brakingDecelCmPerSec: '1400',
+    ),
+    CoreFeelOption(
+      id: 'physics',
+      label: 'Physics Momentum',
+      tradeOff: TradeOffRule(
+        prefer: 'Velocity carry & drift banking',
+        avoid: 'Stop-on-a-dime snapping',
+      ),
+      brakingDecelCmPerSec: '480',
+    ),
+  ];
+
+  static String normalizeFeelChoiceId(String? raw) {
+    final clean = raw?.trim().toLowerCase();
+    if (clean == 'heavy') return 'heavy';
+    if (clean == 'physics') return 'physics';
+    return 'snappy';
+  }
+
+  static CoreFeelOption coreFeelOptionById(String id) {
+    final normalized = normalizeFeelChoiceId(id);
+    for (final opt in coreFeelOptions) {
+      if (opt.id == normalized) return opt;
+    }
+    return coreFeelOptions.first;
+  }
+
+  CoreFeelOption get selectedCoreFeelOption => coreFeelOptionById(feelChoiceId);
+
+  List<ConceptSectionOption> get effectiveCameraDecisionOptions => [
+        ...cameraDecisionOptions,
+        for (final def in defaultCameraDecisionOptions)
+          if (!cameraDecisionOptions.any((o) => o.id == def.id)) def,
+      ];
 
   bool get hasSpec =>
       pitch.trim().isNotEmpty &&
@@ -198,6 +275,7 @@ class ProjectConceptBlueprint {
       cameraDecisionOptions: List<ConceptSectionOption>.from(
         cameraDecisionOptions,
       ),
+      feelChoiceId: feelChoiceId,
       pillars: List<String>.from(pillars),
       tradeOffs: List<TradeOffRule>.from(tradeOffs),
       outOfScope: List<String>.from(outOfScope),
@@ -228,6 +306,7 @@ class ProjectConceptBlueprint {
         'cameraDecisionOptions': [
           for (final o in cameraDecisionOptions) o.toJson(),
         ],
+        'feelChoiceId': feelChoiceId,
         'pillars': pillars,
         'tradeOffs': [for (final t in tradeOffs) t.toJson()],
         'outOfScope': outOfScope,
@@ -359,6 +438,7 @@ class ProjectConceptBlueprint {
       cameraDecisionOptions: cameraOpts.isEmpty
           ? defaultCameraDecisionOptions
           : cameraOpts,
+      feelChoiceId: normalizeFeelChoiceId(json['feelChoiceId']?.toString()),
       pillars: _stringList(json['pillars'] ?? json['designPillars']),
       tradeOffs: trades,
       outOfScope: _stringList(json['outOfScope']),
@@ -484,6 +564,7 @@ class UnrealSparkPresets {
           'Enhanced Input (IMC_Combat + IA_Move, IA_AimCursor, IA_FireBurst, IA_ClawDash)',
       assetPolicy:
           'Greybox Primitives (Engine/BasicShapes) + Solid Tint Material Instances; DA_ShellbreakerTuning PrimaryDataAsset',
+      feelChoiceId: 'snappy',
       cameraDecisionOptions: const [
         ConceptSectionOption(
           id: 'isometric',
@@ -907,6 +988,7 @@ class UnrealSparkPresets {
           'Enhanced Input (IMC_Race + IA_Throttle, IA_Steer, IA_Drift, IA_Boost)',
       assetPolicy:
           'Spline Greybox Canyon Floor + Emissive Gate Frames (Engine/BasicShapes); DA_SkiffPhysics PrimaryDataAsset',
+      feelChoiceId: 'physics',
       pillars: const [
         'Flow Over Friction: Wall scrapes glance forward cleanly instead of dead-stopping momentum',
         'Speed Tells Everything: Camera FOV, engine pitch, and wing-tip trails rise smoothly into boost',
@@ -1114,6 +1196,7 @@ class UnrealSparkPresets {
           'Enhanced Input (IMC_Keeper + IA_Move, IA_AxeSwing, IA_PlantBrazier)',
       assetPolicy:
           'Greybox Keep Courtyard + Warm PointLights (No baked lightmaps required); DA_KeeperTuning PrimaryDataAsset',
+      feelChoiceId: 'heavy',
       pillars: const [
         'Light Defines Territory: Every dynamic light cone visibly alters enemy aggression and player safety',
         'Deliberate Heavy Swings: Axe cleaves carry distinct windup weight rather than rapid spam',

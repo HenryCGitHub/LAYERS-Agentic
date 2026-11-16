@@ -204,6 +204,9 @@ class UnrealSpecGuard {
       inputContract: sanitizeLine(spec.inputContract),
       assetPolicy: sanitizeLine(spec.assetPolicy),
       cameraDecisionOptions: spec.cameraDecisionOptions,
+      feelChoiceId: ProjectConceptBlueprint.normalizeFeelChoiceId(
+        spec.feelChoiceId,
+      ),
       pillars: sanitizeList(spec.pillars),
       tradeOffs: spec.tradeOffs,
       outOfScope: sanitizeList(spec.outOfScope),

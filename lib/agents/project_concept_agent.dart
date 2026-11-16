@@ -48,7 +48,7 @@ class ProjectConceptAgent {
             },
             'cameraChoiceId': {
               'type': 'STRING',
-              'enum': ['isometric', 'topdown', 'tps'],
+              'enum': ['isometric', 'topdown', 'tps', 'fps'],
             },
             'cameraContract': {
               'type': 'STRING',
@@ -81,6 +81,10 @@ class ProjectConceptAgent {
                   'note': {'type': 'STRING'},
                 },
               },
+            },
+            'feelChoiceId': {
+              'type': 'STRING',
+              'enum': ['snappy', 'heavy', 'physics'],
             },
             'pillars': {
               'type': 'ARRAY',
@@ -320,6 +324,18 @@ CRITICAL CONSTRAINTS:
         lowerContract.contains('socketoffset');
     final isFps = lowerId.contains('fps') || lowerId.contains('first');
 
+    if (isTps || isFps) {
+      if (draft.inputContract.contains('IA_AimCursor')) {
+        draft.inputContract =
+            draft.inputContract.replaceAll('IA_AimCursor', 'IA_Look');
+      }
+    } else {
+      if (draft.inputContract.contains('IA_Look')) {
+        draft.inputContract =
+            draft.inputContract.replaceAll('IA_Look', 'IA_AimCursor');
+      }
+    }
+
     void upsertTailTuning(String key, String value, String unit) {
       final idx = e01.tuning.indexWhere(
         (t) => t.key.trim().toLowerCase() == key.toLowerCase(),
@@ -402,6 +418,54 @@ CRITICAL CONSTRAINTS:
     }
   }
 
+  /// Synchronizes `feelChoiceId`, primary §03 feel `TradeOffRule`, and `E01` tail tuning (`BrakingDecel`)
+  /// without disturbing `e01.tuning[0]`.
+  static void syncEpicCoreFeel(
+    ProjectConceptBlueprint draft, {
+    required String feelId,
+  }) {
+    final opt = ProjectConceptBlueprint.coreFeelOptionById(feelId);
+    draft.feelChoiceId = opt.id;
+
+    final feelKeywords = <String>[
+      for (final f in ProjectConceptBlueprint.coreFeelOptions)
+        f.tradeOff.prefer.toLowerCase(),
+      'acceleration',
+      'windup',
+      'velocity carry',
+      'hovering spring',
+      'momentum',
+    ];
+    final updatedTrades = List<TradeOffRule>.from(draft.tradeOffs);
+    final idx = updatedTrades.indexWhere((t) {
+      final p = t.prefer.toLowerCase();
+      return feelKeywords.any((kw) => p.contains(kw));
+    });
+    if (idx >= 0) {
+      updatedTrades.removeAt(idx);
+    }
+    updatedTrades.insert(0, opt.tradeOff);
+    draft.tradeOffs = updatedTrades;
+
+    if (draft.initialEpics.isEmpty) return;
+    final e01 = draft.initialEpics.first;
+    final decelIdx = e01.tuning.indexWhere(
+      (t) => t.key.trim().toLowerCase() == 'brakingdecel',
+    );
+    if (decelIdx >= 0) {
+      e01.tuning[decelIdx].value = opt.brakingDecelCmPerSec;
+      e01.tuning[decelIdx].unit = 'cm/s';
+    } else {
+      e01.tuning.add(
+        EpicTuningParam(
+          key: 'BrakingDecel',
+          value: opt.brakingDecelCmPerSec,
+          unit: 'cm/s',
+        ),
+      );
+    }
+  }
+
   /// Applies a user's Co-Designer instruction directly onto an active Stage 1 [ProjectConceptBlueprint].
   static Future<ProjectConceptBlueprint> applyCoDesignEdit({
     required ProjectConceptBlueprint currentSpec,
@@ -475,7 +539,21 @@ USER CO-DESIGN INSTRUCTION:
     final next = current.deepCopy();
     final lower = instruction.toLowerCase();
 
-    if (lower.contains('third person') ||
+    if (lower.contains('first-person') ||
+        lower.contains('first person') ||
+        lower.contains('fps')) {
+      next.cameraChoiceId = 'fps';
+      next.cameraContract =
+          'First-Person Camera · EyeHeight 64 cm · 90 deg FOV · 1:1 yaw/pitch';
+      syncEpicCameraFraming(
+        next,
+        optionId: next.cameraChoiceId,
+        contractValue: next.cameraContract,
+      );
+      next.lastCoDesignNote =
+          'Switched §02 Camera contract & E01 look controls to First-Person.';
+    } else if (lower.contains('third person') ||
+        lower.contains('third-person') ||
         lower.contains('tps') ||
         lower.contains('over-shoulder') ||
         lower.contains('over shoulder')) {
@@ -511,6 +589,22 @@ USER CO-DESIGN INSTRUCTION:
       );
       next.lastCoDesignNote =
           'Switched §02 Camera contract & E01 cursor aim to Isometric.';
+    } else if (lower.contains('heavy') ||
+        lower.contains('deliberate') ||
+        lower.contains('weighty')) {
+      syncEpicCoreFeel(next, feelId: 'heavy');
+      next.lastCoDesignNote =
+          'Switched §03 Core Feel & E01 locomotion to Heavy Deliberate.';
+    } else if (lower.contains('physics') ||
+        lower.contains('momentum') ||
+        lower.contains('drift')) {
+      syncEpicCoreFeel(next, feelId: 'physics');
+      next.lastCoDesignNote =
+          'Switched §03 Core Feel & E01 locomotion to Physics Momentum.';
+    } else if (lower.contains('snappy') || lower.contains('arcade')) {
+      syncEpicCoreFeel(next, feelId: 'snappy');
+      next.lastCoDesignNote =
+          'Switched §03 Core Feel & E01 locomotion to Snappy Arcade.';
     } else if (lower.startsWith('no ') ||
         lower.contains('cut ') ||
         lower.contains('remove ')) {
@@ -532,24 +626,41 @@ USER CO-DESIGN INSTRUCTION:
   static ProjectConceptBlueprint _buildSynthesizedFallback(String sparkPrompt) {
     final cleaned = sparkPrompt.trim();
     final lower = cleaned.toLowerCase();
-    final isTps = lower.contains('third-person') ||
-        lower.contains('third person') ||
-        lower.contains('over-shoulder') ||
-        lower.contains('over shoulder') ||
-        lower.contains('glider') ||
-        lower.contains('wingsuit') ||
-        lower.contains('grapple') ||
-        lower.contains('grappling') ||
-        lower.contains('tps');
-    final isTopDown = !isTps &&
+    final isFps = lower.contains('first-person') ||
+        lower.contains('first person') ||
+        lower.contains('fps');
+    final isTps = !isFps &&
+        (lower.contains('third-person') ||
+            lower.contains('third person') ||
+            lower.contains('over-shoulder') ||
+            lower.contains('over shoulder') ||
+            lower.contains('glider') ||
+            lower.contains('wingsuit') ||
+            lower.contains('grapple') ||
+            lower.contains('grappling') ||
+            lower.contains('tps'));
+    final isTopDown = !isFps &&
+        !isTps &&
         (lower.contains('top-down') || lower.contains('top down'));
     final cameraChoice =
-        isTps ? 'tps' : (isTopDown ? 'topdown' : 'isometric');
-    final cameraContract = isTps
-        ? 'SpringArm 380 cm · SocketOffset (0, 65, 55) cm · 68 deg FOV · CameraLag 10.0'
-        : isTopDown
-            ? 'SpringArm 1650 cm @ -88 deg pitch, 50 deg FOV, Fixed Arena Framing'
-            : 'SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0';
+        isFps ? 'fps' : (isTps ? 'tps' : (isTopDown ? 'topdown' : 'isometric'));
+    final cameraContract = isFps
+        ? 'First-Person Camera · EyeHeight 64 cm · 90 deg FOV · 1:1 yaw/pitch'
+        : isTps
+            ? 'SpringArm 380 cm · SocketOffset (0, 65, 55) cm · 68 deg FOV · CameraLag 10.0'
+            : isTopDown
+                ? 'SpringArm 1650 cm @ -88 deg pitch, 50 deg FOV, Fixed Arena Framing'
+                : 'SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0';
+    final feelId = (lower.contains('heavy') ||
+            lower.contains('deliberate') ||
+            lower.contains('souls'))
+        ? 'heavy'
+        : (lower.contains('drift') ||
+                lower.contains('hover') ||
+                lower.contains('glider') ||
+                lower.contains('physics'))
+            ? 'physics'
+            : 'snappy';
     final hasDeployVerb = lower.contains('deploy') ||
         lower.contains('pad') ||
         lower.contains('turret') ||
@@ -781,9 +892,10 @@ USER CO-DESIGN INSTRUCTION:
       coreLoop: loop,
       cameraChoiceId: cameraChoice,
       cameraContract: cameraContract,
-      inputContract: isTps
+      inputContract: (isTps || isFps)
           ? 'Enhanced Input (IMC_Core + IA_Move, IA_Look, IA_Dodge, IA_Primary)'
           : 'Enhanced Input (IMC_Core + IA_Move, IA_AimCursor, IA_Dodge, IA_Primary)',
+      feelChoiceId: feelId,
       pillars: const [
         'Instant Frame-1 Control: Player movement and actions respond immediately without sluggish inertia',
         'Clear Spatial Silhouettes: Distinct bright/dark debug primitives communicate danger before impact',
@@ -812,6 +924,7 @@ USER CO-DESIGN INSTRUCTION:
       optionId: cameraChoice,
       contractValue: cameraContract,
     );
+    syncEpicCoreFeel(bp, feelId: feelId);
     return bp;
   }
 }
