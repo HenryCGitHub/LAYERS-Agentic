@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -2234,6 +2235,146 @@ void main() {
         } finally {
           GeminiAgentClient.testMockResponder = prevMock;
         }
+      },
+    );
+
+    test(
+      '31. Cross-runtime byte-for-byte parity between Dart WorkbenchProvider.activeEpicMcpPayload and Cloud Functions computeActiveUnrealEpicPayload across UE5, UE6 Verse, v0.2 Deltas & [FIX] Pass',
+      () async {
+        Future<String> renderViaNode(
+          WorkbenchProvider wb, {
+          Map<String, dynamic>? uprojectContext,
+        }) async {
+          const jsScript = r'''
+            const { _testHelpers: h } = require('./functions/index.js');
+            const docs = JSON.parse(process.env.DOCS_JSON || '[]');
+            const docsById = new Map(docs.map((d) => [d.id, d]));
+            const rawCtx = process.env.CTX_JSON ? JSON.parse(process.env.CTX_JSON) : null;
+            const out = h.computeActiveUnrealEpicPayload({
+              docsById,
+              projectId: process.env.PID,
+              uprojectContext: h.sanitizeUprojectContextJs(rawCtx),
+            });
+            if (!out.ok) throw new Error(out.error || 'computeActiveUnrealEpicPayload failed');
+            process.stdout.write(out.mcpPayloadMarkdown);
+          ''';
+          final docsJson = jsonEncode([
+            for (final doc in wb.documents.values) doc.toJson(),
+          ]);
+          final proc = await Process.run(
+            'node',
+            ['-e', jsScript],
+            environment: {
+              'GCLOUD_PROJECT': 'layers-b8a16',
+              'DOCS_JSON': docsJson,
+              'PID': wb.activeProject!.id,
+              if (uprojectContext != null)
+                'CTX_JSON': jsonEncode(uprojectContext),
+            },
+          );
+          expect(proc.exitCode, equals(0), reason: proc.stderr.toString());
+          return proc.stdout as String;
+        }
+
+        void setLiveContext(
+          WorkbenchProvider wb,
+          Map<String, dynamic>? ctx,
+        ) {
+          final proj = wb.activeProject!;
+          final nextSections = Map<String, String>.from(proj.sections);
+          if (ctx == null) {
+            nextSections.remove('unreal_live_context_json');
+          } else {
+            nextSections['unreal_live_context_json'] = jsonEncode(ctx);
+          }
+          wb.documents[proj.id] = proj.copyWith(sections: nextSections);
+        }
+
+        // Scenario 1: UE 5.9 MCP + Release Gate + rich .uproject snapshot + [BUILT]/[ACTIVE]/[QUEUED]
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        wb.passActiveEpic(wb.selectedEpicId!);
+
+        final richCtx = <String, dynamic>{
+          'project_name': 'ShellbreakerUE5',
+          'current_level': 'L_Shellbreaker_Proto',
+          'game_mode': 'GM_Shellbreaker',
+          'default_pawn': 'BP_PlayerMech',
+          'input_assets': ['/Game/Input/IMC_Combat', '/Game/Input/IA_Move'],
+          'blueprint_assets': ['/Game/Blueprints/BP_PlayerMech'],
+          'data_assets': ['/Game/Data/DA_ShellbreakerTuning'],
+          'widget_assets': ['/Game/UI/WBP_MechHUD'],
+          'level_assets': ['/Game/Maps/L_Shellbreaker_Proto'],
+          'verse_files': <String>[],
+          'recent_errors': ['LogBlueprint: Warning: Accessed None', '   '],
+        };
+        setLiveContext(wb, richCtx);
+
+        final dartUe5 = wb.activeEpicMcpPayload(wb.selectedEpicSpec!);
+        final nodeUe5 = await renderViaNode(wb, uprojectContext: richCtx);
+        expect(nodeUe5, equals(dartUe5));
+        expect(dartUe5, contains('- Release Gate: '));
+        expect(dartUe5, contains('## Release Epic Roadmap (v0.1 · 1/3 Passed)'));
+
+        // Scenario 2: UE6 Verse ([int]/[logic]/[float]) + blank _empty_context() suppresses snapshot header
+        wb.setTargetEngine(UnrealTargetEngine.ue6Verse);
+        wb.addEpicTuningParam(
+          wb.selectedEpicId!,
+          key: 'WaveCount',
+          value: '3',
+          unit: 'count',
+        );
+        wb.addEpicTuningParam(
+          wb.selectedEpicId!,
+          key: 'bAllowAirDash',
+          value: 'true',
+          unit: 'bool',
+        );
+        final emptyCtx = <String, dynamic>{
+          'project_name': '',
+          'current_level': '',
+          'game_mode': '',
+          'default_pawn': '',
+          'input_assets': <String>[],
+          'blueprint_assets': <String>[],
+          'data_assets': <String>[],
+          'widget_assets': <String>[],
+          'level_assets': <String>[],
+          'verse_files': <String>[],
+          'recent_errors': <String>['   '],
+        };
+        setLiveContext(wb, emptyCtx);
+
+        final dartUe6 = wb.activeEpicMcpPayload(wb.selectedEpicSpec!);
+        expect(dartUe6, isNot(contains('## Live Unreal Project Snapshot')));
+        final nodeUe6 = await renderViaNode(wb, uprojectContext: emptyCtx);
+        expect(nodeUe6, equals(dartUe6));
+        expect(nodeUe6, contains('- WaveCount: 3 count [int]'));
+        expect(nodeUe6, contains('- bAllowAirDash: true bool [logic]'));
+
+        // Scenario 3: v0.2 Upgrading Epic with Locked Baseline & +Delta Upgrades
+        setLiveContext(wb, null);
+        await wb.openProgressiveReleaseCopilot();
+        wb.applyProgressivePreset(wb.progressiveDraft!.presets.first.id);
+        wb.commitProgressiveReleaseDraft();
+        final upgradingEpic = wb.activeReleaseEpics.firstWhere(
+          (e) => e.upgradeDeltas.isNotEmpty,
+        );
+        wb.selectEpic(upgradingEpic.id);
+
+        final dartV02 = wb.activeEpicMcpPayload(wb.selectedEpicSpec!);
+        final nodeV02 = await renderViaNode(wb);
+        expect(nodeV02, equals(dartV02));
+        expect(dartV02, contains('- Locked Baseline:'));
+
+        // Scenario 4: FOCUSED PIE REVISION PASS with multiple open [FIX] IDs
+        wb.flagEpicFix(wb.selectedEpicId!, 'Projectile clips ramp corner');
+        wb.flagEpicFix(wb.selectedEpicId!, 'Muzzle flash lags 1 frame');
+        final dartFix = wb.activeEpicMcpPayload(wb.selectedEpicSpec!);
+        final nodeFix = await renderViaNode(wb);
+        expect(nodeFix, equals(dartFix));
+        expect(dartFix, contains('FOCUSED PIE REVISION PASS (2 OPEN [FIX])'));
       },
     );
   });

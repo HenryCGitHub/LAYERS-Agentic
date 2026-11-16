@@ -544,16 +544,15 @@ function renderServerUnrealMcpPayloadJs({
   }
 
   if (uprojectContext && typeof uprojectContext === "object" && Object.keys(uprojectContext).length > 0) {
-    lines.push("");
-    lines.push("## Live Unreal Project Snapshot (.uproject via LayersBridge)");
+    const snapshotLines = [];
     const projName = String(uprojectContext.project_name || "").trim();
     const level = String(uprojectContext.current_level || "").trim();
     const gameMode = String(uprojectContext.game_mode || "").trim();
     const pawn = String(uprojectContext.default_pawn || "").trim();
-    if (projName) lines.push(`- Project: ${projName}`);
-    if (level) lines.push(`- Open Level: ${level}`);
-    if (gameMode) lines.push(`- GameMode: ${gameMode}`);
-    if (pawn) lines.push(`- DefaultPawnClass: ${pawn}`);
+    if (projName) snapshotLines.push(`- Project: ${projName}`);
+    if (level) snapshotLines.push(`- Open Level: ${level}`);
+    if (gameMode) snapshotLines.push(`- GameMode: ${gameMode}`);
+    if (pawn) snapshotLines.push(`- DefaultPawnClass: ${pawn}`);
     const pushSnapshotList = (label, rawList, cap) => {
       if (!Array.isArray(rawList) || rawList.length === 0) return;
       const clean = rawList
@@ -561,7 +560,7 @@ function renderServerUnrealMcpPayloadJs({
         .filter(Boolean)
         .slice(0, cap);
       if (clean.length === 0) return;
-      lines.push(`- ${label}: ${clean.join(", ")}`);
+      snapshotLines.push(`- ${label}: ${clean.join(", ")}`);
     };
     pushSnapshotList("Existing Enhanced Input Assets", uprojectContext.input_assets, 12);
     pushSnapshotList("Existing Blueprints", uprojectContext.blueprint_assets, 12);
@@ -570,10 +569,21 @@ function renderServerUnrealMcpPayloadJs({
     pushSnapshotList("Existing Levels", uprojectContext.level_assets, 6);
     pushSnapshotList("Existing Verse Files", uprojectContext.verse_files, 8);
     if (Array.isArray(uprojectContext.recent_errors) && uprojectContext.recent_errors.length > 0) {
-      lines.push("- Recent Editor/PIE Log Warnings:");
-      for (const err of uprojectContext.recent_errors.slice(0, 4)) {
-        lines.push(`  - ${err}`);
+      const cleanErrors = uprojectContext.recent_errors
+        .map((err) => String(err ?? "").trim())
+        .filter(Boolean)
+        .slice(0, 4);
+      if (cleanErrors.length > 0) {
+        snapshotLines.push("- Recent Editor/PIE Log Warnings:");
+        for (const err of cleanErrors) {
+          snapshotLines.push(`  - ${err}`);
+        }
       }
+    }
+    if (snapshotLines.length > 0) {
+      lines.push("");
+      lines.push("## Live Unreal Project Snapshot (.uproject via LayersBridge)");
+      lines.push(...snapshotLines);
     }
   }
 

@@ -6,8 +6,8 @@ import 'unreal_spec_guard.dart';
 /// Matches `buildRootMcpMarkdown` and `buildEpicMcpMarkdown` in the approved v3 spec UI
 /// and feeds `LayersBridge` (`layers_get_active_epic_spec`) via Cloud Functions.
 class UnrealMcpPayloadBuilder {
-  static void _writeContextList(
-    StringBuffer b,
+  static void _addContextListLine(
+    List<String> out,
     String label,
     dynamic raw,
     int cap,
@@ -19,7 +19,7 @@ class UnrealMcpPayloadBuilder {
         .take(cap)
         .toList();
     if (clean.isEmpty) return;
-    b.writeln('- $label: ${clean.join(', ')}');
+    out.add('- $label: ${clean.join(', ')}');
   }
 
   /// Builds `ROOT_MCP_CONTEXT` (Prepended to every Epic payload sent to Unreal MCP).
@@ -65,57 +65,70 @@ class UnrealMcpPayloadBuilder {
     }
 
     if (liveUprojectContext != null && liveUprojectContext.isNotEmpty) {
-      b.writeln();
-      b.writeln('## Live Unreal Project Snapshot (.uproject via LayersBridge)');
+      final snapshotLines = <String>[];
       final projName = (liveUprojectContext['project_name'] ?? '').toString().trim();
       final level = (liveUprojectContext['current_level'] ?? '').toString().trim();
       final gameMode = (liveUprojectContext['game_mode'] ?? '').toString().trim();
       final pawn = (liveUprojectContext['default_pawn'] ?? '').toString().trim();
-      if (projName.isNotEmpty) b.writeln('- Project: $projName');
-      if (level.isNotEmpty) b.writeln('- Open Level: $level');
-      if (gameMode.isNotEmpty) b.writeln('- GameMode: $gameMode');
-      if (pawn.isNotEmpty) b.writeln('- DefaultPawnClass: $pawn');
-      _writeContextList(
-        b,
+      if (projName.isNotEmpty) snapshotLines.add('- Project: $projName');
+      if (level.isNotEmpty) snapshotLines.add('- Open Level: $level');
+      if (gameMode.isNotEmpty) snapshotLines.add('- GameMode: $gameMode');
+      if (pawn.isNotEmpty) snapshotLines.add('- DefaultPawnClass: $pawn');
+      _addContextListLine(
+        snapshotLines,
         'Existing Enhanced Input Assets',
         liveUprojectContext['input_assets'],
         12,
       );
-      _writeContextList(
-        b,
+      _addContextListLine(
+        snapshotLines,
         'Existing Blueprints',
         liveUprojectContext['blueprint_assets'],
         12,
       );
-      _writeContextList(
-        b,
+      _addContextListLine(
+        snapshotLines,
         'Existing DataAssets & Tables',
         liveUprojectContext['data_assets'],
         8,
       );
-      _writeContextList(
-        b,
+      _addContextListLine(
+        snapshotLines,
         'Existing UMG Widgets',
         liveUprojectContext['widget_assets'],
         8,
       );
-      _writeContextList(
-        b,
+      _addContextListLine(
+        snapshotLines,
         'Existing Levels',
         liveUprojectContext['level_assets'],
         6,
       );
-      _writeContextList(
-        b,
+      _addContextListLine(
+        snapshotLines,
         'Existing Verse Files',
         liveUprojectContext['verse_files'],
         8,
       );
       final recentErrors = liveUprojectContext['recent_errors'];
       if (recentErrors is List && recentErrors.isNotEmpty) {
-        b.writeln('- Recent Editor/PIE Log Warnings:');
-        for (final err in recentErrors.take(4)) {
-          b.writeln('  - $err');
+        final cleanErrors = recentErrors
+            .map((e) => e.toString().trim())
+            .where((s) => s.isNotEmpty)
+            .take(4)
+            .toList();
+        if (cleanErrors.isNotEmpty) {
+          snapshotLines.add('- Recent Editor/PIE Log Warnings:');
+          for (final err in cleanErrors) {
+            snapshotLines.add('  - $err');
+          }
+        }
+      }
+      if (snapshotLines.isNotEmpty) {
+        b.writeln();
+        b.writeln('## Live Unreal Project Snapshot (.uproject via LayersBridge)');
+        for (final line in snapshotLines) {
+          b.writeln(line);
         }
       }
     }
