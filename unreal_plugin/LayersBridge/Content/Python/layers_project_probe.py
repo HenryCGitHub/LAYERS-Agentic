@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from pathlib import Path
+import threading
 from typing import Any
 
 _RECENT_PIE_ERRORS: list[str] = []
+_LAST_MAIN_THREAD_CONTEXT: dict[str, Any] | None = None
 
 
 def record_pie_error(message: str) -> None:
@@ -47,6 +49,7 @@ def _read_prop(obj: Any, attr_name: str, fallback: str = "") -> str:
 
 def probe_uproject_context() -> dict[str, Any]:
   """Inspects running Unreal Editor state without modifying project assets."""
+  global _LAST_MAIN_THREAD_CONTEXT
   context: dict[str, Any] = {
       "project_name": "",
       "current_level": "",
@@ -55,6 +58,15 @@ def probe_uproject_context() -> dict[str, Any]:
       "input_assets": [],
       "recent_errors": list(_RECENT_PIE_ERRORS[-6:]),
   }
+
+  if threading.current_thread() is not threading.main_thread():
+    if _LAST_MAIN_THREAD_CONTEXT is not None:
+      return {
+          **_LAST_MAIN_THREAD_CONTEXT,
+          "input_assets": list(_LAST_MAIN_THREAD_CONTEXT.get("input_assets", [])),
+          "recent_errors": list(_RECENT_PIE_ERRORS[-6:]),
+      }
+    return context
 
   try:
     import unreal  # type: ignore
@@ -140,4 +152,9 @@ def probe_uproject_context() -> dict[str, Any]:
             break
       context["input_assets"] = found_inputs
 
+  _LAST_MAIN_THREAD_CONTEXT = {
+      **context,
+      "input_assets": list(context["input_assets"]),
+      "recent_errors": list(context["recent_errors"]),
+  }
   return context

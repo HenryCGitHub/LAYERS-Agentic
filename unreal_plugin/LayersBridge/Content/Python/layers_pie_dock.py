@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 import json
 import shutil
 import subprocess
@@ -12,6 +13,61 @@ import webbrowser
 
 from layers_project_probe import probe_uproject_context
 from layers_sync_client import DEFAULT_SYNC_BASE_URL, LayersSyncClient
+
+_MAIN_THREAD_QUEUE: deque[Callable[[], None]] = deque()
+_QUEUE_LOCK = threading.Lock()
+_SLATE_TICK_HANDLE: Any = None
+_SLATE_TICK_UNREAL_ID: int | None = None
+
+
+def drain_main_thread_tasks(max_tasks: int = 64) -> int:
+  """Drains queued UI/log callables safely on Unreal's Slate main thread."""
+  if threading.current_thread() is not threading.main_thread():
+    return 0
+  ran = 0
+  while ran < max_tasks:
+    with _QUEUE_LOCK:
+      if not _MAIN_THREAD_QUEUE:
+        break
+      fn = _MAIN_THREAD_QUEUE.popleft()
+    ran += 1
+    try:
+      fn()
+    except Exception:
+      pass
+  return ran
+
+
+def ensure_slate_tick_registered() -> bool:
+  """Registers a single Slate post-tick callback to flush queued game-thread work."""
+  global _SLATE_TICK_HANDLE, _SLATE_TICK_UNREAL_ID
+  if threading.current_thread() is not threading.main_thread():
+    return False
+  try:
+    import unreal  # type: ignore
+
+    unreal_id = id(unreal)
+    if _SLATE_TICK_HANDLE is not None and _SLATE_TICK_UNREAL_ID == unreal_id:
+      return True
+    reg_fn = getattr(unreal, "register_slate_post_tick_callback", None)
+    if callable(reg_fn):
+      _SLATE_TICK_HANDLE = reg_fn(lambda _dt: drain_main_thread_tasks())
+      _SLATE_TICK_UNREAL_ID = unreal_id
+      return _SLATE_TICK_HANDLE is not None
+  except Exception:
+    pass
+  return False
+
+
+def run_on_game_thread(fn: Callable[[], Any]) -> bool:
+  """Executes `fn` immediately on the main thread, or queues it for the next Slate tick."""
+  if threading.current_thread() is threading.main_thread():
+    ensure_slate_tick_registered()
+    fn()
+    return True
+  with _QUEUE_LOCK:
+    _MAIN_THREAD_QUEUE.append(fn)
+  return False
 
 
 def _copy_to_os_clipboard(text: str) -> bool:
@@ -47,14 +103,17 @@ def _copy_to_os_clipboard(text: str) -> bool:
 
 
 def _unreal_log(message: str) -> None:
-  try:
-    import unreal  # type: ignore
+  def _emit() -> None:
+    try:
+      import unreal  # type: ignore
 
-    log_fn = getattr(unreal, "log", None)
-    if callable(log_fn):
-      log_fn(message)
-  except Exception:
-    pass
+      log_fn = getattr(unreal, "log", None)
+      if callable(log_fn):
+        log_fn(message)
+    except Exception:
+      pass
+
+  run_on_game_thread(_emit)
 
 
 class LayersPieGateDock:
@@ -68,6 +127,8 @@ class LayersPieGateDock:
     self.is_building: bool = False
     self.build_logs: list[str] = []
     self.cli_runner: Callable[[list[str], str], tuple[int, str]] | None = None
+    self._active_build_thread: threading.Thread | None = None
+    ensure_slate_tick_registered()
 
   @property
   def last_payload(self) -> dict[str, Any] | None:
@@ -198,19 +259,22 @@ class LayersPieGateDock:
     )
 
   def _start_unreal_mcp_server_if_available(self) -> None:
-    try:
-      import unreal  # type: ignore
+    def _start() -> None:
+      try:
+        import unreal  # type: ignore
 
-      sys_lib = getattr(unreal, "SystemLibrary", None)
-      exec_fn = getattr(sys_lib, "execute_console_command", None) if sys_lib else None
-      if callable(exec_fn):
-        world = None
-        ed_lib = getattr(unreal, "EditorLevelLibrary", None)
-        if ed_lib and hasattr(ed_lib, "get_editor_world"):
-          world = ed_lib.get_editor_world()
-        exec_fn(world, "ModelContextProtocol.StartServer")
-    except Exception:
-      pass
+        sys_lib = getattr(unreal, "SystemLibrary", None)
+        exec_fn = getattr(sys_lib, "execute_console_command", None) if sys_lib else None
+        if callable(exec_fn):
+          world = None
+          ed_lib = getattr(unreal, "EditorLevelLibrary", None)
+          if ed_lib and hasattr(ed_lib, "get_editor_world"):
+            world = ed_lib.get_editor_world()
+          exec_fn(world, "ModelContextProtocol.StartServer")
+      except Exception:
+        pass
+
+    run_on_game_thread(_start)
 
   def _resolve_cli_command(
       self,
@@ -245,6 +309,13 @@ class LayersPieGateDock:
       background: bool = True,
   ) -> dict[str, Any]:
     """Syncs active Epic + .uproject context and dispatches Unreal MCP build/fix."""
+    if self.is_building:
+      return {
+          "ok": True,
+          "mode": "building",
+          "message": "Build already in progress.",
+          "logs": list(self.build_logs[-10:]),
+      }
     self._start_unreal_mcp_server_if_available()
     res = self.sync_now()
     if not res.get("ok"):
@@ -305,14 +376,18 @@ class LayersPieGateDock:
         self._record_build_log(self.last_status_message)
       finally:
         self.is_building = False
-        self.sync_now()
+        ctx = probe_uproject_context()
+        self.sync_client.fetch_active_epic(uproject_context=ctx)
         refresh_toolbar_widgets(self)
 
     if background:
       self.is_building = True
       refresh_toolbar_widgets(self)
-      threading.Thread(target=_run_worker, daemon=True).start()
+      worker = threading.Thread(target=_run_worker, daemon=True)
+      self._active_build_thread = worker
+      worker.start()
     else:
+      self._active_build_thread = None
       _run_worker()
 
     return {
@@ -543,6 +618,10 @@ def _add_entry_safe(menu: Any, section_name: str, entry: Any) -> None:
 
 def refresh_toolbar_widgets(dock: LayersPieGateDock) -> bool:
   """Refreshes the `[ ⚡ Build E01 | E01 · 1/3 ✓ ▾ ]` Split Play-Toolbar pair."""
+  if threading.current_thread() is not threading.main_thread():
+    run_on_game_thread(lambda: refresh_toolbar_widgets(dock))
+    return True
+  ensure_slate_tick_registered()
   try:
     import unreal  # type: ignore
 

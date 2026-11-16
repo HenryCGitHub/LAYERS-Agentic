@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import ssl
+import threading
 from typing import Any, Callable
 import urllib.error
 import urllib.request
@@ -53,18 +54,31 @@ def _build_ssl_context() -> ssl.SSLContext:
   return ctx
 
 
+_CACHED_SAVED_DIR: Path | None = None
+_CACHED_UNREAL_ID: int | None = None
+
+
 def _try_unreal_saved_dir() -> Path | None:
+  global _CACHED_SAVED_DIR, _CACHED_UNREAL_ID
+  if threading.current_thread() is not threading.main_thread():
+    return _CACHED_SAVED_DIR
   try:
     import unreal  # type: ignore
 
+    unreal_id = id(unreal)
     paths_cls = getattr(unreal, "Paths", None)
     if paths_cls and hasattr(paths_cls, "project_saved_dir"):
       raw = str(paths_cls.project_saved_dir() or "").strip()
       if raw:
-        return Path(raw)
+        _CACHED_SAVED_DIR = Path(raw)
+        _CACHED_UNREAL_ID = unreal_id
+        return _CACHED_SAVED_DIR
+    if _CACHED_UNREAL_ID != unreal_id:
+      _CACHED_SAVED_DIR = None
+      _CACHED_UNREAL_ID = unreal_id
   except Exception:
     pass
-  return None
+  return _CACHED_SAVED_DIR if threading.current_thread() is threading.main_thread() else None
 
 
 def resolve_config_path(config_path: str | Path | None = None) -> Path:

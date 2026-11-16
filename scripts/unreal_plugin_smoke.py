@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import threading
 import types
 import urllib.request
 
@@ -278,7 +279,14 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
       "console_commands": [],
       "pie_started": False,
       "logs": [],
+      "thread_violations": [],
+      "slate_tick_callbacks": [],
   }
+
+  def _assert_game_thread(api_name: str) -> None:
+    if threading.current_thread() is not threading.main_thread():
+      state["thread_violations"].append(api_name)  # type: ignore[union-attr]
+      raise RuntimeError(f"Unreal API {api_name} called off game thread")
 
   class _Toolset:
     pass
@@ -290,6 +298,7 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
 
     @classmethod
     def register_toolset(cls, *args):
+      _assert_game_thread("ToolsetRegistry.register_toolset")
       state["registered_toolsets"].append(args[-1])  # type: ignore[union-attr]
 
   class _World:
@@ -299,13 +308,16 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
   class _EditorLevelLibrary:
     @staticmethod
     def get_editor_world():
+      _assert_game_thread("EditorLevelLibrary.get_editor_world")
       return _World()
 
   class _LevelSub:
     def get_current_level(self):
+      _assert_game_thread("LevelEditorSubsystem.get_current_level")
       return _World()
 
     def editor_request_begin_play(self):
+      _assert_game_thread("LevelEditorSubsystem.editor_request_begin_play")
       state["pie_started"] = True
 
   class _GmSettings:
@@ -315,6 +327,7 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
   class _GameMapsSettings:
     @staticmethod
     def get_game_maps_settings():
+      _assert_game_thread("GameMapsSettings.get_game_maps_settings")
       return _GmSettings()
 
   class _AssetData:
@@ -326,6 +339,7 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
   class _AssetRegistry:
     @staticmethod
     def get_assets_by_path(path, recursive=True):
+      _assert_game_thread("AssetRegistry.get_assets_by_path")
       return [
           _AssetData("/Game/Input/IMC_Core", "IMC_Core", "InputMappingContext"),
           _AssetData("/Game/Input/IA_Move", "IA_Move", "InputAction"),
@@ -379,37 +393,53 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
 
     @classmethod
     def get(cls):
+      _assert_game_thread("ToolMenus.get")
       return cls
 
     @classmethod
     def find_menu(cls, name: str):
+      _assert_game_thread("ToolMenus.find_menu")
       return cls._ensure_menu(name)
 
     @classmethod
     def extend_menu(cls, name: str):
+      _assert_game_thread("ToolMenus.extend_menu")
       return cls._ensure_menu(name)
 
     @classmethod
     def register_menu(cls, name: str, *args, **kwargs):
+      _assert_game_thread("ToolMenus.register_menu")
       return cls._ensure_menu(name)
 
     @classmethod
     def refresh_all_widgets(cls):
-      pass
+      _assert_game_thread("ToolMenus.refresh_all_widgets")
 
   class _SystemLibrary:
     @staticmethod
     def get_game_name():
+      _assert_game_thread("SystemLibrary.get_game_name")
       return "ShellbreakerUE5"
 
     @staticmethod
     def execute_console_command(world, command, specific_player=None):
+      _assert_game_thread("SystemLibrary.execute_console_command")
       state["console_commands"].append(str(command))  # type: ignore[union-attr]
 
   class _Paths:
     @staticmethod
     def project_saved_dir():
+      _assert_game_thread("Paths.project_saved_dir")
       return str(saved_dir)
+
+  def _log_fn(msg: object) -> None:
+    _assert_game_thread("unreal.log")
+    state["logs"].append(str(msg))  # type: ignore[union-attr]
+
+  def _register_slate_post_tick(cb: object) -> object:
+    _assert_game_thread("unreal.register_slate_post_tick_callback")
+    state["slate_tick_callbacks"].append(cb)  # type: ignore[union-attr]
+    return object()
 
   unreal_mod = types.ModuleType("unreal")
   unreal_mod.Toolset = _Toolset  # type: ignore[attr-defined]
@@ -429,7 +459,8 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
   unreal_mod.ToolMenuStringCommandType = types.SimpleNamespace(PYTHON="PYTHON")  # type: ignore[attr-defined]
   unreal_mod.SystemLibrary = _SystemLibrary  # type: ignore[attr-defined]
   unreal_mod.Paths = _Paths  # type: ignore[attr-defined]
-  unreal_mod.log = lambda msg: state["logs"].append(str(msg))  # type: ignore[attr-defined]
+  unreal_mod.log = _log_fn  # type: ignore[attr-defined]
+  unreal_mod.register_slate_post_tick_callback = _register_slate_post_tick  # type: ignore[attr-defined]
 
   sys.modules["unreal"] = unreal_mod
   return state
@@ -523,6 +554,62 @@ def main() -> int:
         assert handoff_res.get("mode") == "clipboard_handoff", handoff_res
       finally:
         dock.cli_runner = None
+
+      # 1a-bg. Background CLI build & off-thread MCP call must marshal all unreal.* calls to Slate ticks
+      worker_started = threading.Event()
+      allow_finish = threading.Event()
+
+      def _bg_cli_runner(cmd: list[str], prompt: str) -> tuple[int, str]:
+        captured_builds.append((cmd, prompt))
+        worker_started.set()
+        assert allow_finish.wait(timeout=5), "Timed out waiting for allow_finish"
+        return 0, "Synthesized E01 bg"
+
+      dock.cli_runner = _bg_cli_runner
+      try:
+        bg_res = init_unreal.build_active_epic(background=True)
+        assert bg_res.get("ok") is True and bg_res.get("mode") == "cli_agent", bg_res
+        assert worker_started.wait(timeout=3), "Background CLI worker did not start"
+        assert play_tb.entries["LayersPrimaryAction"].label == "⏳ Building E01…", (
+            play_tb.entries["LayersPrimaryAction"].label
+        )
+        builds_before_dup = len(captured_builds)
+        dup_res = init_unreal.build_active_epic(background=True)
+        assert dup_res.get("mode") == "building", dup_res
+        assert len(captured_builds) == builds_before_dup
+        allow_finish.set()
+        assert dock._active_build_thread is not None
+        dock._active_build_thread.join(timeout=5)
+        assert not dock._active_build_thread.is_alive(), "Build thread did not join"
+      finally:
+        allow_finish.set()
+        dock.cli_runner = None
+
+      assert unreal_state["thread_violations"] == [], unreal_state["thread_violations"]
+      assert unreal_state["slate_tick_callbacks"], "Expected Slate post-tick callback registration"
+      for cb in list(unreal_state["slate_tick_callbacks"]):  # type: ignore[arg-type]
+        cb(0.016)
+      assert play_tb.entries["LayersPrimaryAction"].label == "⚡ Build E01", (
+          play_tb.entries["LayersPrimaryAction"].label
+      )
+      assert any("Synthesized E01 bg" in msg for msg in unreal_state["logs"]), unreal_state["logs"]
+      bg_md = str((dock.last_payload or {}).get("mcpPayloadMarkdown") or "")
+      assert "ShellbreakerUE5" in bg_md and "/Game/Input/IMC_Core" in bg_md, bg_md
+
+      # Off-thread MCP toolset call must also preserve cached .uproject snapshot & avoid thread violations
+      mcp_holder: list[str] = []
+
+      def _off_thread_mcp() -> None:
+        mcp_holder.append(toolset.layers_get_active_epic_spec())
+
+      mcp_thread = threading.Thread(target=_off_thread_mcp)
+      mcp_thread.start()
+      mcp_thread.join(timeout=5)
+      assert not mcp_thread.is_alive()
+      for cb in list(unreal_state["slate_tick_callbacks"]):  # type: ignore[arg-type]
+        cb(0.016)
+      assert unreal_state["thread_violations"] == [], unreal_state["thread_violations"]
+      assert mcp_holder and "ShellbreakerUE5" in mcp_holder[0] and "/Game/Input/IMC_Core" in mcp_holder[0]
 
       # 1b. Update existing §04 tuning + insert new §04 tuning (with unit normalization)
       tune_md = toolset.layers_update_epic_tuning("DashDistance", "460")
