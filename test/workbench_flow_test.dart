@@ -489,11 +489,44 @@ void main() {
         }
       },
     );
+
+    test(
+      'deleteProject cancels pending debounced tuning timers and clears cached Unreal link tokens',
+      () async {
+        final fakeBackend = _MemoryVaultStorageBackend(
+          const VaultLoadResult(documents: {}),
+        );
+        final prevBackend = LocalVaultService.testBackendOverride;
+        final prevAuth = GeminiAgentClient.authTokenProvider;
+        LocalVaultService.testBackendOverride = fakeBackend;
+
+        final wb = WorkbenchProvider(enableAutoLoad: true);
+        try {
+          await Future<void>.delayed(const Duration(milliseconds: 20));
+          wb.loadPresetSpark('shellbreaker');
+          wb.approveRootSpecAndLaunchWorkbench();
+          final projId = wb.activeProjectId!;
+          final epicId = wb.selectedEpicId!;
+
+          wb.updateEpicTuningParam(epicId, 0, '777');
+          wb.deleteProject(projId);
+
+          await Future<void>.delayed(const Duration(milliseconds: 320));
+          expect(fakeBackend.savedDocs.containsKey(epicId), isFalse);
+          expect(fakeBackend.savedDocs.containsKey(projId), isFalse);
+        } finally {
+          wb.dispose();
+          LocalVaultService.testBackendOverride = prevBackend;
+          GeminiAgentClient.authTokenProvider = prevAuth;
+        }
+      },
+    );
   });
 }
 
 class _MemoryVaultStorageBackend implements VaultStorageBackend {
   final VaultLoadResult seedResult;
+  final Map<String, TierDocument> savedDocs = {};
   String? lastSavedModelName;
   String? lastSavedPlanningModel;
   String? lastSavedThinkingLevel;
@@ -520,8 +553,12 @@ class _MemoryVaultStorageBackend implements VaultStorageBackend {
   }
 
   @override
-  Future<void> saveDocument(TierDocument doc) async {}
+  Future<void> saveDocument(TierDocument doc) async {
+    savedDocs[doc.id] = doc;
+  }
 
   @override
-  Future<void> deleteDocument(String id) async {}
+  Future<void> deleteDocument(String id) async {
+    savedDocs.remove(id);
+  }
 }

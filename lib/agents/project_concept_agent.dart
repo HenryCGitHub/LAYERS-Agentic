@@ -151,6 +151,11 @@ class ProjectConceptAgent {
             'type': 'STRING',
             'description': 'Sequential code E01, E02, E03...',
           },
+          'lineageKey': {
+            'type': 'STRING',
+            'description':
+                'Stable Epic lineage identifier across edits and releases (preserve existing value when editing).',
+          },
           'title': {
             'type': 'STRING',
             'description': LayersTextStyleGuide.epicTitleSchemaDesc,
@@ -348,12 +353,28 @@ CRITICAL CONSTRAINTS:
       }
     }
 
+    void removeTuning(String key) {
+      e01.tuning.removeWhere(
+        (t) => t.key.trim().toLowerCase() == key.toLowerCase(),
+      );
+    }
+
     final springArmMatch = RegExp(
       r'SpringArm\s+(\d+(?:\.\d+)?)\s*cm',
       caseSensitive: false,
     ).firstMatch(contractValue);
+    final eyeHeightMatch = RegExp(
+      r'EyeHeight\s+(\d+(?:\.\d+)?)\s*cm',
+      caseSensitive: false,
+    ).firstMatch(contractValue);
     if (springArmMatch != null) {
+      removeTuning('EyeHeight');
       upsertTailTuning('SpringArmLength', springArmMatch.group(1)!, 'cm');
+    } else if (isFps) {
+      removeTuning('SpringArmLength');
+      if (eyeHeightMatch != null) {
+        upsertTailTuning('EyeHeight', eyeHeightMatch.group(1)!, 'cm');
+      }
     }
 
     final fovMatch = RegExp(
@@ -509,20 +530,88 @@ USER CO-DESIGN INSTRUCTION:
       final parsed = ProjectConceptBlueprint.fromJson(res);
       parsed.sparkPrompt = currentSpec.sparkPrompt;
       parsed.targetEngine = currentSpec.targetEngine;
+      parsed.approved = currentSpec.approved;
+      if (parsed.v02Presets.isEmpty) {
+        parsed.v02Presets = List<ReleaseDirectionPreset>.from(
+          currentSpec.v02Presets,
+        );
+      }
+      if (parsed.v02NewPool.isEmpty) {
+        parsed.v02NewPool = [
+          for (final e in currentSpec.v02NewPool) e.deepCopy(),
+        ];
+      }
+      if (parsed.v02UpgradesByLineageKey.isEmpty) {
+        parsed.v02UpgradesByLineageKey = {
+          for (final entry in currentSpec.v02UpgradesByLineageKey.entries)
+            entry.key: [for (final u in entry.value) u.copyWith()],
+        };
+      }
       parsed.lastCoDesignNote =
           (res['coDesignNote'] ?? 'Updated spec from: $trimmed')
               .toString()
               .trim();
       if (parsed.initialEpics.isNotEmpty) {
+        final rawEpicsList = res['initialEpics'] as List? ?? const [];
+        final prevEpics = currentSpec.initialEpics;
+        final usedPrev = List<bool>.filled(prevEpics.length, false);
+        final incomingTitles = {
+          for (final inc in parsed.initialEpics)
+            if (inc.title.trim().isNotEmpty) inc.title.trim().toLowerCase(),
+        };
+
         for (int i = 0; i < parsed.initialEpics.length; i++) {
           final ep = parsed.initialEpics[i];
-          ep.code = 'E${(i + 1).toString().padLeft(2, '0')}';
-          if (ep.lineageKey.trim().isEmpty) {
-            ep.lineageKey = EpicSpec.formatLineageKey(i + 1);
+          final rawMap = i < rawEpicsList.length && rawEpicsList[i] is Map
+              ? rawEpicsList[i] as Map
+              : const <String, dynamic>{};
+          final explicitLineage =
+              (rawMap['lineageKey'] ?? '').toString().trim();
+
+          int? matchIdx;
+          if (explicitLineage.isNotEmpty) {
+            final lowerLineage = explicitLineage.toLowerCase();
+            for (int j = 0; j < prevEpics.length; j++) {
+              if (!usedPrev[j] &&
+                  prevEpics[j].lineageKey.trim().toLowerCase() == lowerLineage) {
+                matchIdx = j;
+                break;
+              }
+            }
           }
+          if (matchIdx == null) {
+            final incTitle = ep.title.trim().toLowerCase();
+            if (incTitle.isNotEmpty) {
+              for (int j = 0; j < prevEpics.length; j++) {
+                if (!usedPrev[j] &&
+                    prevEpics[j].title.trim().toLowerCase() == incTitle) {
+                  matchIdx = j;
+                  break;
+                }
+              }
+            }
+          }
+          if (matchIdx == null &&
+              i < prevEpics.length &&
+              !usedPrev[i] &&
+              !incomingTitles.contains(prevEpics[i].title.trim().toLowerCase())) {
+            matchIdx = i;
+          }
+
+          ep.code = 'E${(i + 1).toString().padLeft(2, '0')}';
           ep.releaseVersion = 'v0.1';
           if (i == 0 && ep.lifecycle == EpicLifecycle.queued) {
             ep.lifecycle = EpicLifecycle.active;
+          }
+          if (matchIdx != null) {
+            usedPrev[matchIdx] = true;
+            final prev = prevEpics[matchIdx];
+            ep.lineageKey = prev.lineageKey;
+            parsed.initialEpics[i] = ep.deepCopy(idOverride: prev.id);
+          } else {
+            ep.lineageKey = explicitLineage.isNotEmpty
+                ? explicitLineage
+                : EpicSpec.formatLineageKey(i + 1);
           }
         }
         return UnrealSpecGuard.sanitizeConceptBlueprint(parsed);

@@ -1095,8 +1095,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final idsToRemove = _collectProjectDocumentTreeIds(projectId);
     if (idsToRemove.isEmpty) return;
 
+    _cachedUnrealLinkTokensByProjectId.remove(projectId);
+    _projectCollaborators.remove(projectId);
     final user = _authService.currentUser;
     for (final id in idsToRemove) {
+      _persistTimers.remove(id)?.cancel();
+      _pendingCloudWriteDocIds.remove(id);
       documents.remove(id);
       LocalVaultService.deleteDocument(id);
       if (user != null) {
@@ -1215,6 +1219,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     if (debounce && enableAutoLoad) {
       _persistTimers[doc.id] = Timer(const Duration(milliseconds: 250), () {
         _persistTimers.remove(doc.id);
+        if (!documents.containsKey(doc.id)) return;
         writeNow();
       });
     } else {

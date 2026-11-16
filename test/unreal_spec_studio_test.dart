@@ -1542,5 +1542,153 @@ void main() {
         }
       },
     );
+
+    test(
+      '22. FPS vs SpringArm camera switch cleans stale SpringArmLength/EyeHeight & Gemini Co-Design preserves reordered lineageKey + v0.2 presets',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+
+        // Part A: Camera switch swaps SpringArmLength vs EyeHeight cleanly while preserving MoveSpeed at index 0
+        wb.selectCameraDecisionOption('tps');
+        var e01 = wb.conceptDraft!.initialEpics.first;
+        expect(e01.tuning.first.key, equals('MoveSpeed'));
+        expect(
+          e01.tuning.firstWhere((t) => t.key == 'SpringArmLength').value,
+          equals('380'),
+        );
+        expect(e01.tuning.any((t) => t.key == 'EyeHeight'), isFalse);
+
+        wb.selectCameraDecisionOption('fps');
+        e01 = wb.conceptDraft!.initialEpics.first;
+        expect(e01.tuning.first.key, equals('MoveSpeed'));
+        expect(e01.tuning.any((t) => t.key == 'SpringArmLength'), isFalse);
+        expect(
+          e01.tuning.firstWhere((t) => t.key == 'EyeHeight').value,
+          equals('64'),
+        );
+
+        wb.selectCameraDecisionOption('isometric');
+        e01 = wb.conceptDraft!.initialEpics.first;
+        expect(e01.tuning.any((t) => t.key == 'EyeHeight'), isFalse);
+        expect(
+          e01.tuning.firstWhere((t) => t.key == 'SpringArmLength').value,
+          equals('1450'),
+        );
+
+        // Part B: Gemini Co-Design after reordering preserves lineageKey, v02Presets & approved flag
+        wb.moveInitialEpic(0, 1);
+        expect(
+          wb.conceptDraft!.initialEpics[0].title,
+          equals('Twin-Stick Burst Cannon & Recoil'),
+        );
+        expect(wb.conceptDraft!.initialEpics[0].lineageKey, equals('e02'));
+        expect(wb.conceptDraft!.initialEpics[1].lineageKey, equals('e01'));
+
+        final relId = wb.approveRootSpecAndLaunchWorkbench()!;
+        wb.passActiveEpic(wb.epicsForRelease(relId).first.id);
+        wb.setStage(WorkbenchStage.projectPitch);
+        wb.updateAiConfig(apiKey: 'mock-key-1234');
+
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains('USER CO-DESIGN INSTRUCTION')) {
+            return {
+              'gameTitle': 'SHELLBREAKER',
+              'pitch': wb.conceptDraft!.pitch,
+              'coreLoop': wb.conceptDraft!.coreLoop,
+              'cameraChoiceId': wb.conceptDraft!.cameraChoiceId,
+              'cameraContract': wb.conceptDraft!.cameraContract,
+              'characterScale': wb.conceptDraft!.characterScale,
+              'inputContract': wb.conceptDraft!.inputContract,
+              'assetPolicy': wb.conceptDraft!.assetPolicy,
+              'pillars': wb.conceptDraft!.pillars,
+              'tradeOffs': [
+                for (final t in wb.conceptDraft!.tradeOffs)
+                  {'prefer': t.prefer, 'avoid': t.avoid},
+              ],
+              'outOfScope': wb.conceptDraft!.outOfScope,
+              'releaseDoneWhen': wb.conceptDraft!.releaseDoneWhen,
+              'initialEpics': [
+                {
+                  'code': 'E01',
+                  'title': 'Twin-Stick Burst Cannon & Recoil',
+                  'coreLoopBeat': 'Beat 3 · Burst Cannon Fire',
+                  'goal': wb.conceptDraft!.initialEpics[0].goal,
+                  'links': wb.conceptDraft!.initialEpics[0].links,
+                  'outOfScope': wb.conceptDraft!.initialEpics[0].outOfScope,
+                  'controls': const [],
+                  'states': wb.conceptDraft!.initialEpics[0].states,
+                  'interrupts': wb.conceptDraft!.initialEpics[0].interrupts,
+                  'tuning': const [],
+                  'feedback': wb.conceptDraft!.initialEpics[0].feedback,
+                  'levelStaging': wb.conceptDraft!.initialEpics[0].levelStaging,
+                  'checks': [
+                    for (final c in wb.conceptDraft!.initialEpics[0].checks)
+                      {'text': c.text},
+                  ],
+                },
+                {
+                  'code': 'E02',
+                  'title': 'Player Mech Movement & Claw Dash',
+                  'coreLoopBeat': 'Beats 1–2 · Skim, Aim & Claw Dash',
+                  'goal': 'Faster 720 cm/s claw dash.',
+                  'links': wb.conceptDraft!.initialEpics[1].links,
+                  'outOfScope': wb.conceptDraft!.initialEpics[1].outOfScope,
+                  'controls': const [],
+                  'states': wb.conceptDraft!.initialEpics[1].states,
+                  'interrupts': wb.conceptDraft!.initialEpics[1].interrupts,
+                  'tuning': [
+                    {'key': 'MoveSpeed', 'value': '720', 'unit': 'cm/s'},
+                  ],
+                  'feedback': wb.conceptDraft!.initialEpics[1].feedback,
+                  'levelStaging': wb.conceptDraft!.initialEpics[1].levelStaging,
+                  'checks': [
+                    for (final c in wb.conceptDraft!.initialEpics[1].checks)
+                      {'text': c.text},
+                  ],
+                },
+                {
+                  'code': 'E03',
+                  'title': 'Crustacean Grunt & Armor Break',
+                  'coreLoopBeat': 'Beats 3–4 · Armor Crack & Reposition',
+                  'goal': wb.conceptDraft!.initialEpics[2].goal,
+                  'links': wb.conceptDraft!.initialEpics[2].links,
+                  'outOfScope': wb.conceptDraft!.initialEpics[2].outOfScope,
+                  'controls': const [],
+                  'states': wb.conceptDraft!.initialEpics[2].states,
+                  'interrupts': wb.conceptDraft!.initialEpics[2].interrupts,
+                  'tuning': const [],
+                  'feedback': wb.conceptDraft!.initialEpics[2].feedback,
+                  'levelStaging': wb.conceptDraft!.initialEpics[2].levelStaging,
+                  'checks': [
+                    for (final c in wb.conceptDraft!.initialEpics[2].checks)
+                      {'text': c.text},
+                  ],
+                },
+              ],
+            };
+          }
+          return null;
+        };
+
+        try {
+          await wb.applyStage1CoDesignInstruction('Boost dash speed');
+          expect(wb.conceptDraft!.initialEpics[0].lineageKey, equals('e02'));
+          expect(wb.conceptDraft!.initialEpics[1].lineageKey, equals('e01'));
+          expect(wb.conceptDraft!.v02Presets, isNotEmpty);
+          expect(wb.conceptDraft!.approved, isTrue);
+
+          wb.approveRootSpecAndLaunchWorkbench();
+          final stage2Epics = wb.epicsForRelease(relId);
+          expect(stage2Epics[0].isPassed, isTrue);
+          expect(stage2Epics[0].lineageKey, equals('e02'));
+          expect(stage2Epics[1].goal, equals('Faster 720 cm/s claw dash.'));
+          expect(stage2Epics[1].lineageKey, equals('e01'));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
   });
 }
