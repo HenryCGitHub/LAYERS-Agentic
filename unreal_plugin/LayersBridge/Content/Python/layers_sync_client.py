@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path
 import ssl
-from typing import Any
+from typing import Any, Callable
 import urllib.error
 import urllib.request
 
@@ -144,6 +144,7 @@ class LayersSyncClient:
       config_path: str | Path | None = None,
       timeout_seconds: float = 20.0,
       agent_cli: str | None = None,
+      on_payload_changed: Callable[[], None] | None = None,
   ) -> None:
     self.config_path = config_path
     self.timeout_seconds = timeout_seconds
@@ -154,7 +155,16 @@ class LayersSyncClient:
     self.link_token = ""
     self.sync_base_url = DEFAULT_SYNC_BASE_URL
     self.agent_cli = "auto"
+    self.on_payload_changed = on_payload_changed
     self.reload_config()
+
+  def _notify_payload_changed(self) -> None:
+    cb = self.on_payload_changed
+    if cb is not None:
+      try:
+        cb()
+      except Exception:
+        pass
 
   def reload_config(self) -> dict[str, str]:
     prev_token = self.link_token
@@ -177,6 +187,7 @@ class LayersSyncClient:
     )
     if (self.link_token, self.sync_base_url) != (prev_token, prev_url):
       self.last_payload = None
+      self._notify_payload_changed()
     return {
         "link_token": self.link_token,
         "sync_base_url": self.sync_base_url,
@@ -204,6 +215,7 @@ class LayersSyncClient:
       self.agent_cli = cleaned_agent
     if (self.link_token, self.sync_base_url) != (prev_token, prev_url):
       self.last_payload = None
+      self._notify_payload_changed()
     if persist:
       return save_bridge_config(
           self.link_token,
@@ -258,6 +270,7 @@ class LayersSyncClient:
         if isinstance(parsed, dict):
           if parsed.get("ok"):
             self.last_payload = parsed
+            self._notify_payload_changed()
           return parsed
         return {"ok": False, "error": "Unexpected non-object Cloud response."}
     except urllib.error.HTTPError as exc:

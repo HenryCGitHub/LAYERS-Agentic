@@ -15,6 +15,7 @@ import 'package:layers_agentic/screens/project_pitch_screen.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/screens/widgets/unreal_bridge_modals.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
+import 'package:layers_agentic/utils/markdown_exporter.dart';
 import 'package:layers_agentic/utils/unreal_mcp_payload_builder.dart';
 import 'package:layers_agentic/utils/unreal_spec_guard.dart';
 
@@ -1148,6 +1149,16 @@ void main() {
     test(
       '16. Pre-launch Stage 1 exports include v0.1 initialEpics & Stage 1 re-approve preserves active v0.2+ release focus',
       () async {
+        expect(sanitizeExportSlug('  !!!  '), equals('layers_project'));
+        expect(
+          sanitizeExportSlug('  !!!  ', fallback: 'layers'),
+          equals('layers'),
+        );
+        expect(
+          sanitizeExportSlug('Shellbreaker: v0.1!'),
+          equals('shellbreaker_v0_1'),
+        );
+
         final wb = WorkbenchProvider(enableAutoLoad: false);
         wb.loadPresetSpark('shellbreaker');
 

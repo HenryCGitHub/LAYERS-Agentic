@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import sys
@@ -61,6 +62,8 @@ class LayersPieGateDock:
 
   def __init__(self, sync_client: LayersSyncClient | None = None) -> None:
     self.sync_client = sync_client or LayersSyncClient()
+    if self.sync_client.on_payload_changed is None:
+      self.sync_client.on_payload_changed = lambda: refresh_toolbar_widgets(self)
     self.last_status_message: str = ""
     self.is_building: bool = False
     self.build_logs: list[str] = []
@@ -588,10 +591,18 @@ def refresh_toolbar_widgets(dock: LayersPieGateDock) -> bool:
     _add_entry_safe(toolbar, "LayersBridge", primary_entry)
     _add_entry_safe(toolbar, "LayersBridge", combo_entry)
 
-    # Populate native ToolMenus submenu when available
+    # Populate native ToolMenus submenu with dynamic PIE checks & quick actions
     if hasattr(menus, "register_menu"):
-      submenu = menus.register_menu(f"{toolbar_name}.LayersPieGateCombo")
+      submenu_name = f"{toolbar_name}.LayersPieGateCombo"
+      if hasattr(menus, "remove_menu"):
+        try:
+          menus.remove_menu(submenu_name)
+        except Exception:
+          pass
+      submenu = menus.register_menu(submenu_name)
       if submenu is not None:
+        if hasattr(submenu, "entries") and isinstance(submenu.entries, dict):
+          submenu.entries.clear()
         _add_entry_safe(
             submenu,
             "Actions",
@@ -604,6 +615,56 @@ def refresh_toolbar_widgets(dock: LayersPieGateDock) -> bool:
                 py_command="import init_unreal; init_unreal.trigger_toolbar_primary_action()",
             ),
         )
+        _add_entry_safe(
+            submenu,
+            "Actions",
+            _make_tool_menu_entry(
+                unreal,
+                name="LayersMenuPlayPie",
+                block_type_attr="MENU_ENTRY",
+                label="▶ Launch PIE",
+                tooltip="Start Unreal Play-In-Editor session cleanly",
+                py_command="import init_unreal; init_unreal.get_pie_dock().launch_pie()",
+            ),
+        )
+
+        payload = dock.last_payload
+        if payload and payload.get("ok") and not payload.get("allEpicsCompleted"):
+          active = payload.get("activeEpic") or {}
+          code = str(active.get("code") or "E01").strip() or "E01"
+          checks = active.get("checks") or []
+          for idx, chk in enumerate(checks):
+            chk_id = str(chk.get("id") or (idx + 1))
+            chk_text = str(chk.get("text") or "").strip()[:64]
+            mark = "x" if chk.get("passed") else " "
+            _add_entry_safe(
+                submenu,
+                "PieChecks",
+                _make_tool_menu_entry(
+                    unreal,
+                    name=f"LayersCheck_{idx + 1}",
+                    block_type_attr="MENU_ENTRY",
+                    label=f"[{mark}] Check {idx + 1}: {chk_text}",
+                    tooltip=f"Toggle §06 PIE Check {idx + 1} on {code}",
+                    py_command=(
+                        "import init_unreal; "
+                        f"init_unreal.get_pie_dock().toggle_check({json.dumps(chk_id)})"
+                    ),
+                ),
+            )
+          _add_entry_safe(
+              submenu,
+              "Actions",
+              _make_tool_menu_entry(
+                  unreal,
+                  name="LayersMenuPass",
+                  block_type_attr="MENU_ENTRY",
+                  label=f"✓ Pass {code} & Advance →",
+                  tooltip=f"Mark {code} passed & advance to next Epic",
+                  py_command="import init_unreal; init_unreal.get_pie_dock().pass_epic()",
+              ),
+          )
+
         _add_entry_safe(
             submenu,
             "Actions",

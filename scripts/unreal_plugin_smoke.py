@@ -537,17 +537,31 @@ def main() -> int:
       assert "1/2" in chk_md, chk_md
       assert "[PASSED] Check 1:" in chk_md, chk_md
       assert "[VERIFY] Check 2:" in chk_md, chk_md
+      assert play_tb.entries["LayersPieGateCombo"].label == "E01 · 1/2 ✓", (
+          play_tb.entries["LayersPieGateCombo"].label
+      )
+      combo_menu = unreal_state["menus_by_name"].get(  # type: ignore[union-attr]
+          "LevelEditor.LevelEditorToolBar.PlayToolBar.LayersPieGateCombo"
+      )
+      assert combo_menu is not None
+      assert "LayersMenuPlayPie" in combo_menu.entries
+      assert "LayersMenuPass" in combo_menu.entries
+      assert "LayersCheck_1" in combo_menu.entries
+      assert "[x] Check 1:" in combo_menu.entries["LayersCheck_1"].label
+      assert "LayersCheck_2" in combo_menu.entries
+      assert "[ ] Check 2:" in combo_menu.entries["LayersCheck_2"].label
 
       chk2_md = toolset.layers_toggle_pie_check("2", passed=True)
       assert "2/2 passed) on E01" in chk2_md, chk2_md
       assert "# ACTIVE EPIC SPEC · E01" in chk2_md, chk2_md
 
-      # 2. Log 2 PIE [FIX] items and confirm switch to FOCUSED PIE REVISION PASS + LIFO latest resolution
+      # 2. Log 2 PIE [FIX] items and confirm switch to FOCUSED PIE REVISION PASS + live toolbar Fix label
       fix_md = toolset.layers_log_pie_fix("Boom clips ceiling during dash jump")
       assert "### FOCUSED PIE REVISION PASS (1 OPEN [FIX])" in fix_md
       assert "- [FIX] Boom clips ceiling during dash jump" in fix_md
       assert dock.compute_primary_toolbar_action()["mode"] == "fix"
       assert dock.compute_primary_toolbar_action()["label"] == "🔧 Fix E01 (1)"
+      assert play_tb.entries["LayersPrimaryAction"].label == "🔧 Fix E01 (1)"
 
       fix2_md = toolset.layers_log_pie_fix("Dash trail flickers on slope")
       assert "### FOCUSED PIE REVISION PASS (2 OPEN [FIX])" in fix2_md
@@ -572,10 +586,12 @@ def main() -> int:
       assert pass_res.get("ok") is True and pass_res.get("mode") == "passed", pass_res
       assert dock.compute_primary_toolbar_action()["label"] == "⚡ Build E02"
 
-      # 5. Fetch E02, check its Check 1 -> stays uncompleted until explicit Pass E02 ✓ sign-off
+      # 5. Fetch E02, check its Check 1 -> stale E01 LayersCheck_2 cleared; stays uncompleted until Pass E02 ✓
       e02_md = toolset.layers_get_active_epic_spec()
       assert "# ACTIVE EPIC SPEC · E02 · Claw Blaster & Hitstop" in e02_md
       assert "[VERIFY] Check 1:" in e02_md, e02_md
+      assert "LayersCheck_1" in combo_menu.entries
+      assert "LayersCheck_2" not in combo_menu.entries, combo_menu.entries
       toolset.layers_toggle_pie_check("1", passed=True)
       assert dock.last_payload is not None
       assert dock.last_payload.get("allEpicsCompleted") is False, dock.last_payload

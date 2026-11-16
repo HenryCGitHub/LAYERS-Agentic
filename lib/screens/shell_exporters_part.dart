@@ -28,12 +28,11 @@ extension _WorkbenchShellExporters on WorkbenchShell {
       liveUprojectContext: wb.latestLiveUprojectContext,
     );
 
-    final safeSlug = rootSpec.normalizedTitle
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-        .replaceAll(RegExp(r'^_+|_+$'), '');
-    final filename =
-        '${safeSlug.isEmpty ? 'layers' : safeSlug}_project_spec.md';
+    final safeSlug = sanitizeExportSlug(
+      rootSpec.normalizedTitle,
+      fallback: 'layers',
+    );
+    final filename = '${safeSlug}_project_spec.md';
 
     await Clipboard.setData(ClipboardData(text: md));
     final downloaded = triggerMarkdownFileDownload(
@@ -105,9 +104,10 @@ extension _WorkbenchShellExporters on WorkbenchShell {
       );
       return;
     }
-    final projTitle = (wb.activeProject?.title ?? 'layers_project')
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '_');
+    final projTitle = sanitizeExportSlug(
+      wb.activeProject?.title ?? 'layers_project',
+      fallback: 'layers_project',
+    );
     final filename = '$projTitle.layers.json';
     await Clipboard.setData(ClipboardData(text: rawJson));
     final downloaded = triggerMarkdownFileDownload(
