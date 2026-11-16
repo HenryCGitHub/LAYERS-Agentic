@@ -1757,5 +1757,49 @@ void main() {
         expect(bundle.trimRight().endsWith('---'), isFalse);
       },
     );
+
+    test(
+      '25. Epic MCP payload surfaces top-of-spec Execution Mode, [FIX] IDs, and explicit LayersToolset callback guardrails',
+      () {
+        final shellbreaker = UnrealSparkPresets.byId('shellbreaker');
+        final epic = shellbreaker.initialEpics.first.deepCopy();
+
+        final payload = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: shellbreaker,
+          epic: epic,
+        );
+        expect(
+          payload,
+          contains('Execution Mode: FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK'),
+        );
+        expect(
+          payload.indexOf('Execution Mode:'),
+          lessThan(payload.indexOf('## §01 System Intent')),
+        );
+        expect(payload, contains('layers_toggle_pie_check'));
+        expect(payload, contains('Do NOT call layers_pass_active_epic'));
+
+        epic.fixes.add(
+          EpicPieFix(id: 'fx_ramp_01', text: 'Dash snags ramp corner'),
+        );
+        final fixPayload = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: shellbreaker,
+          epic: epic,
+        );
+        expect(
+          fixPayload,
+          contains('Execution Mode: FOCUSED PIE REVISION PASS (1 OPEN [FIX])'),
+        );
+        expect(
+          fixPayload.indexOf('Execution Mode:'),
+          lessThan(fixPayload.indexOf('## §01 System Intent')),
+        );
+        expect(
+          fixPayload,
+          contains('- [FIX] Dash snags ramp corner (id: fx_ramp_01)'),
+        );
+        expect(fixPayload, contains('layers_resolve_pie_fix'));
+      },
+    );
   });
 }

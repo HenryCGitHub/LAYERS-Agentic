@@ -248,14 +248,16 @@ class LayersPieGateDock:
           f"layers_get_active_epic_spec right now and execute the "
           f"FOCUSED PIE REVISION PASS for {code} ({title}). "
           f"Open [FIX] items: {fix_list}. Apply targeted fixes, verify in PIE, "
-          f"and report via layers_resolve_pie_fix and layers_toggle_pie_check."
+          f"and report via layers_resolve_pie_fix and layers_toggle_pie_check. "
+          f"Do not call layers_pass_active_epic (leave final sign-off for human PIE review)."
       )
     return (
         f"In Unreal MCP (http://127.0.0.1:8000/mcp), call "
         f"layers_get_active_epic_spec right now and execute the "
         f"FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK for {code} ({title}). "
         f"Implement §01-§06 matching ROOT_MCP_CONTEXT, expose all §04 tuning variables, "
-        f"and report PIE verification via layers_toggle_pie_check."
+        f"and report PIE verification via layers_toggle_pie_check. "
+        f"Do not call layers_pass_active_epic (leave final sign-off for human PIE review)."
     )
 
   def _start_unreal_mcp_server_if_available(self) -> None:

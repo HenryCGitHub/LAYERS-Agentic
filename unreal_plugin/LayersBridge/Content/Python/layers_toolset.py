@@ -59,7 +59,9 @@ def _format_mutation_receipt(
   ]
   if open_fixes:
     for fx in open_fixes:
-      lines.append(f"- [FIX] {str(fx.get('text') or '').strip()}")
+      fx_id = str(fx.get("id") or "").strip()
+      id_tag = f" (id: {fx_id})" if fx_id else ""
+      lines.append(f"- [FIX] {str(fx.get('text') or '').strip()}{id_tag}")
     lines.append(f"### FOCUSED PIE REVISION PASS ({len(open_fixes)} OPEN [FIX])")
   else:
     lines.append("### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK")

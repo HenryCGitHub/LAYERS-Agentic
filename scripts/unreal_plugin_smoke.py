@@ -847,6 +847,26 @@ def main() -> int:
       if (delCheck.ok !== false) {
         throw new Error('Expected ok: false when linked projectId was deleted');
       }
+      const fixA = h.applyUnrealEpicMutationJs({ epicDoc: activeDoc, action: 'log_fix', body: { fixId: 'fx_a', fixText: 'Camera boom clips pillar' }, nowMs: 2100 });
+      const fixB = h.applyUnrealEpicMutationJs({ epicDoc: { id: 'ep_active_gate', sections: fixA.sections }, action: 'log_fix', body: { fixId: 'fx_b', fixText: 'Muzzle spark offset' }, nowMs: 2101 });
+      const fixServerMd = h.renderServerUnrealMcpPayloadJs({
+        rootSpec: { normalizedTitle: 'T', targetEngine: 'ue5Mcp', pitch: 'P' },
+        epicSpec: fixB.epicSpec
+      });
+      if (!fixServerMd.includes('Execution Mode: FOCUSED PIE REVISION PASS (2 OPEN [FIX])')) {
+        throw new Error('Expected top Execution Mode line, got: ' + fixServerMd);
+      }
+      if (!fixServerMd.includes('(id: fx_a)') || !fixServerMd.includes('Do NOT call layers_pass_active_epic')) {
+        throw new Error('Expected fix ID and human sign-off guardrail');
+      }
+      const resByIndex = h.applyUnrealEpicMutationJs({ epicDoc: { id: 'ep_active_gate', sections: fixB.sections }, action: 'resolve_fix', body: { fixId: '1' }, nowMs: 2102 });
+      if (resByIndex.epicSpec.fixes[0].resolved !== true || resByIndex.epicSpec.fixes[1].resolved !== false) {
+        throw new Error('Expected resolve_fix("1") to resolve first open fix cleanly');
+      }
+      const resBySub = h.applyUnrealEpicMutationJs({ epicDoc: { id: 'ep_active_gate', sections: resByIndex.sections }, action: 'resolve_fix', body: { fixId: 'muzzle spark' }, nowMs: 2103 });
+      if (resBySub.epicSpec.fixes[1].resolved !== true) {
+        throw new Error('Expected case-insensitive substring resolve_fix to resolve second fix');
+      }
       """
       reopen_proc = subprocess.run(["node", "-e", reopen_v02_js], cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=10)
       assert reopen_proc.returncode == 0, f"v0.2 reopen check failed: {reopen_proc.stderr}"

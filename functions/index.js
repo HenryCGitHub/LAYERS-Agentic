@@ -447,12 +447,23 @@ function renderServerUnrealMcpPayloadJs({
     }
   }
 
+  const openFixes = Array.isArray(epicSpec.openFixes)
+    ? epicSpec.openFixes
+    : (epicSpec.fixes || []).filter((f) => !f.resolved);
+
   lines.push("");
   lines.push("---");
   lines.push("");
   lines.push(
     `# ACTIVE EPIC SPEC · ${epicSpec.code} · ${epicSpec.title} (${epicSpec.releaseVersion})`
   );
+  if (openFixes.length > 0) {
+    lines.push(
+      `Execution Mode: FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX]) — surgical edits only; keep passing checks intact`
+    );
+  } else {
+    lines.push("Execution Mode: FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK");
+  }
   lines.push("");
   lines.push("## §01 System Intent & Actor Links");
   if (epicSpec.coreLoopBeat) {
@@ -538,25 +549,24 @@ function renderServerUnrealMcpPayloadJs({
     lines.push(`  ${tag} Check ${i + 1}: ${chk.text}`);
   });
 
-  const openFixes = Array.isArray(epicSpec.openFixes)
-    ? epicSpec.openFixes
-    : (epicSpec.fixes || []).filter((f) => !f.resolved);
   if (openFixes.length > 0) {
     lines.push("");
     lines.push("## Open Playtest Revisions ([FIX])");
     for (const fx of openFixes) {
-      lines.push(`- [FIX] ${fx.text}`);
+      const fxId = String(fx.id || "").trim();
+      const idTag = fxId ? ` (id: ${fxId})` : "";
+      lines.push(`- [FIX] ${fx.text}${idTag}`);
     }
     lines.push("");
     lines.push(`### FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX])`);
     lines.push(
-      "Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact and report modified Blueprint/Verse assets + PIE verify steps."
+      "Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, compile/save modified Blueprint/Verse assets, and report via layers_resolve_pie_fix(fix_id) + layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off)."
     );
   } else {
     lines.push("");
     lines.push("### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK");
     lines.push(
-      "Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check before returning for human PIE sign-off."
+      "Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check and call layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off)."
     );
   }
 
@@ -936,10 +946,28 @@ function applyUnrealEpicMutationJs({
         }
       }
     } else if (targetId) {
+      const lowerTarget = targetId.toLowerCase();
       for (const f of spec.fixes) {
-        if (f.id === targetId || f.text === targetId) {
+        if (f.id === targetId || String(f.text || "").toLowerCase() === lowerTarget) {
           f.resolved = nextResolved;
           matched = true;
+        }
+      }
+      if (!matched && /^\d+$/.test(targetId)) {
+        const oneBased = Number(targetId) - 1;
+        const unresolved = spec.fixes.filter((f) => !f.resolved);
+        if (oneBased >= 0 && oneBased < unresolved.length) {
+          unresolved[oneBased].resolved = nextResolved;
+          matched = true;
+        }
+      }
+      if (!matched) {
+        for (const f of spec.fixes) {
+          if (!f.resolved && String(f.text || "").toLowerCase().includes(lowerTarget)) {
+            f.resolved = nextResolved;
+            matched = true;
+            break;
+          }
         }
       }
     }
