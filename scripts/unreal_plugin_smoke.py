@@ -273,6 +273,8 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
   state: dict[str, object] = {
       "registered_toolsets": [],
       "menu_entries": [],
+      "menus_by_name": {},
+      "console_commands": [],
       "pie_started": False,
       "logs": [],
   }
@@ -335,13 +337,27 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
       return _AssetRegistry()
 
   class _Menu:
+    def __init__(self, name: str):
+      self.name = name
+      self.entries: dict[str, object] = {}
+
+    def find_or_add_section(self, section_name: str):
+      return self
+
     def add_menu_entry(self, *args):
-      state["menu_entries"].append(args[-1])  # type: ignore[union-attr]
+      entry = args[-1]
+      entry_name = getattr(entry, "name", "")
+      if entry_name:
+        self.entries[entry_name] = entry
+      state["menu_entries"].append(entry)  # type: ignore[union-attr]
 
   class _ToolMenuEntry:
     def __init__(self, name="", type=""):
       self.name = name
+      self.type = type
       self.label = ""
+      self.tooltip = ""
+      self.cmd = {}
 
     def set_label(self, lbl: str):
       self.label = lbl
@@ -354,12 +370,27 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
 
   class _ToolMenus:
     @classmethod
+    def _ensure_menu(cls, name: str) -> _Menu:
+      menus = state["menus_by_name"]  # type: ignore[assignment]
+      if name not in menus:
+        menus[name] = _Menu(name)
+      return menus[name]  # type: ignore[return-value]
+
+    @classmethod
     def get(cls):
       return cls
 
     @classmethod
     def find_menu(cls, name: str):
-      return _Menu()
+      return cls._ensure_menu(name)
+
+    @classmethod
+    def extend_menu(cls, name: str):
+      return cls._ensure_menu(name)
+
+    @classmethod
+    def register_menu(cls, name: str, *args, **kwargs):
+      return cls._ensure_menu(name)
 
     @classmethod
     def refresh_all_widgets(cls):
@@ -369,6 +400,10 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
     @staticmethod
     def get_game_name():
       return "ShellbreakerUE5"
+
+    @staticmethod
+    def execute_console_command(world, command, specific_player=None):
+      state["console_commands"].append(str(command))  # type: ignore[union-attr]
 
   class _Paths:
     @staticmethod
@@ -385,7 +420,11 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
   unreal_mod.AssetRegistryHelpers = _AssetRegistryHelpers  # type: ignore[attr-defined]
   unreal_mod.ToolMenus = _ToolMenus  # type: ignore[attr-defined]
   unreal_mod.ToolMenuEntry = _ToolMenuEntry  # type: ignore[attr-defined]
-  unreal_mod.MultiBlockType = types.SimpleNamespace(MENU_ENTRY="MENU_ENTRY")  # type: ignore[attr-defined]
+  unreal_mod.MultiBlockType = types.SimpleNamespace(  # type: ignore[attr-defined]
+      MENU_ENTRY="MENU_ENTRY",
+      TOOL_BAR_BUTTON="TOOL_BAR_BUTTON",
+      TOOL_BAR_COMBO_BUTTON="TOOL_BAR_COMBO_BUTTON",
+  )
   unreal_mod.ToolMenuStringCommandType = types.SimpleNamespace(PYTHON="PYTHON")  # type: ignore[attr-defined]
   unreal_mod.SystemLibrary = _SystemLibrary  # type: ignore[attr-defined]
   unreal_mod.Paths = _Paths  # type: ignore[attr-defined]
@@ -431,10 +470,23 @@ def main() -> int:
       os.environ["LAYERS_SYNC_URL"] = f"http://127.0.0.1:{port}"
       sys.path.insert(0, str(PYTHON_DIR))
 
+      import ssl
       import init_unreal  # type: ignore
+      from layers_sync_client import _build_ssl_context  # type: ignore
+
+      ssl_ctx = _build_ssl_context()
+      assert ssl_ctx.verify_mode == ssl.CERT_REQUIRED
 
       assert len(unreal_state["registered_toolsets"]) >= 1
       assert len(unreal_state["menu_entries"]) >= 1
+      play_tb = unreal_state["menus_by_name"].get(  # type: ignore[union-attr]
+          "LevelEditor.LevelEditorToolBar.PlayToolBar"
+      )
+      assert play_tb is not None, "Expected PlayToolBar registration"
+      assert "LayersPrimaryAction" in play_tb.entries
+      assert "LayersPieGateCombo" in play_tb.entries
+      assert play_tb.entries["LayersPrimaryAction"].type == "TOOL_BAR_BUTTON"
+      assert play_tb.entries["LayersPieGateCombo"].type == "TOOL_BAR_COMBO_BUTTON"
 
       toolset = init_unreal.get_toolset()
       dock = init_unreal.get_pie_dock()
@@ -447,6 +499,28 @@ def main() -> int:
       assert "/Game/Input/IMC_Core" in spec_md
       assert "# ACTIVE EPIC SPEC · E01 · Crab Locomotion & Dash" in spec_md
       assert "### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK" in spec_md
+
+      # 1a. Verify Split Play-Toolbar default Build state & CLI / clipboard dispatch
+      primary_action = dock.compute_primary_toolbar_action()
+      assert primary_action["mode"] == "build", primary_action
+      assert primary_action["label"] == "⚡ Build E01", primary_action
+      assert dock.compute_gate_combo_label() == "E01 · 0/2 ✓"
+
+      captured_builds: list[tuple[list[str], str]] = []
+      dock.cli_runner = lambda cmd, prompt: (
+          captured_builds.append((cmd, prompt)) or (0, "Synthesized E01 cleanly")
+      )
+      try:
+        build_res = init_unreal.build_active_epic(background=False)
+        assert build_res.get("ok") is True, build_res
+        assert build_res.get("mode") == "cli_agent", build_res
+        assert "ModelContextProtocol.StartServer" in unreal_state["console_commands"]
+        assert "layers_get_active_epic_spec" in captured_builds[-1][1]
+        assert "FULL-EPIC AUTONOMOUS BUILD" in captured_builds[-1][1]
+        handoff_res = dock.build_active_epic(agent_cli="clipboard", background=False)
+        assert handoff_res.get("mode") == "clipboard_handoff", handoff_res
+      finally:
+        dock.cli_runner = None
 
       # 1b. Update existing §04 tuning + insert new §04 tuning (with unit normalization)
       tune_md = toolset.layers_update_epic_tuning("DashDistance", "460")
@@ -464,22 +538,27 @@ def main() -> int:
       assert "2/2 passed) on E01" in chk2_md, chk2_md
       assert "# ACTIVE EPIC SPEC · E01" in chk2_md, chk2_md
 
-      # 2. Log PIE [FIX] and confirm switch to FOCUSED PIE REVISION PASS
+      # 2. Log PIE [FIX] and confirm switch to FOCUSED PIE REVISION PASS + toolbar Fix label
       fix_md = toolset.layers_log_pie_fix("Boom clips ceiling during dash jump")
       assert "### FOCUSED PIE REVISION PASS (1 OPEN [FIX])" in fix_md
       assert "- [FIX] Boom clips ceiling during dash jump" in fix_md
+      assert dock.compute_primary_toolbar_action()["mode"] == "fix"
+      assert dock.compute_primary_toolbar_action()["label"] == "🔧 Fix E01 (1)"
 
-      # 3. Resolve [FIX] and stay focused on E01 with FULL-EPIC footer restored
+      # 3. Resolve [FIX] and stay focused on E01 with FULL-EPIC footer & Pass E01 toolbar CTA
       resolved_md = toolset.layers_resolve_pie_fix("latest")
       assert "Resolved PIE [FIX] on E01" in resolved_md, resolved_md
       assert "0 remaining" in resolved_md
       assert "### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK" in resolved_md
+      assert dock.compute_primary_toolbar_action()["mode"] == "pass"
+      assert dock.compute_primary_toolbar_action()["label"] == "✓ Pass E01 →"
 
-      # 4. Launch PIE from dock & sign off E01 -> advances to E02 without prematurely passing E02
+      # 4. Launch PIE from dock & sign off E01 via primary toolbar -> advances cleanly to Build E02
       assert dock.launch_pie() is True
       assert unreal_state["pie_started"] is True
-      pass_msg = toolset.layers_pass_active_epic()
-      assert "Epic 2/2: E02" in pass_msg, pass_msg
+      pass_res = init_unreal.trigger_toolbar_primary_action()
+      assert pass_res.get("ok") is True and pass_res.get("mode") == "passed", pass_res
+      assert dock.compute_primary_toolbar_action()["label"] == "⚡ Build E02"
 
       # 5. Fetch E02 & confirm Check 1 is still unverified before passing E02
       e02_md = toolset.layers_get_active_epic_spec()
@@ -568,13 +647,19 @@ def main() -> int:
       assert final_pass.get("allEpicsCompleted") is True
       assert "[ALL EPICS PASSED ✓]" in dock.render_dock_summary_text()
 
-      # 6. Check token config persistence helper & stale last_payload reset on token change
-      dock.configure_token("lyr_saved_token_check_0001", f"http://127.0.0.1:{port}")
+      # 6. Check token + agent_cli persistence helper & stale last_payload reset on token change
+      dock.configure_token(
+          "lyr_saved_token_check_0001",
+          f"http://127.0.0.1:{port}",
+          agent_cli="claude",
+      )
       assert dock.last_payload is None
       assert "SHELLBREAKER" not in dock.render_dock_summary_text()
       cfg_file = saved_dir / "Config" / "LayersBridge.json"
       assert cfg_file.is_file()
-      assert json.loads(cfg_file.read_text(encoding="utf-8"))["link_token"] == "lyr_saved_token_check_0001"
+      cfg_data = json.loads(cfg_file.read_text(encoding="utf-8"))
+      assert cfg_data["link_token"] == "lyr_saved_token_check_0001"
+      assert cfg_data["agent_cli"] == "claude"
 
     print("UNREAL_SMOKE_OK")
     return 0

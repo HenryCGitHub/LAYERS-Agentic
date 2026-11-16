@@ -776,6 +776,14 @@ void main() {
             find.text('lyr_initial_unreal_token_111122223333'),
             findsOneWidget,
           );
+          expect(
+            find.byKey(const ValueKey('copy_unreal_setup_py_btn')),
+            findsOneWidget,
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('copy_unreal_setup_py_btn')),
+          );
+          await tester.pumpAndSettle();
           expect(callCount, equals(1));
 
           await tester.tap(find.byKey(const ValueKey('rotate_unreal_token_btn')));

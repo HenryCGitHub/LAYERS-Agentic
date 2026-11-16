@@ -114,7 +114,7 @@ Future<void> showConnectUnrealPluginDialog(
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  'Unzip into `<YourUEProject>/Plugins/LayersBridge` and enable `PythonScriptPlugin` + `ModelContextProtocol`.',
+                                  'Unzip into `<YourUEProject>/Plugins/LayersBridge` and enable `PythonScriptPlugin` + `ModelContextProtocol`. Adds `[ ⚡ Build E01 | 1/3 ✓ ▾ ]` directly next to Unreal Play.',
                                   style: TextStyle(fontSize: 12, color: muted),
                                 ),
                               ],
@@ -195,69 +195,97 @@ Future<void> showConnectUnrealPluginDialog(
                               ),
                             )
                           else
-                            Row(
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.bgInsetFor(isDark),
-                                      borderRadius: BorderRadius.circular(
-                                        AppTheme.radiusXs,
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                          vertical: 8,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.bgInsetFor(isDark),
+                                          borderRadius: BorderRadius.circular(
+                                            AppTheme.radiusXs,
+                                          ),
+                                          border: Border.all(color: border),
+                                        ),
+                                        child: SelectableText(
+                                          fetchedToken ?? '',
+                                          key: const ValueKey('unreal_link_token_text'),
+                                          style: GoogleFonts.jetBrainsMono(
+                                            fontSize: 12,
+                                            color: cyan,
+                                          ),
+                                        ),
                                       ),
-                                      border: Border.all(color: border),
                                     ),
-                                    child: SelectableText(
-                                      fetchedToken ?? '',
-                                      key: const ValueKey('unreal_link_token_text'),
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 12,
-                                        color: cyan,
-                                      ),
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      key: const ValueKey('copy_unreal_token_btn'),
+                                      onPressed: fetchedToken == null
+                                          ? null
+                                          : () {
+                                              Clipboard.setData(
+                                                ClipboardData(text: fetchedToken!),
+                                              );
+                                              AppToast.show(
+                                                dialogCtx,
+                                                'Copied Unreal Link Token',
+                                                isDark: isDark,
+                                              );
+                                            },
+                                      icon: const Icon(Icons.copy, size: 14),
+                                      label: const Text('Copy'),
                                     ),
-                                  ),
+                                    const SizedBox(width: 6),
+                                    TextButton(
+                                      key: const ValueKey('rotate_unreal_token_btn'),
+                                      onPressed: () {
+                                        setModalState(() {
+                                          loading = true;
+                                          tokenError = null;
+                                        });
+                                        workbench
+                                            .fetchOrCreateUnrealLinkToken(rotate: true)
+                                            .then((res) {
+                                          if (!dialogCtx.mounted) return;
+                                          setModalState(() {
+                                            loading = false;
+                                            fetchedToken = res.token;
+                                            tokenError = res.error;
+                                          });
+                                        });
+                                      },
+                                      child: const Text('Rotate'),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(height: 8),
                                 OutlinedButton.icon(
-                                  key: const ValueKey('copy_unreal_token_btn'),
+                                  key: const ValueKey('copy_unreal_setup_py_btn'),
                                   onPressed: fetchedToken == null
                                       ? null
                                       : () {
+                                          final cmd =
+                                              'import init_unreal; init_unreal.get_pie_dock().configure_token("$fetchedToken")';
                                           Clipboard.setData(
-                                            ClipboardData(text: fetchedToken!),
+                                            ClipboardData(text: cmd),
                                           );
                                           AppToast.show(
                                             dialogCtx,
-                                            'Copied Unreal Link Token',
+                                            'Copied Unreal Output Log Python command',
                                             isDark: isDark,
                                           );
                                         },
-                                  icon: const Icon(Icons.copy, size: 14),
-                                  label: const Text('Copy'),
-                                ),
-                                const SizedBox(width: 6),
-                                TextButton(
-                                  key: const ValueKey('rotate_unreal_token_btn'),
-                                  onPressed: () {
-                                    setModalState(() {
-                                      loading = true;
-                                      tokenError = null;
-                                    });
-                                    workbench
-                                        .fetchOrCreateUnrealLinkToken(rotate: true)
-                                        .then((res) {
-                                      if (!dialogCtx.mounted) return;
-                                      setModalState(() {
-                                        loading = false;
-                                        fetchedToken = res.token;
-                                        tokenError = res.error;
-                                      });
-                                    });
-                                  },
-                                  child: const Text('Rotate'),
+                                  icon: const Icon(Icons.terminal_rounded, size: 14),
+                                  label: const Text(
+                                    'Copy UE Python Setup',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
                                 ),
                               ],
                             ),

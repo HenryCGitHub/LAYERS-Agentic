@@ -23,7 +23,7 @@ def bootstrap() -> tuple[LayersSyncClient, LayersToolset, LayersPieGateDock]:
     log_fn = getattr(unreal, "log", None)
     if callable(log_fn):
       log_fn(
-          "LogLayersBridge: Registered LayersToolset (4 MCP tools) + LAYERS PIE Gate."
+          "LogLayersBridge: Registered LayersToolset (7 MCP tools) + Split Play-Toolbar UI."
       )
   except Exception:
     pass
@@ -64,6 +64,22 @@ def open_pie_gate_log() -> str:
   except Exception:
     pass
   return summary
+
+
+def trigger_toolbar_primary_action() -> dict[str, object]:
+  """Runs the `[ ⚡ Build E01 | ▾ ]` left toolbar button action cleanly."""
+  return get_pie_dock().trigger_primary_toolbar_action()
+
+
+def build_active_epic(
+    agent_cli: str | None = None,
+    background: bool = True,
+) -> dict[str, object]:
+  """Syncs .uproject + active Epic and launches the configured AI agent or clipboard handoff."""
+  return get_pie_dock().build_active_epic(
+      agent_cli=agent_cli,
+      background=background,
+  )
 
 
 bootstrap()

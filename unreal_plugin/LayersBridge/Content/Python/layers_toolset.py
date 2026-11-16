@@ -10,7 +10,11 @@ from layers_sync_client import LayersSyncClient
 try:
   import unreal as _unreal  # type: ignore
 
-  _ToolsetBase = getattr(_unreal, "Toolset", object)
+  _ToolsetBase = (
+      getattr(_unreal, "ToolsetDefinition", None)
+      or getattr(_unreal, "Toolset", None)
+      or object
+  )
 except Exception:
   _unreal = None
   _ToolsetBase = object

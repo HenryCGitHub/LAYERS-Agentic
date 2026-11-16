@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import ssl
 from typing import Any
 import urllib.error
 import urllib.request
@@ -12,6 +13,44 @@ import urllib.request
 DEFAULT_SYNC_BASE_URL = (
     "https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy"
 )
+
+_CANDIDATE_CA_PATHS = (
+    "/etc/ssl/cert.pem",
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/ca-bundle.pem",
+)
+
+
+def _build_ssl_context() -> ssl.SSLContext:
+  """Builds an SSLContext with certifi/OS CA bundle fallback for macOS & Linux UE Python."""
+  ctx = ssl.create_default_context()
+  paths = ssl.get_default_verify_paths()
+  has_default_ca = bool(
+      (paths.cafile and Path(paths.cafile).is_file())
+      or (paths.capath and Path(paths.capath).is_dir())
+  )
+  if has_default_ca:
+    return ctx
+
+  try:
+    import certifi  # type: ignore
+
+    ca_bundle = str(certifi.where() or "").strip()
+    if ca_bundle and Path(ca_bundle).is_file():
+      ctx.load_verify_locations(cafile=ca_bundle)
+      return ctx
+  except Exception:
+    pass
+
+  for candidate in _CANDIDATE_CA_PATHS:
+    if Path(candidate).is_file():
+      try:
+        ctx.load_verify_locations(cafile=candidate)
+        return ctx
+      except Exception:
+        continue
+  return ctx
 
 
 def _try_unreal_saved_dir() -> Path | None:
@@ -46,6 +85,7 @@ def load_bridge_config(
   cfg: dict[str, str] = {
       "link_token": "",
       "sync_base_url": DEFAULT_SYNC_BASE_URL,
+      "agent_cli": "auto",
   }
   target = resolve_config_path(config_path)
   if target.is_file():
@@ -58,6 +98,8 @@ def load_bridge_config(
           cfg["sync_base_url"] = (
               str(data["sync_base_url"]).strip().rstrip("/")
           )
+        if data.get("agent_cli"):
+          cfg["agent_cli"] = str(data["agent_cli"]).strip().lower() or "auto"
     except Exception:
       pass
 
@@ -67,6 +109,9 @@ def load_bridge_config(
   env_url = os.environ.get("LAYERS_SYNC_URL", "").strip()
   if env_url:
     cfg["sync_base_url"] = env_url.rstrip("/")
+  env_agent = os.environ.get("LAYERS_AGENT_CLI", "").strip().lower()
+  if env_agent:
+    cfg["agent_cli"] = env_agent
   return cfg
 
 
@@ -74,6 +119,7 @@ def save_bridge_config(
     link_token: str,
     sync_base_url: str = DEFAULT_SYNC_BASE_URL,
     config_path: str | Path | None = None,
+    agent_cli: str = "auto",
 ) -> Path:
   target = resolve_config_path(config_path)
   target.parent.mkdir(parents=True, exist_ok=True)
@@ -82,6 +128,7 @@ def save_bridge_config(
       "sync_base_url": (
           str(sync_base_url or DEFAULT_SYNC_BASE_URL).strip().rstrip("/")
       ),
+      "agent_cli": str(agent_cli or "auto").strip().lower() or "auto",
   }
   target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
   return target
@@ -96,14 +143,17 @@ class LayersSyncClient:
       sync_base_url: str | None = None,
       config_path: str | Path | None = None,
       timeout_seconds: float = 20.0,
+      agent_cli: str | None = None,
   ) -> None:
     self.config_path = config_path
     self.timeout_seconds = timeout_seconds
     self.last_payload: dict[str, Any] | None = None
     self._override_token = link_token
     self._override_url = sync_base_url
+    self._override_agent_cli = agent_cli
     self.link_token = ""
     self.sync_base_url = DEFAULT_SYNC_BASE_URL
+    self.agent_cli = "auto"
     self.reload_config()
 
   def reload_config(self) -> dict[str, str]:
@@ -120,15 +170,25 @@ class LayersSyncClient:
         if self._override_url is not None
         else cfg["sync_base_url"]
     )
+    self.agent_cli = (
+        str(self._override_agent_cli).strip().lower() or "auto"
+        if self._override_agent_cli is not None
+        else cfg["agent_cli"]
+    )
     if (self.link_token, self.sync_base_url) != (prev_token, prev_url):
       self.last_payload = None
-    return {"link_token": self.link_token, "sync_base_url": self.sync_base_url}
+    return {
+        "link_token": self.link_token,
+        "sync_base_url": self.sync_base_url,
+        "agent_cli": self.agent_cli,
+    }
 
   def configure(
       self,
       link_token: str,
       sync_base_url: str | None = None,
       persist: bool = True,
+      agent_cli: str | None = None,
   ) -> Path | None:
     prev_token = self.link_token
     prev_url = self.sync_base_url
@@ -138,6 +198,10 @@ class LayersSyncClient:
       cleaned_url = str(sync_base_url).strip().rstrip("/")
       self._override_url = cleaned_url or DEFAULT_SYNC_BASE_URL
       self.sync_base_url = self._override_url
+    if agent_cli is not None:
+      cleaned_agent = str(agent_cli).strip().lower() or "auto"
+      self._override_agent_cli = cleaned_agent
+      self.agent_cli = cleaned_agent
     if (self.link_token, self.sync_base_url) != (prev_token, prev_url):
       self.last_payload = None
     if persist:
@@ -145,6 +209,7 @@ class LayersSyncClient:
           self.link_token,
           self.sync_base_url,
           config_path=self.config_path,
+          agent_cli=self.agent_cli,
       )
     return None
 
@@ -181,8 +246,13 @@ class LayersSyncClient:
         headers=headers,
         method=method.upper(),
     )
+    ssl_ctx = _build_ssl_context() if url.lower().startswith("https://") else None
     try:
-      with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+      with urllib.request.urlopen(
+          req,
+          timeout=self.timeout_seconds,
+          context=ssl_ctx,
+      ) as resp:
         text = resp.read().decode("utf-8", errors="replace")
         parsed = json.loads(text) if text.strip() else {}
         if isinstance(parsed, dict):
