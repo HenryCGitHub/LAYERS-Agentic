@@ -2,12 +2,65 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import threading
+import time
 from typing import Any
+
+_MAX_ASSET_SCAN = 2500
+_MAX_VERSE_FILE_SCAN = 1000
+_PROBE_CACHE_TTL_SEC = 2.0
+_SKIP_CONTENT_DIRS = {
+    "__ExternalActors__",
+    "__ExternalObjects__",
+    "Collections",
+    "Developers",
+}
 
 _RECENT_PIE_ERRORS: list[str] = []
 _LAST_MAIN_THREAD_CONTEXT: dict[str, Any] | None = None
+_LAST_PROBE_TS: float = 0.0
+_LAST_UNREAL_MOD_ID: int | None = None
+
+
+def invalidate_uproject_context_cache() -> None:
+  global _LAST_MAIN_THREAD_CONTEXT, _LAST_PROBE_TS, _LAST_UNREAL_MOD_ID
+  _LAST_MAIN_THREAD_CONTEXT = None
+  _LAST_PROBE_TS = 0.0
+  _LAST_UNREAL_MOD_ID = None
+
+
+def _empty_context() -> dict[str, Any]:
+  return {
+      "project_name": "",
+      "current_level": "",
+      "game_mode": "",
+      "default_pawn": "",
+      "input_assets": [],
+      "blueprint_assets": [],
+      "data_assets": [],
+      "widget_assets": [],
+      "level_assets": [],
+      "verse_files": [],
+      "recent_errors": list(_RECENT_PIE_ERRORS[-6:]),
+  }
+
+
+def _clone_context(src: dict[str, Any]) -> dict[str, Any]:
+  return {
+      "project_name": str(src.get("project_name", "")),
+      "current_level": str(src.get("current_level", "")),
+      "game_mode": str(src.get("game_mode", "")),
+      "default_pawn": str(src.get("default_pawn", "")),
+      "input_assets": list(src.get("input_assets", [])),
+      "blueprint_assets": list(src.get("blueprint_assets", [])),
+      "data_assets": list(src.get("data_assets", [])),
+      "widget_assets": list(src.get("widget_assets", [])),
+      "level_assets": list(src.get("level_assets", [])),
+      "verse_files": list(src.get("verse_files", [])),
+      "recent_errors": list(_RECENT_PIE_ERRORS[-6:]),
+  }
 
 
 def record_pie_error(message: str) -> None:
@@ -47,31 +100,32 @@ def _read_prop(obj: Any, attr_name: str, fallback: str = "") -> str:
   return str(val).strip() or fallback
 
 
-def probe_uproject_context() -> dict[str, Any]:
+def probe_uproject_context(
+    *,
+    force_refresh: bool = False,
+    max_age_seconds: float = _PROBE_CACHE_TTL_SEC,
+) -> dict[str, Any]:
   """Inspects running Unreal Editor state without modifying project assets."""
-  global _LAST_MAIN_THREAD_CONTEXT
-  context: dict[str, Any] = {
-      "project_name": "",
-      "current_level": "",
-      "game_mode": "",
-      "default_pawn": "",
-      "input_assets": [],
-      "recent_errors": list(_RECENT_PIE_ERRORS[-6:]),
-  }
+  global _LAST_MAIN_THREAD_CONTEXT, _LAST_PROBE_TS, _LAST_UNREAL_MOD_ID
+  context = _empty_context()
 
   if threading.current_thread() is not threading.main_thread():
     if _LAST_MAIN_THREAD_CONTEXT is not None:
-      return {
-          **_LAST_MAIN_THREAD_CONTEXT,
-          "input_assets": list(_LAST_MAIN_THREAD_CONTEXT.get("input_assets", [])),
-          "recent_errors": list(_RECENT_PIE_ERRORS[-6:]),
-      }
+      return _clone_context(_LAST_MAIN_THREAD_CONTEXT)
     return context
 
   try:
     import unreal  # type: ignore
   except Exception:
     return context
+
+  if (
+      not force_refresh
+      and _LAST_MAIN_THREAD_CONTEXT is not None
+      and _LAST_UNREAL_MOD_ID == id(unreal)
+      and (time.monotonic() - _LAST_PROBE_TS) < max(0.0, float(max_age_seconds))
+  ):
+    return _clone_context(_LAST_MAIN_THREAD_CONTEXT)
 
   # 1. Project Name
   sys_lib = getattr(unreal, "SystemLibrary", None)
@@ -115,7 +169,7 @@ def probe_uproject_context() -> dict[str, Any]:
       )
       context["default_pawn"] = _read_prop(gm_settings, "default_pawn_class", "")
 
-  # 4. Existing Enhanced Input Assets (`IMC_*` / `IA_*`) under `/Game`
+  # 4. Bounded `/Game` Asset Categorization (Input, Widgets, DataAssets, Levels, Blueprints)
   reg_helpers = getattr(unreal, "AssetRegistryHelpers", None)
   if reg_helpers and hasattr(reg_helpers, "get_asset_registry"):
     registry = _safe_call(reg_helpers.get_asset_registry, None)
@@ -124,8 +178,24 @@ def probe_uproject_context() -> dict[str, Any]:
           lambda: registry.get_assets_by_path("/Game", recursive=True), []
       )
       found_inputs: list[str] = []
+      found_blueprints: list[str] = []
+      found_data: list[str] = []
+      found_widgets: list[str] = []
+      found_levels: list[str] = []
       seen: set[str] = set()
-      for asset in assets or []:
+
+      for idx, asset in enumerate(assets or []):
+        if idx >= _MAX_ASSET_SCAN:
+          break
+        if (
+            len(found_inputs) >= 12
+            and len(found_widgets) >= 8
+            and len(found_data) >= 8
+            and len(found_levels) >= 6
+            and len(found_blueprints) >= 12
+        ):
+          break
+
         pkg = str(
             getattr(asset, "package_name", "")
             or getattr(asset, "object_path", "")
@@ -138,23 +208,88 @@ def probe_uproject_context() -> dict[str, Any]:
             or getattr(asset, "asset_class", "")
             or ""
         ).strip()
+        label = pkg or asset_name
+        if not label or label in seen:
+          continue
+
         is_input = (
             "InputAction" in cls_name
             or "InputMappingContext" in cls_name
             or asset_name.startswith("IA_")
             or asset_name.startswith("IMC_")
         )
-        label = pkg or asset_name
-        if is_input and label and label not in seen:
+        is_widget = (
+            "WidgetBlueprint" in cls_name
+            or "UserWidget" in cls_name
+            or asset_name.startswith("WBP_")
+            or asset_name.startswith("UMG_")
+        )
+        is_data = (
+            "DataAsset" in cls_name
+            or "PrimaryDataAsset" in cls_name
+            or "DataTable" in cls_name
+            or asset_name.startswith("DA_")
+            or asset_name.startswith("DT_")
+        )
+        is_level = (
+            cls_name in ("World", "Level")
+            or "World" in cls_name
+            or asset_name.startswith(("L_", "LVL_", "Map_"))
+        )
+        is_blueprint = "Blueprint" in cls_name or asset_name.startswith(
+            ("BP_", "GM_", "GS_", "PC_", "PS_", "AIC_", "BPI_", "AC_")
+        )
+
+        if is_input and len(found_inputs) < 12:
           seen.add(label)
           found_inputs.append(label)
-          if len(found_inputs) >= 16:
-            break
-      context["input_assets"] = found_inputs
+        elif is_widget and len(found_widgets) < 8:
+          seen.add(label)
+          found_widgets.append(label)
+        elif is_data and len(found_data) < 8:
+          seen.add(label)
+          found_data.append(label)
+        elif is_level and len(found_levels) < 6:
+          seen.add(label)
+          found_levels.append(label)
+        elif is_blueprint and len(found_blueprints) < 12:
+          seen.add(label)
+          found_blueprints.append(label)
 
-  _LAST_MAIN_THREAD_CONTEXT = {
-      **context,
-      "input_assets": list(context["input_assets"]),
-      "recent_errors": list(context["recent_errors"]),
-  }
-  return context
+      context["input_assets"] = found_inputs
+      context["blueprint_assets"] = found_blueprints
+      context["data_assets"] = found_data
+      context["widget_assets"] = found_widgets
+      context["level_assets"] = found_levels
+
+  # 5. Existing `.verse` scripts under Content/ (pruning OFPA folders)
+  paths_cls = getattr(unreal, "Paths", None)
+  if paths_cls and hasattr(paths_cls, "project_content_dir"):
+    raw_content_dir = str(
+        _safe_call(paths_cls.project_content_dir, "") or ""
+    ).strip()
+    if raw_content_dir:
+      content_root = Path(raw_content_dir)
+      if content_root.is_dir():
+        found_verse: list[str] = []
+        scanned_files = 0
+        for root, dirs, files in os.walk(content_root):
+          dirs[:] = sorted(
+              d for d in dirs if not d.startswith(".") and d not in _SKIP_CONTENT_DIRS
+          )
+          for fname in sorted(files):
+            scanned_files += 1
+            if scanned_files > _MAX_VERSE_FILE_SCAN or len(found_verse) >= 8:
+              dirs[:] = []
+              break
+            if fname.endswith(".verse"):
+              rel_posix = (Path(root) / fname).relative_to(content_root).as_posix()
+              found_verse.append(f"Content/{rel_posix}")
+          if scanned_files > _MAX_VERSE_FILE_SCAN or len(found_verse) >= 8:
+            break
+        context["verse_files"] = found_verse
+
+  _LAST_MAIN_THREAD_CONTEXT = _clone_context(context)
+  _LAST_PROBE_TS = time.monotonic()
+  _LAST_UNREAL_MOD_ID = id(unreal)
+  return _clone_context(context)

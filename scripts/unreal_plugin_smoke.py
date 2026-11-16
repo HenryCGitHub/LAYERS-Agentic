@@ -272,6 +272,14 @@ def _validate_uplugin() -> None:
 
 
 def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
+  content_dir = saved_dir.parent / "Content"
+  verse_file = content_dir / "Verse" / "crab_dash_device.verse"
+  verse_file.parent.mkdir(parents=True, exist_ok=True)
+  verse_file.write_text("crab_dash_device := class() {}\n", encoding="utf-8")
+  skipped_verse = content_dir / "__ExternalActors__" / "skip.verse"
+  skipped_verse.parent.mkdir(parents=True, exist_ok=True)
+  skipped_verse.write_text("# OFPA should be skipped\n", encoding="utf-8")
+
   state: dict[str, object] = {
       "registered_toolsets": [],
       "menu_entries": [],
@@ -281,6 +289,8 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
       "logs": [],
       "thread_violations": [],
       "slate_tick_callbacks": [],
+      "asset_registry_calls": 0,
+      "assets": None,
   }
 
   def _assert_game_thread(api_name: str) -> None:
@@ -336,15 +346,29 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
       self.asset_name = name
       self.asset_class = cls_name
 
+  default_assets = [
+      _AssetData("/Game/Input/IMC_Core", "IMC_Core", "InputMappingContext"),
+      _AssetData("/Game/Input/IA_Move", "IA_Move", "InputAction"),
+      _AssetData("/Game/Input/IA_Dash", "IA_Dash", "InputAction"),
+      _AssetData("/Game/Blueprints/BP_CrabPlayer", "BP_CrabPlayer", "Blueprint"),
+      _AssetData("/Game/Blueprints/GM_Shellbreaker", "GM_Shellbreaker", "Blueprint"),
+      _AssetData(
+          "/Game/Data/DA_PlayerLocomotion",
+          "DA_PlayerLocomotion",
+          "PrimaryDataAsset",
+      ),
+      _AssetData("/Game/UI/WBP_ArenaHUD", "WBP_ArenaHUD", "WidgetBlueprint"),
+      _AssetData("/Game/Maps/L_Arena_Proto", "L_Arena_Proto", "World"),
+  ]
+  state["assets"] = default_assets
+  state["asset_data_cls"] = _AssetData
+
   class _AssetRegistry:
     @staticmethod
     def get_assets_by_path(path, recursive=True):
       _assert_game_thread("AssetRegistry.get_assets_by_path")
-      return [
-          _AssetData("/Game/Input/IMC_Core", "IMC_Core", "InputMappingContext"),
-          _AssetData("/Game/Input/IA_Move", "IA_Move", "InputAction"),
-          _AssetData("/Game/Input/IA_Dash", "IA_Dash", "InputAction"),
-      ]
+      state["asset_registry_calls"] = int(state["asset_registry_calls"]) + 1
+      return state["assets"]
 
   class _AssetRegistryHelpers:
     @staticmethod
@@ -431,6 +455,11 @@ def _install_mock_unreal(saved_dir: Path) -> dict[str, object]:
     def project_saved_dir():
       _assert_game_thread("Paths.project_saved_dir")
       return str(saved_dir)
+
+    @staticmethod
+    def project_content_dir():
+      _assert_game_thread("Paths.project_content_dir")
+      return str(content_dir)
 
   def _log_fn(msg: object) -> None:
     _assert_game_thread("unreal.log")
@@ -530,8 +559,55 @@ def main() -> int:
       assert "## Live Unreal Project Snapshot (.uproject via LayersBridge)" in spec_md
       assert "ShellbreakerUE5" in spec_md
       assert "/Game/Input/IMC_Core" in spec_md
+      assert (
+          "- Existing Blueprints: /Game/Blueprints/BP_CrabPlayer, /Game/Blueprints/GM_Shellbreaker"
+          in spec_md
+      ), spec_md
+      assert (
+          "- Existing DataAssets & Tables: /Game/Data/DA_PlayerLocomotion"
+          in spec_md
+      ), spec_md
+      assert "- Existing UMG Widgets: /Game/UI/WBP_ArenaHUD" in spec_md, spec_md
+      assert "- Existing Levels: /Game/Maps/L_Arena_Proto" in spec_md, spec_md
+      assert (
+          "- Existing Verse Files: Content/Verse/crab_dash_device.verse"
+          in spec_md
+      ), spec_md
+      assert "__ExternalActors__" not in spec_md, spec_md
       assert "# ACTIVE EPIC SPEC · E01 · Crab Locomotion & Dash" in spec_md
       assert "### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK" in spec_md
+
+      # 1-probe: Verify TTL cache hit + force_refresh + bounded 2,500-asset scan cap
+      import layers_project_probe  # type: ignore
+
+      calls_before_cached = int(unreal_state["asset_registry_calls"])
+      cached_ctx = layers_project_probe.probe_uproject_context()
+      assert int(unreal_state["asset_registry_calls"]) == calls_before_cached, (
+          "Expected immediate probe_uproject_context() to hit TTL cache"
+      )
+      assert cached_ctx.get("blueprint_assets"), cached_ctx
+      refreshed_ctx = layers_project_probe.probe_uproject_context(force_refresh=True)
+      assert int(unreal_state["asset_registry_calls"]) == calls_before_cached + 1
+      assert refreshed_ctx.get("verse_files") == ["Content/Verse/crab_dash_device.verse"]
+
+      orig_assets = unreal_state["assets"]
+      asset_data_cls = unreal_state["asset_data_cls"]
+      try:
+        filler = [
+            asset_data_cls(f"/Game/Temp/T_Filler_{i}", f"T_Filler_{i}", "Texture2D")
+            for i in range(3200)
+        ]
+        filler[2600] = asset_data_cls(
+            "/Game/Blueprints/BP_BeyondCap", "BP_BeyondCap", "Blueprint"
+        )
+        unreal_state["assets"] = filler
+        capped_ctx = layers_project_probe.probe_uproject_context(force_refresh=True)
+        assert "/Game/Blueprints/BP_BeyondCap" not in capped_ctx.get(
+            "blueprint_assets", []
+        ), capped_ctx
+      finally:
+        unreal_state["assets"] = orig_assets
+        layers_project_probe.invalidate_uproject_context_cache()
 
       # 1a. Verify Split Play-Toolbar default Build state & CLI / clipboard dispatch
       primary_action = dock.compute_primary_toolbar_action()

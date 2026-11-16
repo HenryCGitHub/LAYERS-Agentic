@@ -5,6 +5,22 @@ import '../models/epic_spec.dart';
 /// Matches `buildRootMcpMarkdown` and `buildEpicMcpMarkdown` in the approved v3 spec UI
 /// and feeds `LayersBridge` (`layers_get_active_epic_spec`) via Cloud Functions.
 class UnrealMcpPayloadBuilder {
+  static void _writeContextList(
+    StringBuffer b,
+    String label,
+    dynamic raw,
+    int cap,
+  ) {
+    if (raw is! List || raw.isEmpty) return;
+    final clean = raw
+        .map((e) => e.toString().trim())
+        .where((s) => s.isNotEmpty)
+        .take(cap)
+        .toList();
+    if (clean.isEmpty) return;
+    b.writeln('- $label: ${clean.join(', ')}');
+  }
+
   /// Builds `ROOT_MCP_CONTEXT` (Prepended to every Epic payload sent to Unreal MCP).
   static String buildRootMcpContext(
     ProjectConceptBlueprint rootSpec, {
@@ -55,12 +71,42 @@ class UnrealMcpPayloadBuilder {
       if (level.isNotEmpty) b.writeln('- Open Level: $level');
       if (gameMode.isNotEmpty) b.writeln('- GameMode: $gameMode');
       if (pawn.isNotEmpty) b.writeln('- DefaultPawnClass: $pawn');
-      final inputAssets = liveUprojectContext['input_assets'];
-      if (inputAssets is List && inputAssets.isNotEmpty) {
-        b.writeln(
-          '- Existing Enhanced Input Assets: ${inputAssets.take(12).join(', ')}',
-        );
-      }
+      _writeContextList(
+        b,
+        'Existing Enhanced Input Assets',
+        liveUprojectContext['input_assets'],
+        12,
+      );
+      _writeContextList(
+        b,
+        'Existing Blueprints',
+        liveUprojectContext['blueprint_assets'],
+        12,
+      );
+      _writeContextList(
+        b,
+        'Existing DataAssets & Tables',
+        liveUprojectContext['data_assets'],
+        8,
+      );
+      _writeContextList(
+        b,
+        'Existing UMG Widgets',
+        liveUprojectContext['widget_assets'],
+        8,
+      );
+      _writeContextList(
+        b,
+        'Existing Levels',
+        liveUprojectContext['level_assets'],
+        6,
+      );
+      _writeContextList(
+        b,
+        'Existing Verse Files',
+        liveUprojectContext['verse_files'],
+        8,
+      );
       final recentErrors = liveUprojectContext['recent_errors'];
       if (recentErrors is List && recentErrors.isNotEmpty) {
         b.writeln('- Recent Editor/PIE Log Warnings:');

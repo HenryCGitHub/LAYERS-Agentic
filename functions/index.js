@@ -375,6 +375,35 @@ function parseEpicSpecJs(epicDoc, indexHint = 0) {
   return spec;
 }
 
+function sanitizeUprojectContextJs(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const cleanStr = (val, maxLen = 160) =>
+    String(val ?? "").trim().slice(0, maxLen);
+  const cleanArr = (val, maxItems) =>
+    Array.isArray(val)
+      ? val
+          .map((item) => cleanStr(item, 240))
+          .filter(Boolean)
+          .slice(0, maxItems)
+      : [];
+
+  return {
+    project_name: cleanStr(raw.project_name),
+    current_level: cleanStr(raw.current_level),
+    game_mode: cleanStr(raw.game_mode),
+    default_pawn: cleanStr(raw.default_pawn),
+    input_assets: cleanArr(raw.input_assets, 16),
+    blueprint_assets: cleanArr(raw.blueprint_assets, 16),
+    data_assets: cleanArr(raw.data_assets, 12),
+    widget_assets: cleanArr(raw.widget_assets, 12),
+    level_assets: cleanArr(raw.level_assets, 10),
+    verse_files: cleanArr(raw.verse_files, 12),
+    recent_errors: cleanArr(raw.recent_errors, 8),
+  };
+}
+
 function renderServerUnrealMcpPayloadJs({
   rootSpec,
   epicSpec,
@@ -434,11 +463,21 @@ function renderServerUnrealMcpPayloadJs({
     if (level) lines.push(`- Open Level: ${level}`);
     if (gameMode) lines.push(`- GameMode: ${gameMode}`);
     if (pawn) lines.push(`- DefaultPawnClass: ${pawn}`);
-    if (Array.isArray(uprojectContext.input_assets) && uprojectContext.input_assets.length > 0) {
-      lines.push(
-        `- Existing Enhanced Input Assets: ${uprojectContext.input_assets.slice(0, 12).join(", ")}`
-      );
-    }
+    const pushSnapshotList = (label, rawList, cap) => {
+      if (!Array.isArray(rawList) || rawList.length === 0) return;
+      const clean = rawList
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+        .slice(0, cap);
+      if (clean.length === 0) return;
+      lines.push(`- ${label}: ${clean.join(", ")}`);
+    };
+    pushSnapshotList("Existing Enhanced Input Assets", uprojectContext.input_assets, 12);
+    pushSnapshotList("Existing Blueprints", uprojectContext.blueprint_assets, 12);
+    pushSnapshotList("Existing DataAssets & Tables", uprojectContext.data_assets, 8);
+    pushSnapshotList("Existing UMG Widgets", uprojectContext.widget_assets, 8);
+    pushSnapshotList("Existing Levels", uprojectContext.level_assets, 6);
+    pushSnapshotList("Existing Verse Files", uprojectContext.verse_files, 8);
     if (Array.isArray(uprojectContext.recent_errors) && uprojectContext.recent_errors.length > 0) {
       lines.push("- Recent Editor/PIE Log Warnings:");
       for (const err of uprojectContext.recent_errors.slice(0, 4)) {
@@ -1551,12 +1590,7 @@ exports.geminiProxy = onRequest(
       }
 
       const body = req.method === "POST" ? parseJsonBody(req) : {};
-      const uprojectContext =
-        body.uprojectContext &&
-        typeof body.uprojectContext === "object" &&
-        !Array.isArray(body.uprojectContext)
-          ? body.uprojectContext
-          : null;
+      const uprojectContext = sanitizeUprojectContextJs(body.uprojectContext);
 
       const db = getFirestore();
       const docsSnap = await db
@@ -1640,12 +1674,7 @@ exports.geminiProxy = onRequest(
         return;
       }
 
-      const uprojectContext =
-        body.uprojectContext &&
-        typeof body.uprojectContext === "object" &&
-        !Array.isArray(body.uprojectContext)
-          ? body.uprojectContext
-          : null;
+      const uprojectContext = sanitizeUprojectContextJs(body.uprojectContext);
 
       const db = getFirestore();
       const docsCol = db
@@ -1906,6 +1935,7 @@ exports._testHelpers = {
   hashLinkToken,
   UNREAL_UPDATE_VALID_ACTIONS,
   normalizeTuningUnitJs,
+  sanitizeUprojectContextJs,
   parseRootSpecJs,
   parseEpicSpecJs,
   renderServerUnrealMcpPayloadJs,

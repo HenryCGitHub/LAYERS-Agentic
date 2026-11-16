@@ -1801,5 +1801,57 @@ void main() {
         expect(fixPayload, contains('layers_resolve_pie_fix'));
       },
     );
+
+    test(
+      '26. buildRootMcpContext renders Blueprints, DataAssets, UMG Widgets, Levels, and Verse snapshot lines',
+      () {
+        final shellbreaker = UnrealSparkPresets.byId('shellbreaker');
+        final md = UnrealMcpPayloadBuilder.buildRootMcpContext(
+          shellbreaker,
+          liveUprojectContext: const {
+            'project_name': 'ShellbreakerUE5',
+            'current_level': 'L_Arena_Proto',
+            'game_mode': 'GM_Shellbreaker',
+            'default_pawn': 'BP_CrabPlayer',
+            'input_assets': ['/Game/Input/IMC_Core', '/Game/Input/IA_Move'],
+            'blueprint_assets': [
+              '/Game/Blueprints/BP_CrabPlayer',
+              '/Game/Blueprints/GM_Shellbreaker',
+            ],
+            'data_assets': ['/Game/Data/DA_PlayerLocomotion'],
+            'widget_assets': ['/Game/UI/WBP_ArenaHUD'],
+            'level_assets': ['/Game/Maps/L_Arena_Proto'],
+            'verse_files': ['Content/Verse/crab_dash_device.verse'],
+          },
+        );
+        expect(
+          md,
+          contains(
+            '- Existing Enhanced Input Assets: /Game/Input/IMC_Core, /Game/Input/IA_Move',
+          ),
+        );
+        expect(
+          md,
+          contains(
+            '- Existing Blueprints: /Game/Blueprints/BP_CrabPlayer, /Game/Blueprints/GM_Shellbreaker',
+          ),
+        );
+        expect(
+          md,
+          contains(
+            '- Existing DataAssets & Tables: /Game/Data/DA_PlayerLocomotion',
+          ),
+        );
+        expect(
+          md,
+          contains('- Existing UMG Widgets: /Game/UI/WBP_ArenaHUD'),
+        );
+        expect(md, contains('- Existing Levels: /Game/Maps/L_Arena_Proto'));
+        expect(
+          md,
+          contains('- Existing Verse Files: Content/Verse/crab_dash_device.verse'),
+        );
+      },
+    );
   });
 }
