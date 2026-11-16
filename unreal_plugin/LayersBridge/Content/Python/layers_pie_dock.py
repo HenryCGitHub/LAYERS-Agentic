@@ -62,21 +62,40 @@ class LayersPieGateDock:
       self.last_status_message = f"PIE launch failed: {exc}"
     return False
 
-  def toggle_check(self, check_id: str, passed: bool | None = None) -> dict[str, Any]:
-    kwargs: dict[str, Any] = {"checkId": check_id}
+  def toggle_check(
+      self,
+      check_id: str,
+      passed: bool | None = None,
+      epic_id: str = "",
+  ) -> dict[str, Any]:
+    clean_id = str(check_id or "").strip()
+    if not clean_id:
+      return {"ok": False, "error": "check_id cannot be empty."}
+    kwargs: dict[str, Any] = {"checkId": clean_id}
     if passed is not None:
       kwargs["passed"] = bool(passed)
-    return self.sync_client.post_epic_update("toggle_check", **kwargs)
-
-  def flag_fix(self, fix_text: str) -> dict[str, Any]:
     return self.sync_client.post_epic_update(
-        "log_fix",
-        fixText=str(fix_text or "").strip(),
+        "toggle_check",
+        epic_id=epic_id,
+        **kwargs,
     )
 
-  def resolve_fix(self, fix_id: str) -> dict[str, Any]:
+  def flag_fix(self, fix_text: str, epic_id: str = "") -> dict[str, Any]:
+    clean = str(fix_text or "").strip()
+    if not clean:
+      return {"ok": False, "error": "fix_text cannot be empty."}
+    ctx = probe_uproject_context()
+    return self.sync_client.post_epic_update(
+        "log_fix",
+        epic_id=epic_id,
+        fixText=clean,
+        uprojectContext=ctx,
+    )
+
+  def resolve_fix(self, fix_id: str, epic_id: str = "") -> dict[str, Any]:
     return self.sync_client.post_epic_update(
         "resolve_fix",
+        epic_id=epic_id,
         fixId=str(fix_id or "latest").strip(),
     )
 
@@ -87,16 +106,20 @@ class LayersPieGateDock:
       unit: str = "",
       epic_id: str = "",
   ) -> dict[str, Any]:
+    clean_key = str(key or "").strip()
+    clean_val = str(value or "").strip()
+    if not clean_key or not clean_val:
+      return {"ok": False, "error": "key and value cannot be empty."}
     return self.sync_client.post_epic_update(
         "update_tuning",
         epic_id=epic_id,
-        key=str(key or "").strip(),
-        value=str(value or "").strip(),
+        key=clean_key,
+        value=clean_val,
         unit=str(unit or "").strip(),
     )
 
-  def pass_epic(self) -> dict[str, Any]:
-    return self.sync_client.post_epic_update("pass_epic")
+  def pass_epic(self, epic_id: str = "") -> dict[str, Any]:
+    return self.sync_client.post_epic_update("pass_epic", epic_id=epic_id)
 
   def reopen_epic(self, epic_id: str = "") -> dict[str, Any]:
     return self.sync_client.post_epic_update(
@@ -123,14 +146,22 @@ class LayersPieGateDock:
     checks = active.get("checks") or []
     passed = sum(1 for c in checks if c.get("passed"))
     fixes = active.get("openFixes") or []
+    done_tag = " [ALL EPICS PASSED ✓]" if payload.get("allEpicsCompleted") else ""
     lines = [
         f"LAYERS PIE Gate · {payload.get('releaseVersion', '')} · "
-        f"Epic {payload.get('epicPosition', 0)}/{payload.get('totalEpics', 0)}",
+        f"Epic {payload.get('epicPosition', 0)}/{payload.get('totalEpics', 0)}{done_tag}",
         f"{active.get('code', 'E00')} · {active.get('title', 'Epic')} "
         f"({passed}/{len(checks)} Checks, {len(fixes)} Open [FIX])",
+    ]
+    beat = str(active.get("coreLoopBeat") or "").strip()
+    if beat:
+      lines.append(f"Core Loop Beat: {beat}")
+    lines.extend([
         f"Goal: {active.get('goal', '')}",
         f"Web Studio: {payload.get('webStudioUrl', '')}",
-    ]
+    ])
+    for delta in active.get("upgradeDeltas") or []:
+      lines.append(f"  + {delta}")
     for chk in checks:
       mark = "[x]" if chk.get("passed") else "[ ]"
       lines.append(f"  {mark} {chk.get('text', '')}")

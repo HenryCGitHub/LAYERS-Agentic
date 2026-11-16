@@ -107,6 +107,8 @@ class LayersSyncClient:
     self.reload_config()
 
   def reload_config(self) -> dict[str, str]:
+    prev_token = self.link_token
+    prev_url = self.sync_base_url
     cfg = load_bridge_config(self.config_path)
     self.link_token = (
         str(self._override_token).strip()
@@ -118,6 +120,8 @@ class LayersSyncClient:
         if self._override_url is not None
         else cfg["sync_base_url"]
     )
+    if (self.link_token, self.sync_base_url) != (prev_token, prev_url):
+      self.last_payload = None
     return {"link_token": self.link_token, "sync_base_url": self.sync_base_url}
 
   def configure(
@@ -126,12 +130,16 @@ class LayersSyncClient:
       sync_base_url: str | None = None,
       persist: bool = True,
   ) -> Path | None:
+    prev_token = self.link_token
+    prev_url = self.sync_base_url
     self._override_token = str(link_token or "").strip()
     self.link_token = self._override_token
     if sync_base_url is not None:
       cleaned_url = str(sync_base_url).strip().rstrip("/")
       self._override_url = cleaned_url or DEFAULT_SYNC_BASE_URL
       self.sync_base_url = self._override_url
+    if (self.link_token, self.sync_base_url) != (prev_token, prev_url):
+      self.last_payload = None
     if persist:
       return save_bridge_config(
           self.link_token,
@@ -217,10 +225,6 @@ class LayersSyncClient:
       **fields: Any,
   ) -> dict[str, Any]:
     target_epic_id = str(epic_id or "").strip()
-    if not target_epic_id and action != "sync_uproject":
-      active_epic = (self.last_payload or {}).get("activeEpic")
-      if isinstance(active_epic, dict):
-        target_epic_id = str(active_epic.get("id") or "").strip()
     payload: dict[str, Any] = {"action": action}
     if target_epic_id:
       payload["epicId"] = target_epic_id

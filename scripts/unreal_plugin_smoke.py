@@ -13,6 +13,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import types
+import urllib.request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PLUGIN_ROOT = REPO_ROOT / "unreal_plugin" / "LayersBridge"
@@ -226,6 +227,23 @@ const server = http.createServer((req, res) => {
       }
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify(payload));
+      return;
+    }
+
+    if (urlPath === "/_test/web_studio_reopen_e01") {
+      const ep01 = docsById.get("epic_01");
+      const mut = helpers.applyUnrealEpicMutationJs({
+        epicDoc: ep01,
+        action: "reopen_epic",
+        body: {},
+        nowMs: Date.now(),
+      });
+      ep01.sections = mut.sections;
+      ep01.subtasks = mut.subtasks;
+      ep01.isCompleted = mut.isCompleted;
+      projDoc.sections.selected_epic_id = "epic_01";
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
 
@@ -517,8 +535,43 @@ def main() -> int:
       reopen_proc = subprocess.run(["node", "-e", reopen_v02_js], cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=10)
       assert reopen_proc.returncode == 0, f"v0.2 reopen check failed: {reopen_proc.stderr}"
 
-      # 6. Check token config persistence helper
+      # 5d. Web Studio reopens E01 server-side while dock.last_payload still holds E02:
+      #     dock.flag_fix() must omit stale epicId, hit E01, and inject fresh .uproject PIE errors
+      from layers_project_probe import clear_pie_errors, record_pie_error  # type: ignore
+
+      req = urllib.request.Request(
+          url=f"http://127.0.0.1:{port}/_test/web_studio_reopen_e01",
+          data=b"{}",
+          headers={"Authorization": f"Bearer {TEST_TOKEN}"},
+          method="POST",
+      )
+      with urllib.request.urlopen(req, timeout=5) as resp:
+        assert resp.status == 200
+
+      record_pie_error("LogBlueprintUserMessages: Warning: Dash trace missed ramp")
+      try:
+        fix_res = dock.flag_fix("Dash trace missed ramp")
+        assert fix_res.get("ok") is True, fix_res
+        assert (fix_res.get("activeEpic") or {}).get("code") == "E01", fix_res
+        assert "LogBlueprintUserMessages: Warning: Dash trace missed ramp" in str(
+            fix_res.get("mcpPayloadMarkdown") or ""
+        )
+      finally:
+        clear_pie_errors()
+
+      assert dock.flag_fix("   ").get("ok") is False
+      assert dock.toggle_check("").get("ok") is False
+      assert dock.update_tuning("", "100").get("ok") is False
+
+      dock.resolve_fix("latest")
+      final_pass = dock.pass_epic()
+      assert final_pass.get("allEpicsCompleted") is True
+      assert "[ALL EPICS PASSED ✓]" in dock.render_dock_summary_text()
+
+      # 6. Check token config persistence helper & stale last_payload reset on token change
       dock.configure_token("lyr_saved_token_check_0001", f"http://127.0.0.1:{port}")
+      assert dock.last_payload is None
+      assert "SHELLBREAKER" not in dock.render_dock_summary_text()
       cfg_file = saved_dir / "Config" / "LayersBridge.json"
       assert cfg_file.is_file()
       assert json.loads(cfg_file.read_text(encoding="utf-8"))["link_token"] == "lyr_saved_token_check_0001"
