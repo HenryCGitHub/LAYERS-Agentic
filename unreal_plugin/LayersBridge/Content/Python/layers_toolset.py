@@ -22,6 +22,50 @@ except Exception:
 _ACTIVE_TOOLSET: "LayersToolset | None" = None
 
 
+def _format_mutation_receipt(
+    summary: str,
+    res: dict[str, Any],
+    *,
+    updated_tuning_key: str = "",
+) -> str:
+  """Builds a compact delta receipt for Unreal Assistant without re-echoing ROOT_MCP_CONTEXT."""
+  active = res.get("activeEpic") or {}
+  code = str(active.get("code") or "E01").strip() or "E01"
+  title = str(active.get("title") or "Active Epic").strip()
+  ver = str(active.get("releaseVersion") or res.get("releaseVersion") or "v0.1").strip()
+  lines = [
+      summary.strip(),
+      f"# ACTIVE EPIC SPEC · {code} · {title} ({ver})",
+  ]
+  if updated_tuning_key:
+    target_lower = updated_tuning_key.strip().lower()
+    for item in active.get("tuning") or []:
+      if not isinstance(item, dict):
+        continue
+      k = str(item.get("key") or "").strip()
+      if k.lower() == target_lower:
+        val = str(item.get("value") or "0").strip()
+        unit = str(item.get("unit") or "").strip()
+        suffix = f" {unit}" if unit else ""
+        lines.append(f"- {k}: {val}{suffix}")
+  for idx, chk in enumerate(active.get("checks") or []):
+    if not isinstance(chk, dict):
+      continue
+    tag = "[PASSED]" if chk.get("passed") else "[VERIFY]"
+    lines.append(f"  {tag} Check {idx + 1}: {str(chk.get('text') or '').strip()}")
+  open_fixes = [
+      f for f in (active.get("openFixes") or [])
+      if isinstance(f, dict) and str(f.get("text") or "").strip()
+  ]
+  if open_fixes:
+    for fx in open_fixes:
+      lines.append(f"- [FIX] {str(fx.get('text') or '').strip()}")
+    lines.append(f"### FOCUSED PIE REVISION PASS ({len(open_fixes)} OPEN [FIX])")
+  else:
+    lines.append("### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK")
+  return "\n".join(lines).strip()
+
+
 class LayersToolset(_ToolsetBase):  # type: ignore[misc]
   """Registers LAYERS Spec & PIE Acceptance Gate tools inside Unreal MCP."""
 
@@ -65,11 +109,13 @@ class LayersToolset(_ToolsetBase):  # type: ignore[misc]
       return f"LAYERS Error: {res.get('error', 'Failed to log PIE fix.')}"
     active = res.get("activeEpic") or {}
     open_count = int(active.get("openFixesCount", 0) or 0)
-    md = str(res.get("mcpPayloadMarkdown") or "").strip()
-    return (
-        f"Logged PIE [FIX] on {active.get('code', '')} · {active.get('title', '')} "
-        f"({open_count} open).\n\n{md}"
-    ).strip()
+    return _format_mutation_receipt(
+        (
+            f"Logged PIE [FIX] on {active.get('code', '')} · {active.get('title', '')} "
+            f"({open_count} open)."
+        ),
+        res,
+    )
 
   def layers_resolve_pie_fix(self, fix_id: str, epic_id: str = "") -> str:
     """Marks a PIE `[FIX]` resolved on the active Epic."""
@@ -82,10 +128,10 @@ class LayersToolset(_ToolsetBase):  # type: ignore[misc]
       return f"LAYERS Error: {res.get('error', 'Failed to resolve PIE fix.')}"
     active = res.get("activeEpic") or {}
     open_count = int(active.get("openFixesCount", 0) or 0)
-    md = str(res.get("mcpPayloadMarkdown") or "").strip()
-    return (
-        f"Resolved PIE [FIX] on {active.get('code', '')} ({open_count} remaining).\n\n{md}"
-    ).strip()
+    return _format_mutation_receipt(
+        f"Resolved PIE [FIX] on {active.get('code', '')} ({open_count} remaining).",
+        res,
+    )
 
   def layers_toggle_pie_check(
       self,
@@ -108,11 +154,13 @@ class LayersToolset(_ToolsetBase):  # type: ignore[misc]
     active = res.get("activeEpic") or {}
     checks = active.get("checks") or []
     passed_count = sum(1 for c in checks if c.get("passed"))
-    md = str(res.get("mcpPayloadMarkdown") or "").strip()
-    return (
-        f"Updated PIE Check ({passed_count}/{len(checks)} passed) on "
-        f"{active.get('code', '')} · {active.get('title', '')}.\n\n{md}"
-    ).strip()
+    return _format_mutation_receipt(
+        (
+            f"Updated PIE Check ({passed_count}/{len(checks)} passed) on "
+            f"{active.get('code', '')} · {active.get('title', '')}."
+        ),
+        res,
+    )
 
   def layers_update_epic_tuning(
       self,
@@ -136,11 +184,14 @@ class LayersToolset(_ToolsetBase):  # type: ignore[misc]
     if not res.get("ok"):
       return f"LAYERS Error: {res.get('error', 'Failed to update Epic tuning.')}"
     active = res.get("activeEpic") or {}
-    md = str(res.get("mcpPayloadMarkdown") or "").strip()
-    return (
-        f"Updated §04 Tuning `{clean_key}` = `{clean_val}` on "
-        f"{active.get('code', '')} · {active.get('title', '')}.\n\n{md}"
-    ).strip()
+    return _format_mutation_receipt(
+        (
+            f"Updated §04 Tuning `{clean_key}` = `{clean_val}` on "
+            f"{active.get('code', '')} · {active.get('title', '')}."
+        ),
+        res,
+        updated_tuning_key=clean_key,
+    )
 
   def layers_pass_active_epic(self, epic_id: str = "") -> str:
     """Signs off all checks/fixes on the active Epic and advances to the next Epic."""

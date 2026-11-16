@@ -614,6 +614,8 @@ def main() -> int:
       # 1b. Update existing §04 tuning + insert new §04 tuning (with unit normalization)
       tune_md = toolset.layers_update_epic_tuning("DashDistance", "460")
       assert "- DashDistance: 460 cm" in tune_md
+      assert "# ROOT_MCP_CONTEXT" not in tune_md, tune_md
+      assert len(tune_md) < len(spec_md) * 0.45, (len(tune_md), len(spec_md))
       new_tune_md = toolset.layers_update_epic_tuning("ArenaRadius", "1800", unit="pixels")
       assert "- ArenaRadius: 1800 cm" in new_tune_md
       slide_tune_md = toolset.layers_update_epic_tuning("SlideSpeed", "900", unit="pixels/s")
@@ -628,6 +630,8 @@ def main() -> int:
       # 1c. Toggle individual §06 PIE checks (including final check) without jumping off E01
       chk_md = toolset.layers_toggle_pie_check("1", passed=True)
       assert "1/2" in chk_md, chk_md
+      assert "# ROOT_MCP_CONTEXT" not in chk_md, chk_md
+      assert len(chk_md) < len(spec_md) * 0.45, (len(chk_md), len(spec_md))
       assert "[PASSED] Check 1:" in chk_md, chk_md
       assert "[VERIFY] Check 2:" in chk_md, chk_md
       assert play_tb.entries["LayersPieGateCombo"].label == "E01 · 1/2 ✓", (
@@ -650,6 +654,7 @@ def main() -> int:
 
       # 2. Log 2 PIE [FIX] items and confirm switch to FOCUSED PIE REVISION PASS + live toolbar Fix label
       fix_md = toolset.layers_log_pie_fix("Boom clips ceiling during dash jump")
+      assert "# ROOT_MCP_CONTEXT" not in fix_md, fix_md
       assert "### FOCUSED PIE REVISION PASS (1 OPEN [FIX])" in fix_md
       assert "- [FIX] Boom clips ceiling during dash jump" in fix_md
       assert dock.compute_primary_toolbar_action()["mode"] == "fix"
@@ -667,6 +672,7 @@ def main() -> int:
       assert "- [FIX] Dash trail flickers on slope" not in resolved_latest
       resolved_md = toolset.layers_resolve_pie_fix("latest")
       assert "Resolved PIE [FIX] on E01" in resolved_md, resolved_md
+      assert "# ROOT_MCP_CONTEXT" not in resolved_md, resolved_md
       assert "0 remaining" in resolved_md
       assert "### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK" in resolved_md
       assert dock.compute_primary_toolbar_action()["mode"] == "pass"
