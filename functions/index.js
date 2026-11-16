@@ -191,6 +191,7 @@ function parseRootSpecJs(projectDoc) {
       ? parsed.tradeOffs.map(formatTradeOffJs).filter(Boolean)
       : [],
     outOfScope: normalizeStringArrayJs(parsed.outOfScope),
+    releaseDoneWhen: String(parsed.releaseDoneWhen || "").trim(),
   };
 }
 
@@ -515,6 +516,9 @@ function renderServerUnrealMcpPayloadJs({
   lines.push(`- Vision: ${rootSpec.pitch}`);
   if (Array.isArray(rootSpec.coreLoop) && rootSpec.coreLoop.length > 0) {
     lines.push(`- Loop: ${rootSpec.coreLoop.join(" -> ")}`);
+  }
+  if (rootSpec.releaseDoneWhen && String(rootSpec.releaseDoneWhen).trim()) {
+    lines.push(`- Release Gate: ${String(rootSpec.releaseDoneWhen).trim()}`);
   }
   lines.push("");
   lines.push("## §02 Global Unreal Contracts (1 UU = 1 cm)");

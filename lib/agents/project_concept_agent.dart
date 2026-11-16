@@ -171,11 +171,17 @@ class ProjectConceptAgent {
           },
           'links': {
             'type': 'ARRAY',
-            'items': {'type': 'STRING'},
+            'items': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.unrealActorLinkSchemaDesc,
+            },
           },
           'outOfScope': {
             'type': 'ARRAY',
-            'items': {'type': 'STRING'},
+            'items': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.exclusionItemSchemaDesc,
+            },
           },
           'controls': {
             'type': 'ARRAY',
@@ -206,7 +212,10 @@ class ProjectConceptAgent {
               'type': 'OBJECT',
               'required': ['key', 'value', 'unit'],
               'properties': {
-                'key': {'type': 'STRING'},
+                'key': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.unrealTuningKeySchemaDesc,
+                },
                 'value': {'type': 'STRING'},
                 'unit': {
                   'type': 'STRING',
@@ -219,7 +228,10 @@ class ProjectConceptAgent {
             'type': 'ARRAY',
             'items': {'type': 'STRING'},
           },
-          'levelStaging': {'type': 'STRING'},
+          'levelStaging': {
+            'type': 'STRING',
+            'description': LayersTextStyleGuide.unrealLevelStagingSchemaDesc,
+          },
           'checks': {
             'type': 'ARRAY',
             'items': {

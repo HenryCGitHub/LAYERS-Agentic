@@ -45,6 +45,15 @@ LAYERS CANONICAL UNREAL SPEC STYLE RULES:
   static const String changelogDeltaSchemaDesc =
       '5-10 word additive delta starting with "+" (e.g. "+55ms Hit-Stop freeze & radial shockwave ring").';
 
+  static const String unrealActorLinkSchemaDesc =
+      'Concrete Unreal asset/interface links using UE prefixes (BP_*, DA_*, BPI_*, IMC_*, IA_*, WBP_*).';
+
+  static const String unrealTuningKeySchemaDesc =
+      'PascalCase Unreal variable identifier (e.g. "MaxWalkSpeed", "Wave1Count", "bAllowAirDash"). Never use spaces or hyphens.';
+
+  static const String unrealLevelStagingSchemaDesc =
+      'Target Unreal test map (L_*) and greybox actor placement needed to test this Epic in PIE.';
+
   static String compactStoredTradeOff(String raw) {
     final cleaned = raw.trim().replaceFirst(RegExp(r'^[•\-\*\s]+'), '');
     if (cleaned.isEmpty) return '';

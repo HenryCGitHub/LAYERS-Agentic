@@ -125,7 +125,10 @@ class ReleasePlannerAgent {
                 'properties': {
                   'id': {'type': 'STRING'},
                   'code': {'type': 'STRING'},
-                  'title': {'type': 'STRING'},
+                  'title': {
+                    'type': 'STRING',
+                    'description': LayersTextStyleGuide.epicTitleSchemaDesc,
+                  },
                   'coreLoopBeat': {
                     'type': 'STRING',
                     'description':
@@ -135,11 +138,19 @@ class ReleasePlannerAgent {
                   'goal': {'type': 'STRING'},
                   'links': {
                     'type': 'ARRAY',
-                    'items': {'type': 'STRING'},
+                    'items': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.unrealActorLinkSchemaDesc,
+                    },
                   },
                   'outOfScope': {
                     'type': 'ARRAY',
-                    'items': {'type': 'STRING'},
+                    'items': {
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.exclusionItemSchemaDesc,
+                    },
                   },
                   'controls': {
                     'type': 'ARRAY',
@@ -149,7 +160,11 @@ class ReleasePlannerAgent {
                       'properties': {
                         'action': {'type': 'STRING'},
                         'trigger': {'type': 'STRING'},
-                        'rule': {'type': 'STRING'},
+                        'rule': {
+                          'type': 'STRING',
+                          'description':
+                              LayersTextStyleGuide.unrealControlRuleSchemaDesc,
+                        },
                       },
                     },
                   },
@@ -167,9 +182,17 @@ class ReleasePlannerAgent {
                       'type': 'OBJECT',
                       'required': ['key', 'value', 'unit'],
                       'properties': {
-                        'key': {'type': 'STRING'},
+                        'key': {
+                          'type': 'STRING',
+                          'description':
+                              LayersTextStyleGuide.unrealTuningKeySchemaDesc,
+                        },
                         'value': {'type': 'STRING'},
-                        'unit': {'type': 'STRING'},
+                        'unit': {
+                          'type': 'STRING',
+                          'description':
+                              LayersTextStyleGuide.unrealTuningUnitSchemaDesc,
+                        },
                       },
                     },
                   },
@@ -177,14 +200,22 @@ class ReleasePlannerAgent {
                     'type': 'ARRAY',
                     'items': {'type': 'STRING'},
                   },
-                  'levelStaging': {'type': 'STRING'},
+                  'levelStaging': {
+                    'type': 'STRING',
+                    'description':
+                        LayersTextStyleGuide.unrealLevelStagingSchemaDesc,
+                  },
                   'checks': {
                     'type': 'ARRAY',
                     'items': {
                       'type': 'OBJECT',
                       'required': ['text'],
                       'properties': {
-                        'text': {'type': 'STRING'},
+                        'text': {
+                          'type': 'STRING',
+                          'description':
+                              LayersTextStyleGuide.causalPieCheckSchemaDesc,
+                        },
                       },
                     },
                   },
@@ -231,6 +262,11 @@ class ReleasePlannerAgent {
           'lineageKey': e.lineageKey,
           'title': e.title,
           'goal': e.goal,
+          if (e.links.isNotEmpty) 'links': e.links.take(3).toList(),
+          if (e.controls.isNotEmpty)
+            'controls': e.controls.map((c) => c.action).take(4).toList(),
+          if (e.levelStaging.trim().isNotEmpty)
+            'levelStaging': e.levelStaging.trim(),
         },
     ];
 
@@ -239,7 +275,7 @@ ${LayersTextStyleGuide.compactStyleRules}
 
 You are planning Unreal Engine release `$targetVersion` for project `${rootSpec.normalizedTitle}`.
 Vision: ${rootSpec.pitch}
-Core Loop (§01): ${rootSpec.coreLoop.join(' -> ')}
+${rootSpec.releaseDoneWhen.trim().isNotEmpty ? 'Release Gate (§05): ${rootSpec.releaseDoneWhen.trim()}\n' : ''}Core Loop (§01): ${rootSpec.coreLoop.join(' -> ')}
 Camera Contract (§02): ${rootSpec.cameraContract}
 Character Scale (§02): ${rootSpec.characterScale}
 Input Contract (§02): ${rootSpec.inputContract}

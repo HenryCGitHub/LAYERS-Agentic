@@ -38,6 +38,9 @@ class UnrealMcpPayloadBuilder {
     if (rootSpec.coreLoop.isNotEmpty) {
       b.writeln('- Loop: ${rootSpec.coreLoop.join(' -> ')}');
     }
+    if (rootSpec.releaseDoneWhen.trim().isNotEmpty) {
+      b.writeln('- Release Gate: ${rootSpec.releaseDoneWhen.trim()}');
+    }
     b.writeln();
     b.writeln('## §02 Global Unreal Contracts (1 UU = 1 cm)');
     b.writeln('- Camera & Boom: ${rootSpec.cameraContract.trim()}');

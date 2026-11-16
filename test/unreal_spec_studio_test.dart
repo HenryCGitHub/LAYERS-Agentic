@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/release_planner_agent.dart';
+import 'package:layers_agentic/constants/text_style_guide.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
@@ -2162,6 +2163,77 @@ void main() {
           releaseEpics: wb.activeReleaseEpics,
         );
         expect(bundle, isNot(contains('## Release Epic Roadmap')));
+      },
+    );
+
+    test(
+      '30. ROOT_MCP_CONTEXT emits §05 Release Gate, ReleasePlannerAgent passes baseline links/controls/levelStaging to Gemini, and LayersTextStyleGuide normalizes values',
+      () async {
+        final shellbreaker = UnrealSparkPresets.byId('shellbreaker');
+        final withGate = UnrealMcpPayloadBuilder.buildRootMcpContext(shellbreaker);
+        expect(
+          withGate,
+          contains('- Release Gate: ${shellbreaker.releaseDoneWhen}'),
+        );
+
+        final blankGateSpec = shellbreaker.deepCopy()..releaseDoneWhen = '   ';
+        expect(
+          UnrealMcpPayloadBuilder.buildRootMcpContext(blankGateSpec),
+          isNot(contains('- Release Gate:')),
+        );
+
+        expect(
+          LayersTextStyleGuide.compactStoredTradeOff(
+            '- Fast response over Slow drift',
+          ),
+          equals('Fast response OVER Slow drift'),
+        );
+        expect(
+          LayersTextStyleGuide.compactStoredExclusion('save slots'),
+          equals('No save slots'),
+        );
+        expect(
+          LayersTextStyleGuide.isLegacyTemplateTaskTitle('Step 1: edit player.gd'),
+          isTrue,
+        );
+        expect(
+          LayersTextStyleGuide.unrealTuningKeySchemaDesc,
+          contains('PascalCase'),
+        );
+
+        String capturedPrompt = '';
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          capturedPrompt = prompt;
+          return {
+            'presets': [
+              {
+                'id': 'p1',
+                'label': 'Armored Rush',
+                'desc': 'Add shield dash upgrades',
+                'upgrades': [],
+                'newEpics': [],
+              },
+            ],
+            'upgrades': [],
+            'newEpics': [],
+          };
+        };
+
+        try {
+          await ReleasePlannerAgent.proposeNextReleaseCopilot(
+            rootSpec: shellbreaker,
+            currentEpics: shellbreaker.initialEpics,
+            targetVersion: 'v0.2',
+            apiKey: 'mock-key-release-gate',
+          );
+          expect(capturedPrompt, contains('Release Gate (§05):'));
+          expect(capturedPrompt, contains('DA_PlayerLocomotion'));
+          expect(capturedPrompt, contains('IA_Move'));
+          expect(capturedPrompt, contains('L_Shellbreaker_Proto'));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
       },
     );
   });

@@ -46,7 +46,8 @@ const rootSpec = {
   feelChoiceId: "heavy",
   pillars: ["Readable Chaos: Clear telegraph colors before explosions"],
   tradeOffs: [{ prefer: "Snappy arcade grip", avoid: "Sluggish crab drift" }],
-  outOfScope: ["No multiplayer matchmaking in v0.1"]
+  outOfScope: ["No multiplayer matchmaking in v0.1"],
+  releaseDoneWhen: "Start PIE in L_Arena_Proto -> clear 2 crab waves cleanly with 0 Output Log errors"
 };
 
 function makeEpicDoc(id, code, title, lifecycle, goal, checks) {
@@ -555,6 +556,10 @@ def main() -> int:
       # 1. Fetch active Epic + verify ROOT_MCP_CONTEXT, Core Feel & .uproject injection
       spec_md = toolset.layers_get_active_epic_spec()
       assert "# ROOT_MCP_CONTEXT · SHELLBREAKER" in spec_md
+      assert (
+          "- Release Gate: Start PIE in L_Arena_Proto -> clear 2 crab waves cleanly with 0 Output Log errors"
+          in spec_md
+      ), spec_md
       assert "- Core Feel: Heavy Deliberate" in spec_md, spec_md
       assert "## Live Unreal Project Snapshot (.uproject via LayersBridge)" in spec_md
       assert "ShellbreakerUE5" in spec_md
