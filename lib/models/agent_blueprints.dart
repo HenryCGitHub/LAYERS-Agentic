@@ -872,6 +872,7 @@ class UnrealSparkPresets {
           title: '3-Wave Arena Spawner & HUD Counter',
           releaseVersion: 'v0.2',
           lifecycle: EpicLifecycle.newEpic,
+          coreLoopBeat: 'Beat 4 · 3-Wave Escalation & Arena Reset',
           chosenForNextRelease: true,
           goal:
               'Spawn escalating 3-wave crab squads from perimeter gates with live wave banner and quick restart flow.',
@@ -925,6 +926,7 @@ class UnrealSparkPresets {
           title: 'Shell Reflect Guard',
           releaseVersion: 'v0.2',
           lifecycle: EpicLifecycle.newEpic,
+          coreLoopBeat: 'Beats 2–3 · Guard Parry & Counter Stagger',
           goal:
               'Raise timed front energy buckler that staggers incoming crab lunges on tight guard timing.',
           links: const [

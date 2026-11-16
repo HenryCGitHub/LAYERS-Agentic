@@ -107,6 +107,11 @@ class ReleasePlannerAgent {
                   'id': {'type': 'STRING'},
                   'code': {'type': 'STRING'},
                   'title': {'type': 'STRING'},
+                  'coreLoopBeat': {
+                    'type': 'STRING',
+                    'description':
+                        'Which §01 Core Loop beat(s) this Epic expands in PIE.',
+                  },
                   'chosen': {'type': 'BOOLEAN'},
                   'goal': {'type': 'STRING'},
                   'links': {
@@ -219,6 +224,7 @@ Core Loop (§01): ${rootSpec.coreLoop.join(' -> ')}
 Camera Contract (§02): ${rootSpec.cameraContract}
 Character Scale (§02): ${rootSpec.characterScale}
 Input Contract (§02): ${rootSpec.inputContract}
+Core Feel (§03): ${rootSpec.selectedCoreFeelOption.label}
 Design Pillars (§03): ${rootSpec.pillars.join(' | ')}
 Trade-Offs (§03): ${rootSpec.tradeOffs.map((t) => t.formatted).join(' | ')}
 Hard Scope Cuts — DO NOT VIOLATE (§04): ${rootSpec.outOfScope.join(' | ')}
@@ -230,7 +236,7 @@ ${jsonEncode(existingSummary)}
 Generate:
 1. 2 distinct Release Direction Presets (`presets`) matching IDs of upgrades/newEpics.
 2. Small additive `[UPGRADE]` delta options for relevant baseline Epics (`lineageKey`).
-3. 1-2 complete `[NEW]` 6-section Unreal Epics with codes `E0${currentEpics.length + 1}` onward using 1 UU = 1 cm tuning units.
+3. 1-2 complete `[NEW]` 6-section Unreal Epics with codes `${EpicSpec.formatCode(currentEpics.length + 1)}` onward using 1 UU = 1 cm tuning units.
 CRITICAL RULES:
 - Every `[UPGRADE]` delta and `[NEW]` Epic MUST obey §02 Camera/Scale/Input contracts (1 UU = 1 cm), reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.
 - Never recreate existing baseline Epics or add Feature sub-tickets.
@@ -279,11 +285,17 @@ CRITICAL RULES:
           Map<String, dynamic>.from(rawNewEpics[i] as Map),
           indexHint: currentEpics.length + i,
         );
-        final code = 'E0${currentEpics.length + i + 1}';
+        final oneBased = currentEpics.length + i + 1;
+        final code = EpicSpec.formatCode(oneBased);
         parsed.code = code;
         parsed.lineageKey = code.toLowerCase();
         parsed.releaseVersion = targetVersion;
         parsed.lifecycle = EpicLifecycle.newEpic;
+        if (parsed.coreLoopBeat.trim().isEmpty) {
+          parsed.coreLoopBeat = rootSpec.coreLoop.isNotEmpty
+              ? 'Beat ${rootSpec.coreLoop.length} · ${rootSpec.coreLoop.last}'
+              : 'Loop Escalation';
+        }
         parsed.chosenForNextRelease =
             (rawNewEpics[i] as Map)['chosen'] == true || i == 0;
         candidateNew.add(
@@ -375,7 +387,7 @@ CRITICAL RULES:
       ];
     }
 
-    final nextCode = 'E0${currentEpics.length + 1}';
+    final nextCode = EpicSpec.formatCode(currentEpics.length + 1);
     final focusTitle = directionPrompt.trim().isNotEmpty
         ? LayersTextStyleGuide.formatConciseTaskTitle(directionPrompt.trim())
         : 'Wave Progression & Score Loop';
@@ -386,6 +398,9 @@ CRITICAL RULES:
       title: focusTitle,
       releaseVersion: targetVersion,
       lifecycle: EpicLifecycle.newEpic,
+      coreLoopBeat: rootSpec.coreLoop.isNotEmpty
+          ? 'Beat ${rootSpec.coreLoop.length} · ${rootSpec.coreLoop.last}'
+          : 'Loop Escalation',
       chosenForNextRelease: true,
       goal:
           'Expand $targetVersion loop continuity with wave escalation, UMG counter readout, and instant quick-restart.',

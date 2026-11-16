@@ -326,7 +326,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         );
         cleanEpic.code = 'E${(i + 1).toString().padLeft(2, '0')}';
         cleanEpic.lineageKey = rawEpic.lineageKey.trim().isEmpty
-            ? 'e0${i + 1}'
+            ? EpicSpec.formatLineageKey(i + 1)
             : rawEpic.lineageKey.trim();
         final epDoc = cleanEpic.toTierDocument(
           docId: epId,
@@ -447,7 +447,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         final spec = reconciledSpecs[i];
         spec.code = 'E${(i + 1).toString().padLeft(2, '0')}';
         if (spec.lineageKey.trim().isEmpty) {
-          spec.lineageKey = 'e0${i + 1}';
+          spec.lineageKey = EpicSpec.formatLineageKey(i + 1);
         }
         if (!spec.isPassed &&
             spec.lifecycle != EpicLifecycle.upgrading &&

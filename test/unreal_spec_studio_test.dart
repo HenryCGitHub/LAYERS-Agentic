@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
+import 'package:layers_agentic/agents/release_planner_agent.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
@@ -43,18 +44,32 @@ void main() {
           ),
           isTrue,
         );
+        expect(
+          UnrealSpecGuard.containsGodotLeakage('Dash velocity 900 px/s'),
+          isTrue,
+        );
         final sanitized = UnrealSpecGuard.sanitizeLine(
-          'Godot CharacterBody3D moves in arena.tscn with player.gd _physics_process',
+          'Godot CharacterBody3D moves in arena.tscn with player.gd _physics_process at 450 px/s',
         );
         expect(sanitized.toLowerCase(), isNot(contains('godot')));
         expect(sanitized, isNot(contains('CharacterBody3D')));
+        expect(sanitized, isNot(contains('px/s')));
         expect(sanitized, contains('Unreal Engine'));
         expect(sanitized, contains('ACharacter'));
         expect(sanitized, contains('Tick'));
+        expect(sanitized, contains('450 cm/s'));
 
         expect(
           UnrealSpecGuard.normalizeUnrealUnit('WalkSpeed', 'px'),
           equals('cm'),
+        );
+        expect(
+          UnrealSpecGuard.normalizeUnrealUnit('WalkSpeed', 'px/s'),
+          equals('cm/s'),
+        );
+        expect(
+          UnrealSpecGuard.normalizeUnrealUnit('WalkSpeed', 'pixels/s'),
+          equals('cm/s'),
         );
         expect(
           UnrealSpecGuard.normalizeUnrealUnit('DashSpeed', ''),
@@ -1009,10 +1024,12 @@ void main() {
         };
 
         try {
+          wb.selectCoreFeelOption('heavy');
           await wb.openProgressiveReleaseCopilot();
           expect(capturedPrompt, contains('Core Loop (§01):'));
           expect(capturedPrompt, contains('Camera Contract (§02):'));
           expect(capturedPrompt, contains('Input Contract (§02):'));
+          expect(capturedPrompt, contains('Core Feel (§03): Heavy Deliberate'));
           expect(capturedPrompt, contains('Design Pillars (§03):'));
           expect(capturedPrompt, contains('Trade-Offs (§03):'));
           expect(
@@ -1023,6 +1040,25 @@ void main() {
         } finally {
           GeminiAgentClient.testMockResponder = prevMock;
         }
+
+        final nineEpics = [
+          for (int i = 0; i < 9; i++)
+            EpicSpec(
+              id: 'ep_$i',
+              code: EpicSpec.formatCode(i + 1),
+              title: 'System ${i + 1}',
+              goal: 'Playable loop check ${i + 1}.',
+            ),
+        ];
+        final v04Draft = await ReleasePlannerAgent.proposeNextReleaseCopilot(
+          rootSpec: wb.conceptDraft!,
+          currentEpics: nineEpics,
+          targetVersion: 'v0.4',
+          apiKey: '',
+        );
+        expect(v04Draft.candidateNewEpics.first.code, equals('E10'));
+        expect(v04Draft.candidateNewEpics.first.lineageKey, equals('e10'));
+        expect(v04Draft.candidateNewEpics.first.coreLoopBeat, isNotEmpty);
       },
     );
 

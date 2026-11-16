@@ -113,7 +113,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
 
       final clonedId = '${relId}_epic_${nextEpicDocIds.length + 1}';
       final nextEpic = base.deepCopy(idOverride: clonedId);
-      nextEpic.code = 'E0${nextEpicDocIds.length + 1}';
+      nextEpic.code = EpicSpec.formatCode(nextEpicDocIds.length + 1);
       nextEpic.fixes = <EpicPieFix>[];
 
       if (chosenUps.isNotEmpty) {
@@ -161,7 +161,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     for (final cand in draft.candidateNewEpics) {
       if (!cand.chosenForNextRelease) continue;
       final newId = '${relId}_epic_${nextEpicDocIds.length + 1}';
-      final newCode = 'E0${nextEpicDocIds.length + 1}';
+      final newCode = EpicSpec.formatCode(nextEpicDocIds.length + 1);
       final clonedNew = cand.deepCopy(
         idOverride: newId,
         releaseVersionOverride: nextVer,

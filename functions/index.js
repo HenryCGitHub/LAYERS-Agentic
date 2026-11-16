@@ -139,6 +139,13 @@ function formatTradeOffJs(raw) {
   return String(raw || "").trim();
 }
 
+function resolveCoreFeelJs(raw) {
+  const clean = String(raw || "").trim().toLowerCase();
+  if (clean === "heavy") return { id: "heavy", label: "Heavy Deliberate" };
+  if (clean === "physics") return { id: "physics", label: "Physics Momentum" };
+  return { id: "snappy", label: "Snappy Arcade" };
+}
+
 function parseRootSpecJs(projectDoc) {
   const parsed =
     parseJsonObjectSafe(projectDoc?.sections?.concept_blueprint_json) || {};
@@ -153,6 +160,7 @@ function parseRootSpecJs(projectDoc) {
     parsed.gameTitle || projectDoc?.title || "UNTITLED UNREAL PROJECT"
   ).trim();
   const normalizedTitle = rawTitle || "UNTITLED UNREAL PROJECT";
+  const coreFeel = resolveCoreFeelJs(parsed.feelChoiceId);
 
   return {
     gameTitle: normalizedTitle,
@@ -176,6 +184,8 @@ function parseRootSpecJs(projectDoc) {
       parsed.assetPolicy ||
         "Prototype Greybox Primitives (Engine/BasicShapes) + Debug Materials; UDataAsset for tuning"
     ).trim(),
+    feelChoiceId: coreFeel.id,
+    coreFeelLabel: coreFeel.label,
     pillars: normalizeStringArrayJs(parsed.pillars),
     tradeOffs: Array.isArray(parsed.tradeOffs)
       ? parsed.tradeOffs.map(formatTradeOffJs).filter(Boolean)
@@ -199,6 +209,7 @@ function normalizeTuningUnitJs(key, rawUnit) {
   const lowerKey = String(key || "").toLowerCase();
   if (lowerUnit === "px" || lowerUnit === "pixels") return "cm";
   if (lowerUnit.startsWith("px/")) return `cm/${cleanUnit.slice(3)}`;
+  if (lowerUnit.startsWith("pixels/")) return `cm/${cleanUnit.slice(7)}`;
   if (cleanUnit) return cleanUnit;
   if (
     lowerKey.includes("speed") ||
@@ -257,9 +268,10 @@ function parseEpicSpecJs(epicDoc, indexHint = 0) {
       ? epicDoc.sections
       : {};
   const parsed = parseJsonObjectSafe(sec.epic_spec_json) || {};
+  const fallbackCode = `E${String(indexHint + 1).padStart(2, "0")}`;
   const code =
-    String(sec.code || parsed.code || `E0${indexHint + 1}`).trim() ||
-    `E0${indexHint + 1}`;
+    String(sec.code || parsed.code || fallbackCode).trim() ||
+    fallbackCode;
   const lineageKey = String(
     sec.lineage_key || parsed.lineageKey || code.toLowerCase()
   ).trim();
@@ -395,6 +407,7 @@ function renderServerUnrealMcpPayloadJs({
   lines.push(`- Asset Policy: ${rootSpec.assetPolicy}`);
   lines.push("");
   lines.push("## §03 Pillars & Conflict Trade-Offs");
+  lines.push(`- Core Feel: ${rootSpec.coreFeelLabel || "Snappy Arcade"}`);
   for (const pillar of rootSpec.pillars || []) {
     lines.push(`- Pillar: ${pillar}`);
   }

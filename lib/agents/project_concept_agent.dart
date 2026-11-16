@@ -288,7 +288,7 @@ CRITICAL CONSTRAINTS:
           final ep = parsed.initialEpics[i];
           ep.code = 'E${(i + 1).toString().padLeft(2, '0')}';
           if (ep.lineageKey.trim().isEmpty) {
-            ep.lineageKey = 'e0${i + 1}';
+            ep.lineageKey = EpicSpec.formatLineageKey(i + 1);
           }
           ep.releaseVersion = 'v0.1';
           ep.lifecycle =
@@ -518,7 +518,7 @@ USER CO-DESIGN INSTRUCTION:
           final ep = parsed.initialEpics[i];
           ep.code = 'E${(i + 1).toString().padLeft(2, '0')}';
           if (ep.lineageKey.trim().isEmpty) {
-            ep.lineageKey = 'e0${i + 1}';
+            ep.lineageKey = EpicSpec.formatLineageKey(i + 1);
           }
           ep.releaseVersion = 'v0.1';
           if (i == 0 && ep.lifecycle == EpicLifecycle.queued) {

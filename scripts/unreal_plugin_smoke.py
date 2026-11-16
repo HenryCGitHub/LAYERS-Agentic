@@ -42,6 +42,7 @@ const rootSpec = {
   characterScale: "ACharacter CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 620 cm/s",
   inputContract: "Enhanced Input (IMC_Core + IA_Move / IA_Aim / IA_Primary)",
   assetPolicy: "Prototype Greybox Primitives (Engine/BasicShapes) + Debug Materials",
+  feelChoiceId: "heavy",
   pillars: ["Readable Chaos: Clear telegraph colors before explosions"],
   tradeOffs: [{ prefer: "Snappy arcade grip", avoid: "Sluggish crab drift" }],
   outOfScope: ["No multiplayer matchmaking in v0.1"]
@@ -491,9 +492,10 @@ def main() -> int:
       toolset = init_unreal.get_toolset()
       dock = init_unreal.get_pie_dock()
 
-      # 1. Fetch active Epic + verify ROOT_MCP_CONTEXT & .uproject injection
+      # 1. Fetch active Epic + verify ROOT_MCP_CONTEXT, Core Feel & .uproject injection
       spec_md = toolset.layers_get_active_epic_spec()
       assert "# ROOT_MCP_CONTEXT · SHELLBREAKER" in spec_md
+      assert "- Core Feel: Heavy Deliberate" in spec_md, spec_md
       assert "## Live Unreal Project Snapshot (.uproject via LayersBridge)" in spec_md
       assert "ShellbreakerUE5" in spec_md
       assert "/Game/Input/IMC_Core" in spec_md
@@ -527,6 +529,8 @@ def main() -> int:
       assert "- DashDistance: 460 cm" in tune_md
       new_tune_md = toolset.layers_update_epic_tuning("ArenaRadius", "1800", unit="pixels")
       assert "- ArenaRadius: 1800 cm" in new_tune_md
+      slide_tune_md = toolset.layers_update_epic_tuning("SlideSpeed", "900", unit="pixels/s")
+      assert "- SlideSpeed: 900 cm/s" in slide_tune_md, slide_tune_md
 
       # 1c. Toggle individual §06 PIE checks (including final check) without jumping off E01
       chk_md = toolset.layers_toggle_pie_check("1", passed=True)
@@ -610,6 +614,8 @@ def main() -> int:
       if (out.epicSpec.checks[0].passed !== true) throw new Error('Expected baseline check to remain passed');
       if (out.epicSpec.checks[1].passed !== false) throw new Error('Expected delta check to reset to false');
       if (out.isCompleted !== false) throw new Error('Expected isCompleted false');
+      const e10 = h.parseEpicSpecJs({}, 9);
+      if (e10.code !== 'E10') throw new Error('Expected E10 padding, got ' + e10.code);
       """
       reopen_proc = subprocess.run(["node", "-e", reopen_v02_js], cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=10)
       assert reopen_proc.returncode == 0, f"v0.2 reopen check failed: {reopen_proc.stderr}"

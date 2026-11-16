@@ -340,6 +340,12 @@ List<String> _strList(dynamic raw) {
 /// Canonical 6-Section Unreal MCP Epic Spec (`Project -> Release -> Epic`).
 /// Single-pass Epic contract: "What You Read Is What Unreal MCP Receives".
 class EpicSpec {
+  static String formatCode(int oneBasedIndex) =>
+      'E${oneBasedIndex.toString().padLeft(2, '0')}';
+
+  static String formatLineageKey(int oneBasedIndex) =>
+      'e${oneBasedIndex.toString().padLeft(2, '0')}';
+
   final String id;
   String code;
   String lineageKey;
@@ -501,7 +507,8 @@ class EpicSpec {
       };
 
   factory EpicSpec.fromJson(Map<String, dynamic> json, {int indexHint = 0}) {
-    final rawCode = (json['code'] ?? 'E0${indexHint + 1}').toString().trim();
+    final fallbackCode = formatCode(indexHint + 1);
+    final rawCode = (json['code'] ?? fallbackCode).toString().trim();
     final rawChecks = json['checks'] as List? ?? const [];
     final rawFixes = json['fixes'] as List? ?? const [];
     final rawControls = json['controls'] as List? ?? const [];
@@ -511,7 +518,7 @@ class EpicSpec {
     return EpicSpec(
       id: (json['id'] ?? json['chosenId'] ?? 'epic_${indexHint + 1}')
           .toString(),
-      code: rawCode.isEmpty ? 'E0${indexHint + 1}' : rawCode,
+      code: rawCode.isEmpty ? fallbackCode : rawCode,
       lineageKey: (json['lineageKey'] ?? rawCode.toLowerCase()).toString(),
       title: (json['title'] ?? 'Untitled System').toString().trim(),
       releaseVersion: (json['releaseVersion'] ?? 'v0.1').toString().trim(),
@@ -636,10 +643,11 @@ class EpicSpec {
       } catch (_) {}
     }
 
-    final fallbackCode = (doc.sections['code'] ?? 'E0${indexHint + 1}').trim();
+    final defaultCode = formatCode(indexHint + 1);
+    final fallbackCode = (doc.sections['code'] ?? defaultCode).trim();
     return EpicSpec(
       id: doc.id,
-      code: fallbackCode.isEmpty ? 'E0${indexHint + 1}' : fallbackCode,
+      code: fallbackCode.isEmpty ? defaultCode : fallbackCode,
       lineageKey: doc.sections['lineage_key'] ?? fallbackCode.toLowerCase(),
       title: doc.title,
       releaseVersion: doc.sections['release_version'] ?? 'v0.1',

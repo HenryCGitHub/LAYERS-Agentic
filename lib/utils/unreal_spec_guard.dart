@@ -5,7 +5,7 @@ import '../models/epic_spec.dart';
 /// Ensures zero Godot leakage, clean literal game-dev wording, and canonical `1 UU = 1 cm` units.
 class UnrealSpecGuard {
   static final RegExp _godotLeakPattern = RegExp(
-    r'\b(godot|gdscript|characterbody3d|characterbody2d|area3d|area2d|_physics_process|\.tscn|\.gd)\b',
+    r'\b(godot|gdscript|characterbody3d|characterbody2d|area3d|area2d|_physics_process|\.tscn|\.gd)\b|\bpx/s\b',
     caseSensitive: false,
   );
 
@@ -34,6 +34,7 @@ class UnrealSpecGuard {
       RegExp(r'\bCharacterBody3D\b', caseSensitive: false): 'ACharacter',
       RegExp(r'\bCharacterBody2D\b', caseSensitive: false): 'ACharacter',
       RegExp(r'\b_physics_process\b', caseSensitive: false): 'Tick',
+      RegExp(r'\bpx/s\b', caseSensitive: false): 'cm/s',
       RegExp(r'\.tscn\b', caseSensitive: false): ' Level / Blueprint',
       RegExp(r'\.gd\b', caseSensitive: false): ' Blueprint',
     };
@@ -65,8 +66,11 @@ class UnrealSpecGuard {
   /// Normalizes Unreal tuning unit strings (`1 UU = 1 cm`).
   static String normalizeUnrealUnit(String key, String rawUnit) {
     final clean = rawUnit.trim();
+    final lowerUnit = clean.toLowerCase();
     final lowerKey = key.toLowerCase();
-    if (clean == 'px' || clean == 'pixels') return 'cm';
+    if (lowerUnit == 'px' || lowerUnit == 'pixels') return 'cm';
+    if (lowerUnit.startsWith('px/')) return 'cm/${clean.substring(3)}';
+    if (lowerUnit.startsWith('pixels/')) return 'cm/${clean.substring(7)}';
     if (clean.isNotEmpty) return clean;
     if (lowerKey.contains('speed') ||
         lowerKey.contains('velocity') ||
