@@ -466,8 +466,36 @@ class WorkbenchProvider extends ChangeNotifier {
 
   String releaseConciseLabel(TierDocument relDoc) => releaseDisplayName(relDoc);
 
+  TierDocument? get latestProjectRelease {
+    final releases = projectReleases;
+    if (releases.isEmpty) return null;
+    TierDocument best = releases.first;
+    String bestTag = releaseVersionTagFor(best);
+    for (int i = 1; i < releases.length; i++) {
+      final candidate = releases[i];
+      final candidateTag = releaseVersionTagFor(candidate);
+      if (ReleasePlannerAgent.compareVersionTags(candidateTag, bestTag) >= 0) {
+        best = candidate;
+        bestTag = candidateTag;
+      }
+    }
+    return best;
+  }
+
+  String get highestProjectReleaseVersionTag {
+    final latest = latestProjectRelease;
+    if (latest == null) return activeReleaseVersionTag;
+    return releaseVersionTagFor(latest);
+  }
+
+  List<EpicSpec> get latestReleaseEpics {
+    final latest = latestProjectRelease;
+    if (latest == null) return activeReleaseEpics;
+    return epicsForRelease(latest.id);
+  }
+
   String get nextReleaseActionLabel =>
-      '+ Plan ${ReleasePlannerAgent.nextMinorVersionTag(activeReleaseVersionTag)} Release';
+      '+ Plan ${ReleasePlannerAgent.nextMinorVersionTag(highestProjectReleaseVersionTag)} Release';
 
   bool get isActiveReleaseComplete {
     final epics = activeReleaseEpics;

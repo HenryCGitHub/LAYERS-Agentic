@@ -177,8 +177,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         final deltaChecks = spec.checks.where((c) {
           final t = c.text.trim().toLowerCase();
           return c.id.contains('_delta_') ||
-              (verLower.isNotEmpty && t.startsWith('verify $verLower delta')) ||
-              t.contains('delta:');
+              (verLower.isNotEmpty
+                  ? t.startsWith('verify $verLower delta')
+                  : t.contains('delta:'));
         }).toList();
         if (deltaChecks.isNotEmpty) {
           for (final c in deltaChecks) {

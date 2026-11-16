@@ -39,7 +39,7 @@ Future<void> showProgressiveReleaseCopilotDialog(
                 );
               }
 
-              final baseEpics = workbench.activeReleaseEpics;
+              final baseEpics = workbench.latestReleaseEpics;
 
               return Dialog(
                 backgroundColor: AppTheme.bgSurfaceRaisedFor(isDark),

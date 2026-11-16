@@ -779,6 +779,46 @@ def main() -> int:
       crossDocs.set('rel_v02_ep1', { id: 'rel_v02_ep1', tier: 'epic', parentId: 'rel_v02', sections: { code: 'E01', lifecycle: 'queued' } });
       const resolvedId = h.resolveTargetEpicDocIdJs({ docsById: crossDocs, projectId: 'proj_x', requestedEpicId: '' });
       if (resolvedId !== 'rel_v02_ep1') throw new Error('Expected rel_v02_ep1, got ' + resolvedId);
+
+      // 5c-4. v0.3 renderServerUnrealMcpPayloadJs emits Locked Baseline & reopen_epic keeps v0.2 checks passed
+      const v03Doc = {
+        id: 'ep_v03_up',
+        sections: {
+          code: 'E01',
+          lineage_key: 'e01',
+          release_version: 'v0.3',
+          lifecycle: 'stable',
+          epic_spec_json: JSON.stringify({
+            id: 'ep_v03_up',
+            code: 'E01',
+            lineageKey: 'e01',
+            title: 'Movement',
+            releaseVersion: 'v0.3',
+            lifecycle: 'stable',
+            goal: 'Jump + Dash',
+            baselineSummary: ['v0.2: +55ms Hit-Stop'],
+            upgradeDeltas: ['+Dash echo'],
+            checks: [
+              { id: 'ep_v03_base_2', text: 'Verify v0.2 delta: 55ms Hit-Stop', passed: true },
+              { id: 'ep_v03_delta_1', text: 'Verify v0.3 delta: Dash echo', passed: true }
+            ]
+          })
+        }
+      };
+      const v03Md = h.renderServerUnrealMcpPayloadJs({
+        rootSpec: { normalizedTitle: 'T', targetEngine: 'ue5Mcp', pitch: 'P' },
+        epicSpec: h.parseEpicSpecJs(v03Doc)
+      });
+      if (!v03Md.includes('- Locked Baseline: v0.2: +55ms Hit-Stop')) {
+        throw new Error('Expected Locked Baseline in v0.3 payload');
+      }
+      const v03Reopen = h.applyUnrealEpicMutationJs({ epicDoc: v03Doc, action: 'reopen_epic', body: {}, nowMs: 2000 });
+      if (v03Reopen.epicSpec.checks[0].passed !== true) {
+        throw new Error('Expected v0.2 locked check to remain passed on v0.3 reopen');
+      }
+      if (v03Reopen.epicSpec.checks[1].passed !== false) {
+        throw new Error('Expected v0.3 delta check to reset on v0.3 reopen');
+      }
       """
       reopen_proc = subprocess.run(["node", "-e", reopen_v02_js], cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=10)
       assert reopen_proc.returncode == 0, f"v0.2 reopen check failed: {reopen_proc.stderr}"

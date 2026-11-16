@@ -27,6 +27,25 @@ class ReleasePlannerAgent {
     return 'v0.2';
   }
 
+  static int compareVersionTags(String a, String b) {
+    List<int> parts(String raw) {
+      final clean = extractReleaseVersionTag(raw).replaceFirst('v', '');
+      return [
+        for (final seg in clean.split('.')) int.tryParse(seg) ?? 0,
+      ];
+    }
+
+    final pa = parts(a);
+    final pb = parts(b);
+    final len = pa.length > pb.length ? pa.length : pb.length;
+    for (int i = 0; i < len; i++) {
+      final va = i < pa.length ? pa[i] : 0;
+      final vb = i < pb.length ? pb[i] : 0;
+      if (va != vb) return va.compareTo(vb);
+    }
+    return 0;
+  }
+
   static Map<String, dynamic> get _progressiveReleaseSchema => <String, dynamic>{
         'name': 'propose_progressive_unreal_release',
         'description':
@@ -264,16 +283,40 @@ CRITICAL RULES:
       for (final entry in rawUpgrades) {
         if (entry is! Map) continue;
         final m = Map<String, dynamic>.from(entry);
-        final key = (m['lineageKey'] ?? '').toString().trim().toLowerCase();
-        if (key.isEmpty) continue;
+        final rawKeyOriginal = (m['lineageKey'] ?? '').toString().trim();
+        final rawKey = rawKeyOriginal.toLowerCase();
+        if (rawKey.isEmpty) continue;
+        EpicSpec? matchedEpic = currentEpics
+            .where((ep) => ep.lineageKey.trim() == rawKeyOriginal)
+            .firstOrNull;
+        matchedEpic ??= currentEpics
+            .where((ep) => ep.code.trim() == rawKeyOriginal)
+            .firstOrNull;
+        matchedEpic ??= currentEpics
+            .where((ep) => ep.lineageKey.trim().toLowerCase() == rawKey)
+            .firstOrNull;
+        matchedEpic ??= currentEpics
+            .where((ep) => ep.code.trim().toLowerCase() == rawKey)
+            .firstOrNull;
+        final resolvedKey =
+            matchedEpic?.lineageKey.trim().toLowerCase() ?? rawKey;
         final opts = m['options'] as List? ?? const [];
-        upgradesByKey[key] = [
-          for (int i = 0; i < opts.length; i++)
-            if (opts[i] is Map)
-              EpicUpgradeOption.fromJson(
-                Map<String, dynamic>.from(opts[i] as Map),
-                i,
-              ),
+        final parsedOpts = <EpicUpgradeOption>[];
+        for (int i = 0; i < opts.length; i++) {
+          if (opts[i] is! Map) continue;
+          final opt = EpicUpgradeOption.fromJson(
+            Map<String, dynamic>.from(opts[i] as Map),
+            i,
+          );
+          final cleanText = UnrealSpecGuard.sanitizeLine(opt.text);
+          if (cleanText.isNotEmpty) {
+            opt.text = cleanText;
+          }
+          parsedOpts.add(opt);
+        }
+        upgradesByKey[resolvedKey] = [
+          ...?upgradesByKey[resolvedKey],
+          ...parsedOpts,
         ];
       }
 

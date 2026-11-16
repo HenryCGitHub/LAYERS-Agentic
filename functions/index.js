@@ -463,6 +463,13 @@ function renderServerUnrealMcpPayloadJs({
   if (epicSpec.outOfScope.length > 0) {
     lines.push(`- Out of Scope: ${epicSpec.outOfScope.join("; ")}`);
   }
+  if (
+    Array.isArray(epicSpec.baselineSummary) &&
+    epicSpec.baselineSummary.length > 0 &&
+    (epicSpec.releaseVersion !== "v0.1" || epicSpec.upgradeDeltas.length > 0)
+  ) {
+    lines.push(`- Locked Baseline: ${epicSpec.baselineSummary.join(" · ")}`);
+  }
 
   if (epicSpec.upgradeDeltas.length > 0) {
     lines.push("");
@@ -957,8 +964,9 @@ function applyUnrealEpicMutationJs({
         const t = String(c.text || "").trim().toLowerCase();
         return (
           String(c.id || "").includes("_delta_") ||
-          (verLower && t.startsWith(`verify ${verLower} delta`)) ||
-          t.includes("delta:")
+          (verLower
+            ? t.startsWith(`verify ${verLower} delta`)
+            : t.includes("delta:"))
         );
       });
       if (deltaChecks.length > 0) {

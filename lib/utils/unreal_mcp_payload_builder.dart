@@ -113,6 +113,10 @@ class UnrealMcpPayloadBuilder {
     if (epic.outOfScope.isNotEmpty) {
       b.writeln('- Out of Scope: ${epic.outOfScope.join('; ')}');
     }
+    if (epic.baselineSummary.isNotEmpty &&
+        (epic.releaseVersion != 'v0.1' || epic.upgradeDeltas.isNotEmpty)) {
+      b.writeln('- Locked Baseline: ${epic.baselineSummary.join(' · ')}');
+    }
 
     if (epic.upgradeDeltas.isNotEmpty) {
       b.writeln();

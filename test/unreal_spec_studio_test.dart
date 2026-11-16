@@ -1391,5 +1391,156 @@ void main() {
         expect(demotedE01.isPassed, isFalse);
       },
     );
+
+    test(
+      '21. Progressive v0.1 -> v0.2 -> v0.3 preserves v0.2 deltas in Locked Baseline, guards monotonic version when viewing v0.1, and maps Gemini presets onto reordered Epics',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.moveInitialEpic(0, 1);
+        final v01RelId = wb.approveRootSpecAndLaunchWorkbench()!;
+        expect(wb.activeReleaseEpics.first.code, equals('E01'));
+        expect(wb.activeReleaseEpics.first.lineageKey, equals('e02'));
+
+        wb.updateAiConfig(apiKey: 'mock-key-1234');
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          if (prompt.contains('release `v0.2`')) {
+            return {
+              'presets': [
+                {
+                  'id': 'p_v02',
+                  'label': 'Bolt Pierce Focus',
+                  'desc': 'Add piercing bolt delta and wave spawner',
+                  'upgrades': ['UP_1'],
+                  'newEpics': ['E04_WAVES'],
+                },
+              ],
+              'upgrades': [
+                {
+                  'lineageKey': 'E01',
+                  'options': [
+                    {
+                      'id': 'up_1',
+                      'text': '+Piercing plasma bolt',
+                      'chosen': false,
+                    },
+                  ],
+                },
+              ],
+              'newEpics': [
+                {
+                  'id': 'e04_waves',
+                  'code': 'E04',
+                  'title': 'Arena Wave Spawner',
+                  'goal': 'Spawn 3 escalating waves in L_Shellbreaker_Proto.',
+                  'links': ['GM_Shellbreaker -> BP_WaveSpawner'],
+                  'outOfScope': ['No endless mode'],
+                  'controls': const [],
+                  'states': ['Idle -> Spawning'],
+                  'interrupts': ['Player death halts spawn timer'],
+                  'tuning': [
+                    {'key': 'WaveCount', 'value': '3', 'unit': 'count'},
+                  ],
+                  'feedback': ['UMG wave banner pulse'],
+                  'levelStaging': 'L_Shellbreaker_Proto',
+                  'checks': [
+                    {'text': 'Clear wave 1 -> wave 2 spawns cleanly'},
+                  ],
+                  'chosen': false,
+                },
+              ],
+            };
+          }
+          return {
+            'presets': [
+              {
+                'id': 'p_v03',
+                'label': 'Dash Echo Pass',
+                'desc': 'Add dash echo atop v0.2 bolts',
+                'upgrades': ['up_v03_1'],
+                'newEpics': const [],
+              },
+            ],
+            'upgrades': [
+              {
+                'lineageKey': 'e02',
+                'options': [
+                  {
+                    'id': 'up_v03_1',
+                    'text': '+Dash shockwave pulse',
+                    'chosen': false,
+                  },
+                ],
+              },
+            ],
+            'newEpics': const [],
+          };
+        };
+
+        try {
+          await wb.openProgressiveReleaseCopilot();
+          final v02Draft = wb.progressiveDraft!;
+          expect(v02Draft.targetVersion, equals('v0.2'));
+          expect(
+            v02Draft.upgradesByLineageKey['e02']?.single.chosen,
+            isTrue,
+          );
+          expect(
+            v02Draft.candidateNewEpics.single.chosenForNextRelease,
+            isTrue,
+          );
+
+          final v02RelId = wb.commitProgressiveReleaseDraft()!;
+          expect(wb.activeReleaseVersionTag, equals('v0.2'));
+
+          // Switch UI back to v0.1: release planner must remain monotonic (v0.3 atop v0.2)
+          wb.selectActiveRelease(v01RelId);
+          expect(wb.highestProjectReleaseVersionTag, equals('v0.2'));
+          expect(wb.nextReleaseActionLabel, contains('v0.3'));
+
+          await wb.openProgressiveReleaseCopilot();
+          expect(wb.progressiveDraft!.targetVersion, equals('v0.3'));
+          expect(
+            wb.latestReleaseEpics.length,
+            equals(wb.epicsForRelease(v02RelId).length),
+          );
+
+          wb.commitProgressiveReleaseDraft()!;
+          expect(wb.activeReleaseVersionTag, equals('v0.3'));
+
+          final v03E01 = wb.activeReleaseEpics.firstWhere(
+            (e) => e.lineageKey == 'e02',
+          );
+          expect(
+            v03E01.baselineSummary.any(
+              (s) => s.contains('+Piercing plasma bolt'),
+            ),
+            isTrue,
+          );
+          final v03Payload = wb.activeEpicMcpPayload(v03E01);
+          expect(v03Payload, contains('- Locked Baseline:'));
+          expect(v03Payload, contains('+Piercing plasma bolt'));
+
+          wb.passActiveEpic(v03E01.id);
+          wb.reopenEpic(v03E01.id);
+          final reopened = wb.epicsForRelease(wb.activeReleaseId!).firstWhere(
+                (e) => e.id == v03E01.id,
+              );
+          final v02Checks = reopened.checks
+              .where((c) => c.text.toLowerCase().contains('verify v0.2 delta'))
+              .toList();
+          final v03Checks = reopened.checks
+              .where((c) => c.text.toLowerCase().contains('verify v0.3 delta'))
+              .toList();
+          expect(v02Checks, isNotEmpty);
+          expect(v02Checks.every((c) => c.passed), isTrue);
+          expect(v03Checks, isNotEmpty);
+          expect(v03Checks.every((c) => !c.passed), isTrue);
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
   });
 }

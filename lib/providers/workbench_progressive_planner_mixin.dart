@@ -8,15 +8,16 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     final rootSpec = _conceptDraft;
     if (rootSpec == null) return null;
 
-    final nextVer =
-        ReleasePlannerAgent.nextMinorVersionTag(activeReleaseVersionTag);
+    final nextVer = ReleasePlannerAgent.nextMinorVersionTag(
+      highestProjectReleaseVersionTag,
+    );
     _isDraftingProgressive = true;
     notifyListeners();
 
     try {
       final draft = await ReleasePlannerAgent.proposeNextReleaseCopilot(
         rootSpec: rootSpec,
-        currentEpics: activeReleaseEpics,
+        currentEpics: latestReleaseEpics,
         targetVersion: nextVer,
         apiKey: _apiKey,
         directionPrompt: directionPrompt,
@@ -24,6 +25,9 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         thinkingLevel: _thinkingLevel,
       );
       _progressiveDraft = draft;
+      if (draft.activePresetId != null && draft.presets.isNotEmpty) {
+        applyProgressivePreset(draft.activePresetId!);
+      }
       return draft;
     } finally {
       _isDraftingProgressive = false;
@@ -45,16 +49,25 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     );
     draft.activePresetId = preset.id;
 
+    final upIdsLower = preset.upgradeIds.map((id) => id.trim().toLowerCase()).toSet();
+    final newIdsLower = preset.newEpicIds.map((id) => id.trim().toLowerCase()).toSet();
+
     for (final opts in draft.upgradesByLineageKey.values) {
       for (final opt in opts) {
-        opt.chosen = preset.upgradeIds.contains(opt.id);
+        opt.chosen = upIdsLower.contains(opt.id.trim().toLowerCase());
       }
     }
     for (final cand in draft.candidateNewEpics) {
+      final candIdLower = cand.id.trim().toLowerCase();
+      final candCodeLower = cand.code.trim().toLowerCase();
+      final candLineageLower = cand.lineageKey.trim().toLowerCase();
       cand.chosenForNextRelease =
-          preset.newEpicIds.contains(cand.id) ||
-          preset.newEpicIds.contains(cand.code.toLowerCase()) ||
-          preset.newEpicIds.any((pid) => pid.contains(cand.lineageKey));
+          newIdsLower.contains(candIdLower) ||
+          newIdsLower.contains(candCodeLower) ||
+          newIdsLower.any(
+            (pid) =>
+                candLineageLower.isNotEmpty && pid.contains(candLineageLower),
+          );
     }
     notifyListeners();
   }
@@ -102,7 +115,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     final nextEpicDocIds = <String>[];
     String? firstFocusEpicId;
 
-    final existingEpics = activeReleaseEpics;
+    final existingEpics = latestReleaseEpics;
     for (int i = 0; i < existingEpics.length; i++) {
       final base = existingEpics[i];
       final key = base.lineageKey.toLowerCase();
@@ -116,16 +129,33 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       nextEpic.code = EpicSpec.formatCode(nextEpicDocIds.length + 1);
       nextEpic.fixes = <EpicPieFix>[];
 
+      for (final prevDelta in base.upgradeDeltas) {
+        final cleanDelta = prevDelta.trim();
+        if (cleanDelta.isEmpty) continue;
+        final entry = '${base.releaseVersion}: $cleanDelta';
+        if (!nextEpic.baselineSummary.contains(entry)) {
+          nextEpic.baselineSummary.add(entry);
+        }
+      }
+
+      final lockedBaseChecks = [
+        for (int cIdx = 0; cIdx < nextEpic.checks.length; cIdx++)
+          EpicPieCheck(
+            id: nextEpic.checks[cIdx].id.contains('_delta_')
+                ? '${clonedId}_base_${cIdx + 1}'
+                : nextEpic.checks[cIdx].id,
+            text: nextEpic.checks[cIdx].text,
+            passed: true,
+          ),
+      ];
+
       if (chosenUps.isNotEmpty) {
         nextEpic.lifecycle = EpicLifecycle.upgrading;
         nextEpic.releaseVersion = nextVer;
         nextEpic.upgradeDeltas = chosenUps;
-        final existingChecks = nextEpic.checks
-            .map((c) => c.copyWith(passed: true))
-            .toList();
-        final baseCount = existingChecks.length;
+        final baseCount = lockedBaseChecks.length;
         for (int uIdx = 0; uIdx < chosenUps.length; uIdx++) {
-          existingChecks.add(
+          lockedBaseChecks.add(
             EpicPieCheck(
               id: '${clonedId}_delta_${uIdx + 1}',
               text:
@@ -134,7 +164,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
             ),
           );
         }
-        nextEpic.checks = existingChecks;
+        nextEpic.checks = lockedBaseChecks;
         if (nextEpic.baselineSummary.isEmpty && baseCount > 0) {
           nextEpic.baselineSummary = [
             '${base.releaseVersion} baseline locked ($baseCount PIE checks passing)',
@@ -144,9 +174,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       } else {
         nextEpic.lifecycle = EpicLifecycle.stable;
         nextEpic.upgradeDeltas = <String>[];
-        for (final c in nextEpic.checks) {
-          c.passed = true;
-        }
+        nextEpic.checks = lockedBaseChecks;
       }
 
       final doc = nextEpic.toTierDocument(
