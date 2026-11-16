@@ -275,7 +275,20 @@ CRITICAL RULES:
       final presets = <ReleaseDirectionPreset>[
         for (final item in rawPresets)
           if (item is Map)
-            ReleaseDirectionPreset.fromJson(Map<String, dynamic>.from(item)),
+            () {
+              final rawPreset = ReleaseDirectionPreset.fromJson(
+                Map<String, dynamic>.from(item),
+              );
+              final cleanLabel = UnrealSpecGuard.sanitizeLine(rawPreset.label);
+              return ReleaseDirectionPreset(
+                id: rawPreset.id,
+                label: cleanLabel.isEmpty ? 'Release Direction' : cleanLabel,
+                description:
+                    UnrealSpecGuard.sanitizeLine(rawPreset.description),
+                upgradeIds: rawPreset.upgradeIds,
+                newEpicIds: rawPreset.newEpicIds,
+              );
+            }(),
       ];
 
       final upgradesByKey = <String, List<EpicUpgradeOption>>{};

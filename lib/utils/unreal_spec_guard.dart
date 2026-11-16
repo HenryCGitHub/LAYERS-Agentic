@@ -5,25 +5,63 @@ import '../models/epic_spec.dart';
 /// Ensures zero Godot leakage, clean literal game-dev wording, and canonical `1 UU = 1 cm` units.
 class UnrealSpecGuard {
   static final RegExp _godotLeakPattern = RegExp(
-    r'\b(godot|gdscript|characterbody3d|characterbody2d|area3d|area2d|_physics_process|\.tscn|\.gd)\b|\bpx/s\b',
+    r'\b(godot|gdscript|characterbody3d|characterbody2d|rigidbody3d|rigidbody2d|area3d|area2d|node3d|node2d|camera3d|camera2d|raycast3d|raycast2d|packedscene|_physics_process|gameobject|gameobjects|monobehaviour|serializefield|prefab|prefabs)\b|(?:\.prefab|\.tscn|\.gd)\b|\b(?:px|pixels)/s\b|\b\d+(?:\.\d+)?\s*(?:px|pixels)\b',
     caseSensitive: false,
   );
 
   static final RegExp _leadingBulletPattern = RegExp(r'^[\-\*\u2022\s]+');
 
   static final List<String> _bannedFillerPhrases = <String>[
-    'seamlessly',
-    'synergy',
-    'leverage',
     'end-to-end loop',
+    'end-to-end',
     'unified pipeline',
+    'unified',
+    'seamlessly',
+    'synergistic',
+    'synergy',
   ];
+
+  static final List<(String, String)> _jargonReplacements = <(String, String)>[
+    ('leveraging', 'using'),
+    ('leverages', 'uses'),
+    ('leverage', 'use'),
+    ('validates', 'checks'),
+    ('validated', 'checked'),
+    ('validate', 'check'),
+    ('verified', 'checked'),
+    ('delivering', 'producing'),
+    ('delivers', 'produces'),
+    ('deliver', 'produce'),
+    ('husbandry', 'breeding'),
+    ('homestead', 'base'),
+    ('expedition', 'run'),
+    ('ordinance', 'weaponry'),
+  ];
+
+  static String _replaceCaseAware(
+    String input,
+    String fromWord,
+    String toLower,
+  ) {
+    return input.replaceAllMapped(
+      RegExp('\\b$fromWord\\b', caseSensitive: false),
+      (m) {
+        final matched = m.group(0) ?? '';
+        if (matched.isNotEmpty &&
+            matched[0] == matched[0].toUpperCase() &&
+            matched[0] != matched[0].toLowerCase()) {
+          return '${toLower[0].toUpperCase()}${toLower.substring(1)}';
+        }
+        return toLower;
+      },
+    );
+  }
 
   static bool containsGodotLeakage(String text) {
     return _godotLeakPattern.hasMatch(text);
   }
 
-  /// Strips Godot-specific terms or buzzword padding and tightens to literal Unreal phrasing.
+  /// Strips Godot/Unity terms or buzzword padding and tightens to literal Unreal phrasing.
   static String sanitizeLine(String raw) {
     var out = raw.trim().replaceFirst(_leadingBulletPattern, '').trim();
     if (out.isEmpty) return '';
@@ -33,19 +71,59 @@ class UnrealSpecGuard {
       RegExp(r'\bGodot\b', caseSensitive: false): 'Unreal Engine',
       RegExp(r'\bCharacterBody3D\b', caseSensitive: false): 'ACharacter',
       RegExp(r'\bCharacterBody2D\b', caseSensitive: false): 'ACharacter',
+      RegExp(r'\bRigidBody3D\b', caseSensitive: false): 'UPrimitiveComponent',
+      RegExp(r'\bRigidBody2D\b', caseSensitive: false): 'UPrimitiveComponent',
+      RegExp(r'\bArea3D\b', caseSensitive: false): 'UBoxComponent',
+      RegExp(r'\bArea2D\b', caseSensitive: false): 'UBoxComponent',
+      RegExp(r'\bNode3D\b', caseSensitive: false): 'AActor',
+      RegExp(r'\bNode2D\b', caseSensitive: false): 'AActor',
+      RegExp(r'\bCamera3D\b', caseSensitive: false): 'UCameraComponent',
+      RegExp(r'\bCamera2D\b', caseSensitive: false): 'UCameraComponent',
+      RegExp(r'\bRayCast3D\b', caseSensitive: false): 'LineTraceByChannel',
+      RegExp(r'\bRayCast2D\b', caseSensitive: false): 'LineTraceByChannel',
+      RegExp(r'\bPackedScene\b', caseSensitive: false): 'Blueprint Class',
       RegExp(r'\b_physics_process\b', caseSensitive: false): 'Tick',
-      RegExp(r'\bpx/s\b', caseSensitive: false): 'cm/s',
+      RegExp(r'\bGameObjects\b', caseSensitive: false): 'AActors',
+      RegExp(r'\bGameObject\b', caseSensitive: false): 'AActor',
+      RegExp(r'\bMonoBehaviour\b', caseSensitive: false): 'UActorComponent',
+      RegExp(r'\bSerializeField\b', caseSensitive: false): 'EditAnywhere',
+      RegExp(r'\.prefab\b', caseSensitive: false): ' Blueprint',
+      RegExp(r'\bPrefabs\b', caseSensitive: false): 'Blueprints',
+      RegExp(r'\bPrefab\b', caseSensitive: false): 'Blueprint',
       RegExp(r'\.tscn\b', caseSensitive: false): ' Level / Blueprint',
       RegExp(r'\.gd\b', caseSensitive: false): ' Blueprint',
+      RegExp(r'\b(?:px|pixels)/s\b', caseSensitive: false): 'cm/s',
     };
     for (final entry in replacements.entries) {
       out = out.replaceAll(entry.key, entry.value);
     }
 
-    for (final filler in _bannedFillerPhrases) {
-      out = out.replaceAll(RegExp('\\b${RegExp.escape(filler)}\\b', caseSensitive: false), '');
+    out = out.replaceAllMapped(
+      RegExp(r'\b(\d+(?:\.\d+)?)\s*(?:px|pixels)\b', caseSensitive: false),
+      (m) => '${m.group(1)} cm',
+    );
+
+    for (final (fromWord, toLower) in _jargonReplacements) {
+      out = _replaceCaseAware(out, fromWord, toLower);
     }
 
+    for (final filler in _bannedFillerPhrases) {
+      out = out.replaceAll(
+        RegExp('\\b${RegExp.escape(filler)}\\b', caseSensitive: false),
+        '',
+      );
+    }
+
+    out = out.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+    out = out.replaceAllMapped(
+      RegExp(r'\s+(?:and|or)\s*([.,;:])', caseSensitive: false),
+      (m) => m.group(1)!,
+    );
+    out = out.replaceAll(RegExp(r'\s+(?:and|or)\s*$', caseSensitive: false), '');
+    out = out.replaceAllMapped(
+      RegExp(r'\s+([.,;:])'),
+      (m) => m.group(1)!,
+    );
     out = out.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
     return out;
   }
@@ -240,6 +318,18 @@ class UnrealSpecGuard {
         ),
     ].where((c) => c.text.isNotEmpty).toList();
 
+    final cleanedFixes = <EpicPieFix>[
+      for (final fx in raw.fixes)
+        if (sanitizeLine(fx.text).isNotEmpty)
+          fx.copyWith(text: sanitizeLine(fx.text)),
+    ];
+
+    final cleanedUpgrades = <EpicUpgradeOption>[
+      for (final up in raw.copilotUpgrades)
+        if (sanitizeLine(up.text).isNotEmpty)
+          up.copyWith(text: sanitizeLine(up.text)),
+    ];
+
     return EpicSpec(
       id: raw.id,
       code: raw.code.trim().isEmpty ? 'E01' : raw.code.trim().toUpperCase(),
@@ -262,10 +352,10 @@ class UnrealSpecGuard {
       feedback: sanitizeList(raw.feedback),
       levelStaging: sanitizeLine(raw.levelStaging),
       checks: cleanedChecks,
-      fixes: raw.fixes,
+      fixes: cleanedFixes,
       baselineSummary: sanitizeList(raw.baselineSummary),
       upgradeDeltas: sanitizeList(raw.upgradeDeltas),
-      copilotUpgrades: raw.copilotUpgrades,
+      copilotUpgrades: cleanedUpgrades,
       chosenForNextRelease: raw.chosenForNextRelease,
     );
   }
@@ -287,6 +377,51 @@ class UnrealSpecGuard {
               : spec.initialEpics[i].lineageKey.trim()),
     ];
 
+    final cleanedCameraOptions = <ConceptSectionOption>[
+      for (final opt in spec.cameraDecisionOptions)
+        ConceptSectionOption(
+          id: opt.id,
+          label: sanitizeLine(opt.label).isEmpty
+              ? opt.label.trim()
+              : sanitizeLine(opt.label),
+          contractValue: sanitizeLine(opt.contractValue).isEmpty
+              ? opt.contractValue.trim()
+              : sanitizeLine(opt.contractValue),
+          note: opt.note == null ? null : sanitizeLine(opt.note!),
+        ),
+    ];
+
+    final cleanedTradeOffs = <TradeOffRule>[
+      for (final t in spec.tradeOffs)
+        if (sanitizeLine(t.prefer).isNotEmpty || sanitizeLine(t.avoid).isNotEmpty)
+          TradeOffRule(
+            prefer: sanitizeLine(t.prefer),
+            avoid: sanitizeLine(t.avoid),
+          ),
+    ];
+
+    final cleanedPresets = <ReleaseDirectionPreset>[
+      for (final p in spec.v02Presets)
+        ReleaseDirectionPreset(
+          id: p.id,
+          label: sanitizeLine(p.label).isEmpty
+              ? 'Release Direction'
+              : sanitizeLine(p.label),
+          description: sanitizeLine(p.description),
+          upgradeIds: p.upgradeIds,
+          newEpicIds: p.newEpicIds,
+        ),
+    ];
+
+    final cleanedUpgradesByLineage = <String, List<EpicUpgradeOption>>{
+      for (final e in spec.v02UpgradesByLineageKey.entries)
+        e.key: [
+          for (final u in e.value)
+            if (sanitizeLine(u.text).isNotEmpty)
+              u.copyWith(text: sanitizeLine(u.text)),
+        ],
+    };
+
     return ProjectConceptBlueprint(
       sparkPrompt: spec.sparkPrompt.trim(),
       gameTitle: sanitizeLine(spec.gameTitle).isEmpty
@@ -300,21 +435,21 @@ class UnrealSpecGuard {
       characterScale: sanitizeLine(spec.characterScale),
       inputContract: sanitizeLine(spec.inputContract),
       assetPolicy: sanitizeLine(spec.assetPolicy),
-      cameraDecisionOptions: spec.cameraDecisionOptions,
+      cameraDecisionOptions: cleanedCameraOptions,
       feelChoiceId: ProjectConceptBlueprint.normalizeFeelChoiceId(
         spec.feelChoiceId,
       ),
       pillars: sanitizeList(spec.pillars),
-      tradeOffs: spec.tradeOffs,
+      tradeOffs: cleanedTradeOffs,
       outOfScope: sanitizeList(spec.outOfScope),
       initialEpics: cleanedEpics,
       releaseDoneWhen: sanitizeLine(spec.releaseDoneWhen),
-      v02Presets: spec.v02Presets,
+      v02Presets: cleanedPresets,
       v02NewPool: [
         for (final ep in spec.v02NewPool)
           sanitizeEpicSpec(ep, forceReleaseVersion: 'v0.2'),
       ],
-      v02UpgradesByLineageKey: spec.v02UpgradesByLineageKey,
+      v02UpgradesByLineageKey: cleanedUpgradesByLineage,
       lastCoDesignNote: sanitizeLine(spec.lastCoDesignNote),
       approved: spec.approved,
     );
@@ -329,9 +464,29 @@ class UnrealSpecGuard {
     if (spec.initialEpics.any((e) => e.releaseVersion != 'v0.1')) {
       warnings.add('Stage 1 §05 contains non-v0.1 Epics.');
     }
-    if (containsGodotLeakage(spec.pitch) ||
-        containsGodotLeakage(spec.cameraContract) ||
-        containsGodotLeakage(spec.inputContract)) {
+    final allTexts = <String>[
+      spec.pitch,
+      spec.cameraContract,
+      spec.characterScale,
+      spec.inputContract,
+      spec.assetPolicy,
+      ...spec.pillars,
+      ...spec.tradeOffs.map((t) => t.formatted),
+      for (final opt in spec.cameraDecisionOptions) ...[
+        opt.label,
+        opt.contractValue,
+        if (opt.note != null) opt.note!,
+      ],
+      for (final ep in spec.initialEpics) ...[
+        ep.title,
+        ep.goal,
+        ep.levelStaging,
+        ...ep.links,
+        ...ep.checks.map((c) => c.text),
+        ...ep.fixes.map((f) => f.text),
+      ],
+    ];
+    if (allTexts.any(containsGodotLeakage)) {
       warnings.add('Detected legacy Godot terminology in Unreal foundation.');
     }
     for (final ep in spec.initialEpics) {

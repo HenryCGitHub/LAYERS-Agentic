@@ -1940,5 +1940,166 @@ void main() {
         expect(ue6Md, contains('- bCanDash: true bool [logic]'));
       },
     );
+
+    test(
+      '28. UnrealSpecGuard strips Godot 4, Unity, and banned jargon across TradeOffs, Camera Options, Presets, Upgrades & [FIX] notes',
+      () {
+        expect(
+          UnrealSpecGuard.containsGodotLeakage(
+            'Attach MonoBehaviour to GameObject prefab',
+          ),
+          isTrue,
+        );
+        expect(
+          UnrealSpecGuard.containsGodotLeakage(
+            'Spawn PackedScene inside Area3D',
+          ),
+          isTrue,
+        );
+        expect(UnrealSpecGuard.containsGodotLeakage('1200 pixels/s'), isTrue);
+
+        final dirtyNestedOnly = ProjectConceptBlueprint(
+          gameTitle: 'Clean Title',
+          pitch: 'Crisp melee arena prototype.',
+          cameraContract: 'SpringArm 1450 cm @ -52 deg pitch',
+          inputContract: 'Enhanced Input (IMC_Combat + IA_Move)',
+          tradeOffs: const [
+            TradeOffRule(
+              prefer: 'Snappy Node3D response',
+              avoid: 'Heavy GameObject MonoBehaviour drift',
+            ),
+          ],
+          initialEpics: [
+            EpicSpec(
+              id: 'ep_n1',
+              code: 'E01',
+              title: 'Combat',
+              goal: 'Swing sword',
+              checks: [
+                EpicPieCheck(id: 'c1', text: 'Sword hits dummy cleanly'),
+              ],
+            ),
+          ],
+        );
+        expect(UnrealSpecGuard.auditBlueprint(dirtyNestedOnly), isNotEmpty);
+
+        final dirty = ProjectConceptBlueprint(
+          gameTitle: 'Test Arena',
+          pitch:
+              'Leverage homestead husbandry on an expedition cleanly and seamlessly.',
+          cameraDecisionOptions: const [
+            ConceptSectionOption(
+              id: 'cam_a',
+              label: 'Godot Camera3D',
+              contractValue: 'Camera3D boom 1400 px',
+              note: 'Validate RayCast3D sightline',
+            ),
+          ],
+          tradeOffs: const [
+            TradeOffRule(
+              prefer: 'Snappy Node3D response',
+              avoid: 'Heavy GameObject MonoBehaviour drift',
+            ),
+          ],
+          v02Presets: const [
+            ReleaseDirectionPreset(
+              id: 'p1',
+              label: 'Unified Expedition',
+              description: 'Deliver enemy prefab waves seamlessly',
+              upgradeIds: ['u1'],
+              newEpicIds: [],
+            ),
+          ],
+          v02UpgradesByLineageKey: {
+            'e01': [
+              EpicUpgradeOption(
+                id: 'u1',
+                text: 'Spawn PackedScene decoy inside Area3D',
+              ),
+            ],
+          },
+          initialEpics: [
+            EpicSpec(
+              id: 'ep_1',
+              code: 'E01',
+              title: 'Dash',
+              goal: 'Dash forward cleanly',
+              checks: [
+                EpicPieCheck(id: 'c1', text: 'Dash 400 px on press'),
+              ],
+              fixes: [
+                EpicPieFix(
+                  id: 'f1',
+                  text: 'RigidBody3D snags turret.prefab at 400 px',
+                ),
+              ],
+              copilotUpgrades: [
+                EpicUpgradeOption(
+                  id: 'cu1',
+                  text: 'Leverage ordinance blast',
+                ),
+              ],
+            ),
+          ],
+        );
+
+        final clean = UnrealSpecGuard.sanitizeConceptBlueprint(dirty);
+        final lowerPitch = clean.pitch.toLowerCase();
+        expect(lowerPitch, contains('base'));
+        expect(lowerPitch, contains('breeding'));
+        expect(lowerPitch, contains('run'));
+        expect(lowerPitch, contains('cleanly.'));
+        expect(lowerPitch, isNot(contains('leverage')));
+        expect(lowerPitch, isNot(contains('homestead')));
+        expect(lowerPitch, isNot(contains('husbandry')));
+        expect(lowerPitch, isNot(contains('expedition')));
+        expect(lowerPitch, isNot(contains('seamlessly')));
+        expect(clean.pitch, isNot(contains(' and .')));
+
+        final camOpt = clean.cameraDecisionOptions.first;
+        expect(camOpt.label, contains('UCameraComponent'));
+        expect(camOpt.contractValue, contains('UCameraComponent boom 1400 cm'));
+        expect(camOpt.note, contains('Check LineTraceByChannel sightline'));
+
+        expect(
+          clean.tradeOffs.first.formatted,
+          equals('Snappy AActor response OVER Heavy AActor UActorComponent drift'),
+        );
+
+        final preset = clean.v02Presets.first;
+        expect(preset.label.toLowerCase(), isNot(contains('unified')));
+        expect(preset.label.toLowerCase(), isNot(contains('expedition')));
+        expect(preset.description, contains('Blueprint'));
+        expect(preset.description.toLowerCase(), contains('produce'));
+        expect(preset.description.toLowerCase(), isNot(contains('prefab')));
+        expect(preset.description.toLowerCase(), isNot(contains('deliver')));
+        expect(preset.description.toLowerCase(), isNot(contains('seamlessly')));
+
+        expect(
+          clean.v02UpgradesByLineageKey['e01']!.first.text,
+          allOf(contains('Blueprint Class'), contains('UBoxComponent')),
+        );
+        expect(
+          clean.initialEpics.first.fixes.first.text,
+          allOf(
+            contains('UPrimitiveComponent'),
+            contains('400 cm'),
+            contains('Blueprint'),
+            isNot(contains('RigidBody3D')),
+            isNot(contains('prefab')),
+            isNot(contains('400 px')),
+          ),
+        );
+        expect(
+          clean.initialEpics.first.copilotUpgrades.first.text.toLowerCase(),
+          allOf(
+            contains('weaponry'),
+            isNot(contains('leverage')),
+            isNot(contains('ordinance')),
+          ),
+        );
+        expect(UnrealSpecGuard.auditBlueprint(clean), isEmpty);
+      },
+    );
   });
 }
