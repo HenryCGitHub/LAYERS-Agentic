@@ -120,6 +120,56 @@ class UnrealMcpPayloadBuilder {
     return b.toString().trimRight();
   }
 
+  static void _writeReleaseEpicRoadmap(
+    StringBuffer b,
+    EpicSpec activeEpic,
+    List<EpicSpec>? releaseEpics,
+  ) {
+    if (releaseEpics == null || releaseEpics.length < 2) return;
+    final passedCount = releaseEpics.where((e) => e.isPassed).length;
+    b.writeln();
+    b.writeln(
+      '## Release Epic Roadmap (${activeEpic.releaseVersion} · $passedCount/${releaseEpics.length} Passed)',
+    );
+    for (final sib in releaseEpics) {
+      final isCurrent = (activeEpic.id.isNotEmpty && sib.id == activeEpic.id) ||
+          (activeEpic.id.isEmpty && sib.code == activeEpic.code);
+      if (isCurrent) {
+        b.writeln('- [ACTIVE →] ${sib.code} · ${sib.title} — build in this pass');
+      } else if (sib.isPassed) {
+        final seenContracts = <String>{};
+        final contracts = <String>[];
+        void addContract(String raw) {
+          final clean = raw.trim();
+          if (clean.isEmpty || contracts.length >= 3) return;
+          if (seenContracts.add(clean.toLowerCase())) {
+            contracts.add(clean);
+          }
+        }
+
+        for (final link in sib.links.take(2)) {
+          addContract(link);
+        }
+        for (final ctrl in sib.controls.take(2)) {
+          addContract(ctrl.action);
+        }
+        if (contracts.isNotEmpty) {
+          b.writeln(
+            '- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse (${contracts.join(', ')})',
+          );
+        } else {
+          b.writeln(
+            '- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse existing assets',
+          );
+        }
+      } else {
+        b.writeln(
+          '- [QUEUED — DEFER] ${sib.code} · ${sib.title} — do not build yet; stub interfaces only if needed',
+        );
+      }
+    }
+  }
+
   /// Builds the exact Unreal MCP wire payload for an Epic (`ROOT_MCP_CONTEXT` + `ACTIVE EPIC SPEC`).
   /// Automatically switches footer instructions between:
   /// - `FOCUSED PIE REVISION PASS (N OPEN [FIX])` when any unresolved `[FIX]` exists, or
@@ -127,6 +177,7 @@ class UnrealMcpPayloadBuilder {
   static String buildEpicMcpPayload({
     required ProjectConceptBlueprint rootSpec,
     required EpicSpec epic,
+    List<EpicSpec>? releaseEpics,
     UnrealTargetEngine? targetOverride,
     Map<String, dynamic>? liveUprojectContext,
     bool includeRootContext = true,
@@ -143,6 +194,7 @@ class UnrealMcpPayloadBuilder {
           liveUprojectContext: liveUprojectContext,
         ),
       );
+      _writeReleaseEpicRoadmap(b, epic, releaseEpics);
       b.writeln();
       b.writeln('---');
       b.writeln();

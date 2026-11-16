@@ -493,6 +493,7 @@ function sanitizeUprojectContextJs(raw) {
 function renderServerUnrealMcpPayloadJs({
   rootSpec,
   epicSpec,
+  releaseEpics = null,
   uprojectContext,
 }) {
   const isUe6 = rootSpec?.targetEngine === "ue6Verse";
@@ -568,6 +569,63 @@ function renderServerUnrealMcpPayloadJs({
       lines.push("- Recent Editor/PIE Log Warnings:");
       for (const err of uprojectContext.recent_errors.slice(0, 4)) {
         lines.push(`  - ${err}`);
+      }
+    }
+  }
+
+  if (Array.isArray(releaseEpics) && releaseEpics.length >= 2) {
+    const passedCount = releaseEpics.filter((sib) =>
+      typeof sib?.isPassed === "boolean"
+        ? sib.isPassed
+        : computeEpicPassedJs(sib)
+    ).length;
+    lines.push("");
+    lines.push(
+      `## Release Epic Roadmap (${epicSpec.releaseVersion} · ${passedCount}/${releaseEpics.length} Passed)`
+    );
+    for (const sib of releaseEpics) {
+      const isCurrent =
+        (epicSpec.id && sib.id === epicSpec.id) ||
+        (!epicSpec.id && sib.code === epicSpec.code);
+      const sibPassed =
+        typeof sib?.isPassed === "boolean"
+          ? sib.isPassed
+          : computeEpicPassedJs(sib);
+      if (isCurrent) {
+        lines.push(
+          `- [ACTIVE →] ${sib.code} · ${sib.title} — build in this pass`
+        );
+      } else if (sibPassed) {
+        const seenContracts = new Set();
+        const contracts = [];
+        const addContract = (raw) => {
+          const clean = String(raw || "").trim();
+          if (!clean || contracts.length >= 3) return;
+          const key = clean.toLowerCase();
+          if (!seenContracts.has(key)) {
+            seenContracts.add(key);
+            contracts.push(clean);
+          }
+        };
+        for (const link of (Array.isArray(sib.links) ? sib.links : []).slice(0, 2)) {
+          addContract(link);
+        }
+        for (const ctrl of (Array.isArray(sib.controls) ? sib.controls : []).slice(0, 2)) {
+          addContract(ctrl?.action);
+        }
+        if (contracts.length > 0) {
+          lines.push(
+            `- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse (${contracts.join(", ")})`
+          );
+        } else {
+          lines.push(
+            `- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse existing assets`
+          );
+        }
+      } else {
+        lines.push(
+          `- [QUEUED — DEFER] ${sib.code} · ${sib.title} — do not build yet; stub interfaces only if needed`
+        );
       }
     }
   }
@@ -857,6 +915,7 @@ function computeActiveUnrealEpicPayload({
   const mcpPayloadMarkdown = renderServerUnrealMcpPayloadJs({
     rootSpec,
     epicSpec: activeEpic,
+    releaseEpics: parsedEpics,
     uprojectContext: liveCtx,
   });
 

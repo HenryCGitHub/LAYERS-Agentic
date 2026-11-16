@@ -574,6 +574,15 @@ def main() -> int:
           in spec_md
       ), spec_md
       assert "__ExternalActors__" not in spec_md, spec_md
+      assert "## Release Epic Roadmap (v0.1 · 0/2 Passed)" in spec_md, spec_md
+      assert (
+          "- [ACTIVE →] E01 · Crab Locomotion & Dash — build in this pass"
+          in spec_md
+      ), spec_md
+      assert (
+          "- [QUEUED — DEFER] E02 · Claw Blaster & Hitstop — do not build yet; stub interfaces only if needed"
+          in spec_md
+      ), spec_md
       assert "# ACTIVE EPIC SPEC · E01 · Crab Locomotion & Dash" in spec_md
       assert "### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK" in spec_md
 
@@ -769,6 +778,15 @@ def main() -> int:
 
       # 5. Fetch E02, check its Check 1 -> stale E01 LayersCheck_2 cleared; stays uncompleted until Pass E02 ✓
       e02_md = toolset.layers_get_active_epic_spec()
+      assert "## Release Epic Roadmap (v0.1 · 1/2 Passed)" in e02_md, e02_md
+      assert (
+          "- [BUILT ✓] E01 · Crab Locomotion & Dash — preserve & reuse (BP_CrabPlayer -> IMC_Core, IA_Move, IA_Dash)"
+          in e02_md
+      ), e02_md
+      assert (
+          "- [ACTIVE →] E02 · Claw Blaster & Hitstop — build in this pass"
+          in e02_md
+      ), e02_md
       assert "# ACTIVE EPIC SPEC · E02 · Claw Blaster & Hitstop" in e02_md
       assert "[VERIFY] Check 1:" in e02_md, e02_md
       assert "LayersCheck_1" in combo_menu.entries

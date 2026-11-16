@@ -2101,5 +2101,68 @@ void main() {
         expect(UnrealSpecGuard.auditBlueprint(clean), isEmpty);
       },
     );
+
+    test(
+      '29. activeEpicMcpPayload emits Release Epic Roadmap with [BUILT ✓] reusable contracts, [ACTIVE →], and [QUEUED — DEFER] siblings',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final e01Md = wb.activeEpicMcpPayload(wb.selectedEpicSpec!);
+        expect(e01Md, contains('## Release Epic Roadmap (v0.1 · 0/3 Passed)'));
+        expect(
+          e01Md,
+          contains(
+            '- [ACTIVE →] E01 · Player Mech Movement & Claw Dash — build in this pass',
+          ),
+        );
+        expect(
+          e01Md,
+          contains(
+            '- [QUEUED — DEFER] E02 · Twin-Stick Burst Cannon & Recoil — do not build yet; stub interfaces only if needed',
+          ),
+        );
+        expect(
+          e01Md,
+          contains(
+            '- [QUEUED — DEFER] E03 · Crustacean Grunt & Armor Break — do not build yet; stub interfaces only if needed',
+          ),
+        );
+
+        wb.passActiveEpic(wb.selectedEpicId!);
+        expect(wb.selectedEpicSpec?.code, equals('E02'));
+        final e02Md = wb.activeEpicMcpPayload(wb.selectedEpicSpec!);
+        expect(e02Md, contains('## Release Epic Roadmap (v0.1 · 1/3 Passed)'));
+        expect(
+          e02Md,
+          allOf(
+            contains(
+              '- [BUILT ✓] E01 · Player Mech Movement & Claw Dash — preserve & reuse (',
+            ),
+            contains('IA_Move'),
+          ),
+        );
+        expect(
+          e02Md,
+          contains(
+            '- [ACTIVE →] E02 · Twin-Stick Burst Cannon & Recoil — build in this pass',
+          ),
+        );
+        expect(
+          e02Md,
+          contains(
+            '- [QUEUED — DEFER] E03 · Crustacean Grunt & Armor Break',
+          ),
+        );
+
+        final bundle = UnrealMcpPayloadBuilder.buildReleaseMcpBundle(
+          rootSpec: wb.conceptDraft!,
+          releaseLabel: 'v0.1 · Prototype',
+          releaseEpics: wb.activeReleaseEpics,
+        );
+        expect(bundle, isNot(contains('## Release Epic Roadmap')));
+      },
+    );
   });
 }

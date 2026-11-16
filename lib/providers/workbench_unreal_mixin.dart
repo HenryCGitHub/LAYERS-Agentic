@@ -59,6 +59,7 @@ extension WorkbenchUnrealMixin on WorkbenchProvider {
     return UnrealMcpPayloadBuilder.buildEpicMcpPayload(
       rootSpec: spec,
       epic: epic,
+      releaseEpics: activeReleaseEpics,
       liveUprojectContext: latestLiveUprojectContext,
     );
   }
