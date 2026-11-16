@@ -540,6 +540,7 @@ function computeActiveUnrealEpicPayload({
   projectId,
   webStudioUrl = DEFAULT_WEB_STUDIO_URL,
   uprojectContext = null,
+  preferredEpicId = "",
 }) {
   let projectDoc = docsById.get(projectId) || null;
   if (!projectDoc) {
@@ -588,8 +589,11 @@ function computeActiveUnrealEpicPayload({
     }
   }
 
+  const prefId = String(preferredEpicId || "").trim();
+  const prefDoc = prefId ? docsById.get(prefId) : null;
   const savedRelId = String(projSections.active_release_id || "").trim();
   const activeRel =
+    (prefDoc?.parentId && releases.find((r) => r.id === prefDoc.parentId)) ||
     releases.find((r) => r.id === savedRelId) ||
     (releases.length > 0 ? releases[releases.length - 1] : null);
 
@@ -669,11 +673,20 @@ function computeActiveUnrealEpicPayload({
   const selIdx = selectedId
     ? parsedEpics.findIndex((e) => e.id === selectedId)
     : -1;
+  const prefIdx = prefId
+    ? parsedEpics.findIndex((e) => e.id === prefId)
+    : -1;
   const firstUnpassedIdx = parsedEpics.findIndex((e) => !e.isPassed);
   const allEpicsCompleted = firstUnpassedIdx === -1;
 
   let activeIdx = -1;
-  if (selIdx >= 0 && !parsedEpics[selIdx].isPassed) {
+  if (prefIdx >= 0) {
+    activeIdx = prefIdx;
+  } else if (
+    selIdx >= 0 &&
+    (!parsedEpics[selIdx].isPassed ||
+      String(parsedEpics[selIdx].lifecycle || "").toLowerCase() !== "stable")
+  ) {
     activeIdx = selIdx;
   } else if (firstUnpassedIdx >= 0) {
     activeIdx = firstUnpassedIdx;
@@ -714,9 +727,22 @@ function resolveTargetEpicDocIdJs({
   projectId,
   requestedEpicId = "",
   webStudioUrl = DEFAULT_WEB_STUDIO_URL,
+  action = "",
 }) {
   const reqId = String(requestedEpicId || "").trim();
   if (!reqId) {
+    const projectDoc = docsById.get(projectId);
+    const selectedId = String(projectDoc?.sections?.selected_epic_id || "").trim();
+    if (selectedId) {
+      const selDoc = docsById.get(selectedId);
+      if (selDoc && String(selDoc.tier || "").toUpperCase() === "EPIC") {
+        const selSpec = parseEpicSpecJs(selDoc);
+        const lifecycle = String(selSpec.lifecycle || "").toLowerCase();
+        if (!selSpec.isPassed || lifecycle !== "stable") {
+          return selectedId;
+        }
+      }
+    }
     const payload = computeActiveUnrealEpicPayload({
       docsById,
       projectId,
@@ -909,8 +935,26 @@ function applyUnrealEpicMutationJs({
     for (const c of spec.checks) c.passed = true;
     spec.lifecycle = "stable";
   } else if (action === "reopen_epic") {
-    spec.lifecycle = "active";
-    for (const c of spec.checks) c.passed = false;
+    if (Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) {
+      spec.lifecycle = "upgrading";
+      const verLower = String(spec.releaseVersion || "").trim().toLowerCase();
+      const deltaChecks = spec.checks.filter((c) => {
+        const t = String(c.text || "").trim().toLowerCase();
+        return (
+          String(c.id || "").includes("_delta_") ||
+          (verLower && t.startsWith(`verify ${verLower} delta`)) ||
+          t.includes("delta:")
+        );
+      });
+      if (deltaChecks.length > 0) {
+        for (const c of deltaChecks) c.passed = false;
+      } else {
+        for (const c of spec.checks) c.passed = false;
+      }
+    } else {
+      spec.lifecycle = "active";
+      for (const c of spec.checks) c.passed = false;
+    }
   } else {
     const err = new Error(`Unsupported Unreal Epic action: ${action}`);
     err.statusCode = 400;
@@ -1571,6 +1615,7 @@ exports.geminiProxy = onRequest(
           projectId: linkAuth.projectId,
           requestedEpicId: targetEpicId,
           webStudioUrl: linkAuth.webStudioUrl,
+          action,
         });
         if (!targetEpicId) {
           res.status(404).json({
@@ -1637,11 +1682,13 @@ exports.geminiProxy = onRequest(
         inMemProj.sections = existingSec;
       }
 
+      const isInPlaceMutation = action !== "pass_epic" && action !== "sync_uproject";
       const payload = computeActiveUnrealEpicPayload({
         docsById,
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
         uprojectContext,
+        preferredEpicId: isInPlaceMutation ? targetEpicId : "",
       });
 
       const nextProjSec = {

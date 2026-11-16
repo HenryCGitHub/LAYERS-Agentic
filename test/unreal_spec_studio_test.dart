@@ -905,5 +905,61 @@ void main() {
         }
       },
     );
+
+    test(
+      '15. Reopening a passed v0.2 Upgrading Epic preserves locked v0.1 baseline checks & restores upgrading lifecycle',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        await wb.openProgressiveReleaseCopilot();
+        final presetId = wb.progressiveDraft!.presets.first.id;
+        wb.applyProgressivePreset(presetId);
+        wb.commitProgressiveReleaseDraft();
+
+        final upgradingEpic = wb.activeReleaseEpics.firstWhere(
+          (e) => e.lifecycle == EpicLifecycle.upgrading,
+        );
+        expect(upgradingEpic.upgradeDeltas, isNotEmpty);
+        expect(
+          upgradingEpic.checks.any(
+            (c) => !c.id.contains('_delta_') && c.passed,
+          ),
+          isTrue,
+        );
+        expect(
+          upgradingEpic.checks.any(
+            (c) => c.id.contains('_delta_') && !c.passed,
+          ),
+          isTrue,
+        );
+
+        // Pass the upgrading Epic (all checks true, lifecycle -> stable)
+        wb.passActiveEpic(upgradingEpic.id);
+        final passedSpec = wb.epicsForRelease(wb.activeReleaseId!).firstWhere(
+              (e) => e.id == upgradingEpic.id,
+            );
+        expect(passedSpec.isPassed, isTrue);
+        expect(passedSpec.lifecycle, equals(EpicLifecycle.stable));
+
+        // Reopen -> restores EpicLifecycle.upgrading, keeps locked baseline checks passed, resets delta checks only
+        wb.reopenEpic(upgradingEpic.id);
+        final reopened = wb.epicsForRelease(wb.activeReleaseId!).firstWhere(
+              (e) => e.id == upgradingEpic.id,
+            );
+        expect(reopened.lifecycle, equals(EpicLifecycle.upgrading));
+        expect(reopened.isPassed, isFalse);
+        final baselineChecks = reopened.checks
+            .where((c) => !c.id.contains('_delta_'))
+            .toList();
+        final deltaChecks = reopened.checks
+            .where((c) => c.id.contains('_delta_'))
+            .toList();
+        expect(baselineChecks, isNotEmpty);
+        expect(baselineChecks.every((c) => c.passed), isTrue);
+        expect(deltaChecks, isNotEmpty);
+        expect(deltaChecks.every((c) => !c.passed), isTrue);
+      },
+    );
   });
 }

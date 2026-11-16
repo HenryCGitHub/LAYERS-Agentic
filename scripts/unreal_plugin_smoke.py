@@ -188,6 +188,7 @@ const server = http.createServer((req, res) => {
           docsById,
           projectId: "proj_smoke",
           requestedEpicId: targetEpicId,
+          action,
         });
       }
       if (action !== "sync_uproject") {
@@ -212,11 +213,13 @@ const server = http.createServer((req, res) => {
           projDoc.sections.selected_epic_id = targetEpicId;
         }
       }
+      const isInPlaceMutation = action !== "pass_epic" && action !== "sync_uproject";
       const payload = helpers.computeActiveUnrealEpicPayload({
         docsById,
         projectId: "proj_smoke",
         webStudioUrl: "https://henrycgithub.github.io/LAYERS-Agentic/",
         uprojectContext: body.uprojectContext || null,
+        preferredEpicId: isInPlaceMutation ? targetEpicId : "",
       });
       if (payload.activeEpic?.id) {
         projDoc.sections.selected_epic_id = payload.activeEpic.id;
@@ -433,31 +436,37 @@ def main() -> int:
       new_tune_md = toolset.layers_update_epic_tuning("ArenaRadius", "1800", unit="pixels")
       assert "- ArenaRadius: 1800 cm" in new_tune_md
 
-      # 1c. Toggle individual §06 PIE check by 1-based check number ("1")
+      # 1c. Toggle individual §06 PIE checks (including final check) without jumping off E01
       chk_md = toolset.layers_toggle_pie_check("1", passed=True)
-      assert "1/2" in chk_md
-      assert "[PASSED] Check 1:" in chk_md
-      assert "[VERIFY] Check 2:" in chk_md
+      assert "1/2" in chk_md, chk_md
+      assert "[PASSED] Check 1:" in chk_md, chk_md
+      assert "[VERIFY] Check 2:" in chk_md, chk_md
+
+      chk2_md = toolset.layers_toggle_pie_check("2", passed=True)
+      assert "2/2 passed) on E01" in chk2_md, chk2_md
+      assert "# ACTIVE EPIC SPEC · E01" in chk2_md, chk2_md
 
       # 2. Log PIE [FIX] and confirm switch to FOCUSED PIE REVISION PASS
       fix_md = toolset.layers_log_pie_fix("Boom clips ceiling during dash jump")
       assert "### FOCUSED PIE REVISION PASS (1 OPEN [FIX])" in fix_md
       assert "- [FIX] Boom clips ceiling during dash jump" in fix_md
 
-      # 3. Resolve [FIX] and restore FULL-EPIC footer
+      # 3. Resolve [FIX] and stay focused on E01 with FULL-EPIC footer restored
       resolved_md = toolset.layers_resolve_pie_fix("latest")
+      assert "Resolved PIE [FIX] on E01" in resolved_md, resolved_md
       assert "0 remaining" in resolved_md
       assert "### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK" in resolved_md
 
-      # 4. Launch PIE from dock & sign off E01 -> advances automatically to E02
+      # 4. Launch PIE from dock & sign off E01 -> advances to E02 without prematurely passing E02
       assert dock.launch_pie() is True
       assert unreal_state["pie_started"] is True
       pass_msg = toolset.layers_pass_active_epic()
-      assert "Epic 2/2: E02" in pass_msg
+      assert "Epic 2/2: E02" in pass_msg, pass_msg
 
-      # 5. Fetch E02 & pass E02 -> allEpicsCompleted
+      # 5. Fetch E02 & confirm Check 1 is still unverified before passing E02
       e02_md = toolset.layers_get_active_epic_spec()
       assert "# ACTIVE EPIC SPEC · E02 · Claw Blaster & Hitstop" in e02_md
+      assert "[VERIFY] Check 1:" in e02_md, e02_md
       done_msg = toolset.layers_pass_active_epic()
       assert "All Epics passed PIE acceptance gate" in done_msg
 
@@ -471,6 +480,42 @@ def main() -> int:
       assert "- MaxWalkSpeed: 650 cm/s" in str(dock_tune.get("mcpPayloadMarkdown") or "")
       repass_res = dock.pass_epic()
       assert repass_res.get("allEpicsCompleted") is True
+
+      # 5c. Reopen v0.2 upgrading Epic preserves locked v0.1 baseline checks & restores upgrading lifecycle
+      reopen_v02_js = r"""
+      process.env.GCLOUD_PROJECT = 'layers-b8a16';
+      const { _testHelpers: h } = require('./functions/index.js');
+      const v02Doc = {
+        id: 'ep_v02_up',
+        sections: {
+          code: 'E01',
+          lineage_key: 'e01',
+          release_version: 'v0.2',
+          lifecycle: 'stable',
+          epic_spec_json: JSON.stringify({
+            id: 'ep_v02_up',
+            code: 'E01',
+            lineageKey: 'e01',
+            title: 'Movement',
+            releaseVersion: 'v0.2',
+            lifecycle: 'stable',
+            goal: 'Jump + Dash',
+            upgradeDeltas: ['+55ms Hit-Stop'],
+            checks: [
+              { id: 'c1', text: 'v0.1 base walk passes', passed: true },
+              { id: 'ep_v02_up_delta_1', text: 'Verify v0.2 delta: 55ms Hit-Stop', passed: true }
+            ]
+          })
+        }
+      };
+      const out = h.applyUnrealEpicMutationJs({ epicDoc: v02Doc, action: 'reopen_epic', body: {}, nowMs: 1234 });
+      if (out.epicSpec.lifecycle !== 'upgrading') throw new Error('Expected upgrading, got ' + out.epicSpec.lifecycle);
+      if (out.epicSpec.checks[0].passed !== true) throw new Error('Expected baseline check to remain passed');
+      if (out.epicSpec.checks[1].passed !== false) throw new Error('Expected delta check to reset to false');
+      if (out.isCompleted !== false) throw new Error('Expected isCompleted false');
+      """
+      reopen_proc = subprocess.run(["node", "-e", reopen_v02_js], cwd=str(REPO_ROOT), capture_output=True, text=True, timeout=10)
+      assert reopen_proc.returncode == 0, f"v0.2 reopen check failed: {reopen_proc.stderr}"
 
       # 6. Check token config persistence helper
       dock.configure_token("lyr_saved_token_check_0001", f"http://127.0.0.1:{port}")

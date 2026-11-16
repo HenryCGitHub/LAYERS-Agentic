@@ -164,7 +164,24 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
   void reopenEpic(String epicId) {
     _updateAndPersistEpic(epicId, (spec) {
-      spec.lifecycle = EpicLifecycle.active;
+      if (spec.upgradeDeltas.isNotEmpty) {
+        spec.lifecycle = EpicLifecycle.upgrading;
+        final verLower = spec.releaseVersion.trim().toLowerCase();
+        final deltaChecks = spec.checks.where((c) {
+          final t = c.text.trim().toLowerCase();
+          return c.id.contains('_delta_') ||
+              (verLower.isNotEmpty && t.startsWith('verify $verLower delta')) ||
+              t.contains('delta:');
+        }).toList();
+        if (deltaChecks.isNotEmpty) {
+          for (final c in deltaChecks) {
+            c.passed = false;
+          }
+          return;
+        }
+      } else {
+        spec.lifecycle = EpicLifecycle.active;
+      }
       for (final c in spec.checks) {
         c.passed = false;
       }
