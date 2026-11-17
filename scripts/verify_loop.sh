@@ -102,6 +102,27 @@ config/name="LAYERS Plugin Test"
 EOF
   cp -R "$ROOT_DIR/godot_plugin/addons" "$TMP_GODOT/addons"
   "$GODOT_EXEC" --headless --path "$TMP_GODOT" --script "$ROOT_DIR/scripts/godot_plugin_test.gd"
+  cat >"$TMP_GODOT/main.tscn" <<'EOF'
+[gd_scene format=3]
+
+[node name="Main" type="Node3D"]
+EOF
+  cat >"$TMP_GODOT/project.godot" <<'EOF'
+config_version=5
+
+[application]
+config/name="LAYERS Plugin Editor Check"
+run/main_scene="res://main.tscn"
+
+[editor_plugins]
+enabled=PackedStringArray("res://addons/layers/plugin.cfg")
+EOF
+  ED_OUT="$("$GODOT_EXEC" --headless --editor --quit --path "$TMP_GODOT" 2>&1)"
+  if echo "$ED_OUT" | grep -qE "SCRIPT ERROR:|addons/layers/.*ERROR:|editor_plugin\.cpp.*ERROR:|Condition \"!legacy_docks\.has"; then
+    echo "$ED_OUT" >&2
+    echo "Godot editor plugin initialization failed!" >&2
+    exit 1
+  fi
 else
   echo "SKIP headless Godot binary check (Godot binary not found)." >&2
 fi

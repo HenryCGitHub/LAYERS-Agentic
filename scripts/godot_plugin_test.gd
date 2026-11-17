@@ -403,6 +403,33 @@ func _physics_process(_delta: float) -> void:
 	dock_sync.call("clear_link_token")
 	mock_editor.base_ctrl.free()
 
+	# 9. Test fresh hot-reload when cached script has a pending queue_free instance
+	var hot_path := "res://tmp_hot_dock.gd"
+	if not _write_text(hot_path, "@tool\nextends VBoxContainer\nvar editor_interface: Variant = null\n"):
+		_fail("Could not write temporary hot dock script.")
+		return
+	var old_scr: GDScript = load(hot_path) as GDScript
+	var old_dock: Control = old_scr.new() as Control
+	get_root().add_child(old_dock)
+	_write_text(hot_path, "@tool\nextends VBoxContainer\nvar editor_interface: Variant = null\nvar undo_redo: Variant = null\n")
+	old_dock.queue_free()
+
+	var plugin_scr: GDScript = ResourceLoader.load("res://addons/layers/layers_plugin.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+	var reloaded_scr_v: Variant = plugin_scr.call("load_fresh_script", hot_path)
+	if not (reloaded_scr_v is GDScript):
+		_fail("load_fresh_script returned invalid script for %s" % hot_path)
+		return
+	var reloaded_gds: GDScript = reloaded_scr_v as GDScript
+	var reloaded_inst: Control = reloaded_gds.new() as Control
+	if reloaded_inst == null:
+		_fail("Expected Control instance from reloaded hot dock script.")
+		return
+	if not ("undo_redo" in reloaded_inst):
+		reloaded_inst.free()
+		_fail("Reloaded hot dock instance missing 'undo_redo' property.")
+		return
+	reloaded_inst.free()
+
 	print("GODOT_PLUGIN_TEST_OK")
 	quit(0)
 

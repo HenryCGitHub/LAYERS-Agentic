@@ -71,7 +71,7 @@ class _LayersEditorLogger extends Logger:
 
 
 var editor_interface: Variant = null
-var undo_redo: EditorUndoRedoManager = null
+var undo_redo: Variant = null
 
 var _sync_client: Node = null
 var _executor: RefCounted = null
@@ -170,12 +170,32 @@ func _ready() -> void:
 			_sync_client.call("check_for_plugin_update", true)
 
 
+func _load_fresh_helper_script(res_path: String) -> Script:
+	if not FileAccess.file_exists(res_path):
+		return null
+	var disk_code: String = FileAccess.get_file_as_string(res_path)
+	if disk_code.strip_edges().is_empty():
+		return null
+	if ResourceLoader.has_cached(res_path):
+		var cached: Variant = ResourceLoader.load(res_path)
+		if cached is GDScript:
+			var cached_gds: GDScript = cached as GDScript
+			cached_gds.source_code = disk_code
+			if cached_gds.reload(true) == OK:
+				return cached_gds
+	var fresh: Variant = ResourceLoader.load(res_path, "Script", ResourceLoader.CACHE_MODE_IGNORE)
+	if fresh is GDScript:
+		return fresh as Script
+	var fallback: Variant = load(res_path)
+	return fallback as Script if fallback is Script else null
+
+
 func _init_helpers() -> void:
-	var step_scr: Script = load(STEP_EXECUTOR_SCRIPT_PATH) as Script
+	var step_scr: Script = _load_fresh_helper_script(STEP_EXECUTOR_SCRIPT_PATH)
 	if step_scr != null:
 		_executor = step_scr.new()
 
-	var sync_scr: Script = load(SYNC_CLIENT_SCRIPT_PATH) as Script
+	var sync_scr: Script = _load_fresh_helper_script(SYNC_CLIENT_SCRIPT_PATH)
 	if sync_scr != null:
 		_sync_client = sync_scr.new() as Node
 		if _sync_client != null:
@@ -513,6 +533,10 @@ func notify_editor_state_changed() -> void:
 
 func _as_editor_interface() -> EditorInterface:
 	return editor_interface as EditorInterface if editor_interface is EditorInterface else null
+
+
+func _as_undo_redo() -> EditorUndoRedoManager:
+	return undo_redo as EditorUndoRedoManager if undo_redo is EditorUndoRedoManager else null
 
 
 func _extract_tscn_paths_from_text(raw_text: String) -> PackedStringArray:
@@ -933,7 +957,7 @@ func _on_agent_bundle_received(agent_bundle: Dictionary, _payload_resp: Dictiona
 	var res_v: Variant = _executor.call(
 		"apply_agent_bundle",
 		ed_int,
-		undo_redo,
+		_as_undo_redo(),
 		agent_bundle,
 		_pending_build_preferred_scene
 	)

@@ -799,6 +799,12 @@ func _apply_downloaded_zip_bytes(zip_bytes: PackedByteArray) -> void:
 		out_f.close()
 		if dest_res.ends_with(".gd"):
 			updated_gd_paths.append(dest_res)
+			if ResourceLoader.has_cached(dest_res):
+				var cached_v: Variant = ResourceLoader.load(dest_res)
+				if cached_v is GDScript:
+					var cached_gds: GDScript = cached_v as GDScript
+					cached_gds.source_code = data.get_string_from_utf8()
+					cached_gds.reload(true)
 
 	reader.close()
 	DirAccess.remove_absolute(tmp_abs)
