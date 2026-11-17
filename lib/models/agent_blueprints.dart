@@ -563,7 +563,7 @@ class UnrealSparkPresets {
       inputContract:
           'Enhanced Input (IMC_Combat + IA_Move, IA_AimCursor, IA_FireBurst, IA_ClawDash)',
       assetPolicy:
-          'Greybox Primitives (Engine/BasicShapes) + Solid Tint Material Instances; DA_ShellbreakerTuning PrimaryDataAsset',
+          'Greybox Primitives (Engine/BasicShapes) + Solid Tint Material Instances; DA_ShellbreakerTuning Blueprint DataAsset',
       feelChoiceId: 'snappy',
       cameraDecisionOptions: const [
         ConceptSectionOption(
@@ -989,7 +989,7 @@ class UnrealSparkPresets {
       inputContract:
           'Enhanced Input (IMC_Race + IA_Throttle, IA_Steer, IA_Drift, IA_Boost)',
       assetPolicy:
-          'Spline Greybox Canyon Floor + Emissive Gate Frames (Engine/BasicShapes); DA_SkiffPhysics PrimaryDataAsset',
+          'Spline Greybox Canyon Floor + Emissive Gate Frames (Engine/BasicShapes); DA_SkiffPhysics Blueprint DataAsset',
       feelChoiceId: 'physics',
       pillars: const [
         'Flow Over Friction: Wall scrapes glance forward cleanly instead of dead-stopping momentum',
@@ -1197,7 +1197,7 @@ class UnrealSparkPresets {
       inputContract:
           'Enhanced Input (IMC_Keeper + IA_Move, IA_AxeSwing, IA_PlantBrazier)',
       assetPolicy:
-          'Greybox Keep Courtyard + Warm PointLights (No baked lightmaps required); DA_KeeperTuning PrimaryDataAsset',
+          'Greybox Keep Courtyard + Warm PointLights (No baked lightmaps required); DA_KeeperTuning Blueprint DataAsset',
       feelChoiceId: 'heavy',
       pillars: const [
         'Light Defines Territory: Every dynamic light cone visibly alters enemy aggression and player safety',

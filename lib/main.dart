@@ -1222,6 +1222,8 @@ class WorkbenchShell extends StatelessWidget {
                 ),
               ),
             ),
+          if (workbench.hasPendingUnrealAuth)
+            UnrealAuthHandoffOverlay(workbench: workbench),
         ],
       ),
     );

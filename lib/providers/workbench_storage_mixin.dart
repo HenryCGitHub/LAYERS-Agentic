@@ -549,9 +549,34 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  /// Applies Web Studio URL deep-link query params (`?project=<id>&epic=<id>`),
-  /// switching straight to Stage 2 (`2. Epic Specs`) and focusing the target Epic.
+  /// Applies Web Studio URL deep-link query params (`?project=<id>&epic=<id>`)
+  /// and Unreal Editor Google Sign-In browser handoff params (`?unreal_auth=1&port=<port>&state=<nonce>&uproject=<Name>`).
   void applyDeepLinkParams(Map<String, String> queryParams) {
+    bool didUpdate = false;
+    final unrealAuthFlag =
+        (queryParams['unreal_auth'] ?? '').trim().toLowerCase();
+    if (unrealAuthFlag == '1' || unrealAuthFlag == 'true') {
+      final port = int.tryParse((queryParams['port'] ?? '').trim());
+      final state = (queryParams['state'] ?? '').trim();
+      final uprojectRaw = (queryParams['uproject'] ?? '').trim();
+      if (port != null &&
+          port >= 1024 &&
+          port <= 65535 &&
+          RegExp(r'^[A-Za-z0-9_\-]{8,128}$').hasMatch(state)) {
+        _pendingUnrealAuthPort = port;
+        _pendingUnrealAuthState = state;
+        _pendingUnrealUprojectName = uprojectRaw.isEmpty
+            ? null
+            : (uprojectRaw.length > 120
+                ? uprojectRaw.substring(0, 120)
+                : uprojectRaw);
+        _unrealAuthSelectedProjectId = null;
+        _unrealAuthMinimized = false;
+        _unrealAuthError = null;
+        didUpdate = true;
+      }
+    }
+
     final projParam = (queryParams['project'] ?? '').trim();
     final epicParam =
         (queryParams['epic'] ?? queryParams['feature'] ?? '').trim();
@@ -563,6 +588,9 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
     if ((projParam.isNotEmpty || epicParam.isNotEmpty) &&
         _tryResolvePendingDeepLink()) {
+      didUpdate = true;
+    }
+    if (didUpdate) {
       notifyListeners();
     }
   }
@@ -834,6 +862,43 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       }
     }
     return collectedIds;
+  }
+
+  /// Cancels pending debounce timers and saves [projectId]'s full 3-tier tree
+  /// (`Project -> Release -> Epic`) to Firestore before Unreal handoff redirects
+  /// unload the browser tab.
+  Future<void> flushProjectTreeToCloud(String projectId) async {
+    final treeIds = _collectProjectDocumentTreeIds(projectId);
+    if (treeIds.isEmpty) return;
+    for (final id in treeIds) {
+      final timer = _persistTimers.remove(id);
+      if (timer != null) {
+        timer.cancel();
+      }
+      final doc = documents[id];
+      if (doc != null) {
+        LocalVaultService.saveDocument(doc);
+      }
+    }
+    final uid = (testOverrideUserUid ?? _authService.currentUser?.uid)?.trim();
+    if (uid == null || uid.isEmpty || !isSessionApprovedForAi) return;
+    final futures = <Future<void>>[];
+    for (final id in treeIds) {
+      final doc = documents[id];
+      if (doc == null) continue;
+      _pendingCloudWriteDocIds.add(id);
+      final saveFuture = testCloudDocumentSaver != null
+          ? testCloudDocumentSaver!(uid, doc)
+          : _firestoreService.saveDocument(uid: uid, doc: doc);
+      futures.add(
+        saveFuture.whenComplete(() {
+          _pendingCloudWriteDocIds.remove(id);
+        }),
+      );
+    }
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
   }
 
   void _remapEmbeddedEpicJsonAndClearSync(

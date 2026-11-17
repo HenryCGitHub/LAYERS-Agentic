@@ -14,6 +14,8 @@ import subprocess
 import tempfile
 import threading
 import types
+import urllib.error
+import urllib.parse
 import urllib.request
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -556,6 +558,14 @@ def main() -> int:
       # 1. Fetch active Epic + verify ROOT_MCP_CONTEXT, Core Feel & .uproject injection
       spec_md = toolset.layers_get_active_epic_spec()
       assert "# ROOT_MCP_CONTEXT · SHELLBREAKER" in spec_md
+      assert "Target Architecture: 100% Blueprint-Only (.uasset)" in spec_md, spec_md
+      assert (
+          "Code Policy: STRICT BLUEPRINT-ONLY — NEVER create or edit C++ files (.h/.cpp)"
+          in spec_md
+      ), spec_md
+      assert "author 100% in Blueprints (.uasset) with zero C++ (.h/.cpp)" in spec_md, (
+          spec_md
+      )
       assert (
           "- Release Gate: Start PIE in L_Arena_Proto -> clear 2 crab waves cleanly with 0 Output Log errors"
           in spec_md
@@ -644,7 +654,10 @@ def main() -> int:
             "Target Test Level: L_Arena_Proto -> Spawn BP_CrabPlayer + 2 BP_TargetDummy actors."
             in captured_builds[-1][1]
         ), captured_builds[-1][1]
-        assert "UE 5.9 Blueprint + DataAsset" in captured_builds[-1][1], (
+        assert "UE 5.9 · 100% Blueprint-Only (Zero C++)" in captured_builds[-1][1], (
+            captured_builds[-1][1]
+        )
+        assert "NEVER create or edit C++ (.h/.cpp)" in captured_builds[-1][1], (
             captured_builds[-1][1]
         )
         handoff_res = dock.build_active_epic(agent_cli="clipboard", background=False)
@@ -1024,6 +1037,9 @@ def main() -> int:
       if (!ue6Md.includes('- WaveCount: 3 count [int]')) {
         throw new Error('Expected UE6 Verse [int] hint, got: ' + ue6Md);
       }
+      if (!ue6Md.includes('Code Policy: UE6 VERSE + SCENE GRAPH')) {
+        throw new Error('Expected UE6 Code Policy, got: ' + ue6Md);
+      }
       if (!ue6Md.includes('- bAllowAirDash: true bool [logic]')) {
         throw new Error('Expected UE6 Verse [logic] hint, got: ' + ue6Md);
       }
@@ -1066,6 +1082,65 @@ def main() -> int:
       final_pass = dock.pass_epic()
       assert final_pass.get("allEpicsCompleted") is True
       assert "[ALL EPICS PASSED ✓]" in dock.render_dock_summary_text()
+
+      # 5e. Per-.uproject Google Sign-In Browser Loopback Handoff
+      unlinked_msg = dock.sign_out_project()
+      assert "Unlinked" in unlinked_msg, unlinked_msg
+      assert dock.sync_client.link_token == ""
+      assert dock.compute_primary_toolbar_action()["label"] == "⚡ Sign in with Google"
+      assert dock.compute_gate_combo_label() == "LAYERS · Unlinked"
+
+      opened_auth_urls: list[str] = []
+      dock.browser_opener = lambda url: opened_auth_urls.append(url)
+      try:
+        auth_start = init_unreal.trigger_toolbar_primary_action()
+        assert auth_start.get("ok") is True and auth_start.get("mode") == "signing_in", (
+            auth_start
+        )
+        assert play_tb.entries["LayersPrimaryAction"].label == "⏳ Complete in Browser…", (
+            play_tb.entries["LayersPrimaryAction"].label
+        )
+        assert len(opened_auth_urls) == 1, opened_auth_urls
+        parsed_auth = urllib.parse.urlparse(opened_auth_urls[0])
+        qs = urllib.parse.parse_qs(parsed_auth.query)
+        assert qs.get("unreal_auth") == ["1"], qs
+        assert qs.get("uproject") == ["ShellbreakerUE5"], qs
+        cb_port = int(qs["port"][0])
+        assert 1024 <= cb_port <= 65535
+        cb_state = qs["state"][0]
+
+        # CSRF check: mismatched state must be rejected cleanly with HTTP 400
+        try:
+          urllib.request.urlopen(
+              f"http://127.0.0.1:{cb_port}/callback?state=wrong_state&token={TEST_TOKEN}",
+              timeout=3,
+          )
+          raise AssertionError("Expected HTTP 400 for mismatched loopback state")
+        except urllib.error.HTTPError as exc:
+          assert exc.code == 400, exc.code
+        assert dock.sync_client.link_token == ""
+
+        # Valid browser handoff completes callback, persists token, and restores Build toolbar
+        cb_url = (
+            f"http://127.0.0.1:{cb_port}/callback?"
+            f"state={urllib.parse.quote(cb_state)}&token={TEST_TOKEN}&project=SHELLBREAKER"
+        )
+        with urllib.request.urlopen(cb_url, timeout=5) as cb_resp:
+          assert cb_resp.status == 200
+          cb_html = cb_resp.read().decode("utf-8")
+          assert "history.replaceState" in cb_html
+          assert "SHELLBREAKER" in cb_html
+
+        assert dock._auth_thread is not None
+        dock._auth_thread.join(timeout=5)
+        assert not dock._auth_thread.is_alive()
+        for cb in list(unreal_state["slate_tick_callbacks"]):  # type: ignore[arg-type]
+          cb(0.016)
+        assert unreal_state["thread_violations"] == [], unreal_state["thread_violations"]
+        assert dock.sync_client.link_token == TEST_TOKEN
+        assert (dock.last_payload or {}).get("projectTitle") == "SHELLBREAKER"
+      finally:
+        dock.browser_opener = None
 
       # 6. Check token + agent_cli persistence helper & stale last_payload/PIE error reset on token change
       layers_project_probe.record_pie_error("Stale project warning")

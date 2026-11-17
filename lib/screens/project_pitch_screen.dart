@@ -191,11 +191,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               spacing: 10,
               runSpacing: 6,
               children: [
-                _TargetEngineToggle(
-                  target: spec.targetEngine,
-                  isDark: isDark,
-                  onChanged: wb.setTargetEngine,
-                ),
                 _SegmentedTab(
                   isDark: isDark,
                   leftKey: const ValueKey('stage1_tab_clean'),
@@ -322,10 +317,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _TargetEngineToggle(
-                    target: wb.targetEngine,
+                  _BlueprintOnlyBadge(
+                    label: wb.targetEngine.shortLabel,
                     isDark: isDark,
-                    onChanged: wb.setTargetEngine,
                   ),
                   ElevatedButton.icon(
                     key: const ValueKey('draft_spark_btn'),
@@ -389,6 +383,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             children: [
               if (spec.sparkPrompt.trim().isNotEmpty) ...[
                 Expanded(
+                  flex: 2,
                   child: Text(
                     'Spark: "${spec.sparkPrompt.trim()}"',
                     maxLines: 1,
@@ -397,11 +392,22 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
-              ] else
-                const Spacer(),
-              Text(
-                spec.targetEngine.architectureContract,
-                style: GoogleFonts.jetBrainsMono(fontSize: 11, color: textMuted),
+              ],
+              Expanded(
+                flex: 3,
+                child: Tooltip(
+                  message: spec.targetEngine.architectureContract,
+                  child: Text(
+                    spec.targetEngine.architectureContract,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: textMuted,
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -1066,60 +1072,39 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   }
 }
 
-class _TargetEngineToggle extends StatelessWidget {
-  final UnrealTargetEngine target;
+class _BlueprintOnlyBadge extends StatelessWidget {
+  final String label;
   final bool isDark;
-  final ValueChanged<UnrealTargetEngine> onChanged;
 
-  const _TargetEngineToggle({
-    required this.target,
+  const _BlueprintOnlyBadge({
+    required this.label,
     required this.isDark,
-    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
-    final border = AppTheme.borderFor(isDark);
-    final activeBg = AppTheme.accentCyanFor(isDark).withValues(alpha: 0.16);
-    final activeFg = AppTheme.accentCyanFor(isDark);
-    final muted = AppTheme.textMutedFor(isDark);
-
-    Widget btn(UnrealTargetEngine mode, Key key) {
-      final selected = target == mode;
-      return InkWell(
-        key: key,
-        onTap: () => onChanged(mode),
-        borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: selected ? activeBg : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-          ),
-          child: Text(
-            mode.shortLabel,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11.5,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? activeFg : muted,
-            ),
-          ),
-        ),
-      );
-    }
-
+    final cyan = AppTheme.accentCyanFor(isDark);
     return Container(
-      padding: const EdgeInsets.all(3),
+      key: const ValueKey('stage1_blueprint_only_badge'),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(isDark),
+        color: cyan.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: border),
+        border: Border.all(color: cyan.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          btn(UnrealTargetEngine.ue5Mcp, const ValueKey('stage1_target_ue5')),
-          btn(UnrealTargetEngine.ue6Verse, const ValueKey('stage1_target_ue6')),
+          Icon(Icons.account_tree_outlined, size: 13, color: cyan),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: cyan,
+            ),
+          ),
         ],
       ),
     );

@@ -32,6 +32,7 @@ class UnrealMcpPayloadBuilder {
     final b = StringBuffer();
     b.writeln('# ROOT_MCP_CONTEXT · ${rootSpec.normalizedTitle}');
     b.writeln('Target Architecture: ${target.architectureContract}');
+    b.writeln('Code Policy: ${target.codePolicyContract}');
     b.writeln();
     b.writeln('## §01 Concept & 30s Core Loop');
     b.writeln('- Vision: ${rootSpec.pitch.trim()}');
@@ -331,13 +332,13 @@ class UnrealMcpPayloadBuilder {
         '### FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX])',
       );
       b.writeln(
-        'Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, compile/save modified Blueprint/Verse assets, and report via layers_resolve_pie_fix(fix_id) + layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).',
+        'Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, ${target.compileSaveClause}, and report via layers_resolve_pie_fix(fix_id) + layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).',
       );
     } else if (includeExecutionFooter) {
       b.writeln();
       b.writeln('### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK');
       b.writeln(
-        'Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check and call layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).',
+        'Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts (${target.buildRuleClause}), expose every §04 tuning variable, then run PIE self-check against every §06 Check and call layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).',
       );
     }
 

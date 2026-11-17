@@ -17,7 +17,17 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   void _ensureActiveProjectDocument(ProjectConceptBlueprint bp) {
-    final pid = _activeProjectId ?? 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    final String pid = _activeProjectId ??
+        () {
+          final baseMs = DateTime.now().millisecondsSinceEpoch;
+          var candidate = 'proj_$baseMs';
+          var suffix = 1;
+          while (documents.containsKey(candidate)) {
+            candidate = 'proj_${baseMs}_$suffix';
+            suffix++;
+          }
+          return candidate;
+        }();
     _activeProjectId = pid;
     final existing = documents[pid];
     final nextSections = Map<String, String>.from(

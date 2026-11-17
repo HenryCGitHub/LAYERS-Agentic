@@ -16,3 +16,8 @@ bool triggerRelativeAssetDownload({
 }) {
   return false;
 }
+
+/// Non-web stub for browser location redirect.
+bool performPlatformBrowserRedirect(String targetUrl) {
+  return false;
+}

@@ -59,10 +59,11 @@ Future<void> showConnectUnrealPluginDialog(
               constraints: const BoxConstraints(maxWidth: 640),
               child: Padding(
                 padding: const EdgeInsets.all(22),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     Row(
                       children: [
                         Icon(Icons.cable, size: 18, color: cyan),
@@ -164,7 +165,7 @@ Future<void> showConnectUnrealPluginDialog(
                               runSpacing: 4,
                               children: [
                                 Text(
-                                  '2. Project Sync Token (LAYERS_LINK_TOKEN)',
+                                  '2. Connect via Google Account (or Fallback Token)',
                                   style: TextStyle(
                                     fontSize: 13.5,
                                     fontWeight: FontWeight.w600,
@@ -182,6 +183,11 @@ Future<void> showConnectUnrealPluginDialog(
                                 ),
                               ],
                             ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'In Unreal Editor, click `⚡ Sign in with Google` on the Play Toolbar to bind your `.uproject` in 1 click — or use the fallback token below for headless/remote machines.',
+                            style: TextStyle(fontSize: 12, color: muted, height: 1.35),
                           ),
                           const SizedBox(height: 10),
                           if (loading)
@@ -340,6 +346,7 @@ Future<void> showConnectUnrealPluginDialog(
                       ),
                     ),
                   ],
+                  ),
                 ),
               ),
             ),
@@ -348,4 +355,361 @@ Future<void> showConnectUnrealPluginDialog(
       );
     },
   );
+}
+
+/// Overlay shown when Unreal Editor (`LayersBridge`) opens Web Studio via
+/// `?unreal_auth=1&port=<port>&state=<nonce>&uproject=<Name>` to bind a `.uproject`
+/// using the user's Google account without copying tokens manually.
+class UnrealAuthHandoffOverlay extends StatelessWidget {
+  final WorkbenchProvider workbench;
+
+  const UnrealAuthHandoffOverlay({super.key, required this.workbench});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = workbench.isDark;
+    final bgSurface = AppTheme.bgSurfaceRaisedFor(isDark);
+    final bgInset = AppTheme.bgInsetFor(isDark);
+    final border = AppTheme.borderBrightFor(isDark);
+    final primary = AppTheme.textPrimaryFor(isDark);
+    final secondary = AppTheme.textSecondaryFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+    final cyan = AppTheme.accentCyanFor(isDark);
+    final uprojName = workbench.pendingUnrealUprojectName?.trim();
+    final port = workbench.pendingUnrealAuthPort;
+
+    if (workbench.isUnrealAuthMinimized) {
+      return Positioned(
+        top: 12,
+        right: 16,
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            key: const ValueKey('unreal_handoff_minimized_banner'),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: bgSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: cyan.withValues(alpha: 0.55)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black38,
+                  blurRadius: 12,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.cable, size: 15, color: cyan),
+                const SizedBox(width: 8),
+                Text(
+                  uprojName != null && uprojName.isNotEmpty
+                      ? 'Unreal Waiting: $uprojName.uproject'
+                      : 'Unreal Waiting to Link Project',
+                  style: GoogleFonts.inter(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: primary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  key: const ValueKey('unreal_handoff_restore_btn'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: const Color(0xFF06281E),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                  ),
+                  onPressed: () => workbench.setUnrealAuthMinimized(false),
+                  child: const Text(
+                    'Connect to Unreal',
+                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  key: const ValueKey('dismiss_unreal_handoff_minimized_btn'),
+                  onPressed: workbench.dismissPendingUnrealAuth,
+                  icon: Icon(Icons.close_rounded, size: 15, color: muted),
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final projects = workbench.savedProjects;
+    final selectedPid = workbench.effectiveUnrealAuthProjectId;
+
+    return Container(
+      key: const ValueKey('unreal_handoff_overlay'),
+      color: Colors.black.withValues(alpha: 0.7),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(20),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: bgSurface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: border),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'UNREAL EDITOR · GOOGLE SIGN-IN HANDOFF',
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                        color: cyan,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  InkWell(
+                    key: const ValueKey('dismiss_unreal_handoff_btn'),
+                    onTap: workbench.dismissPendingUnrealAuth,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.close_rounded,
+                        size: 16,
+                        color: secondary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Text(
+                uprojName != null && uprojName.isNotEmpty
+                    ? 'Connect $uprojName.uproject to LAYERS'
+                    : 'Connect Unreal Editor to LAYERS',
+                style: AppTheme.displayFont(
+                  fontSize: 17.5,
+                  fontWeight: FontWeight.w700,
+                  color: primary,
+                ),
+              ),
+              if (port != null) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bgInset,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: AppTheme.borderFor(isDark)),
+                  ),
+                  child: Text(
+                    uprojName != null && uprojName.isNotEmpty
+                        ? '$uprojName.uproject -> 127.0.0.1:$port'
+                        : 'LayersBridge -> 127.0.0.1:$port',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: secondary,
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+              if (!workbench.isUserLoggedIn) ...[
+                Text(
+                  'Sign in once with your Google account to link this `.uproject` with your LAYERS project automatically — no manual token copying required.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: secondary,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    key: const ValueKey('unreal_handoff_google_signin_btn'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: const Color(0xFF06281E),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    onPressed: () => workbench.signInWithGoogle(),
+                    icon: const Icon(Icons.login_rounded, size: 16),
+                    label: Text(
+                      'Sign in with Google →',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else if (projects.isEmpty) ...[
+                Text(
+                  'Signed in as ${workbench.userEmail ?? 'Google Account'}. Draft your first LAYERS Project Spec, then click `Connect to Unreal` in the banner to complete linking.',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: secondary,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    key: const ValueKey('unreal_handoff_minimize_btn'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: const Color(0xFF06281E),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => workbench.setUnrealAuthMinimized(true),
+                    icon: const Icon(Icons.edit_note_rounded, size: 16),
+                    label: Text(
+                      'Draft Project Spec First',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  'Signed in as ${workbench.userEmail ?? 'Google Account'}. Choose the LAYERS project for this `.uproject`:',
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    height: 1.45,
+                    color: secondary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: bgInset,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppTheme.borderFor(isDark)),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      key: const ValueKey('unreal_handoff_project_dropdown'),
+                      isExpanded: true,
+                      dropdownColor: bgSurface,
+                      value: selectedPid,
+                      items: [
+                        for (final proj in projects)
+                          DropdownMenuItem<String>(
+                            value: proj.id,
+                            child: Text(
+                              proj.title,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: primary,
+                              ),
+                            ),
+                          ),
+                      ],
+                      onChanged: workbench.isCompletingUnrealAuth
+                          ? null
+                          : (val) {
+                              if (val != null) {
+                                workbench.selectUnrealAuthProject(val);
+                              }
+                            },
+                    ),
+                  ),
+                ),
+                if (workbench.unrealAuthError != null &&
+                    workbench.unrealAuthError!.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentAmberFor(isDark)
+                          .withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: AppTheme.accentAmberFor(isDark)
+                            .withValues(alpha: 0.5),
+                      ),
+                    ),
+                    child: Text(
+                      workbench.unrealAuthError!,
+                      style: GoogleFonts.inter(
+                        fontSize: 11.5,
+                        height: 1.35,
+                        color: primary,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    key: const ValueKey('unreal_handoff_approve_btn'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF10B981),
+                      foregroundColor: const Color(0xFF06281E),
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                    ),
+                    onPressed: workbench.isCompletingUnrealAuth
+                        ? null
+                        : () => workbench.completePendingUnrealAuthHandoff(),
+                    icon: const Icon(Icons.verified_user_rounded, size: 16),
+                    label: Text(
+                      workbench.isCompletingUnrealAuth
+                          ? 'Connecting to Unreal…'
+                          : 'Link Project to Unreal Editor →',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -80,9 +80,9 @@ class SectionTextUtils {
   static String detectEngineLabel(String? engineHint) {
     final lower = (engineHint ?? '').trim().toLowerCase();
     if (lower.contains('ue6') || lower.contains('verse')) {
-      return 'UE6 Verse';
+      return 'UE6 · Verse + Scene';
     }
-    return 'UE 5.9 MCP';
+    return 'UE 5.9 · Blueprint Only';
   }
 
   /// Formats a remaining minute estimate into a compact hour string (`0h`, `4h`, `1.5h`).

@@ -10,22 +10,43 @@ enum UnrealTargetEngine {
   String get id => name;
 
   String get shortLabel => switch (this) {
-        UnrealTargetEngine.ue5Mcp => 'UE 5.9 MCP',
-        UnrealTargetEngine.ue6Verse => 'UE6 Verse',
+        UnrealTargetEngine.ue5Mcp => 'UE 5.9 · Blueprint Only',
+        UnrealTargetEngine.ue6Verse => 'UE6 · Verse + Scene',
       };
 
   String get fullLabel => switch (this) {
         UnrealTargetEngine.ue5Mcp =>
-          'UE 5.9 Official MCP (Blueprints + DataAssets)',
+          'UE 5.9 Official MCP (100% Blueprint-Only · Zero C++)',
         UnrealTargetEngine.ue6Verse =>
-          'UE6 Preview (Scene Graph + Verse)',
+          'UE6 (Verse + New Scene Editor / Scene Graph)',
       };
 
   String get architectureContract => switch (this) {
         UnrealTargetEngine.ue5Mcp =>
-          'Blueprint Actors/Components + PrimaryDataAsset (EditAnywhere tuning)',
+          '100% Blueprint-Only (.uasset) — Blueprint Actors/Components (BP_*), Interfaces (BPI_*), & Blueprint DataAssets/Structs (Instance Editable tuning)',
         UnrealTargetEngine.ue6Verse =>
           'Verse Components + Scene Graph Entities (@editable exposed fields)',
+      };
+
+  String get codePolicyContract => switch (this) {
+        UnrealTargetEngine.ue5Mcp =>
+          'STRICT BLUEPRINT-ONLY — NEVER create or edit C++ files (.h/.cpp), Source/*.Build.cs, or trigger Live Coding / UBT compiles; build all gameplay in Blueprints (.uasset).',
+        UnrealTargetEngine.ue6Verse =>
+          'UE6 VERSE + SCENE GRAPH — Author gameplay in .verse components and New Scene Editor entities (@editable tuning); zero C++ (.h/.cpp).',
+      };
+
+  String get compileSaveClause => switch (this) {
+        UnrealTargetEngine.ue5Mcp =>
+          'compile/save modified Blueprint (.uasset) assets (strictly zero C++ .h/.cpp)',
+        UnrealTargetEngine.ue6Verse =>
+          'compile/save modified Verse & Scene Graph assets (zero C++ .h/.cpp)',
+      };
+
+  String get buildRuleClause => switch (this) {
+        UnrealTargetEngine.ue5Mcp =>
+          'author 100% in Blueprints (.uasset) with zero C++ (.h/.cpp)',
+        UnrealTargetEngine.ue6Verse =>
+          'author strictly in Verse & Scene Graph entities (zero C++ .h/.cpp)',
       };
 
   String get tuningColumnLabel => switch (this) {

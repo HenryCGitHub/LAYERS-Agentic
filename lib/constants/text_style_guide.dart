@@ -13,6 +13,7 @@ LAYERS CANONICAL UNREAL SPEC STYLE RULES:
 4. CHANGELOG DELTAS (+Delta, 5-10 words): Progressive release upgrades describe "+mechanic delta" atop locked v0.1 baselines.
 5. UNREAL SCALE (1 UU = 1 cm): Always specify spatial distances in cm, speeds in cm/s, angles in deg, durations in s, health in hp.
 6. LITERAL GAME-DEV LANGUAGE: Plain everyday gameplay terms. Ban corporate filler ("seamlessly", "leverage", "synergy", "unified", "validate").
+7. STRICT BLUEPRINT-ONLY CODE POLICY (ZERO C++): Unless UE6 Verse is explicitly active, author 100% Blueprint-Only specs (BP_*, BPI_*, DA_*, DT_*, S_*, IMC_*, IA_*, WBP_*, Instance Editable tuning). NEVER emit C++ classes (.h, .cpp, UCLASS, UPROPERTY, Source/*.Build.cs, or Live Coding).
 ''';
 
   static const String epicTitleSchemaDesc =
@@ -46,7 +47,7 @@ LAYERS CANONICAL UNREAL SPEC STYLE RULES:
       '5-10 word additive delta starting with "+" (e.g. "+55ms Hit-Stop freeze & radial shockwave ring").';
 
   static const String unrealActorLinkSchemaDesc =
-      'Concrete Unreal asset/interface links using UE prefixes (BP_*, DA_*, BPI_*, IMC_*, IA_*, WBP_*).';
+      'Concrete Unreal asset/interface links using UE prefixes (BP_*, BPI_*, DA_*, IMC_*, IA_*, WBP_* — zero .h/.cpp C++ classes).';
 
   static const String unrealTuningKeySchemaDesc =
       'PascalCase Unreal variable identifier (e.g. "MaxWalkSpeed", "Wave1Count", "bAllowAirDash"). Never use spaces or hyphens.';

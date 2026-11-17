@@ -251,8 +251,8 @@ class LayersSyncClient:
       return {
           "ok": False,
           "error": (
-              "LayersBridge is not linked yet. Paste your `lyr_...` token "
-              "from LAYERS Web Studio (`Connect Unreal MCP`)."
+              "LayersBridge is not linked yet. Click `⚡ Sign in with Google` "
+              "on Unreal's Play Toolbar or paste your `lyr_...` token from LAYERS Web Studio."
           ),
       }
 

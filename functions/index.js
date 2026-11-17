@@ -500,7 +500,16 @@ function renderServerUnrealMcpPayloadJs({
   const isUe6 = rootSpec?.targetEngine === "ue6Verse";
   const archContract = isUe6
     ? "Verse Components + Scene Graph Entities (@editable exposed fields)"
-    : "Blueprint Actors/Components + PrimaryDataAsset (EditAnywhere tuning)";
+    : "100% Blueprint-Only (.uasset) — Blueprint Actors/Components (BP_*), Interfaces (BPI_*), & Blueprint DataAssets/Structs (Instance Editable tuning)";
+  const codePolicy = isUe6
+    ? "UE6 VERSE + SCENE GRAPH — Author gameplay in .verse components and New Scene Editor entities (@editable tuning); zero C++ (.h/.cpp)."
+    : "STRICT BLUEPRINT-ONLY — NEVER create or edit C++ files (.h/.cpp), Source/*.Build.cs, or trigger Live Coding / UBT compiles; build all gameplay in Blueprints (.uasset).";
+  const compileSaveClause = isUe6
+    ? "compile/save modified Verse & Scene Graph assets (zero C++ .h/.cpp)"
+    : "compile/save modified Blueprint (.uasset) assets (strictly zero C++ .h/.cpp)";
+  const buildRuleClause = isUe6
+    ? "author strictly in Verse & Scene Graph entities (zero C++ .h/.cpp)"
+    : "author 100% in Blueprints (.uasset) with zero C++ (.h/.cpp)";
   const inputContractLabel = isUe6
     ? "Enhanced Input → Verse InputAction"
     : "Enhanced Input (UInputAction + IMC_Core)";
@@ -511,6 +520,7 @@ function renderServerUnrealMcpPayloadJs({
   const lines = [];
   lines.push(`# ROOT_MCP_CONTEXT · ${rootSpec.normalizedTitle}`);
   lines.push(`Target Architecture: ${archContract}`);
+  lines.push(`Code Policy: ${codePolicy}`);
   lines.push("");
   lines.push("## §01 Concept & 30s Core Loop");
   lines.push(`- Vision: ${rootSpec.pitch}`);
@@ -758,13 +768,13 @@ function renderServerUnrealMcpPayloadJs({
     lines.push("");
     lines.push(`### FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX])`);
     lines.push(
-      "Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, compile/save modified Blueprint/Verse assets, and report via layers_resolve_pie_fix(fix_id) + layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off)."
+      `Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, ${compileSaveClause}, and report via layers_resolve_pie_fix(fix_id) + layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).`
     );
   } else {
     lines.push("");
     lines.push("### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK");
     lines.push(
-      "Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check and call layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off)."
+      `Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts (${buildRuleClause}), expose every §04 tuning variable, then run PIE self-check against every §06 Check and call layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).`
     );
   }
 

@@ -82,4 +82,14 @@ def build_active_epic(
   )
 
 
+def sign_in_with_google(web_studio_url: str | None = None) -> dict[str, object]:
+  """Starts browser loopback Google Sign-In handoff for this `.uproject`."""
+  return get_pie_dock().start_browser_sign_in(web_studio_url=web_studio_url)
+
+
+def sign_out_layers() -> str:
+  """Unlinks this `.uproject` from its saved LAYERS Cloud Sync credential."""
+  return get_pie_dock().sign_out_project()
+
+
 bootstrap()

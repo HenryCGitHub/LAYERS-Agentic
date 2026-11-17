@@ -11,6 +11,7 @@ import '../models/tier_document.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_vault_service.dart';
 import '../services/local_vault_service.dart';
+import '../utils/markdown_exporter.dart';
 import '../utils/unreal_mcp_payload_builder.dart';
 import '../utils/unreal_spec_guard.dart';
 
@@ -41,6 +42,10 @@ class WorkbenchProvider extends ChangeNotifier {
 
   /// Test-only hook to simulate signed-in collaborator/admin identity in unit tests.
   String? testOverrideUserEmail;
+
+  /// Test-only hooks for verifying cloud vault flushes without live Firebase Auth/Firestore.
+  String? testOverrideUserUid;
+  Future<void> Function(String uid, TierDocument doc)? testCloudDocumentSaver;
 
   bool _isCloudSynced = false;
   bool get isCloudSynced => _isCloudSynced;
@@ -73,6 +78,14 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _pendingUrlProjectId;
   String? _pendingUrlEpicId;
   String? _inviteFeedbackMessage;
+
+  int? _pendingUnrealAuthPort;
+  String? _pendingUnrealAuthState;
+  String? _pendingUnrealUprojectName;
+  String? _unrealAuthSelectedProjectId;
+  bool _unrealAuthMinimized = false;
+  bool _isCompletingUnrealAuth = false;
+  String? _unrealAuthError;
 
   String? get pendingUrlInviteToken => _pendingUrlInviteToken;
   String? get pendingUrlInvitedEmail => _pendingUrlInvitedEmail;
@@ -284,6 +297,7 @@ class WorkbenchProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    if (_isDisposed) return;
     _isDisposed = true;
     _autoSyncDebounceTimer?.cancel();
     for (final timer in _persistTimers.values) {

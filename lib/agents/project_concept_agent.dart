@@ -277,6 +277,7 @@ You are the LAYERS Unreal Engine Project Co-Designer.
 Generate a clean, build-ready Stage 1 Project Spec (`PROJECT_SPEC.md` -> `ROOT_MCP_CONTEXT`) for this game idea:
 USER SPARK: "$trimmedSpark"
 TARGET ARCHITECTURE: ${targetEngine.fullLabel} (${targetEngine.architectureContract})
+CODE POLICY: ${targetEngine.codePolicyContract}
 
 CRITICAL CONSTRAINTS:
 - Produce `2–4` strictly `v0.1` Prototype Epics in `initialEpics` derived directly from §01 `coreLoop` beats and §02 Camera/Scale/Input (`IA_*`) contracts.
@@ -518,6 +519,8 @@ CRITICAL CONSTRAINTS:
 ${LayersTextStyleGuide.compactStyleRules}
 
 Update the Unreal Engine Root Project Spec (`ROOT_MCP_CONTEXT`) below according to the user's instruction.
+TARGET ARCHITECTURE: ${currentSpec.targetEngine.fullLabel} (${currentSpec.targetEngine.architectureContract})
+CODE POLICY: ${currentSpec.targetEngine.codePolicyContract}
 Return the complete updated JSON via `commit_unreal_root_spec`, preserving existing approved sections unless the instruction asks to change them.
 Whenever §01 `coreLoop`, §02 Camera/Input/Scale contracts, or §04 `outOfScope` change, update §05 `initialEpics` in lockstep (`coreLoopBeat`, `controls`, `tuning`, `checks`, and dependency order).
 Keep all `initialEpics` strictly at `2–4` `v0.1` prototype Epics with 1 UU = 1 cm units.
@@ -800,7 +803,7 @@ USER CO-DESIGN INSTRUCTION:
         goal:
             'Control the player ACharacter at fixed ground speed with smooth directional facing and locked Unreal SpringArm framing.',
         links: const [
-          'Reads DA_PlayerLocomotion PrimaryDataAsset',
+          'Reads DA_PlayerLocomotion Blueprint DataAsset',
           'Provides Actor location & facing vector to E02',
         ],
         outOfScope: const [

@@ -345,13 +345,30 @@ void main() {
           isTrue,
         );
 
-        await tester.tap(find.byKey(const ValueKey('stage1_target_ue6')));
-        await tester.pumpAndSettle();
-        expect(wb.targetEngine, equals(UnrealTargetEngine.ue6Verse));
+        expect(find.byKey(const ValueKey('stage1_target_ue6')), findsNothing);
+        expect(wb.targetEngine, equals(UnrealTargetEngine.ue5Mcp));
 
         await tester.tap(find.byKey(const ValueKey('stage1_tab_raw')));
         await tester.pumpAndSettle();
         expect(wb.showRawRootContext, isTrue);
+        expect(
+          find.textContaining(
+            'Target Architecture: 100% Blueprint-Only (.uasset)',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Code Policy: STRICT BLUEPRINT-ONLY'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Core Feel: Snappy Arcade'),
+          findsOneWidget,
+        );
+
+        wb.setTargetEngine(UnrealTargetEngine.ue6Verse);
+        await tester.pumpAndSettle();
+        expect(wb.targetEngine, equals(UnrealTargetEngine.ue6Verse));
         expect(
           find.textContaining(
             'Target Architecture: Verse Components + Scene Graph Entities',
@@ -359,9 +376,13 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.textContaining('Core Feel: Snappy Arcade'),
+          find.textContaining('Code Policy: UE6 VERSE + SCENE GRAPH'),
           findsOneWidget,
         );
+
+        wb.setTargetEngine(UnrealTargetEngine.ue5Mcp);
+        await tester.pumpAndSettle();
+        expect(wb.targetEngine, equals(UnrealTargetEngine.ue5Mcp));
 
         await tester.tap(find.byKey(const ValueKey('stage1_tab_clean')));
         await tester.pumpAndSettle();
@@ -2375,6 +2396,250 @@ void main() {
         final nodeFix = await renderViaNode(wb);
         expect(nodeFix, equals(dartFix));
         expect(dartFix, contains('FOCUSED PIE REVISION PASS (2 OPEN [FIX])'));
+      },
+    );
+
+    testWidgets(
+      '32. Per-.uproject Google Sign-In Browser Handoff: URL params -> Google login -> smart .uproject match -> 127.0.0.1 callback redirect',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+
+        // Security check: reject privileged ports (<1024) and invalid CSRF state
+        wb.applyDeepLinkParams(const {
+          'unreal_auth': '1',
+          'port': '80',
+          'state': 'valid_state_12345',
+        });
+        expect(wb.hasPendingUnrealAuth, isFalse);
+        wb.applyDeepLinkParams(const {
+          'unreal_auth': '1',
+          'port': '54321',
+          'state': 'bad!',
+        });
+        expect(wb.hasPendingUnrealAuth, isFalse);
+
+        // Create SHELLBREAKER and RAILJACK, keeping SHELLBREAKER active so .uproject auto-match proves smart matching
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final shellbreakerProjId = wb.activeProject!.id;
+
+        wb.createNewProject();
+        wb.loadPresetSpark('railjack');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final railjackProjId = wb.activeProject!.id;
+        final expectedRailjackTreeIds = <String>[
+          railjackProjId,
+          wb.activeReleaseId!,
+          ...wb.activeReleaseEpicDocs.map((e) => e.id),
+        ];
+        expect(railjackProjId, isNot(equals(shellbreakerProjId)));
+        wb.switchProject(shellbreakerProjId);
+
+        // Apply valid Unreal Sign-In Handoff query params while logged out
+        wb.applyDeepLinkParams(const {
+          'unreal_auth': '1',
+          'port': '54321',
+          'state': 'nonce_abcdef123456',
+          'uproject': 'RailjackUE5',
+        });
+        expect(wb.hasPendingUnrealAuth, isTrue);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('unreal_handoff_overlay')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('unreal_handoff_google_signin_btn')),
+          findsOneWidget,
+        );
+
+        // Simulate signing in with Google -> overlay switches to project confirmation pre-matching RAILJACK
+        wb.setAiAccessRecordsForTest(
+          const [],
+          overrideEmail: 'henryyoungchoi@gmail.com',
+        );
+        await tester.pumpAndSettle();
+
+        expect(wb.effectiveUnrealAuthProjectId, equals(railjackProjId));
+        expect(
+          find.byKey(const ValueKey('unreal_handoff_approve_btn')),
+          findsOneWidget,
+        );
+
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevAuthProvider = GeminiAgentClient.authTokenProvider;
+        final prevRedirect = debugBrowserRedirectInterceptor;
+        String? capturedRedirect;
+        String? capturedTokenProjectId;
+        final flushedDocIds = <String>[];
+
+        wb.testOverrideUserUid = 'uid_handoff_test';
+        wb.testCloudDocumentSaver = (uid, doc) async {
+          expect(uid, equals('uid_handoff_test'));
+          flushedDocIds.add(doc.id);
+        };
+        GeminiAgentClient.authTokenProvider =
+            ({bool forceRefresh = false}) async => 'fake-firebase-id-token';
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          if (uri.path.endsWith('/unrealLink/token')) {
+            final decoded = body is String && body.isNotEmpty
+                ? jsonDecode(body) as Map<String, dynamic>
+                : const <String, dynamic>{};
+            capturedTokenProjectId = decoded['projectId']?.toString();
+            return http.Response(
+              jsonEncode({
+                'ok': true,
+                'projectId': capturedTokenProjectId,
+                'linkToken': 'lyr_handoff_token_998877665544',
+              }),
+              200,
+            );
+          }
+          return http.Response('{"error":{"message":"Not found"}}', 404);
+        };
+        debugBrowserRedirectInterceptor = (url) {
+          expect(flushedDocIds, containsAll(expectedRailjackTreeIds));
+          capturedRedirect = url;
+          return true;
+        };
+
+        try {
+          await tester.tap(
+            find.byKey(const ValueKey('unreal_handoff_approve_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          expect(flushedDocIds, containsAll(expectedRailjackTreeIds));
+          expect(capturedTokenProjectId, equals(railjackProjId));
+          expect(
+            capturedRedirect,
+            equals(
+              'http://127.0.0.1:54321/callback?state=nonce_abcdef123456&token=lyr_handoff_token_998877665544&project=RAILJACK+DRIFT',
+            ),
+          );
+          expect(wb.hasPendingUnrealAuth, isFalse);
+          expect(
+            find.byKey(const ValueKey('unreal_handoff_overlay')),
+            findsNothing,
+          );
+        } finally {
+          wb.testOverrideUserUid = null;
+          wb.testCloudDocumentSaver = null;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.authTokenProvider = prevAuthProvider;
+          debugBrowserRedirectInterceptor = prevRedirect;
+        }
+      },
+    );
+
+    testWidgets(
+      '33. Blueprint-Only policy enforces Zero C++ across ROOT_MCP_CONTEXT, sanitizer strips C++ leakage, Stage 1 hides UE6 toggle, and UE6 Verse + Scene Editor remains ready',
+      (tester) async {
+        // 1. Default Stage 1 Spark & presets default to UE 5.9 Blueprint-Only (Zero C++)
+        final defaultSpec = ProjectConceptBlueprint();
+        expect(defaultSpec.targetEngine, equals(UnrealTargetEngine.ue5Mcp));
+        for (final entry in UnrealSparkPresets.entries) {
+          final preset = UnrealSparkPresets.byId(entry.id);
+          expect(preset.targetEngine, equals(UnrealTargetEngine.ue5Mcp));
+          expect(preset.assetPolicy, contains('Blueprint DataAsset'));
+          expect(preset.assetPolicy, isNot(contains('PrimaryDataAsset')));
+        }
+
+        final shellbreaker = UnrealSparkPresets.byId('shellbreaker');
+        final e01 = shellbreaker.initialEpics.first;
+        final fullBpPayload = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: shellbreaker,
+          epic: e01,
+        );
+        expect(
+          fullBpPayload,
+          contains('Target Architecture: 100% Blueprint-Only (.uasset)'),
+        );
+        expect(
+          fullBpPayload,
+          contains(
+            'Code Policy: STRICT BLUEPRINT-ONLY — NEVER create or edit C++ files (.h/.cpp)',
+          ),
+        );
+        expect(
+          fullBpPayload,
+          contains('author 100% in Blueprints (.uasset) with zero C++ (.h/.cpp)'),
+        );
+
+        // 2. [FIX] mode footer reflects Blueprint-Only on ue5Mcp vs Verse + Scene Graph on ue6Verse
+        final e01WithFix = e01.deepCopy();
+        e01WithFix.fixes.add(
+          EpicPieFix(
+            id: 'fx_bp_only',
+            text: 'Claw dash capsule misses ramp edge',
+            resolved: false,
+          ),
+        );
+        final fixBpPayload = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: shellbreaker,
+          epic: e01WithFix,
+          targetOverride: UnrealTargetEngine.ue5Mcp,
+        );
+        expect(
+          fixBpPayload,
+          contains(
+            'compile/save modified Blueprint (.uasset) assets (strictly zero C++ .h/.cpp)',
+          ),
+        );
+        final fixUe6Payload = UnrealMcpPayloadBuilder.buildEpicMcpPayload(
+          rootSpec: shellbreaker,
+          epic: e01WithFix,
+          targetOverride: UnrealTargetEngine.ue6Verse,
+        );
+        expect(
+          fixUe6Payload,
+          contains(
+            'compile/save modified Verse & Scene Graph assets (zero C++ .h/.cpp)',
+          ),
+        );
+
+        // 3. UnrealSpecGuard strips accidental C++ class/file leakage
+        final sanitizedCpp = UnrealSpecGuard.sanitizeLine(
+          'Create UCLASS(Blueprintable) PlayerMech.h and PlayerMech.cpp with UPROPERTY(EditAnywhere) and UFUNCTION(BlueprintCallable)',
+        );
+        expect(sanitizedCpp, contains('Blueprint Class'));
+        expect(sanitizedCpp, contains('PlayerMech Blueprint'));
+        expect(sanitizedCpp, contains('Instance Editable'));
+        expect(sanitizedCpp, contains('Blueprint Event'));
+        expect(sanitizedCpp, isNot(contains('.cpp')));
+        expect(sanitizedCpp, isNot(contains('.h')));
+        expect(sanitizedCpp, isNot(contains('UCLASS')));
+        expect(sanitizedCpp, isNot(contains('UPROPERTY')));
+        expect(sanitizedCpp, isNot(contains('UFUNCTION')));
+
+        // 4. Stage 1 UI hides premature UE6 toggle and shows read-only Blueprint-Only badge
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('stage1_target_ue5')), findsNothing);
+        expect(find.byKey(const ValueKey('stage1_target_ue6')), findsNothing);
+        expect(
+          find.byKey(const ValueKey('stage1_blueprint_only_badge')),
+          findsOneWidget,
+        );
+        expect(find.text('UE 5.9 · Blueprint Only'), findsOneWidget);
       },
     );
   });

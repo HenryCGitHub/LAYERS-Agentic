@@ -274,6 +274,8 @@ class ReleasePlannerAgent {
 ${LayersTextStyleGuide.compactStyleRules}
 
 You are planning Unreal Engine release `$targetVersion` for project `${rootSpec.normalizedTitle}`.
+Target Architecture: ${rootSpec.targetEngine.architectureContract}
+Code Policy: ${rootSpec.targetEngine.codePolicyContract}
 Vision: ${rootSpec.pitch}
 ${rootSpec.releaseDoneWhen.trim().isNotEmpty ? 'Release Gate (§05): ${rootSpec.releaseDoneWhen.trim()}\n' : ''}Core Loop (§01): ${rootSpec.coreLoop.join(' -> ')}
 Camera Contract (§02): ${rootSpec.cameraContract}

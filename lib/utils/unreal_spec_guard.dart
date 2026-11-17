@@ -86,7 +86,13 @@ class UnrealSpecGuard {
       RegExp(r'\bGameObjects\b', caseSensitive: false): 'AActors',
       RegExp(r'\bGameObject\b', caseSensitive: false): 'AActor',
       RegExp(r'\bMonoBehaviour\b', caseSensitive: false): 'UActorComponent',
-      RegExp(r'\bSerializeField\b', caseSensitive: false): 'EditAnywhere',
+      RegExp(r'\bSerializeField\b', caseSensitive: false): 'Instance Editable',
+      RegExp(r'\bUCLASS\s*(?:\([^)]*\))?', caseSensitive: false):
+          'Blueprint Class',
+      RegExp(r'\bUPROPERTY\s*(?:\([^)]*\))?', caseSensitive: false):
+          'Instance Editable',
+      RegExp(r'\bUFUNCTION\s*(?:\([^)]*\))?', caseSensitive: false):
+          'Blueprint Event',
       RegExp(r'\.prefab\b', caseSensitive: false): ' Blueprint',
       RegExp(r'\bPrefabs\b', caseSensitive: false): 'Blueprints',
       RegExp(r'\bPrefab\b', caseSensitive: false): 'Blueprint',
@@ -98,6 +104,10 @@ class UnrealSpecGuard {
       out = out.replaceAll(entry.key, entry.value);
     }
 
+    out = out.replaceAllMapped(
+      RegExp(r'\b([A-Za-z_][A-Za-z0-9_]*)\.(?:cpp|hpp|h)\b', caseSensitive: false),
+      (m) => '${m.group(1)} Blueprint',
+    );
     out = out.replaceAllMapped(
       RegExp(r'\b(\d+(?:\.\d+)?)\s*(?:px|pixels)\b', caseSensitive: false),
       (m) => '${m.group(1)} cm',
