@@ -22,10 +22,10 @@ extension _WorkbenchShellExporters on WorkbenchShell {
       epicsByRelease[wb.releaseDisplayName(rel)] = wb.epicsForRelease(rel.id);
     }
 
-    final md = UnrealMcpPayloadBuilder.buildFullProjectSpecMarkdown(
+    final md = GodotContextBuilder.buildFullProjectSpecMarkdown(
       rootSpec: rootSpec,
       epicsByReleaseLabel: epicsByRelease,
-      liveUprojectContext: wb.latestLiveUprojectContext,
+      liveGodotContext: wb.latestLiveGodotContext,
     );
 
     final safeSlug = sanitizeExportSlug(
@@ -49,7 +49,7 @@ extension _WorkbenchShellExporters on WorkbenchShell {
     );
   }
 
-  /// Exports the active Release (`ROOT_MCP_CONTEXT` + all active Epic payloads).
+  /// Exports the active Release (`ROOT_GODOT_CONTEXT` + all active Epic contexts).
   Future<void> _exportActiveReleaseAgentsMd(BuildContext context) async {
     final wb = workbench;
     final isDark = wb.isDark;
@@ -66,15 +66,15 @@ extension _WorkbenchShellExporters on WorkbenchShell {
     final rel = wb.activeRelease;
     final releaseLabel =
         rel != null ? wb.releaseDisplayName(rel) : 'v0.1 · Prototype';
-    final md = UnrealMcpPayloadBuilder.buildReleaseMcpBundle(
+    final md = GodotContextBuilder.buildReleaseContextBundle(
       rootSpec: rootSpec,
       releaseLabel: releaseLabel,
       releaseEpics: wb.activeReleaseEpics,
-      liveUprojectContext: wb.latestLiveUprojectContext,
+      liveGodotContext: wb.latestLiveGodotContext,
     );
 
     final filename =
-        'unreal_mcp_release_${wb.activeReleaseVersionTag.replaceAll('.', '_')}.md';
+        'godot_release_${wb.activeReleaseVersionTag.replaceAll('.', '_')}.md';
     await Clipboard.setData(ClipboardData(text: md));
     final downloaded = triggerMarkdownFileDownload(
       filename: filename,
@@ -85,7 +85,7 @@ extension _WorkbenchShellExporters on WorkbenchShell {
       context,
       downloaded
           ? 'Downloaded $filename & copied to clipboard'
-          : 'Copied active Release MCP bundle to clipboard',
+          : 'Copied active Release Godot bundle to clipboard',
       isDark: isDark,
     );
   }

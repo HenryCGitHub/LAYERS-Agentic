@@ -74,7 +74,7 @@ def _verify_skills_and_discovery() -> None:
   env = dict(os.environ)
   env["PYTHONDONTWRITEBYTECODE"] = "1"
   proc = subprocess.run(
-      [sys.executable, str(DISCOVER_PATH), "--no-smoke", "unreal"],
+      [sys.executable, str(DISCOVER_PATH), "--no-smoke", "godot"],
       cwd=str(REPO_ROOT),
       capture_output=True,
       text=True,
@@ -83,15 +83,15 @@ def _verify_skills_and_discovery() -> None:
   )
   assert proc.returncode == 0, f"discover_signals.py failed: {proc.stderr}"
   report = json.loads(proc.stdout)
-  assert report.get("focus") == "unreal", f"Unexpected focus: {report.get('focus')}"
+  assert report.get("focus") == "godot", f"Unexpected focus: {report.get('focus')}"
   assert isinstance(report.get("focusMatches"), list) and len(report["focusMatches"]) > 0, (
-      "Expected non-empty focusMatches for 'unreal'"
+      "Expected non-empty focusMatches for 'godot'"
   )
-  assert report.get("pluginVersion") == "1.0.0", f"Unexpected pluginVersion: {report.get('pluginVersion')}"
+  assert report.get("pluginVersion") == "4.0.0", f"Unexpected pluginVersion: {report.get('pluginVersion')}"
   assert report.get("zipParityOk") is True, "Expected zipParityOk is True"
   assert isinstance(report.get("monolithHotspots"), list), "Expected monolithHotspots list"
   assert isinstance(report.get("untestedModules"), list), "Expected untestedModules list"
-  assert report.get("godotLeakageHits") == [], f"Unexpected godotLeakageHits: {report.get('godotLeakageHits')}"
+  assert report.get("unrealLeakageHits") == [], f"Unexpected unrealLeakageHits: {report.get('unrealLeakageHits')}"
 
 
 def _verify_non_trigger_guards() -> None:
@@ -128,12 +128,12 @@ def _verify_auto_goal_bounded() -> None:
     tmp_dir = Path(td)
     out = _run_hook(
         "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal unreal bridge"},
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal godot dock"},
     )
     st = _load_state(tmp_dir)
     assert st.get("active") is True and st.get("mode") == "goal", st
     assert st.get("phase") == "discovering" and st.get("round") == 1, st
-    assert st.get("maxRounds") == 3 and st.get("focus") == "unreal bridge", st
+    assert st.get("maxRounds") == 3 and st.get("focus") == "godot dock", st
     msg1 = out["injectSteps"][0]["systemMessage"]["systemMessage"]
     assert "Round 1/3" in msg1 and "skip `ask_question`" in msg1, msg1
 
@@ -193,7 +193,7 @@ def _verify_auto_goal_bounded() -> None:
 
     out2 = _run_hook(
         "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal unreal bridge"},
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal godot dock"},
     )
     msg2 = out2["injectSteps"][0]["systemMessage"]["systemMessage"]
     assert "Round 2/3" in msg2, f"Expected Round 2/3 prompt injection, got: {msg2}"
@@ -230,16 +230,16 @@ def _verify_auto_goal_bounded() -> None:
     assert "[Auto-Goal Complete" in done_msg and "Shipped R1" in done_msg and "Shipped R2" in done_msg, done_msg
     assert _load_state(tmp_dir).get("pendingCompletionNotice") is False
 
-  # Explicit count `auto goal 2 unreal` + hyphenated focus guard `3-tier hierarchy`
+  # Explicit count `auto goal 2 godot` + hyphenated focus guard `3-tier hierarchy`
   with tempfile.TemporaryDirectory() as td:
     tmp_dir = Path(td)
     _run_hook(
         "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "auto goal 2 unreal"},
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "auto goal 2 godot"},
     )
     st = _load_state(tmp_dir)
     assert st.get("active") is True and st.get("mode") == "goal", st
-    assert st.get("maxRounds") == 2 and st.get("focus") == "unreal", st
+    assert st.get("maxRounds") == 2 and st.get("focus") == "godot", st
 
     _run_hook(
         "post_tool",
@@ -271,7 +271,7 @@ def _verify_auto_goal_bounded() -> None:
     assert st.get("active") is False and st.get("phase") == "idle" and st.get("pendingCompletionNotice") is True, st
     done_out = _run_hook(
         "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "auto goal 2 unreal"},
+        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "auto goal 2 godot"},
     )
     done_msg = done_out["injectSteps"][0]["systemMessage"]["systemMessage"]
     assert "[Auto-Goal Complete — 2/2 Rounds Shipped]" in done_msg, done_msg

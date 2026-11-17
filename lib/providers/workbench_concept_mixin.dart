@@ -1,7 +1,7 @@
 part of 'workbench_provider.dart';
 
-/// Stage 1 actions: Spark Onboarding, Preset Packs, Target Engine toggle,
-/// Co-Designer live edits, and `Approve & Launch Unreal Workbench`.
+/// Stage 1 actions: Spark Onboarding, Preset Packs, 3D | 2D Dimension toggle,
+/// Co-Designer live edits, and `Approve & Launch Godot Workbench`.
 extension WorkbenchConceptMixin on WorkbenchProvider {
   void showSparkPicker() {
     _showingSparkPicker = true;
@@ -34,7 +34,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       existing?.sections ?? const <String, String>{},
     );
     nextSections['concept_blueprint_json'] = jsonEncode(bp.toJson());
-    nextSections['engine'] = bp.targetEngine.shortLabel;
+    nextSections['engine'] = bp.dimension.shortLabel;
+    nextSections['dimension'] = bp.dimension.id;
     nextSections['current_stage'] = _currentStage.name;
 
     final updated = (existing ??
@@ -55,8 +56,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   void loadPresetSpark(String presetId) {
-    final preset = UnrealSparkPresets.byId(presetId);
-    preset.targetEngine = _conceptDraft?.targetEngine ?? UnrealTargetEngine.ue5Mcp;
+    final preset = GodotSparkPresets.byId(presetId);
+    _userPinnedDimension = false;
     _conceptDraft = preset;
     _showingSparkPicker = false;
     _showRawRootContext = false;
@@ -72,7 +73,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (cleanPrompt.isEmpty) return null;
 
     _isAgentBusy = true;
-    _agentProgressStep = 'Drafting Unreal Root Spec (PROJECT_SPEC.md)...';
+    _agentProgressStep = 'Drafting Godot 4 Root Spec (PROJECT_SPEC.md)...';
     _offlineErrorMessage = null;
     notifyListeners();
 
@@ -80,11 +81,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       final drafted = await ProjectConceptAgent.draftSpecFromSpark(
         sparkPrompt: cleanPrompt,
         apiKey: _apiKey,
-        targetEngine: _conceptDraft?.targetEngine ?? UnrealTargetEngine.ue5Mcp,
+        dimensionOverride: _userPinnedDimension ? projectDimension : null,
         preferredModel: _planningModel,
         thinkingLevel: _thinkingLevel,
       );
       _conceptDraft = drafted;
+      _userPinnedDimension = false;
       _showingSparkPicker = false;
       _showRawRootContext = false;
       _currentStage = WorkbenchStage.projectPitch;
@@ -108,7 +110,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (draft == null || clean.isEmpty) return null;
 
     _isAgentBusy = true;
-    _agentProgressStep = 'Co-Designer updating ROOT_MCP_CONTEXT...';
+    _agentProgressStep = 'Co-Designer updating ROOT_GODOT_CONTEXT...';
     _offlineErrorMessage = null;
     notifyListeners();
 
@@ -133,12 +135,19 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     }
   }
 
-  void setTargetEngine(UnrealTargetEngine target) {
+  void setProjectDimension(GodotProjectDimension dim) {
+    _userPinnedDimension = true;
     final draft = _conceptDraft;
     if (draft == null) {
-      _conceptDraft = ProjectConceptBlueprint(targetEngine: target);
+      _conceptDraft = ProjectConceptBlueprint(dimension: dim);
+    } else if (draft.hasSpec) {
+      _conceptDraft = ProjectConceptAgent.convertBlueprintDimension(draft, dim);
     } else {
-      draft.targetEngine = target;
+      _conceptDraft = ProjectConceptBlueprint(
+        sparkPrompt: draft.sparkPrompt,
+        gameTitle: draft.gameTitle,
+        dimension: dim,
+      );
     }
     if (activeProject != null && _conceptDraft != null) {
       _ensureActiveProjectDocument(_conceptDraft!);
@@ -181,10 +190,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   /// Clears the active unapproved draft back to empty Stage 1 intake, or opens a fresh Stage 1
   /// project when existing approved Releases exist so saved project work is preserved.
   void resetStage1ToNewIdea() {
-    final target = targetEngine;
+    final dim = projectDimension;
     if (projectReleases.isNotEmpty) {
       createNewProject();
-      setTargetEngine(target);
+      _userPinnedDimension = false;
+      _conceptDraft = ProjectConceptBlueprint(dimension: dim);
+      notifyListeners();
       return;
     }
     final orphanId = _activeProjectId;
@@ -202,7 +213,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _selectedEpicId = null;
     _progressiveDraft = null;
     _executionLog.clear();
-    _conceptDraft = ProjectConceptBlueprint(targetEngine: target);
+    _userPinnedDimension = false;
+    _conceptDraft = ProjectConceptBlueprint(dimension: dim);
     _showingSparkPicker = true;
     _showRawRootContext = false;
     _showRawEpicPayload = false;
@@ -299,7 +311,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   String? approveRootSpecAndLaunchWorkbench() {
     var draft = _conceptDraft;
     if (draft == null) return null;
-    draft = UnrealSpecGuard.sanitizeConceptBlueprint(draft);
+    draft = GodotSpecGuard.sanitizeConceptBlueprint(draft);
     draft.approved = true;
     _conceptDraft = draft;
 

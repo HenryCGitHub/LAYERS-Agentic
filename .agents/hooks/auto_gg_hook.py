@@ -210,7 +210,7 @@ def _build_pre_invocation_message(state: dict) -> str:
         "1) Run `PYTHONDONTWRITEBYTECODE=1 python3 "
         f".agents/skills/auto-goal/scripts/discover_signals.py{discover_arg}` "
         "and inspect candidate files; "
-        "2) Auto-select the #1 highest-confidence bug, Stage 1/2/Unreal bridge parity gap, "
+        "2) Auto-select the #1 highest-confidence bug, Stage 1/2/Godot Dock parity gap, "
         "or test coverage target (STRICTLY NO speculative UI features; skip `ask_question`); "
         f"3) Print a 1-line `[{round_label} Goal]` banner, lock the 3-part Goal Contract, "
         "execute `Red -> ./scripts/verify_loop.sh -> Commit`, and call "

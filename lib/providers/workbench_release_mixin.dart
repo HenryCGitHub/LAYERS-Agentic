@@ -85,8 +85,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     required String value,
     required String unit,
   }) {
-    final cleanKey = UnrealSpecGuard.sanitizeTuningKey(key, fallback: '');
+    final cleanKey = GodotSpecGuard.sanitizeTuningKey(key, fallback: '');
     if (cleanKey.isEmpty) return;
+    final dim = projectDimension;
     _updateAndPersistEpic(epicId, (spec) {
       final nextVal = value.trim().isEmpty ? '0' : value.trim();
       final existingIdx = spec.tuning.indexWhere(
@@ -95,16 +96,21 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       if (existingIdx >= 0) {
         final existing = spec.tuning[existingIdx];
         existing.value = nextVal;
-        existing.unit = UnrealSpecGuard.normalizeUnrealUnit(
+        existing.unit = GodotSpecGuard.normalizeGodotUnit(
           existing.key,
           unit.trim().isEmpty ? existing.unit : unit,
+          dimension: dim,
         );
       } else {
         spec.tuning.add(
           EpicTuningParam(
             key: cleanKey,
             value: nextVal,
-            unit: UnrealSpecGuard.normalizeUnrealUnit(cleanKey, unit),
+            unit: GodotSpecGuard.normalizeGodotUnit(
+              cleanKey,
+              unit,
+              dimension: dim,
+            ),
           ),
         );
       }
@@ -117,15 +123,21 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     String? goal,
     String? levelStaging,
   }) {
+    final dim = projectDimension;
     _updateAndPersistEpic(
       epicId,
       (spec) {
         if (title != null && title.trim().isNotEmpty) {
-          spec.title = UnrealSpecGuard.sanitizeLine(title);
+          spec.title = GodotSpecGuard.sanitizeLine(title, dimension: dim);
         }
-        if (goal != null) spec.goal = UnrealSpecGuard.sanitizeLine(goal);
+        if (goal != null) {
+          spec.goal = GodotSpecGuard.sanitizeLine(goal, dimension: dim);
+        }
         if (levelStaging != null) {
-          spec.levelStaging = UnrealSpecGuard.sanitizeLine(levelStaging);
+          spec.levelStaging = GodotSpecGuard.sanitizeLine(
+            levelStaging,
+            dimension: dim,
+          );
         }
       },
       debounce: true,
@@ -135,11 +147,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void flagEpicFix(String epicId, String fixText) {
     final clean = fixText.trim();
     if (clean.isEmpty) return;
+    final dim = projectDimension;
     _updateAndPersistEpic(epicId, (spec) {
       spec.fixes.add(
         EpicPieFix(
           id: 'fix_${DateTime.now().microsecondsSinceEpoch}',
-          text: UnrealSpecGuard.sanitizeLine(clean),
+          text: GodotSpecGuard.sanitizeLine(clean, dimension: dim),
           resolved: false,
         ),
       );

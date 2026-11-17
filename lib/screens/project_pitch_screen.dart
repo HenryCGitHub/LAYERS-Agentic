@@ -6,7 +6,7 @@ import '../models/epic_spec.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 
-/// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_MCP_CONTEXT`).
+/// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`).
 /// Unified single-space canvas with one top prompt bar (Idea Intake -> Compact Refine Bar)
 /// paired directly with the 5-section Blueprint (`§01–§05`), Camera/Feel forks, and `v0.1` Epics.
 class ProjectPitchScreen extends StatefulWidget {
@@ -191,12 +191,17 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               spacing: 10,
               runSpacing: 6,
               children: [
+                _GodotDimensionToggle(
+                  dimension: wb.projectDimension,
+                  isDark: isDark,
+                  onChanged: wb.isAgentBusy ? null : wb.setProjectDimension,
+                ),
                 _SegmentedTab(
                   isDark: isDark,
                   leftKey: const ValueKey('stage1_tab_clean'),
                   rightKey: const ValueKey('stage1_tab_raw'),
                   leftLabel: 'Clean Spec Document',
-                  rightLabel: 'Raw ROOT_MCP_CONTEXT.md',
+                  rightLabel: 'Raw ROOT_GODOT_CONTEXT.md',
                   isRightSelected: wb.showRawRootContext,
                   onSelect: (isRaw) => wb.toggleRawRootContext(isRaw),
                 ),
@@ -218,8 +223,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   icon: const Icon(Icons.check_circle_outline, size: 16),
                   label: Text(
                     wb.projectReleases.isNotEmpty
-                        ? 'Sync & Open Unreal Workbench →'
-                        : 'Approve & Launch Unreal Workbench →',
+                        ? 'Sync & Open Godot Workbench →'
+                        : 'Approve & Launch Godot Workbench →',
                   ),
                 ),
               ],
@@ -270,7 +275,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Turn a one-sentence idea into a playable v0.1 Unreal spec — camera, controls, tuning, and first Epics.',
+          'Turn a one-sentence idea into a playable v0.1 Godot 4 spec — camera, controls, tuning, and first Epics.',
           style: TextStyle(
             fontSize: 14,
             color: textSecondary,
@@ -317,9 +322,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _BlueprintOnlyBadge(
-                    label: wb.targetEngine.shortLabel,
+                  _GodotDimensionToggle(
+                    dimension: wb.projectDimension,
                     isDark: isDark,
+                    onChanged: wb.isAgentBusy ? null : wb.setProjectDimension,
                   ),
                   ElevatedButton.icon(
                     key: const ValueKey('draft_spark_btn'),
@@ -355,6 +361,30 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               ),
             ],
           ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            Text(
+              'Starter Packs:',
+              style: TextStyle(fontSize: 12, color: textMuted),
+            ),
+            for (final preset in GodotSparkPresets.entries)
+              ActionChip(
+                key: ValueKey('preset_${preset.id}'),
+                avatar: Icon(Icons.bolt_rounded, size: 14, color: cyan),
+                label: Text(
+                  preset.label,
+                  style: TextStyle(fontSize: 12, color: textPrimary),
+                ),
+                onPressed: wb.isAgentBusy
+                    ? null
+                    : () => wb.loadPresetSpark(preset.id),
+              ),
+          ],
         ),
       ],
     );
@@ -396,9 +426,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               Expanded(
                 flex: 3,
                 child: Tooltip(
-                  message: spec.targetEngine.architectureContract,
+                  message: spec.dimension.architectureContract,
                   child: Text(
-                    spec.targetEngine.architectureContract,
+                    spec.dimension.architectureContract,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
@@ -469,8 +499,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       ),
       (
         '§02',
-        'Global Unreal Scale & Architecture (1 UU = 1 cm)',
-        'Camera framing fork (Isometric, Top-Down, Third-Person, First-Person), scale, and Enhanced Input.',
+        'Global Godot 4 Scale & Architecture (3D m | 2D px)',
+        'Camera framing fork (3D SpringArm3D or 2D Camera2D), scale, and InputMap actions.',
       ),
       (
         '§03',
@@ -485,7 +515,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       (
         '§05',
         'Initial Release (v0.1 Prototype Epics Only)',
-        'Dependency-ordered E01–E0N Epics ready to sync straight into Unreal MCP.',
+        'Dependency-ordered E01–E0N Epics ready to build in 1 click inside Godot 4.',
       ),
     ];
 
@@ -574,7 +604,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     Color border,
     Color cyan,
   ) {
-    final rawText = wb.activeRootMcpMarkdown;
+    final rawText = wb.activeRootGodotMarkdown;
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
@@ -589,7 +619,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           Row(
             children: [
               Text(
-                'Exact ROOT_MCP_CONTEXT Wire Markdown',
+                'Exact ROOT_GODOT_CONTEXT Wire Markdown',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -602,7 +632,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   Clipboard.setData(ClipboardData(text: rawText));
                   AppToast.show(
                     context,
-                    'Copied ROOT_MCP_CONTEXT Markdown',
+                    'Copied ROOT_GODOT_CONTEXT Markdown',
                     isDark: isDark,
                   );
                 },
@@ -614,6 +644,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           const SizedBox(height: 12),
           SelectableText(
             rawText,
+            key: const ValueKey('raw_root_godot_context_text'),
             style: GoogleFonts.jetBrainsMono(
               fontSize: 12.5,
               color: textPrimary,
@@ -694,11 +725,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         ),
         const SizedBox(height: 16),
 
-        // §02 Global Unreal Scale & Architecture (1 UU = 1 cm)
+        // §02 Global Godot 4 Scale & Architecture
         _SectionCard(
           isDark: isDark,
           code: '§02',
-          title: 'Global Unreal Scale & Architecture (1 UU = 1 cm)',
+          title: 'Global Godot 4 Scale & Architecture (${spec.dimension.pillLabel})',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -725,7 +756,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              _ContractRow(label: 'Camera & Boom', value: spec.cameraContract, isDark: isDark),
+              _ContractRow(label: 'Camera Rig', value: spec.cameraContract, isDark: isDark),
               _ContractRow(label: 'Player Scale', value: spec.characterScale, isDark: isDark),
               _ContractRow(label: 'Input Contract', value: spec.inputContract, isDark: isDark),
               _ContractRow(label: 'Asset Policy', value: spec.assetPolicy, isDark: isDark, isLast: true),
@@ -859,7 +890,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Strict v0.1 Prototype Gate: Only these Epics build first. v0.2+ waves & meta unlock after v0.1 passes PIE.',
+                        'Strict v0.1 Prototype Gate: Only these Epics build first. v0.2+ waves & meta unlock after v0.1 passes Playtest.',
                         style: TextStyle(fontSize: 12, color: textPrimary),
                       ),
                     ),
@@ -1012,7 +1043,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 children: [
                   IconButton(
                     key: ValueKey('stage1_epic_up_$index'),
-                    tooltip: 'Move earlier in PIE queue',
+                    tooltip: 'Move earlier in Playtest queue',
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
@@ -1028,7 +1059,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                   IconButton(
                     key: ValueKey('stage1_epic_down_$index'),
-                    tooltip: 'Move later in PIE queue',
+                    tooltip: 'Move later in Playtest queue',
                     visualDensity: VisualDensity.compact,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(
@@ -1072,38 +1103,72 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   }
 }
 
-class _BlueprintOnlyBadge extends StatelessWidget {
-  final String label;
+class _GodotDimensionToggle extends StatelessWidget {
+  final GodotProjectDimension dimension;
   final bool isDark;
+  final ValueChanged<GodotProjectDimension>? onChanged;
 
-  const _BlueprintOnlyBadge({
-    required this.label,
+  const _GodotDimensionToggle({
+    required this.dimension,
     required this.isDark,
+    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final cyan = AppTheme.accentCyanFor(isDark);
+    final border = AppTheme.borderFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+
+    Widget buildOption({
+      required Key key,
+      required GodotProjectDimension target,
+    }) {
+      final selected = dimension == target;
+      return InkWell(
+        key: key,
+        onTap: onChanged == null ? null : () => onChanged!(target),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          decoration: BoxDecoration(
+            color: selected ? cyan.withValues(alpha: 0.16) : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+            border: selected
+                ? Border.all(color: cyan.withValues(alpha: 0.45))
+                : null,
+          ),
+          child: Text(
+            target.pillLabel,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              color: selected ? cyan : muted,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Container(
-      key: const ValueKey('stage1_blueprint_only_badge'),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      key: const ValueKey('stage1_dimension_toggle'),
+      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: cyan.withValues(alpha: 0.12),
+        color: AppTheme.bgSurfaceFor(isDark),
         borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: cyan.withValues(alpha: 0.35)),
+        border: Border.all(color: border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.account_tree_outlined, size: 13, color: cyan),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: cyan,
-            ),
+          buildOption(
+            key: const ValueKey('stage1_dim_3d'),
+            target: GodotProjectDimension.dim3d,
+          ),
+          const SizedBox(width: 2),
+          buildOption(
+            key: const ValueKey('stage1_dim_2d'),
+            target: GodotProjectDimension.dim2d,
           ),
         ],
       ),

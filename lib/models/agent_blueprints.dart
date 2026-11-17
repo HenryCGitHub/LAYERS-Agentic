@@ -78,29 +78,34 @@ class CoreFeelOption {
   final String id;
   final String label;
   final TradeOffRule tradeOff;
-  final String brakingDecelCmPerSec;
+  final String decelMPerSec;
+  final String decelPxPerSec;
 
   const CoreFeelOption({
     required this.id,
     required this.label,
     required this.tradeOff,
-    required this.brakingDecelCmPerSec,
+    required this.decelMPerSec,
+    required this.decelPxPerSec,
   });
+
+  String decelFor(GodotProjectDimension dim) =>
+      dim == GodotProjectDimension.dim2d ? decelPxPerSec : decelMPerSec;
 }
 
-/// Stage 1 Unreal Root Project Specification (`PROJECT_SPEC.md` -> `ROOT_MCP_CONTEXT`).
-/// Pure high-level foundation: 1 UU = 1 cm spatial contracts, pillars, trade-offs, hard cuts,
+/// Stage 1 Godot 4 Root Project Specification (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`).
+/// Pure high-level foundation: 3D (`1 unit = 1 m`) or 2D (`px`), pillars, trade-offs, hard cuts,
 /// and strictly `v0.1` prototype Epics in §05.
 class ProjectConceptBlueprint {
   String sparkPrompt;
   String gameTitle;
-  UnrealTargetEngine targetEngine;
+  GodotProjectDimension dimension;
 
   // §01 Core Fantasy & 30s Loop
   String pitch;
   List<String> coreLoop;
 
-  // §02 Global Unreal Scale & Architecture (1 UU = 1 cm)
+  // §02 Global Godot 4 Scale & Architecture
   String cameraChoiceId;
   String cameraContract;
   String characterScale;
@@ -130,19 +135,15 @@ class ProjectConceptBlueprint {
 
   ProjectConceptBlueprint({
     this.sparkPrompt = '',
-    this.gameTitle = 'UNTITLED UNREAL PROJECT',
-    this.targetEngine = UnrealTargetEngine.ue5Mcp,
+    this.gameTitle = 'UNTITLED GODOT PROJECT',
+    this.dimension = GodotProjectDimension.dim3d,
+    String? cameraChoiceId,
+    String? cameraContract,
+    String? characterScale,
+    String? inputContract,
+    String? assetPolicy,
     this.pitch = '',
     List<String>? coreLoop,
-    this.cameraChoiceId = 'isometric',
-    this.cameraContract =
-        'SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0',
-    this.characterScale =
-        'ACharacter CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 620 cm/s',
-    this.inputContract =
-        'Enhanced Input (IMC_Core + IA_Move / IA_Aim / IA_Primary / IA_Secondary)',
-    this.assetPolicy =
-        'Prototype Greybox Primitives (Engine/BasicShapes) + Debug Materials; UDataAsset for tuning',
     List<ConceptSectionOption>? cameraDecisionOptions,
     this.feelChoiceId = 'snappy',
     List<String>? pillars,
@@ -150,15 +151,35 @@ class ProjectConceptBlueprint {
     List<String>? outOfScope,
     List<EpicSpec>? initialEpics,
     this.releaseDoneWhen =
-        'Start PIE in L_Arena_Proto -> complete full 30s core loop cleanly with 0 Output Log errors',
+        'Run F6 on res://scenes/arena_proto.tscn -> complete full 30s core loop cleanly with 0 Debugger errors',
     List<ReleaseDirectionPreset>? v02Presets,
     List<EpicSpec>? v02NewPool,
     Map<String, List<EpicUpgradeOption>>? v02UpgradesByLineageKey,
     this.lastCoDesignNote = '',
     this.approved = false,
-  })  : coreLoop = coreLoop ?? <String>[],
-        cameraDecisionOptions =
-            cameraDecisionOptions ?? defaultCameraDecisionOptions,
+  })  : cameraChoiceId = cameraChoiceId ??
+            (dimension == GodotProjectDimension.dim2d
+                ? 'topdown2d'
+                : 'isometric'),
+        cameraContract = cameraContract ??
+            (dimension == GodotProjectDimension.dim2d
+                ? 'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim'
+                : 'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0'),
+        characterScale = characterScale ??
+            (dimension == GodotProjectDimension.dim2d
+                ? 'CharacterBody2D CollisionShape 32x48 px · move_speed 260 px/s'
+                : 'CharacterBody3D CapsuleRadius 0.42 m · Height 1.84 m · move_speed 6.2 m/s'),
+        inputContract = inputContract ??
+            'InputMap (move_left/right/up/down, dodge, primary_action)',
+        assetPolicy = assetPolicy ??
+            (dimension == GodotProjectDimension.dim2d
+                ? 'ColorRect / Polygon2D Greybox Prototypes + Solid Tint Materials; @export vars & Resource (.tres)'
+                : 'CSGBox3D / PrimitiveMesh Greybox + StandardMaterial3D Tints; @export vars & Resource (.tres)'),
+        coreLoop = coreLoop ?? <String>[],
+        cameraDecisionOptions = cameraDecisionOptions ??
+            (dimension == GodotProjectDimension.dim2d
+                ? defaultCamera2dOptions
+                : defaultCamera3dOptions),
         pillars = pillars ?? <String>[],
         tradeOffs = tradeOffs ?? <TradeOffRule>[],
         outOfScope = outOfScope ?? <String>[],
@@ -168,34 +189,58 @@ class ProjectConceptBlueprint {
         v02UpgradesByLineageKey =
             v02UpgradesByLineageKey ?? <String, List<EpicUpgradeOption>>{};
 
-  static const List<ConceptSectionOption> defaultCameraDecisionOptions = [
+  static const List<ConceptSectionOption> defaultCamera3dOptions = [
     ConceptSectionOption(
       id: 'isometric',
       label: 'Isometric (~52 deg)',
       contractValue:
-          'SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0',
-      note: 'Best readability for arena movement + cursor plane aiming.',
+          'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0',
+      note: 'Best readability for 3D arena movement + XZ cursor plane aiming.',
     ),
     ConceptSectionOption(
       id: 'topdown',
       label: 'Fixed Top-Down (90 deg)',
       contractValue:
-          'SpringArm 1650 cm @ -88 deg pitch, 50 deg FOV, Zero camera roll',
-      note: 'Pure 2D tactical grid clarity with zero perspective skew.',
+          'SpringArm3D 16.5 m @ -88 deg pitch, 50 deg FOV, Zero camera roll',
+      note: 'Pure tactical arena clarity with minimal perspective skew.',
     ),
     ConceptSectionOption(
       id: 'tps',
       label: 'Third-Person Over-Shoulder',
       contractValue:
-          'SpringArm 360 cm · SocketOffset (0, 65, 55) cm · 68 deg FOV · CameraLag 11.0',
-      note: 'Close-quarters weight and horizon depth over multi-enemy flank readability.',
+          'SpringArm3D 3.6 m · Offset (0.65, 0.55) m · 68 deg FOV · CameraLag 11.0',
+      note: 'Close-quarters weight and horizon depth over rear flank awareness.',
     ),
     ConceptSectionOption(
       id: 'fps',
       label: 'First-Person (90 deg FOV)',
       contractValue:
-          'First-Person Camera · EyeHeight 64 cm · 90 deg FOV · 1:1 yaw/pitch',
+          'Camera3D EyeHeight 1.65 m · 90 deg FOV · Captured mouse yaw/pitch',
       note: 'Immediate eye-level aim precision with narrow peripheral awareness.',
+    ),
+  ];
+
+  static const List<ConceptSectionOption> defaultCamera2dOptions = [
+    ConceptSectionOption(
+      id: 'topdown2d',
+      label: 'Top-Down 2D Follow',
+      contractValue:
+          'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim',
+      note: 'Crisp 360-degree top-down movement and mouse aim across 2D rooms.',
+    ),
+    ConceptSectionOption(
+      id: 'sidescroller2d',
+      label: '2D Side-Scroller Cam',
+      contractValue:
+          'Camera2D Zoom 1.4x · Lookahead 64 px · Horizontal floor lock',
+      note: 'Clear vertical platform clearance and grounded forward readability.',
+    ),
+    ConceptSectionOption(
+      id: 'fixedarena2d',
+      label: 'Fixed Room Frame (1280x720)',
+      contractValue:
+          'Camera2D Centered Fixed Frame (Zoom 1.0x) · Whole arena visible',
+      note: 'Zero scrolling disorientation for compact wave skirmish rooms.',
     ),
   ];
 
@@ -207,7 +252,8 @@ class ProjectConceptBlueprint {
         prefer: 'Instant arcade acceleration',
         avoid: 'Heavy momentum turn inertia',
       ),
-      brakingDecelCmPerSec: '2400',
+      decelMPerSec: '24.0',
+      decelPxPerSec: '2400',
     ),
     CoreFeelOption(
       id: 'heavy',
@@ -216,7 +262,8 @@ class ProjectConceptBlueprint {
         prefer: 'Committed heavy windups',
         avoid: 'Zero-recovery animation cancel spam',
       ),
-      brakingDecelCmPerSec: '1400',
+      decelMPerSec: '14.0',
+      decelPxPerSec: '1400',
     ),
     CoreFeelOption(
       id: 'physics',
@@ -225,7 +272,8 @@ class ProjectConceptBlueprint {
         prefer: 'Velocity carry & drift banking',
         avoid: 'Stop-on-a-dime snapping',
       ),
-      brakingDecelCmPerSec: '480',
+      decelMPerSec: '4.8',
+      decelPxPerSec: '480',
     ),
   ];
 
@@ -246,11 +294,16 @@ class ProjectConceptBlueprint {
 
   CoreFeelOption get selectedCoreFeelOption => coreFeelOptionById(feelChoiceId);
 
-  List<ConceptSectionOption> get effectiveCameraDecisionOptions => [
-        ...cameraDecisionOptions,
-        for (final def in defaultCameraDecisionOptions)
-          if (!cameraDecisionOptions.any((o) => o.id == def.id)) def,
-      ];
+  List<ConceptSectionOption> get effectiveCameraDecisionOptions {
+    final defaults = dimension == GodotProjectDimension.dim2d
+        ? defaultCamera2dOptions
+        : defaultCamera3dOptions;
+    return [
+      ...cameraDecisionOptions,
+      for (final def in defaults)
+        if (!cameraDecisionOptions.any((o) => o.id == def.id)) def,
+    ];
+  }
 
   bool get hasSpec =>
       pitch.trim().isNotEmpty &&
@@ -258,13 +311,13 @@ class ProjectConceptBlueprint {
       initialEpics.isNotEmpty;
 
   String get normalizedTitle =>
-      gameTitle.trim().isEmpty ? 'UNTITLED PROJECT' : gameTitle.trim();
+      gameTitle.trim().isEmpty ? 'UNTITLED GODOT PROJECT' : gameTitle.trim();
 
   ProjectConceptBlueprint deepCopy() {
     return ProjectConceptBlueprint(
       sparkPrompt: sparkPrompt,
       gameTitle: gameTitle,
-      targetEngine: targetEngine,
+      dimension: dimension,
       pitch: pitch,
       coreLoop: List<String>.from(coreLoop),
       cameraChoiceId: cameraChoiceId,
@@ -295,7 +348,7 @@ class ProjectConceptBlueprint {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'sparkPrompt': sparkPrompt,
         'gameTitle': gameTitle,
-        'targetEngine': targetEngine.id,
+        'dimension': dimension.id,
         'pitch': pitch,
         'coreLoop': coreLoop,
         'cameraChoiceId': cameraChoiceId,
@@ -323,7 +376,6 @@ class ProjectConceptBlueprint {
       };
 
   factory ProjectConceptBlueprint.fromJson(Map<String, dynamic> json) {
-    // Support both Unreal Root Spec JSON and legacy Stage 1 blueprint JSON
     final rawLoop = json['coreLoop'];
     final loop = <String>[];
     if (rawLoop is List) {
@@ -403,40 +455,52 @@ class ProjectConceptBlueprint {
         ? Map<String, dynamic>.from(json['techSpec'] as Map)
         : const <String, dynamic>{};
 
+    final dim = GodotProjectDimension.fromString(
+      (json['dimension'] ?? json['engine'] ?? legacyTechSpec['engine'] ?? 'dim3d')
+          .toString(),
+    );
+    final is2d = dim == GodotProjectDimension.dim2d;
+
     return ProjectConceptBlueprint(
       sparkPrompt: (json['sparkPrompt'] ?? json['prompt'] ?? '').toString(),
       gameTitle: (json['gameTitle'] ??
               json['title'] ??
               legacyGameSpec['title'] ??
-              'UNTITLED UNREAL PROJECT')
+              'UNTITLED GODOT PROJECT')
           .toString()
           .trim(),
-      targetEngine: UnrealTargetEngine.fromString(
-        (json['targetEngine'] ?? legacyTechSpec['engine'] ?? 'ue5Mcp')
-            .toString(),
-      ),
+      dimension: dim,
       pitch: (json['pitch'] ?? json['goal'] ?? '').toString().trim(),
       coreLoop: loop,
-      cameraChoiceId: (json['cameraChoiceId'] ?? 'isometric').toString().trim(),
+      cameraChoiceId: (json['cameraChoiceId'] ??
+              (is2d ? 'topdown2d' : 'isometric'))
+          .toString()
+          .trim(),
       cameraContract: (json['cameraContract'] ??
               legacyGameSpec['camera'] ??
-              'SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0')
+              (is2d
+                  ? 'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim'
+                  : 'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0'))
           .toString()
           .trim(),
       characterScale: (json['characterScale'] ??
-              'ACharacter CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 620 cm/s')
+              (is2d
+                  ? 'CharacterBody2D CollisionShape 32x48 px · move_speed 260 px/s'
+                  : 'CharacterBody3D CapsuleRadius 0.42 m · Height 1.84 m · move_speed 6.2 m/s'))
           .toString()
           .trim(),
       inputContract: (json['inputContract'] ??
-              'Enhanced Input (IMC_Core + IA_Move / IA_Aim / IA_Primary / IA_Secondary)')
+              'InputMap (move_left/right/up/down, dodge, primary_action)')
           .toString()
           .trim(),
       assetPolicy: (json['assetPolicy'] ??
-              'Prototype Greybox Primitives (Engine/BasicShapes) + Debug Materials; UDataAsset for tuning')
+              (is2d
+                  ? 'ColorRect / Polygon2D Greybox Prototypes + Solid Tint Materials; @export vars & Resource (.tres)'
+                  : 'CSGBox3D / PrimitiveMesh Greybox + StandardMaterial3D Tints; @export vars & Resource (.tres)'))
           .toString()
           .trim(),
       cameraDecisionOptions: cameraOpts.isEmpty
-          ? defaultCameraDecisionOptions
+          ? (is2d ? defaultCamera2dOptions : defaultCamera3dOptions)
           : cameraOpts,
       feelChoiceId: normalizeFeelChoiceId(json['feelChoiceId']?.toString()),
       pillars: _stringList(json['pillars'] ?? json['designPillars']),
@@ -445,7 +509,7 @@ class ProjectConceptBlueprint {
       initialEpics: epics,
       releaseDoneWhen: (json['releaseDoneWhen'] ??
               json['doneWhen'] ??
-              'Start PIE in L_Arena_Proto -> complete full 30s core loop cleanly with 0 Output Log errors')
+              'Run F6 on res://scenes/arena_proto.tscn -> complete full 30s core loop cleanly with 0 Debugger errors')
           .toString()
           .trim(),
       v02Presets: presets,
@@ -474,14 +538,14 @@ class ProjectConceptBlueprint {
   }
 }
 
-/// Curated Unreal Engine starter packs matching `unreal_mcp_spec_studio_v3_mockup.html`.
-class UnrealSparkPresetInfo {
+/// Curated Godot 4 starter packs (`3D` and `2D`).
+class GodotSparkPresetInfo {
   final String id;
   final String label;
   final String subtitle;
   final String sparkPrompt;
 
-  const UnrealSparkPresetInfo({
+  const GodotSparkPresetInfo({
     required this.id,
     required this.label,
     required this.subtitle,
@@ -489,28 +553,28 @@ class UnrealSparkPresetInfo {
   });
 }
 
-class UnrealSparkPresets {
-  static const List<UnrealSparkPresetInfo> entries = [
-    UnrealSparkPresetInfo(
+class GodotSparkPresets {
+  static const List<GodotSparkPresetInfo> entries = [
+    GodotSparkPresetInfo(
       id: 'shellbreaker',
-      label: 'Shellbreaker',
-      subtitle: 'Top-down twin-stick crustacean mech arena shooter',
+      label: 'Shellbreaker (3D)',
+      subtitle: 'Top-down 3D crustacean mech arena shooter',
       sparkPrompt:
           'Top-down twin-stick crustacean mech arena shooter with claw dash armor breaks, heavy burst cannon recoil, and 3-wave combat.',
     ),
-    UnrealSparkPresetInfo(
+    GodotSparkPresetInfo(
       id: 'railjack',
-      label: 'Railjack Drift',
+      label: 'Railjack Drift (3D)',
       subtitle: 'Third-person hover-skiff canyon racer with boost & gates',
       sparkPrompt:
           'Third-person hover-skiff canyon time-trial racer with apex drift banking, thruster heat gauges, and plasma gate boosts.',
     ),
-    UnrealSparkPresetInfo(
+    GodotSparkPresetInfo(
       id: 'emberkeep',
-      label: 'Ember Keep',
-      subtitle: 'Isometric torchlight survival & melee barricade defense',
+      label: 'Ember Keep (2D)',
+      subtitle: '2D pixel-art torchlight survival & axe cleave defense',
       sparkPrompt:
-          'Isometric survival skirmisher where you chop shadow stalkers, place brazier light pylons, and hold safe ground as light radius shrinks.',
+          '2D top-down survival skirmisher where you chop shadow stalkers, plant brazier light pylons, and hold safe ground as light radius shrinks.',
     ),
   ];
 
@@ -546,9 +610,9 @@ class UnrealSparkPresets {
     return ProjectConceptBlueprint(
       sparkPrompt: entries[0].sparkPrompt,
       gameTitle: 'SHELLBREAKER',
-      targetEngine: UnrealTargetEngine.ue5Mcp,
+      dimension: GodotProjectDimension.dim3d,
       pitch:
-          'Crisp twin-stick mech brawler — smash armored crabs inside a compact greybox arena',
+          'Crisp twin-stick 3D mech brawler — smash armored crabs inside a compact greybox arena',
       coreLoop: const [
         'Skim & Cursor Aim',
         'Claw Dash Slam',
@@ -557,37 +621,15 @@ class UnrealSparkPresets {
       ],
       cameraChoiceId: 'isometric',
       cameraContract:
-          'SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0 (Cursor Z-Plane aim)',
+          'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0 (XZ cursor plane aim)',
       characterScale:
-          'BP_PlayerMech CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 640 cm/s',
+          'CharacterBody3D CapsuleRadius 0.42 m · Height 1.84 m · move_speed 6.4 m/s',
       inputContract:
-          'Enhanced Input (IMC_Combat + IA_Move, IA_AimCursor, IA_FireBurst, IA_ClawDash)',
+          'InputMap (move_left/right/up/down, claw_dash, fire_burst)',
       assetPolicy:
-          'Greybox Primitives (Engine/BasicShapes) + Solid Tint Material Instances; DA_ShellbreakerTuning Blueprint DataAsset',
+          'CSGBox3D / PrimitiveMesh Greybox + StandardMaterial3D Tints; res://data/shellbreaker_tuning.tres',
       feelChoiceId: 'snappy',
-      cameraDecisionOptions: const [
-        ConceptSectionOption(
-          id: 'isometric',
-          label: 'Isometric (~52 deg)',
-          contractValue:
-              'SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0 (Cursor Z-Plane aim)',
-          note: 'Best clarity for circular dash telegraphs and twin-stick cursor aim.',
-        ),
-        ConceptSectionOption(
-          id: 'topdown',
-          label: 'Fixed Top-Down (90 deg)',
-          contractValue:
-              'SpringArm 1700 cm @ -88 deg pitch, 48 deg FOV, Fixed Arena Framing',
-          note: 'Zero foreshortening along arena cover walls.',
-        ),
-        ConceptSectionOption(
-          id: 'tps',
-          label: 'Over-Shoulder (68 deg FOV)',
-          contractValue:
-              'SpringArm 380 cm · SocketOffset (0, 70, 60) cm · 68 deg FOV · CameraLag 10.0',
-          note: 'Adds visceral impact scale at the cost of rear flank awareness.',
-        ),
-      ],
+      cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera3dOptions,
       pillars: const [
         'Aggressive Armor Cracking: Every dash creates an immediate weak-spot window',
         'Readable Telegraph Clarity: Distinct silhouette colors and sharp windup cues beat visual noise',
@@ -600,7 +642,7 @@ class UnrealSparkPresets {
         ),
         TradeOffRule(
           prefer: 'Tight single-arena testbed',
-          avoid: 'Multi-room streaming levels',
+          avoid: 'Multi-room streaming scenes',
         ),
         TradeOffRule(
           prefer: 'Clear emissive debug shapes',
@@ -610,11 +652,11 @@ class UnrealSparkPresets {
       outOfScope: const [
         'No main menu, title screen, or save slots',
         'No inventory screen or multi-weapon loadout UI',
-        'No co-op networking or replicated RPCs',
+        'No co-op multiplayer networking',
         'No procedural terrain or multi-zone progression',
       ],
       releaseDoneWhen:
-          'Press PIE in L_Shellbreaker_Proto -> walk/dash/shoot dummy armor crab into kill state cleanly with 0 Output Log errors',
+          'Run F6 on res://scenes/shellbreaker_proto.tscn -> dash and shatter dummy crab cleanly with 0 Debugger errors',
       initialEpics: [
         EpicSpec(
           id: 'sb_e01',
@@ -625,11 +667,11 @@ class UnrealSparkPresets {
           lifecycle: EpicLifecycle.active,
           coreLoopBeat: 'Beats 1–2 · Skim, Aim & Claw Dash',
           goal:
-              'Move smoothly across the arena plane, rotate upper chassis toward mouse cursor, and execute an invulnerable forward claw dash.',
+              'Move smoothly across the arena XZ plane, aim VisualRig toward mouse cursor, and execute an invulnerable forward claw dash.',
           links: const [
-            'Reads DA_PlayerLocomotion DataAsset',
-            'Exposes BPI_Damageable & I_DashImpact for E03 armor break',
-            'Drives BP_PlayerMech SpringArm lag and dash burst VFX',
+            'Scene res://scenes/player_mech.tscn + res://scripts/player_mech.gd',
+            'Emits dash_impact signal & hit_damage method contract to E03',
+            'Drives SpringArm3D follow lag and dash thruster GPUParticles3D',
           ],
           outOfScope: const [
             'No slope stair-stepping mechanics',
@@ -637,59 +679,58 @@ class UnrealSparkPresets {
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_Move (Vector2D)',
-              trigger: 'Triggered (Hold WASD)',
-              rule: 'Ground velocity clamped cleanly at 640 cm/s; ignored during DashActive',
+              action: 'move_left / move_right / move_up / move_down',
+              trigger: 'Held (WASD)',
+              rule: 'Ground velocity clamped cleanly at 6.4 m/s; locked during DashActive',
             ),
             EpicControlBinding(
-              action: 'IA_AimCursor (Trace)',
-              trigger: 'Tick Raycast',
-              rule: 'Rotates upper turret mesh toward Z-plane cursor hit point every frame',
+              action: 'mouse_aim',
+              trigger: 'Physics Tick Raycast',
+              rule: r'Rotates $VisualRig child toward cursor XZ plane hit every frame',
             ),
             EpicControlBinding(
-              action: 'IA_ClawDash (Bool)',
-              trigger: 'Started (Space / RMB)',
-              rule: 'Locks facing, launches forward 550 cm in 0.16s on 1.1s cooldown',
+              action: 'claw_dash',
+              trigger: 'Just Pressed (Space / RMB)',
+              rule: 'Launches forward 5.5 m over 0.16s along aim vector on 1.1s cooldown',
             ),
           ],
           states: const [
             'Idle / Move -> DashWindup (0.04s) -> DashActive (0.16s) -> DashRecover (0.08s)',
           ],
           interrupts: const [
-            'DashActive cancels weapon burst fire cleanly and toggles ECC_GameTraceChannel_Dash overlap',
-            'Camera lag dips briefly on DashActive impact to amplify speed feel',
+            'DashActive cancels weapon burst fire cleanly and toggles DashHitbox monitoring',
           ],
           tuning: [
-            EpicTuningParam(key: 'MoveSpeed', value: '640', unit: 'cm/s'),
-            EpicTuningParam(key: 'DashDistance', value: '550', unit: 'cm'),
-            EpicTuningParam(key: 'DashDuration', value: '0.16', unit: 's'),
-            EpicTuningParam(key: 'DashCooldown', value: '1.1', unit: 's'),
+            EpicTuningParam(key: 'move_speed', value: '6.4', unit: 'm/s'),
+            EpicTuningParam(key: 'dash_distance', value: '5.5', unit: 'm'),
+            EpicTuningParam(key: 'dash_duration', value: '0.16', unit: 's'),
+            EpicTuningParam(key: 'dash_cooldown', value: '1.1', unit: 's'),
           ],
           feedback: const [
-            'Orange emissive thruster trail ribbon during DashActive (0.16s)',
-            'Compact radial cooldown ring around mech base in UMG HUD',
-            'Camera shake pulse (Scale 0.45) on wall or enemy dash collision',
+            'Orange emissive thruster trail during DashActive (0.16s)',
+            'Compact radial cooldown arc inside Control HUD overlay',
+            'Subtle camera punch on wall or enemy dash collision',
           ],
           levelStaging:
-              'L_Shellbreaker_Proto: 3000x3000 cm walled greybox floor + 2 solid cover pillars + PlayerStart at origin',
+              'res://scenes/shellbreaker_proto.tscn: 30x30 m walled greybox floor + 2 solid CSG cover pillars + SpawnPoint at origin',
           checks: [
             EpicPieCheck(
               id: 'sb_e01_c1',
-              text: 'Press WASD -> mech accelerates smoothly to 640 cm/s with zero wall snagging',
+              text: 'Hold WASD -> mech accelerates smoothly to 6.4 m/s with zero wall snagging',
             ),
             EpicPieCheck(
               id: 'sb_e01_c2',
-              text: 'Move cursor across floor -> upper turret tracks aim vector immediately without gimbal flip',
+              text: 'Move cursor across floor -> VisualRig tracks aim vector smoothly without flip',
             ),
             EpicPieCheck(
               id: 'sb_e01_c3',
-              text: 'Press Space -> dash travels ~550 cm cleanly along aim direction and obeys 1.1s cooldown',
+              text: 'Press Space -> dash travels ~5.5 m along aim direction and obeys 1.1s cooldown',
             ),
           ],
           baselineSummary: const [
-            '8-way movement at 640 cm/s',
+            '8-way movement at 6.4 m/s',
             'Cursor plane turret aim',
-            '550 cm invulnerable Claw Dash',
+            '5.5 m invulnerable Claw Dash',
           ],
         ),
         EpicSpec(
@@ -703,8 +744,8 @@ class UnrealSparkPresets {
           goal:
               'Fire 3-round high-velocity kinetic bolts toward cursor aim with punchy muzzle recoil and heat cooldown.',
           links: const [
-            'Attached to BP_PlayerMech turret muzzle socket',
-            'Applies KineticImpact interface event to E03 Crab targets',
+            'Spawns res://scenes/kinetic_bolt.tscn from player muzzle Marker3D',
+            'Calls take_damage(amount) on E03 crab targets in enemy group',
           ],
           outOfScope: const [
             'No alternate ammo pickups',
@@ -712,9 +753,9 @@ class UnrealSparkPresets {
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_FireBurst (Bool)',
+              action: 'fire_burst',
               trigger: 'Pressed / Held (LMB)',
-              rule: 'Spawns 3-bolt burst over 0.24s when Heat < 100 and not DashActive',
+              rule: 'Spawns 3-bolt burst over 0.24s when heat < 100 and not DashActive',
             ),
           ],
           states: const [
@@ -722,22 +763,22 @@ class UnrealSparkPresets {
             'Heat >= 100 -> OverheatLock (1.3s vent) -> Ready',
           ],
           interrupts: const [
-            'Triggering IA_ClawDash immediately aborts remaining burst bolts safely',
+            'Triggering claw_dash immediately aborts remaining burst bolts safely',
             'Passive heat decay pauses for 0.35s right after last shot fired',
           ],
           tuning: [
-            EpicTuningParam(key: 'BoltSpeed', value: '2400', unit: 'cm/s'),
-            EpicTuningParam(key: 'BurstDamage', value: '18', unit: 'hp'),
-            EpicTuningParam(key: 'OverheatTime', value: '1.3', unit: 's'),
-            EpicTuningParam(key: 'RecoilImpulse', value: '120', unit: 'cm/s'),
+            EpicTuningParam(key: 'bolt_speed', value: '24.0', unit: 'm/s'),
+            EpicTuningParam(key: 'burst_damage', value: '18', unit: 'hp'),
+            EpicTuningParam(key: 'overheat_time', value: '1.3', unit: 's'),
+            EpicTuningParam(key: 'recoil_impulse', value: '1.2', unit: 'm/s'),
           ],
           feedback: const [
-            'Bright yellow emissive projectile capsules with hit-spark Niagara/Debug burst on wall hit',
-            'Turret barrel kicks back 18 cm per shot and interpolates cleanly forward',
-            'Thin curved heat bar next to center cursor turns amber above 75%',
+            'Bright yellow emissive projectile capsules with hit-spark burst on wall hit',
+            'Barrel kicks back 0.18 m per shot and tweens smoothly forward',
+            'Thin curved heat bar turns amber above 75%',
           ],
           levelStaging:
-              'L_Shellbreaker_Proto: firing lane with static calibration cubes at 600 cm and 1400 cm distance',
+              'res://scenes/shellbreaker_proto.tscn: firing lane with static calibration cubes at 6 m and 14 m',
           checks: [
             EpicPieCheck(
               id: 'sb_e02_c1',
@@ -765,48 +806,48 @@ class UnrealSparkPresets {
           goal:
               'Patrol and telegraph melee pincer lunges while requiring a Claw Dash hit to shatter front shell armor.',
           links: const [
-            'Targets BP_PlayerMech via AI Perception / direct distance check',
-            'Responds to BPI_Damageable & I_DashImpact from E01/E02',
+            'Scene res://scenes/crab_grunt.tscn + res://scripts/crab_grunt.gd',
+            'Responds to take_damage() & apply_dash_shatter() from E01/E02',
           ],
           outOfScope: const [
-            'No wave spawner director yet (placed directly in level)',
+            'No wave spawner director yet (placed directly in scene)',
             'No ranged enemy variants',
           ],
           controls: [
             EpicControlBinding(
-              action: 'AI MoveTo / Lunge',
-              trigger: 'Loop (420 cm range)',
-              rule: 'Faces player -> telegraphs 0.45s crimson flash -> lunges 420 cm',
+              action: 'ai_lunge',
+              trigger: 'AI Loop (4.2 m range)',
+              rule: 'Faces player -> telegraphs 0.45s crimson flash -> lunges 4.2 m',
             ),
           ],
           states: const [
             'ArmoredAdvance -> PincerWindup (0.45s) -> PincerLunge -> ExposedStagger (2.0s) -> Dead',
           ],
           interrupts: const [
-            'E01 Claw Dash hit shatters ShellShield immediately and pushes enemy into ExposedStagger (2.0s)',
-            'Bolt impacts on intact shell deal 25% chip damage and emit metallic deflect sparks',
+            'E01 Claw Dash hit shatters shell immediately and enters ExposedStagger (2.0s)',
+            'Bolt impacts on intact shell deal 25% chip damage and emit metallic sparks',
           ],
           tuning: [
-            EpicTuningParam(key: 'ShellHP', value: '60', unit: 'hp'),
-            EpicTuningParam(key: 'CoreHP', value: '90', unit: 'hp'),
-            EpicTuningParam(key: 'TelegraphDuration', value: '0.45', unit: 's'),
-            EpicTuningParam(key: 'StaggerDuration', value: '2.0', unit: 's'),
+            EpicTuningParam(key: 'shell_hp', value: '60', unit: 'hp'),
+            EpicTuningParam(key: 'core_hp', value: '90', unit: 'hp'),
+            EpicTuningParam(key: 'telegraph_duration', value: '0.45', unit: 's'),
+            EpicTuningParam(key: 'stagger_duration', value: '2.0', unit: 's'),
           ],
           feedback: const [
-            'Front dome shifts from slate-grey armored tint to glowing exposed magenta on Armor Break',
-            'Compact floating world-space HP + Armor bar above enemy mesh',
-            'Enemy flashes solid white for 0.08s on exposed core bolt impacts',
+            'Front dome shifts from slate-grey armor to glowing magenta on Armor Break',
+            'SubViewport floating HP + Armor bar above enemy mesh',
+            'Enemy flashes solid white for 0.08s on exposed core hits',
           ],
           levelStaging:
-              'L_Shellbreaker_Proto: 2 static Armored Crab Grunt actors placed 1200 cm north of PlayerStart',
+              'res://scenes/shellbreaker_proto.tscn: 2 static CrabGrunt instances placed 12 m north of SpawnPoint',
           checks: [
             EpicPieCheck(
               id: 'sb_e03_c1',
-              text: 'Shoot frontal shell -> reduced chip damage with deflect flash until Claw Dash hits',
+              text: 'Shoot frontal shell -> reduced chip damage with flash until Claw Dash hits',
             ),
             EpicPieCheck(
               id: 'sb_e03_c2',
-              text: 'Dash through crab -> front armor shatters into 2.0s ExposedStagger and bursts kill cleanly',
+              text: 'Dash through crab -> armor shatters into 2.0s stagger and bursts kill cleanly',
             ),
           ],
           baselineSummary: const [
@@ -821,7 +862,7 @@ class UnrealSparkPresets {
           id: 'juice',
           label: 'Combat Juice Pass',
           description:
-              'Tighten dash hit-stop, add burst finisher overdrive, and bring in 3-wave arena escalation.',
+              'Tighten dash hitstop, add burst finisher overdrive, and bring in 3-wave arena escalation.',
           upgradeIds: ['up_e01_hitstop', 'up_e03_knockback'],
           newEpicIds: ['e04_waves'],
         ),
@@ -838,7 +879,7 @@ class UnrealSparkPresets {
         'e01': [
           EpicUpgradeOption(
             id: 'up_e01_hitstop',
-            text: '+55ms Hit-Stop freeze & radial shockwave ring on Dash impact',
+            text: '+55ms hitstop freeze & radial shockwave ring on Dash impact',
             chosen: true,
           ),
           EpicUpgradeOption(
@@ -849,13 +890,13 @@ class UnrealSparkPresets {
         'e02': [
           EpicUpgradeOption(
             id: 'up_e02_crit',
-            text: '+2x Weak-Point crit bolts vs staggered crabs (instant heat vent on kill)',
+            text: '+2x weak-point crit bolts vs staggered crabs (instant heat vent)',
           ),
         ],
         'e03': [
           EpicUpgradeOption(
             id: 'up_e03_knockback',
-            text: '+Wall-Slam knockback impulse & extra 25 hp stagger wall damage',
+            text: '+Wall-slam knockback impulse & extra 25 hp wall smash damage',
             chosen: true,
           ),
           EpicUpgradeOption(
@@ -877,8 +918,8 @@ class UnrealSparkPresets {
           goal:
               'Spawn escalating 3-wave crab squads from perimeter gates with live wave banner and quick restart flow.',
           links: const [
-            'Spawns E03 BP_CrabGrunt actors at 4 perimeter SpawnGates',
-            'Updates UMG_ArenaHUD Wave index + Remaining count',
+            'Instantiates res://scenes/crab_grunt.tscn (E03) at 4 perimeter Marker3D SpawnGates',
+            'Updates Control HUD wave label and remaining enemy counter',
           ],
           outOfScope: const [
             'No endless wave scaling past Wave 3',
@@ -886,8 +927,8 @@ class UnrealSparkPresets {
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_QuickRestart (Bool)',
-              trigger: 'Pressed (R on Clear)',
+              action: 'quick_restart',
+              trigger: 'Just Pressed (R on Clear)',
               rule: 'Resets player HP/pos and restarts Wave 1 cleanly in < 0.2s',
             ),
           ],
@@ -895,27 +936,27 @@ class UnrealSparkPresets {
             'WaveIntro (1.2s) -> WaveCombat -> WaveClear (2.0s breather) -> ArenaVictory',
           ],
           interrupts: const [
-            'Player HP <= 0 transitions directly to ArenaDefeat overlay and stops active spawners',
+            'Player HP <= 0 transitions directly to ArenaDefeat overlay and stops active spawn timers',
           ],
           tuning: [
-            EpicTuningParam(key: 'Wave1Count', value: '3', unit: 'count'),
-            EpicTuningParam(key: 'Wave3Count', value: '7', unit: 'count'),
-            EpicTuningParam(key: 'BreatherSeconds', value: '2.0', unit: 's'),
+            EpicTuningParam(key: 'wave_1_count', value: '3', unit: 'count'),
+            EpicTuningParam(key: 'wave_3_count', value: '7', unit: 'count'),
+            EpicTuningParam(key: 'breather_seconds', value: '2.0', unit: 's'),
           ],
           feedback: const [
             'Perimeter floor pad pulses cyan 1.0s before spawning each grunt',
-            'Top-center UMG Wave pill animates scale punch on wave transitions',
+            'Top-center HUD Wave pill animates scale punch on wave transitions',
           ],
           levelStaging:
-              'L_Shellbreaker_Proto: 4 SpawnGate target points placed along North/East/South/West walls',
+              'res://scenes/shellbreaker_proto.tscn: 4 SpawnGate Marker3D nodes placed along N/E/S/W walls',
           checks: [
             EpicPieCheck(
               id: 'sb_e04_c1',
-              text: 'Kill all Wave 1 crabs -> 2.0s breather plays and Wave 2 spawns cleanly from lit gates',
+              text: 'Kill all Wave 1 crabs -> 2.0s breather plays and Wave 2 spawns from lit gates',
             ),
             EpicPieCheck(
               id: 'sb_e04_c2',
-              text: 'Press R after ArenaVictory -> resets arena immediately with 0 stale actors',
+              text: 'Press R after ArenaVictory -> resets arena immediately with 0 stale nodes',
             ),
           ],
         ),
@@ -930,15 +971,15 @@ class UnrealSparkPresets {
           goal:
               'Raise timed front energy buckler that staggers incoming crab lunges on tight guard timing.',
           links: const [
-            'Coordinates with E01 IA_Secondary timing and E03 PincerLunge hit check',
+            'Coordinates with E01 player dash state and E03 PincerLunge overlap check',
           ],
           outOfScope: const [
             'No persistent hold block drain',
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_ShellGuard (Bool)',
-              trigger: 'Started (Shift / Q)',
+              action: 'shell_guard',
+              trigger: 'Just Pressed (Shift / Q)',
               rule: 'Opens 0.25s parry window; successful reflect staggers attacker 2.2s',
             ),
           ],
@@ -949,14 +990,14 @@ class UnrealSparkPresets {
             'Successful parry zeroes heat bar and allows immediate Dash cancel',
           ],
           tuning: [
-            EpicTuningParam(key: 'ParryWindow', value: '0.25', unit: 's'),
-            EpicTuningParam(key: 'ParryStagger', value: '2.2', unit: 's'),
+            EpicTuningParam(key: 'parry_window', value: '0.25', unit: 's'),
+            EpicTuningParam(key: 'parry_stagger', value: '2.2', unit: 's'),
           ],
           feedback: const [
             'Cyan arc shield mesh flashes front 120 deg cone during GuardWindow',
           ],
           levelStaging:
-              'L_Shellbreaker_Proto: test directly against E03 Crab lunge telegraph',
+              'res://scenes/shellbreaker_proto.tscn: test directly against E03 Crab lunge telegraph',
           checks: [
             EpicPieCheck(
               id: 'sb_e05_c1',
@@ -972,9 +1013,9 @@ class UnrealSparkPresets {
     return ProjectConceptBlueprint(
       sparkPrompt: entries[1].sparkPrompt,
       gameTitle: 'RAILJACK DRIFT',
-      targetEngine: UnrealTargetEngine.ue5Mcp,
+      dimension: GodotProjectDimension.dim3d,
       pitch:
-          'High-speed canyon hover-skiff racer — carve long drift arcs through boost gates to beat par time',
+          'High-speed 3D canyon hover-skiff racer — carve long drift arcs through boost gates to beat par time',
       coreLoop: const [
         'Carve Canyon Line',
         'Hold Apex Drift',
@@ -983,14 +1024,15 @@ class UnrealSparkPresets {
       ],
       cameraChoiceId: 'tps',
       cameraContract:
-          'SpringArm 440 cm @ -12 deg pitch · Dynamic FOV 74->92 deg by speed · CameraLag 12.0',
+          'SpringArm3D 4.4 m @ -12 deg pitch · Dynamic FOV 74->92 deg by speed · CameraLag 12.0',
       characterScale:
-          'BP_HoverSkiff Hull 340x160 cm · HoverHeight 85 cm · TopSpeed 3800 cm/s',
+          'CharacterBody3D Hull 3.4x1.6 m · HoverHeight 0.85 m · top_speed 38.0 m/s',
       inputContract:
-          'Enhanced Input (IMC_Race + IA_Throttle, IA_Steer, IA_Drift, IA_Boost)',
+          'InputMap (throttle, steer_left, steer_right, drift_hold, boost_hold)',
       assetPolicy:
-          'Spline Greybox Canyon Floor + Emissive Gate Frames (Engine/BasicShapes); DA_SkiffPhysics Blueprint DataAsset',
+          'CSG / MeshInstance3D Canyon Track + Emissive Gate Frames; res://data/skiff_physics.tres',
       feelChoiceId: 'physics',
+      cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera3dOptions,
       pillars: const [
         'Flow Over Friction: Wall scrapes glance forward cleanly instead of dead-stopping momentum',
         'Speed Tells Everything: Camera FOV, engine pitch, and wing-tip trails rise smoothly into boost',
@@ -1012,7 +1054,7 @@ class UnrealSparkPresets {
         'No multiplayer ghost leaderboards',
       ],
       releaseDoneWhen:
-          'Complete 1 clean canyon lap in L_Canyon_Proto crossing Start/Finish gate with final timer HUD and 0 Output Log errors',
+          'Run F6 on res://scenes/canyon_proto.tscn -> complete 1 clean canyon lap with final timer HUD and 0 Debugger errors',
       initialEpics: [
         EpicSpec(
           id: 'rj_e01',
@@ -1025,27 +1067,27 @@ class UnrealSparkPresets {
           goal:
               'Maintain steady ground-hugging hover height over canyon slopes while carving responsive high-angle drifts.',
           links: const [
-            'Reads DA_SkiffPhysics DataAsset',
-            'Exposes SpeedRatio & IsDrifting to E02 Boost & E03 Gate HUD',
+            'Scene res://scenes/hover_skiff.tscn + res://scripts/hover_skiff.gd',
+            'Exposes speed_ratio & is_drifting signals to E02 Boost & E03 Gate HUD',
           ],
           outOfScope: const [
             'No upside-down loop-the-loop gravity shifts',
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_Throttle (Axis1D)',
-              trigger: 'Held (W / Trigger)',
-              rule: 'Accelerates forward velocity smoothly up to BaseTopSpeed 3100 cm/s',
+              action: 'throttle',
+              trigger: 'Held (W / Up)',
+              rule: 'Accelerates forward velocity smoothly up to base_top_speed 31.0 m/s',
             ),
             EpicControlBinding(
-              action: 'IA_Steer (Axis1D)',
-              trigger: 'Held (A/D)',
-              rule: 'Banks hull roll +/-26 deg smoothly while turning yaw rate',
+              action: 'steer_left / steer_right',
+              trigger: 'Held (A / D)',
+              rule: 'Banks VisualRig roll +/-26 deg smoothly while turning yaw rate',
             ),
             EpicControlBinding(
-              action: 'IA_Drift (Bool)',
-              trigger: 'Held (Space / LShift)',
-              rule: 'Widens lateral slip angle, locks forward carry, and builds DriftCharge/s',
+              action: 'drift_hold',
+              trigger: 'Held (Space / Shift)',
+              rule: 'Widens lateral slip angle, locks forward carry, and builds drift charge/s',
             ),
           ],
           states: const [
@@ -1055,21 +1097,21 @@ class UnrealSparkPresets {
             'Wall glance clamps normal impact speed to 78% and slides hull along tangent safely',
           ],
           tuning: [
-            EpicTuningParam(key: 'HoverHeight', value: '85', unit: 'cm'),
-            EpicTuningParam(key: 'BaseTopSpeed', value: '3100', unit: 'cm/s'),
-            EpicTuningParam(key: 'MaxBankAngle', value: '26', unit: 'deg'),
-            EpicTuningParam(key: 'DriftChargeRate', value: '35', unit: '%/s'),
+            EpicTuningParam(key: 'hover_height', value: '0.85', unit: 'm'),
+            EpicTuningParam(key: 'base_top_speed', value: '31.0', unit: 'm/s'),
+            EpicTuningParam(key: 'max_bank_angle', value: '26', unit: 'deg'),
+            EpicTuningParam(key: 'drift_charge_rate', value: '35', unit: '%/s'),
           ],
           feedback: const [
             'Twin cyan thrusters lengthen with throttle and flare orange during ApexDrift',
-            'Dynamic camera FOV expands smoothly from 74 to 92 deg with forward velocity',
+            'Dynamic Camera3D FOV expands smoothly from 74 to 92 deg with forward velocity',
           ],
           levelStaging:
-              'L_Canyon_Proto: wide banked spline greybox track (~40s loop) with banked hairpin turn',
+              'res://scenes/canyon_proto.tscn: wide banked greybox canyon track (~40s loop) with hairpin turn',
           checks: [
             EpicPieCheck(
               id: 'rj_e01_c1',
-              text: 'Drive over sloped ramp -> hull holds steady ~85 cm clearance without nose-diving into floor',
+              text: 'Drive over sloped ramp -> hull holds ~0.85 m clearance without floor clipping',
             ),
             EpicPieCheck(
               id: 'rj_e01_c2',
@@ -1088,39 +1130,39 @@ class UnrealSparkPresets {
           goal:
               'Spend accumulated boost meter for an immediate velocity surge without overheating past limit.',
           links: const [
-            'Consumes DriftCharge from E01 and BoostPad pulses from E03',
+            'Consumes drift charge from E01 and boost gate pulses from E03',
           ],
           outOfScope: const [
             'No combat missiles or shield energy sharing',
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_Boost (Bool)',
+              action: 'boost_hold',
               trigger: 'Held (RMB / E)',
-              rule: 'Pushes target speed to 4200 cm/s while draining BoostMeter',
+              rule: 'Pushes target speed to 42.0 m/s while draining boost meter',
             ),
           ],
           states: const [
-            'Normal -> Boosting (Max 4200 cm/s) -> OverheatLockout (1.5s) -> Normal',
+            'Normal -> Boosting (Max 42.0 m/s) -> OverheatLockout (1.5s) -> Normal',
           ],
           interrupts: const [
-            'Touching E03 Boost Gate grants instant +0.8s surge without raising Heat',
+            'Touching E03 Boost Gate grants instant +0.8s surge without raising heat',
           ],
           tuning: [
-            EpicTuningParam(key: 'BoostTopSpeed', value: '4200', unit: 'cm/s'),
-            EpicTuningParam(key: 'BoostDrainRate', value: '28', unit: '%/s'),
-            EpicTuningParam(key: 'OverheatCooldown', value: '1.5', unit: 's'),
+            EpicTuningParam(key: 'boost_top_speed', value: '42.0', unit: 'm/s'),
+            EpicTuningParam(key: 'boost_drain_rate', value: '28', unit: '%/s'),
+            EpicTuningParam(key: 'overheat_cooldown', value: '1.5', unit: 's'),
           ],
           feedback: const [
-            'Edge speed-lines post/UMG vignette + bright white exhaust core while Boosting',
-            'Centered horizontal thruster gauge shows speed km/h & Boost %',
+            'Edge speed-lines Control overlay + bright white exhaust core while Boosting',
+            'Centered horizontal thruster progress bar shows m/s & Boost %',
           ],
           levelStaging:
-              'L_Canyon_Proto: straightaway run + speed readout debug overlay',
+              'res://scenes/canyon_proto.tscn: straightaway run + speed readout HUD overlay',
           checks: [
             EpicPieCheck(
               id: 'rj_e02_c1',
-              text: 'Hold E with Boost available -> velocity jumps smoothly to 4200 cm/s with widened FOV',
+              text: 'Hold E with Boost available -> velocity jumps smoothly to 42.0 m/s with widened FOV',
             ),
           ],
         ),
@@ -1133,42 +1175,41 @@ class UnrealSparkPresets {
           lifecycle: EpicLifecycle.queued,
           coreLoopBeat: 'Beats 3–4 · Checkpoint Gates & Lap Closure',
           goal:
-              'Track ordered spline gates, reward clean gate pass with speed pulse, and display final lap time.',
+              'Track ordered Area3D track gates, reward clean gate pass with speed pulse, and display final lap time.',
           links: const [
-            'Reads overlap events from BP_HoverSkiff (E01)',
-            'Triggers free surge impulse on E02 thruster component',
+            'Connects Area3D body_entered from HoverSkiff (E01) to E02 surge pulse',
           ],
           outOfScope: const [
             'No persistent ghost replay serialization',
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_ResetTrack (Bool)',
-              trigger: 'Pressed (R)',
-              rule: 'Snaps skiff cleanly to StartLine and resets LapTimer to 0.00s',
+              action: 'reset_track',
+              trigger: 'Just Pressed (R)',
+              rule: 'Snaps skiff cleanly to StartLine Marker3D and resets lap_timer to 0.00s',
             ),
           ],
           states: const [
             'Countdown (0.8s) -> Racing (Gate 1..6) -> LapFinished (Display Final Time)',
           ],
           interrupts: const [
-            'Skipping an ordered gate shows floating OFF-COURSE arrow toward missed gate',
+            'Skipping an ordered gate shows floating OFF-COURSE HUD arrow toward missed gate',
           ],
           tuning: [
-            EpicTuningParam(key: 'GateHalfWidth', value: '480', unit: 'cm'),
-            EpicTuningParam(key: 'GateBoostDuration', value: '0.8', unit: 's'),
-            EpicTuningParam(key: 'ParTimeSeconds', value: '42.0', unit: 's'),
+            EpicTuningParam(key: 'gate_half_width', value: '4.8', unit: 'm'),
+            EpicTuningParam(key: 'gate_boost_duration', value: '0.8', unit: 's'),
+            EpicTuningParam(key: 'par_time_seconds', value: '42.0', unit: 's'),
           ],
           feedback: const [
             'Active next gate glows bright emerald; passed gates turn muted slate',
-            'Top-right UMG timer displays mm:ss.ms + green/red delta vs ParTime',
+            'Top-right Control timer displays mm:ss.ms + green/red delta vs par time',
           ],
           levelStaging:
-              'L_Canyon_Proto: 6 sequential BP_BoostGate archways ending at Start/Finish gantry',
+              'res://scenes/canyon_proto.tscn: 6 sequential boost gate Area3D arches ending at Start/Finish',
           checks: [
             EpicPieCheck(
               id: 'rj_e03_c1',
-              text: 'Pass Gate 1..6 sequentially -> green next-gate highlights advance and Gate 6 posts Lap Time',
+              text: 'Pass Gate 1..6 sequentially -> next-gate highlight advances and Gate 6 posts Lap Time',
             ),
           ],
         ),
@@ -1180,36 +1221,37 @@ class UnrealSparkPresets {
     return ProjectConceptBlueprint(
       sparkPrompt: entries[2].sparkPrompt,
       gameTitle: 'EMBER KEEP',
-      targetEngine: UnrealTargetEngine.ue5Mcp,
+      dimension: GodotProjectDimension.dim2d,
       pitch:
-          'Tactical isometric torch defense — carve shadow stalkers away while guarding shrinking brazier light zones',
+          'Tactical 2D top-down torch defense — cleave shadow stalkers while guarding shrinking brazier light rings',
       coreLoop: const [
         'Swing Torch Axe',
         'Plant Brazier Light',
         'Hold Safe Radius',
         'Collect Ash Shards',
       ],
-      cameraChoiceId: 'isometric',
+      cameraChoiceId: 'topdown2d',
       cameraContract:
-          'SpringArm 1350 cm @ -50 deg pitch, 52 deg FOV, CameraLag 8.0 (Isometric cursor aim)',
+          'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim',
       characterScale:
-          'BP_Keeper CapsuleRadius 38 cm · HalfHeight 88 cm · WalkSpeed 540 cm/s',
+          'CharacterBody2D CollisionShape 32x40 px · walk_speed 260 px/s',
       inputContract:
-          'Enhanced Input (IMC_Keeper + IA_Move, IA_AxeSwing, IA_PlantBrazier)',
+          'InputMap (move_left/right/up/down, axe_swing, plant_brazier)',
       assetPolicy:
-          'Greybox Keep Courtyard + Warm PointLights (No baked lightmaps required); DA_KeeperTuning Blueprint DataAsset',
+          'Polygon2D / ColorRect Keep Courtyard + PointLight2D (CanvasModulate dusk tint); @export vars',
       feelChoiceId: 'heavy',
+      cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera2dOptions,
       pillars: const [
-        'Light Defines Territory: Every dynamic light cone visibly alters enemy aggression and player safety',
+        'Light Defines Territory: Every 2D light circle visibly alters enemy aggression and player safety',
         'Deliberate Heavy Swings: Axe cleaves carry distinct windup weight rather than rapid spam',
       ],
       tradeOffs: const [
         TradeOffRule(
-          prefer: 'Dynamic moveable PointLights for instant PIE clarity',
-          avoid: 'Long baked lighting builds',
+          prefer: 'Dynamic 2D radial light circles for instant clarity',
+          avoid: 'Static darkness masks',
         ),
         TradeOffRule(
-          prefer: 'Compact 2400x2400 cm courtyard',
+          prefer: 'Compact 1280x1280 px courtyard',
           avoid: 'Procedural forest chunks',
         ),
       ],
@@ -1219,7 +1261,7 @@ class UnrealSparkPresets {
         'No crafting bench menus',
       ],
       releaseDoneWhen:
-          'Plant 1 brazier and fend off 3 shadow stalkers across 30s without brazier extinguishing or console errors',
+          'Run F6 on res://scenes/keep_proto.tscn -> plant brazier and fend off 3 shadow stalkers with 0 Debugger errors',
       initialEpics: [
         EpicSpec(
           id: 'ek_e01',
@@ -1230,23 +1272,24 @@ class UnrealSparkPresets {
           lifecycle: EpicLifecycle.active,
           coreLoopBeat: 'Beat 1 · Swing Torch Axe',
           goal:
-              'Move across the courtyard and unleash a directional 140 deg cleave arc knocking back shadow stalkers.',
+              'Move across the 2D courtyard and unleash a directional 140 deg cleave arc knocking back shadow stalkers.',
           links: const [
-            'Deals HitImpact & LightPulse to E03 Shadow Stalkers',
+            'Scene res://scenes/keeper_player.tscn + res://scripts/keeper_player.gd',
+            'Applies cleave knockback & damage to E03 Shadow Stalkers in enemy group',
           ],
           outOfScope: const [
             'No multi-weapon swapping',
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_Move (Vector2D)',
+              action: 'move_left / move_right / move_up / move_down',
               trigger: 'Held WASD',
-              rule: 'Moves keeper at 540 cm/s; slowed 50% during AxeWindup',
+              rule: 'Moves keeper at 260 px/s; slowed 50% during AxeWindup',
             ),
             EpicControlBinding(
-              action: 'IA_AxeSwing (Bool)',
-              trigger: 'Started (LMB)',
-              rule: '0.18s windup -> 140 deg sweep hitbox out to 240 cm reach',
+              action: 'axe_swing',
+              trigger: 'Just Pressed (LMB)',
+              rule: '0.18s windup -> 140 deg Area2D cleave hitbox out to 96 px reach',
             ),
           ],
           states: const [
@@ -1256,21 +1299,21 @@ class UnrealSparkPresets {
             'Planting a Brazier (E02) takes priority over AxeRecover',
           ],
           tuning: [
-            EpicTuningParam(key: 'WalkSpeed', value: '540', unit: 'cm/s'),
-            EpicTuningParam(key: 'CleaveRadius', value: '240', unit: 'cm'),
-            EpicTuningParam(key: 'CleaveDamage', value: '40', unit: 'hp'),
-            EpicTuningParam(key: 'KnockbackImpulse', value: '480', unit: 'cm/s'),
+            EpicTuningParam(key: 'walk_speed', value: '260', unit: 'px/s'),
+            EpicTuningParam(key: 'cleave_radius', value: '96', unit: 'px'),
+            EpicTuningParam(key: 'cleave_damage', value: '40', unit: 'hp'),
+            EpicTuningParam(key: 'knockback_impulse', value: '320', unit: 'px/s'),
           ],
           feedback: const [
-            'Translucent amber 140 deg floor arc flashes briefly on AxeStrike',
-            'Carried lantern flickers brighter during swing impact',
+            'Translucent amber 140 deg floor arc Polygon2D flashes on AxeStrike',
+            'Carried PointLight2D flickers brighter during swing impact',
           ],
           levelStaging:
-              'L_Keep_Proto: 2400x2400 cm stone courtyard with central main bonfire',
+              'res://scenes/keep_proto.tscn: 1280x1280 px 2D stone courtyard + central bonfire + TileMapLayer walls',
           checks: [
             EpicPieCheck(
               id: 'ek_e01_c1',
-              text: 'Press LMB facing cursor -> axe cleave hits 240 cm cone and shoves dummy target back',
+              text: 'Press LMB facing cursor -> axe cleave hits 96 px cone and shoves dummy target back',
             ),
           ],
         ),
@@ -1283,40 +1326,40 @@ class UnrealSparkPresets {
           lifecycle: EpicLifecycle.queued,
           coreLoopBeat: 'Beats 2–3 · Plant Brazier & Hold Safe Radius',
           goal:
-              'Deploy temporary field braziers that project a shrinking safe light ring forcing enemies to recoil.',
+              'Deploy temporary 2D braziers that project a shrinking safe light ring forcing enemies to recoil.',
           links: const [
-            'Broadcasts LightRadius query to E03 Shadow Stalkers',
+            'Instantiates res://scenes/field_brazier.tscn and registers active light radius for E03',
           ],
           outOfScope: const [
             'No defensive stone wall grid snapping',
           ],
           controls: [
             EpicControlBinding(
-              action: 'IA_PlantBrazier (Bool)',
-              trigger: 'Started (RMB / E)',
-              rule: 'Spawns BP_FieldBrazier 140 cm ahead if AmberFuel >= 1',
+              action: 'plant_brazier',
+              trigger: 'Just Pressed (RMB / E)',
+              rule: 'Spawns field_brazier.tscn 56 px ahead if amber_fuel >= 1',
             ),
           ],
           states: const [
-            'Ignited (Full 480 cm radius) -> Flickering (< 160 cm) -> Extinguished',
+            'Ignited (Full 220 px radius) -> Flickering (< 80 px) -> Extinguished',
           ],
           interrupts: const [
-            'Hitting a planted brazier with AxeStrike stokes +4s lifetime cleanly',
+            'Hitting a planted brazier with AxeStrike stokes +4s burn lifetime cleanly',
           ],
           tuning: [
-            EpicTuningParam(key: 'StartLightRadius', value: '480', unit: 'cm'),
-            EpicTuningParam(key: 'BurnDuration', value: '18.0', unit: 's'),
-            EpicTuningParam(key: 'MaxActiveBraziers', value: '3', unit: 'count'),
+            EpicTuningParam(key: 'start_light_radius', value: '220', unit: 'px'),
+            EpicTuningParam(key: 'burn_duration', value: '18.0', unit: 's'),
+            EpicTuningParam(key: 'max_active_braziers', value: '3', unit: 'count'),
           ],
           feedback: const [
-            'Crisp floor decal ring matches current safe PointLight attenuation radius',
+            'Crisp Line2D floor ring matches current PointLight2D safe attenuation radius',
           ],
           levelStaging:
-              'L_Keep_Proto: verify dark perimeter edge around central stone circle',
+              'res://scenes/keep_proto.tscn: dark perimeter corners contrast central lit courtyard circle',
           checks: [
             EpicPieCheck(
               id: 'ek_e02_c1',
-              text: 'Press E -> brazier illuminates 480 cm circle and shrinks smoothly over 18s',
+              text: 'Press E -> brazier illuminates 220 px circle and shrinks smoothly over 18s',
             ),
           ],
         ),
@@ -1329,17 +1372,17 @@ class UnrealSparkPresets {
           lifecycle: EpicLifecycle.queued,
           coreLoopBeat: 'Beats 3–4 · Shadow Recoil & Ash Shards',
           goal:
-              'Stalk the keeper from perimeter darkness and recoil dramatically whenever bright brazier light expands over them.',
+              'Stalk the keeper from perimeter darkness and recoil whenever bright brazier light expands over them.',
           links: const [
-            'Queries E02 active LightRadius spheres + E01 AxeStrike events',
+            'Scene res://scenes/shadow_stalker.tscn queries E02 active light circles & E01 cleave hits',
           ],
           outOfScope: const [
             'No ranged shadow projectile casters',
           ],
           controls: [
             EpicControlBinding(
-              action: 'AI Stalk / Flee',
-              trigger: 'Tick AI',
+              action: 'ai_stalk_flee',
+              trigger: 'Physics Tick AI',
               rule: 'Circles outside bright core -> dashes in when light dips -> flees on ignition',
             ),
           ],
@@ -1347,18 +1390,18 @@ class UnrealSparkPresets {
             'ShadowProwl -> BiteLunge -> LightRecoil (1.2s) -> Dead (Drop 1 EmberFuel)',
           ],
           interrupts: const [
-            'Fresh Brazier ignition inside 480 cm forces instant LightRecoil and cancels BiteLunge',
+            'Fresh Brazier ignition inside 220 px forces instant LightRecoil and cancels BiteLunge',
           ],
           tuning: [
-            EpicTuningParam(key: 'StalkerHP', value: '80', unit: 'hp'),
-            EpicTuningParam(key: 'ProwlSpeed', value: '430', unit: 'cm/s'),
-            EpicTuningParam(key: 'RecoilSpeed', value: '680', unit: 'cm/s'),
+            EpicTuningParam(key: 'stalker_hp', value: '80', unit: 'hp'),
+            EpicTuningParam(key: 'prowl_speed', value: '190', unit: 'px/s'),
+            EpicTuningParam(key: 'recoil_speed', value: '310', unit: 'px/s'),
           ],
           feedback: const [
             'Glowing violet eye slits dim whenever forced into LightRecoil',
           ],
           levelStaging:
-              'L_Keep_Proto: 3 stalker spawns stationed around dark courtyard corners',
+              'res://scenes/keep_proto.tscn: 3 stalker spawns stationed around dark courtyard corners',
           checks: [
             EpicPieCheck(
               id: 'ek_e03_c1',

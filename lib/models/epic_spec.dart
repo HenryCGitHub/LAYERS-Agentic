@@ -2,69 +2,76 @@ import 'dart:convert';
 import '../constants/tiers.dart';
 import 'tier_document.dart';
 
-/// Unreal Engine generation target for `ROOT_MCP_CONTEXT` and `§02` / `§04` table headings.
-enum UnrealTargetEngine {
-  ue5Mcp,
-  ue6Verse;
+/// Godot 4 spatial target dimension for `ROOT_GODOT_CONTEXT`, `GodotSpecGuard`,
+/// and `§02` / `§04` Studio contracts (`3D`: `1 unit = 1 m`, `2D`: pixel space).
+enum GodotProjectDimension {
+  dim3d,
+  dim2d;
 
   String get id => name;
 
   String get shortLabel => switch (this) {
-        UnrealTargetEngine.ue5Mcp => 'UE 5.9 · Blueprint Only',
-        UnrealTargetEngine.ue6Verse => 'UE6 · Verse + Scene',
+        GodotProjectDimension.dim3d => 'Godot 4 · 3D',
+        GodotProjectDimension.dim2d => 'Godot 4 · 2D',
+      };
+
+  String get pillLabel => switch (this) {
+        GodotProjectDimension.dim3d => '3D (m, m/s)',
+        GodotProjectDimension.dim2d => '2D (px, px/s)',
       };
 
   String get fullLabel => switch (this) {
-        UnrealTargetEngine.ue5Mcp =>
-          'UE 5.9 Official MCP (100% Blueprint-Only · Zero C++)',
-        UnrealTargetEngine.ue6Verse =>
-          'UE6 (Verse + New Scene Editor / Scene Graph)',
+        GodotProjectDimension.dim3d =>
+          'Godot 4.x 3D (1 unit = 1 m · CharacterBody3D + Node3D)',
+        GodotProjectDimension.dim2d =>
+          'Godot 4.x 2D (Pixel Space · CharacterBody2D + Node2D)',
       };
 
   String get architectureContract => switch (this) {
-        UnrealTargetEngine.ue5Mcp =>
-          '100% Blueprint-Only (.uasset) — Blueprint Actors/Components (BP_*), Interfaces (BPI_*), & Blueprint DataAssets/Structs (Instance Editable tuning)',
-        UnrealTargetEngine.ue6Verse =>
-          'Verse Components + Scene Graph Entities (@editable exposed fields)',
+        GodotProjectDimension.dim3d =>
+          'Godot 4 3D (.tscn + GDScript .gd) — CharacterBody3D / Node3D + @export Inspector tuning (1 unit = 1 m)',
+        GodotProjectDimension.dim2d =>
+          'Godot 4 2D (.tscn + GDScript .gd) — CharacterBody2D / Node2D + @export Inspector tuning (px, px/s)',
       };
 
   String get codePolicyContract => switch (this) {
-        UnrealTargetEngine.ue5Mcp =>
-          'STRICT BLUEPRINT-ONLY — NEVER create or edit C++ files (.h/.cpp), Source/*.Build.cs, or trigger Live Coding / UBT compiles; build all gameplay in Blueprints (.uasset).',
-        UnrealTargetEngine.ue6Verse =>
-          'UE6 VERSE + SCENE GRAPH — Author gameplay in .verse components and New Scene Editor entities (@editable tuning); zero C++ (.h/.cpp).',
+        GodotProjectDimension.dim3d =>
+          'PURE GODOT 4 GDSCRIPT (.gd + .tscn) — Use typed GDScript 2.0, @export snake_case tuning vars, CharacterBody3D/Area3D/SpringArm3D/Camera3D, and project.godot InputMap.',
+        GodotProjectDimension.dim2d =>
+          'PURE GODOT 4 GDSCRIPT (.gd + .tscn) — Use typed GDScript 2.0, @export snake_case tuning vars, CharacterBody2D/Area2D/Camera2D, and project.godot InputMap.',
       };
 
-  String get compileSaveClause => switch (this) {
-        UnrealTargetEngine.ue5Mcp =>
-          'compile/save modified Blueprint (.uasset) assets (strictly zero C++ .h/.cpp)',
-        UnrealTargetEngine.ue6Verse =>
-          'compile/save modified Verse & Scene Graph assets (zero C++ .h/.cpp)',
+  String get tuningColumnLabel => '@export GDScript Var';
+
+  String get inputContractLabel => 'InputMap Actions (project.godot)';
+
+  String get distanceUnit => switch (this) {
+        GodotProjectDimension.dim3d => 'm',
+        GodotProjectDimension.dim2d => 'px',
       };
 
-  String get buildRuleClause => switch (this) {
-        UnrealTargetEngine.ue5Mcp =>
-          'author 100% in Blueprints (.uasset) with zero C++ (.h/.cpp)',
-        UnrealTargetEngine.ue6Verse =>
-          'author strictly in Verse & Scene Graph entities (zero C++ .h/.cpp)',
+  String get speedUnit => switch (this) {
+        GodotProjectDimension.dim3d => 'm/s',
+        GodotProjectDimension.dim2d => 'px/s',
       };
 
-  String get tuningColumnLabel => switch (this) {
-        UnrealTargetEngine.ue5Mcp => 'DataAsset / Details Var',
-        UnrealTargetEngine.ue6Verse => '@editable Verse Field',
-      };
-
-  String get inputContractLabel => switch (this) {
-        UnrealTargetEngine.ue5Mcp => 'Enhanced Input (UInputAction + IMC_Core)',
-        UnrealTargetEngine.ue6Verse => 'Enhanced Input → Verse InputAction',
-      };
-
-  static UnrealTargetEngine fromString(String? raw) {
+  static GodotProjectDimension fromString(String? raw) {
     final lower = (raw ?? '').trim().toLowerCase();
-    if (lower == 'ue6verse' || lower == 'ue6' || lower.contains('verse')) {
-      return UnrealTargetEngine.ue6Verse;
+    if (lower == 'dim2d' || lower == '2d' || lower.contains('2d')) {
+      return GodotProjectDimension.dim2d;
     }
-    return UnrealTargetEngine.ue5Mcp;
+    return GodotProjectDimension.dim3d;
+  }
+
+  static GodotProjectDimension detectFromSpark(String sparkPrompt) {
+    final lower = sparkPrompt.trim().toLowerCase();
+    if (lower.isEmpty) return GodotProjectDimension.dim3d;
+    if (RegExp(
+      r'\b(?:2d|pixel[- ]?art|side[- ]?scroller|metroidvania|platformer\s*2d|top[- ]?down\s*2d|tilemap|spritesheet)\b',
+    ).hasMatch(lower)) {
+      return GodotProjectDimension.dim2d;
+    }
+    return GodotProjectDimension.dim3d;
   }
 }
 
@@ -118,8 +125,8 @@ class EpicControlBinding {
 
   factory EpicControlBinding.fromJson(Map<String, dynamic> json) {
     return EpicControlBinding(
-      action: (json['action'] ?? 'IA_Action').toString().trim(),
-      trigger: (json['trigger'] ?? 'Pressed (Tap)').toString().trim(),
+      action: (json['action'] ?? 'primary_action').toString().trim(),
+      trigger: (json['trigger'] ?? 'Just Pressed').toString().trim(),
       rule: (json['rule'] ?? '').toString().trim(),
     );
   }
@@ -358,8 +365,8 @@ List<String> _strList(dynamic raw) {
       .toList();
 }
 
-/// Canonical 6-Section Unreal MCP Epic Spec (`Project -> Release -> Epic`).
-/// Single-pass Epic contract: "What You Read Is What Unreal MCP Receives".
+/// Canonical 6-Section Godot 4 Epic Spec (`Project -> Release -> Epic`).
+/// Single-pass Epic contract: "What You Read Is What Godot 4 Builds".
 class EpicSpec {
   static String formatCode(int oneBasedIndex) =>
       'E${oneBasedIndex.toString().padLeft(2, '0')}';
@@ -387,13 +394,13 @@ class EpicSpec {
   List<String> states;
   List<String> interrupts;
 
-  // §04 Spatial & Exposed Tuning (1 UU = 1 cm)
+  // §04 Spatial & Exposed Tuning (@export GDScript Vars)
   List<EpicTuningParam> tuning;
 
-  // §05 Viewport, UMG & Audio Cues
+  // §05 Viewport, UI & Audio Cues
   List<String> feedback;
 
-  // §06 Test Level Staging & PIE Acceptance Gate
+  // §06 Test Scene Staging & Playtest Acceptance Gate
   String levelStaging;
   List<EpicPieCheck> checks;
   List<EpicPieFix> fixes;

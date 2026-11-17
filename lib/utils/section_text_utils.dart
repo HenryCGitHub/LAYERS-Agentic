@@ -76,13 +76,13 @@ class SectionTextUtils {
     caseSensitive: false,
   );
 
-  /// Godot 4 Native engine label across Stage 1 and Stage 2.
+  /// Godot 4 engine/dimension label across Stage 1 and Stage 2.
   static String detectEngineLabel(String? engineHint) {
     final lower = (engineHint ?? '').trim().toLowerCase();
-    if (lower.contains('ue6') || lower.contains('verse')) {
-      return 'UE6 · Verse + Scene';
+    if (lower.contains('2d')) {
+      return 'Godot 4 · 2D';
     }
-    return 'UE 5.9 · Blueprint Only';
+    return 'Godot 4 · 3D';
   }
 
   /// Formats a remaining minute estimate into a compact hour string (`0h`, `4h`, `1.5h`).

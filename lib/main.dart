@@ -9,8 +9,8 @@ import 'models/tier_document.dart';
 import 'providers/workbench_provider.dart';
 import 'screens/project_pitch_screen.dart';
 import 'screens/release_workbench_screen.dart';
-import 'screens/widgets/unreal_bridge_modals.dart';
-import 'utils/unreal_mcp_payload_builder.dart';
+import 'screens/widgets/godot_bridge_modals.dart';
+import 'utils/godot_context_builder.dart';
 import 'theme/app_theme.dart';
 import 'utils/markdown_exporter.dart';
 
@@ -512,18 +512,18 @@ class WorkbenchShell extends StatelessWidget {
                           builder: (ctx) {
                             final isNarrowTopBar =
                                 MediaQuery.sizeOf(ctx).width < 1040;
-                            final isUnrealSynced =
-                                workbench.isActiveProjectSyncedWithUnreal;
+                            final isGodotSynced =
+                                workbench.isActiveProjectSyncedWithGodot;
                             return Tooltip(
-                              message: isUnrealSynced
-                                  ? 'Unreal MCP LayersBridge (${workbench.formatUnrealSyncStatusLabel()})'
-                                  : 'Connect Unreal MCP & LayersBridge (.uplugin + Token)',
+                              message: isGodotSynced
+                                  ? 'Godot 4 Plugin (${workbench.formatGodotSyncStatusLabel()})'
+                                  : 'Connect Godot 4 Editor Plugin (addons/layers + Token)',
                               child: InkWell(
                                 key: const ValueKey(
-                                  'top_bar_connect_unreal_btn',
+                                  'top_bar_connect_godot_btn',
                                 ),
                                 borderRadius: BorderRadius.circular(5),
-                                onTap: () => showConnectUnrealPluginDialog(
+                                onTap: () => showConnectGodotPluginDialog(
                                   context,
                                   workbench,
                                 ),
@@ -536,21 +536,21 @@ class WorkbenchShell extends StatelessWidget {
                                     color: bgSurface,
                                     borderRadius: BorderRadius.circular(5),
                                     border: Border.all(
-                                      color: (isUnrealSynced
+                                      color: (isGodotSynced
                                               ? const Color(0xFF10B981)
                                               : const Color(0xFF38BDF8))
                                           .withValues(
-                                        alpha: isUnrealSynced ? 0.55 : 0.4,
+                                        alpha: isGodotSynced ? 0.55 : 0.4,
                                       ),
                                     ),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (isUnrealSynced) ...[
+                                      if (isGodotSynced) ...[
                                         Container(
                                           key: const ValueKey(
-                                            'top_bar_unreal_live_sync_dot',
+                                            'top_bar_godot_live_sync_dot',
                                           ),
                                           width: 6,
                                           height: 6,
@@ -563,12 +563,12 @@ class WorkbenchShell extends StatelessWidget {
                                       ],
                                       Text(
                                         isNarrowTopBar
-                                            ? '🔌'
-                                            : '🔌 Unreal MCP',
+                                            ? '🎮'
+                                            : '🎮 Godot 4',
                                         style: GoogleFonts.jetBrainsMono(
                                           fontSize: 10.5,
                                           fontWeight: FontWeight.w600,
-                                          color: isUnrealSynced
+                                          color: isGodotSynced
                                               ? const Color(0xFF6EE7B7)
                                               : const Color(0xFF7DD3FC),
                                         ),
@@ -591,8 +591,8 @@ class WorkbenchShell extends StatelessWidget {
                             side: BorderSide(color: borderColor),
                           ),
                           onSelected: (val) {
-                            if (val == 'connect_unreal') {
-                              showConnectUnrealPluginDialog(context, workbench);
+                            if (val == 'connect_godot') {
+                              showConnectGodotPluginDialog(context, workbench);
                             } else if (val == 'spec') {
                               _exportFullProjectSpec(context);
                             } else if (val == 'agents_md') {
@@ -605,7 +605,7 @@ class WorkbenchShell extends StatelessWidget {
                           },
                           itemBuilder: (ctx) => [
                             PopupMenuItem<String>(
-                              value: 'connect_unreal',
+                              value: 'connect_godot',
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
@@ -616,7 +616,7 @@ class WorkbenchShell extends StatelessWidget {
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Connect Unreal MCP & LayersBridge',
+                                    'Connect Godot 4 Editor Plugin',
                                     style: GoogleFonts.inter(
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600,
@@ -1222,8 +1222,8 @@ class WorkbenchShell extends StatelessWidget {
                 ),
               ),
             ),
-          if (workbench.hasPendingUnrealAuth)
-            UnrealAuthHandoffOverlay(workbench: workbench),
+          if (workbench.hasPendingGodotAuth)
+            GodotAuthHandoffOverlay(workbench: workbench),
         ],
       ),
     );

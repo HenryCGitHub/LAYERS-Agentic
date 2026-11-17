@@ -12,18 +12,18 @@ import '../services/auth_service.dart';
 import '../services/firestore_vault_service.dart';
 import '../services/local_vault_service.dart';
 import '../utils/markdown_exporter.dart';
-import '../utils/unreal_mcp_payload_builder.dart';
-import '../utils/unreal_spec_guard.dart';
+import '../utils/godot_context_builder.dart';
+import '../utils/godot_spec_guard.dart';
 
 part 'workbench_storage_mixin.dart';
 part 'workbench_concept_mixin.dart';
 part 'workbench_release_mixin.dart';
 part 'workbench_progressive_planner_mixin.dart';
-part 'workbench_unreal_mixin.dart';
+part 'workbench_godot_mixin.dart';
 
 /// Pure 2-Stage Antigravity Studio Workflow:
-/// - [projectPitch]: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_MCP_CONTEXT`, Spark Onboarding, Co-Designer).
-/// - [releaseWorkbench]: `2. Epic Specs` (6-section Unreal MCP Spec Sheets, `v0.1` -> `v0.2+`, `LayersBridge` Sync).
+/// - [projectPitch]: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`, Spark Onboarding, Co-Designer).
+/// - [releaseWorkbench]: `2. Epic Specs` (6-section Godot 4 Epic Spec Sheets, `v0.1` -> `v0.2+`, In-Editor Dock Sync).
 enum WorkbenchStage {
   projectPitch,
   releaseWorkbench,
@@ -79,13 +79,14 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _pendingUrlEpicId;
   String? _inviteFeedbackMessage;
 
-  int? _pendingUnrealAuthPort;
-  String? _pendingUnrealAuthState;
-  String? _pendingUnrealUprojectName;
-  String? _unrealAuthSelectedProjectId;
-  bool _unrealAuthMinimized = false;
-  bool _isCompletingUnrealAuth = false;
-  String? _unrealAuthError;
+  int? _pendingGodotAuthPort;
+  String? _pendingGodotAuthState;
+  String? _pendingGodotProjectName;
+  String? _godotAuthSelectedProjectId;
+  bool _godotAuthMinimized = false;
+  bool _isCompletingGodotAuth = false;
+  String? _godotAuthError;
+  bool _userPinnedDimension = false;
 
   String? get pendingUrlInviteToken => _pendingUrlInviteToken;
   String? get pendingUrlInvitedEmail => _pendingUrlInvitedEmail;
@@ -195,7 +196,7 @@ class WorkbenchProvider extends ChangeNotifier {
   final Map<String, Timer> _persistTimers = {};
   final Set<String> _pendingCloudWriteDocIds = <String>{};
   final List<String> _executionLog = <String>[];
-  final Map<String, String> _cachedUnrealLinkTokensByProjectId = {};
+  final Map<String, String> _cachedGodotLinkTokensByProjectId = {};
 
   String? _activeProjectId;
   String? get activeProjectId => _activeProjectId;
@@ -232,12 +233,12 @@ class WorkbenchProvider extends ChangeNotifier {
 
   Timer? _autoSyncDebounceTimer;
 
-  String? get cachedUnrealLinkTokenForActiveProject => _activeProjectId != null
-      ? _cachedUnrealLinkTokensByProjectId[_activeProjectId!]
+  String? get cachedGodotLinkTokenForActiveProject => _activeProjectId != null
+      ? _cachedGodotLinkTokensByProjectId[_activeProjectId!]
       : null;
 
-  void clearCachedUnrealLinkTokens() {
-    _cachedUnrealLinkTokensByProjectId.clear();
+  void clearCachedGodotLinkTokens() {
+    _cachedGodotLinkTokensByProjectId.clear();
   }
 
   void scheduleDebouncedAutoSync() {
@@ -359,8 +360,8 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  UnrealTargetEngine get targetEngine =>
-      _conceptDraft?.targetEngine ?? UnrealTargetEngine.ue5Mcp;
+  GodotProjectDimension get projectDimension =>
+      _conceptDraft?.dimension ?? GodotProjectDimension.dim3d;
 
   TierDocument? get activeProject =>
       _activeProjectId != null ? documents[_activeProjectId] : null;

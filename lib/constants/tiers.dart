@@ -46,9 +46,9 @@ enum TierType {
       };
 
   String get descriptionTooltip => switch (this) {
-        TierType.project => 'Project: Root Unreal PROJECT_SPEC.md workspace',
+        TierType.project => 'Project: Root Godot 4 PROJECT_SPEC.md workspace',
         TierType.release => 'Release: Target playable milestone (v0.1, v0.2+)',
-        TierType.epic => 'Epic: 6-section Unreal MCP cohesive system spec',
+        TierType.epic => 'Epic: 6-section Godot 4 cohesive system spec',
       };
 
   Color colorFor(bool isDark) => switch (this) {
@@ -90,7 +90,7 @@ enum ReleaseScope {
   featurePrototype(
     'Prototype',
     '',
-    'A fast prototype to test if the core gameplay loop is fun and responsive in Unreal PIE.',
+    'A fast prototype to test if the core gameplay loop is fun and responsive in Godot Playtest.',
     2,
     Color(0xFF71717A),
     category: 'rd',

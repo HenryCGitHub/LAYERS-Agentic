@@ -1,19 +1,20 @@
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
-import 'unreal_spec_guard.dart';
+import 'godot_spec_guard.dart';
 
-/// Deterministic single-source-of-truth Markdown compiler for Unreal MCP payloads.
-/// Matches `buildRootMcpMarkdown` and `buildEpicMcpMarkdown` in the approved v3 spec UI
-/// and feeds `LayersBridge` (`layers_get_active_epic_spec`) via Cloud Functions.
-class UnrealMcpPayloadBuilder {
+/// Single Source of Truth that formats `ProjectConceptBlueprint` + `EpicSpec`
+/// into exact Godot 4 AI context markdown (mirrored 1:1 in `functions/index.js`).
+class GodotContextBuilder {
+  const GodotContextBuilder._();
+
   static void _addContextListLine(
     List<String> out,
     String label,
-    dynamic raw,
+    dynamic rawList,
     int cap,
   ) {
-    if (raw is! List || raw.isEmpty) return;
-    final clean = raw
+    if (rawList is! List || rawList.isEmpty) return;
+    final clean = rawList
         .map((e) => e.toString().trim())
         .where((s) => s.isNotEmpty)
         .take(cap)
@@ -22,17 +23,17 @@ class UnrealMcpPayloadBuilder {
     out.add('- $label: ${clean.join(', ')}');
   }
 
-  /// Builds `ROOT_MCP_CONTEXT` (Prepended to every Epic payload sent to Unreal MCP).
-  static String buildRootMcpContext(
+  /// Builds `ROOT_GODOT_CONTEXT` (Prepended to every Epic payload used by Godot 4 AI Builder).
+  static String buildRootGodotContext(
     ProjectConceptBlueprint rootSpec, {
-    UnrealTargetEngine? targetOverride,
-    Map<String, dynamic>? liveUprojectContext,
+    GodotProjectDimension? dimensionOverride,
+    Map<String, dynamic>? liveGodotContext,
   }) {
-    final target = targetOverride ?? rootSpec.targetEngine;
+    final dim = dimensionOverride ?? rootSpec.dimension;
     final b = StringBuffer();
-    b.writeln('# ROOT_MCP_CONTEXT · ${rootSpec.normalizedTitle}');
-    b.writeln('Target Architecture: ${target.architectureContract}');
-    b.writeln('Code Policy: ${target.codePolicyContract}');
+    b.writeln('# ROOT_GODOT_CONTEXT · ${rootSpec.normalizedTitle}');
+    b.writeln('Target Architecture: ${dim.architectureContract}');
+    b.writeln('Code Policy: ${dim.codePolicyContract}');
     b.writeln();
     b.writeln('## §01 Concept & 30s Core Loop');
     b.writeln('- Vision: ${rootSpec.pitch.trim()}');
@@ -43,8 +44,8 @@ class UnrealMcpPayloadBuilder {
       b.writeln('- Release Gate: ${rootSpec.releaseDoneWhen.trim()}');
     }
     b.writeln();
-    b.writeln('## §02 Global Unreal Contracts (1 UU = 1 cm)');
-    b.writeln('- Camera & Boom: ${rootSpec.cameraContract.trim()}');
+    b.writeln('## §02 Global Godot 4 Contracts (${dim.pillLabel})');
+    b.writeln('- Camera Rig: ${rootSpec.cameraContract.trim()}');
     b.writeln('- Player Scale: ${rootSpec.characterScale.trim()}');
     b.writeln('- Input Contract: ${rootSpec.inputContract.trim()}');
     b.writeln('- Asset Policy: ${rootSpec.assetPolicy.trim()}');
@@ -65,53 +66,37 @@ class UnrealMcpPayloadBuilder {
       }
     }
 
-    if (liveUprojectContext != null && liveUprojectContext.isNotEmpty) {
+    if (liveGodotContext != null && liveGodotContext.isNotEmpty) {
       final snapshotLines = <String>[];
-      final projName = (liveUprojectContext['project_name'] ?? '').toString().trim();
-      final level = (liveUprojectContext['current_level'] ?? '').toString().trim();
-      final gameMode = (liveUprojectContext['game_mode'] ?? '').toString().trim();
-      final pawn = (liveUprojectContext['default_pawn'] ?? '').toString().trim();
+      final projName = (liveGodotContext['project_name'] ?? '').toString().trim();
+      final mainScene = (liveGodotContext['main_scene'] ?? '').toString().trim();
       if (projName.isNotEmpty) snapshotLines.add('- Project: $projName');
-      if (level.isNotEmpty) snapshotLines.add('- Open Level: $level');
-      if (gameMode.isNotEmpty) snapshotLines.add('- GameMode: $gameMode');
-      if (pawn.isNotEmpty) snapshotLines.add('- DefaultPawnClass: $pawn');
+      if (mainScene.isNotEmpty) snapshotLines.add('- Main Scene: $mainScene');
       _addContextListLine(
         snapshotLines,
-        'Existing Enhanced Input Assets',
-        liveUprojectContext['input_assets'],
+        'Existing InputMap Actions',
+        liveGodotContext['input_actions'],
+        16,
+      );
+      _addContextListLine(
+        snapshotLines,
+        'Existing Scenes (.tscn)',
+        liveGodotContext['scene_files'],
         12,
       );
       _addContextListLine(
         snapshotLines,
-        'Existing Blueprints',
-        liveUprojectContext['blueprint_assets'],
-        12,
+        'Existing Scripts (.gd)',
+        liveGodotContext['script_files'],
+        14,
       );
       _addContextListLine(
         snapshotLines,
-        'Existing DataAssets & Tables',
-        liveUprojectContext['data_assets'],
+        'Existing Resources (.tres)',
+        liveGodotContext['resource_files'],
         8,
       );
-      _addContextListLine(
-        snapshotLines,
-        'Existing UMG Widgets',
-        liveUprojectContext['widget_assets'],
-        8,
-      );
-      _addContextListLine(
-        snapshotLines,
-        'Existing Levels',
-        liveUprojectContext['level_assets'],
-        6,
-      );
-      _addContextListLine(
-        snapshotLines,
-        'Existing Verse Files',
-        liveUprojectContext['verse_files'],
-        8,
-      );
-      final recentErrors = liveUprojectContext['recent_errors'];
+      final recentErrors = liveGodotContext['recent_errors'];
       if (recentErrors is List && recentErrors.isNotEmpty) {
         final cleanErrors = recentErrors
             .map((e) => e.toString().trim())
@@ -119,7 +104,7 @@ class UnrealMcpPayloadBuilder {
             .take(4)
             .toList();
         if (cleanErrors.isNotEmpty) {
-          snapshotLines.add('- Recent Editor/PIE Log Warnings:');
+          snapshotLines.add('- Recent Editor/Debugger Errors:');
           for (final err in cleanErrors) {
             snapshotLines.add('  - $err');
           }
@@ -127,7 +112,7 @@ class UnrealMcpPayloadBuilder {
       }
       if (snapshotLines.isNotEmpty) {
         b.writeln();
-        b.writeln('## Live Unreal Project Snapshot (.uproject via LayersBridge)');
+        b.writeln('## Live Godot Project Snapshot (project.godot via Dock)');
         for (final line in snapshotLines) {
           b.writeln(line);
         }
@@ -176,39 +161,39 @@ class UnrealMcpPayloadBuilder {
           );
         } else {
           b.writeln(
-            '- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse existing assets',
+            '- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse existing scenes/scripts',
           );
         }
       } else {
         b.writeln(
-          '- [QUEUED — DEFER] ${sib.code} · ${sib.title} — do not build yet; stub interfaces only if needed',
+          '- [QUEUED — DEFER] ${sib.code} · ${sib.title} — do not build yet; stub signals only if needed',
         );
       }
     }
   }
 
-  /// Builds the exact Unreal MCP wire payload for an Epic (`ROOT_MCP_CONTEXT` + `ACTIVE EPIC SPEC`).
+  /// Builds the exact Godot 4 AI context payload for an Epic (`ROOT_GODOT_CONTEXT` + `ACTIVE EPIC SPEC`).
   /// Automatically switches footer instructions between:
-  /// - `FOCUSED PIE REVISION PASS (N OPEN [FIX])` when any unresolved `[FIX]` exists, or
+  /// - `FOCUSED PLAYTEST REVISION PASS (N OPEN [FIX])` when any unresolved `[FIX]` exists, or
   /// - `FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK` for single-pass build.
-  static String buildEpicMcpPayload({
+  static String buildEpicGodotContext({
     required ProjectConceptBlueprint rootSpec,
     required EpicSpec epic,
     List<EpicSpec>? releaseEpics,
-    UnrealTargetEngine? targetOverride,
-    Map<String, dynamic>? liveUprojectContext,
+    GodotProjectDimension? dimensionOverride,
+    Map<String, dynamic>? liveGodotContext,
     bool includeRootContext = true,
     bool includeExecutionFooter = true,
   }) {
-    final target = targetOverride ?? rootSpec.targetEngine;
+    final dim = dimensionOverride ?? rootSpec.dimension;
     final b = StringBuffer();
 
     if (includeRootContext) {
       b.writeln(
-        buildRootMcpContext(
+        buildRootGodotContext(
           rootSpec,
-          targetOverride: target,
-          liveUprojectContext: liveUprojectContext,
+          dimensionOverride: dim,
+          liveGodotContext: liveGodotContext,
         ),
       );
       _writeReleaseEpicRoadmap(b, epic, releaseEpics);
@@ -224,13 +209,13 @@ class UnrealMcpPayloadBuilder {
     );
     if (openFixes.isNotEmpty) {
       b.writeln(
-        'Execution Mode: FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX]) — surgical edits only; keep passing checks intact',
+        'Execution Mode: FOCUSED PLAYTEST REVISION PASS (${openFixes.length} OPEN [FIX]) — surgical edits only; keep passing checks intact',
       );
     } else if (includeExecutionFooter) {
       b.writeln('Execution Mode: FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK');
     }
     b.writeln();
-    b.writeln('## §01 System Intent & Actor Links');
+    b.writeln('## §01 System Intent & Scene Links');
     if (epic.coreLoopBeat.trim().isNotEmpty) {
       b.writeln('- Core Loop Beat: ${epic.coreLoopBeat.trim()}');
     }
@@ -260,7 +245,7 @@ class UnrealMcpPayloadBuilder {
     }
 
     b.writeln();
-    b.writeln('## §02 Controls (${target.inputContractLabel})');
+    b.writeln('## §02 Controls (${dim.inputContractLabel})');
     if (epic.controls.isEmpty) {
       b.writeln('- None (passive/system-driven Epic)');
     } else {
@@ -272,7 +257,7 @@ class UnrealMcpPayloadBuilder {
     b.writeln();
     b.writeln('## §03 State Flow & Interrupt Rules');
     if (epic.states.isEmpty && epic.interrupts.isEmpty) {
-      b.writeln('- Stateless / event-driven Epic');
+      b.writeln('- Stateless / signal-driven Epic');
     } else {
       for (final s in epic.states) {
         b.writeln('- State: $s');
@@ -283,24 +268,22 @@ class UnrealMcpPayloadBuilder {
     }
 
     b.writeln();
-    b.writeln('## §04 Spatial & Exposed Tuning (${target.tuningColumnLabel})');
+    b.writeln('## §04 Spatial & Exposed Tuning (${dim.tuningColumnLabel})');
     if (epic.tuning.isEmpty) {
       b.writeln('- None');
     } else {
-      final isUe6 = target == UnrealTargetEngine.ue6Verse;
       for (final t in epic.tuning) {
         final unitSuffix = t.unit.trim().isEmpty ? '' : ' ${t.unit.trim()}';
-        final propType = UnrealSpecGuard.inferUnrealPropertyType(
+        final propType = GodotSpecGuard.inferGodotPropertyType(
           t.value,
           t.unit,
-          isUe6Verse: isUe6,
         );
         b.writeln('- ${t.key}: ${t.value}$unitSuffix [$propType]');
       }
     }
 
     b.writeln();
-    b.writeln('## §05 Viewport, UMG & Audio Cues');
+    b.writeln('## §05 Viewport, UI & Audio Cues');
     if (epic.feedback.isEmpty) {
       b.writeln('- Minimal greybox debug visuals');
     } else {
@@ -310,9 +293,9 @@ class UnrealMcpPayloadBuilder {
     }
 
     b.writeln();
-    b.writeln('## §06 Test Level Staging & PIE Acceptance Gate');
+    b.writeln('## §06 Test Scene Staging & Playtest Acceptance Gate');
     if (epic.levelStaging.trim().isNotEmpty) {
-      b.writeln('- Test Level: ${epic.levelStaging.trim()}');
+      b.writeln('- Test Scene: ${epic.levelStaging.trim()}');
     }
     for (int i = 0; i < epic.checks.length; i++) {
       final chk = epic.checks[i];
@@ -329,16 +312,16 @@ class UnrealMcpPayloadBuilder {
       }
       b.writeln();
       b.writeln(
-        '### FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX])',
+        '### FOCUSED PLAYTEST REVISION PASS (${openFixes.length} OPEN [FIX])',
       );
       b.writeln(
-        'Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, ${target.compileSaveClause}, and report via layers_resolve_pie_fix(fix_id) + layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).',
+        'Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, emit compile-clean Godot 4 .gd/.tscn/${dim.shortLabel} updates, and leave final pass sign-off to human playtest.',
       );
     } else if (includeExecutionFooter) {
       b.writeln();
       b.writeln('### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK');
       b.writeln(
-        'Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts (${target.buildRuleClause}), expose every §04 tuning variable, then run PIE self-check against every §06 Check and call layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).',
+        'Synthesize §01-§06 cleanly into Godot 4 (${dim.shortLabel}: .gd scripts + .tscn sceneOps + project.godot inputOps) matching ROOT_GODOT_CONTEXT contracts, expose every §04 @export variable in snake_case, and ensure zero GDScript compile errors.',
       );
     }
 
@@ -349,19 +332,19 @@ class UnrealMcpPayloadBuilder {
   static String buildFullProjectSpecMarkdown({
     required ProjectConceptBlueprint rootSpec,
     required Map<String, List<EpicSpec>> epicsByReleaseLabel,
-    Map<String, dynamic>? liveUprojectContext,
+    Map<String, dynamic>? liveGodotContext,
   }) {
     final b = StringBuffer();
     b.writeln(
-      buildRootMcpContext(
+      buildRootGodotContext(
         rootSpec,
-        liveUprojectContext: liveUprojectContext,
+        liveGodotContext: liveGodotContext,
       ),
     );
     b.writeln();
     b.writeln('---');
     b.writeln();
-    b.writeln('# Release Roadmap & Unreal MCP Epic Specs');
+    b.writeln('# Release Roadmap & Godot 4 Epic Specs');
     final effectiveReleases = epicsByReleaseLabel.isNotEmpty
         ? epicsByReleaseLabel
         : (rootSpec.initialEpics.isNotEmpty
@@ -375,11 +358,11 @@ class UnrealMcpPayloadBuilder {
       for (final epic in entry.value) {
         b.writeln();
         b.writeln(
-          buildEpicMcpPayload(
+          buildEpicGodotContext(
             rootSpec: rootSpec,
             epic: epic,
             includeRootContext: false,
-            includeExecutionFooter: epic.openFixes.isNotEmpty,
+            includeExecutionFooter: false,
           ),
         );
       }
@@ -387,46 +370,33 @@ class UnrealMcpPayloadBuilder {
     return b.toString().trimRight();
   }
 
-  /// Builds a copy/export bundle for the active Release (for coding agents / Unreal MCP).
-  static String buildReleaseMcpBundle({
+  /// Builds a Release bundle (`ROOT_GODOT_CONTEXT` + all Epics in one release).
+  static String buildReleaseContextBundle({
     required ProjectConceptBlueprint rootSpec,
     required String releaseLabel,
     required List<EpicSpec> releaseEpics,
-    Map<String, dynamic>? liveUprojectContext,
+    Map<String, dynamic>? liveGodotContext,
   }) {
     final b = StringBuffer();
     b.writeln(
-      buildRootMcpContext(
+      buildRootGodotContext(
         rootSpec,
-        liveUprojectContext: liveUprojectContext,
+        liveGodotContext: liveGodotContext,
       ),
     );
     b.writeln();
     b.writeln('---');
-    b.writeln('# ACTIVE RELEASE BUNDLE · $releaseLabel');
-    final effectiveEpics =
-        releaseEpics.isNotEmpty ? releaseEpics : rootSpec.initialEpics;
-    for (int i = 0; i < effectiveEpics.length; i++) {
-      final epic = effectiveEpics[i];
+    b.writeln();
+    b.writeln('# RELEASE BUNDLE · $releaseLabel');
+    for (final epic in releaseEpics) {
       b.writeln();
       b.writeln(
-        buildEpicMcpPayload(
+        buildEpicGodotContext(
           rootSpec: rootSpec,
           epic: epic,
           includeRootContext: false,
-          includeExecutionFooter: epic.openFixes.isNotEmpty,
+          includeExecutionFooter: false,
         ),
-      );
-      if (i < effectiveEpics.length - 1) {
-        b.writeln();
-        b.writeln('---');
-      }
-    }
-    if (effectiveEpics.isNotEmpty) {
-      b.writeln();
-      b.writeln('### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK');
-      b.writeln(
-        'Implement §01-§06 per Epic in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts, expose every §04 tuning variable, then run PIE self-check against every §06 Check and call layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).',
       );
     }
     return b.toString().trimRight();

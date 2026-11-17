@@ -2,9 +2,9 @@ part of 'workbench_provider.dart';
 
 int _docEffectiveTimestampMs(TierDocument doc) {
   final codeTs = int.tryParse(doc.sections['updated_at_ms'] ?? '') ?? 0;
-  final unrealSyncTs =
-      int.tryParse(doc.sections['last_unreal_sync_ms'] ?? '') ?? 0;
-  return codeTs > unrealSyncTs ? codeTs : unrealSyncTs;
+  final godotSyncTs =
+      int.tryParse(doc.sections['last_godot_sync_ms'] ?? '') ?? 0;
+  return codeTs > godotSyncTs ? codeTs : godotSyncTs;
 }
 
 int _countCompletedSubtasksRecursive(List<Subtask> tasks) {
@@ -29,7 +29,7 @@ int _countTotalSubtasksRecursive(List<Subtask> tasks) {
   return count;
 }
 
-/// Returns `true` when [remoteDoc] carries newer timestamps or further Unreal/PIE
+/// Returns `true` when [remoteDoc] carries newer timestamps or further Godot/Playtest
 /// progress than [localDoc] so startup cloud sync merges instead of overwriting.
 bool shouldPreferRemoteDocumentOnSync(
   TierDocument localDoc,
@@ -77,11 +77,11 @@ bool shouldPreferRemoteDocumentOnSync(
     return remoteDoc.childrenIds.length > localDoc.childrenIds.length;
   }
 
-  final remoteUprojectCtx =
-      (remoteDoc.sections['unreal_live_context_json'] ?? '').trim();
-  final localUprojectCtx =
-      (localDoc.sections['unreal_live_context_json'] ?? '').trim();
-  if (remoteUprojectCtx.isNotEmpty && localUprojectCtx.isEmpty) {
+  final remoteGodotCtx =
+      (remoteDoc.sections['godot_live_context_json'] ?? '').trim();
+  final localGodotCtx =
+      (localDoc.sections['godot_live_context_json'] ?? '').trim();
+  if (remoteGodotCtx.isNotEmpty && localGodotCtx.isEmpty) {
     return true;
   }
 
@@ -106,7 +106,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       _isCloudSynced = false;
       _myAiAccessStatus = null;
       _aiAccessRecords = const [];
-      clearCachedUnrealLinkTokens();
+      clearCachedGodotLinkTokens();
       _firestoreService.stopRealtimeSync();
       notifyListeners();
       return;
@@ -544,35 +544,36 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   }
 
   Future<void> signOutFromCloud() async {
-    clearCachedUnrealLinkTokens();
+    clearCachedGodotLinkTokens();
     await _authService.signOut();
     notifyListeners();
   }
 
   /// Applies Web Studio URL deep-link query params (`?project=<id>&epic=<id>`)
-  /// and Unreal Editor Google Sign-In browser handoff params (`?unreal_auth=1&port=<port>&state=<nonce>&uproject=<Name>`).
+  /// and Godot 4 Dock Google Sign-In browser handoff params (`?godot_auth=1&port=<port>&state=<nonce>&project_name=<Name>`).
   void applyDeepLinkParams(Map<String, String> queryParams) {
     bool didUpdate = false;
-    final unrealAuthFlag =
-        (queryParams['unreal_auth'] ?? '').trim().toLowerCase();
-    if (unrealAuthFlag == '1' || unrealAuthFlag == 'true') {
+    final godotAuthFlag =
+        (queryParams['godot_auth'] ?? '').trim().toLowerCase();
+    if (godotAuthFlag == '1' || godotAuthFlag == 'true') {
       final port = int.tryParse((queryParams['port'] ?? '').trim());
       final state = (queryParams['state'] ?? '').trim();
-      final uprojectRaw = (queryParams['uproject'] ?? '').trim();
+      final projectNameRaw =
+          (queryParams['project_name'] ?? '').trim();
       if (port != null &&
           port >= 1024 &&
           port <= 65535 &&
           RegExp(r'^[A-Za-z0-9_\-]{8,128}$').hasMatch(state)) {
-        _pendingUnrealAuthPort = port;
-        _pendingUnrealAuthState = state;
-        _pendingUnrealUprojectName = uprojectRaw.isEmpty
+        _pendingGodotAuthPort = port;
+        _pendingGodotAuthState = state;
+        _pendingGodotProjectName = projectNameRaw.isEmpty
             ? null
-            : (uprojectRaw.length > 120
-                ? uprojectRaw.substring(0, 120)
-                : uprojectRaw);
-        _unrealAuthSelectedProjectId = null;
-        _unrealAuthMinimized = false;
-        _unrealAuthError = null;
+            : (projectNameRaw.length > 120
+                ? projectNameRaw.substring(0, 120)
+                : projectNameRaw);
+        _godotAuthSelectedProjectId = null;
+        _godotAuthMinimized = false;
+        _godotAuthError = null;
         didUpdate = true;
       }
     }
@@ -792,6 +793,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedEpicId = null;
+    _userPinnedDimension = false;
     _conceptDraft = null;
     _progressiveDraft = null;
     _showingSparkPicker = true;
@@ -865,7 +867,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   }
 
   /// Cancels pending debounce timers and saves [projectId]'s full 3-tier tree
-  /// (`Project -> Release -> Epic`) to Firestore before Unreal handoff redirects
+  /// (`Project -> Release -> Epic`) to Firestore before Godot 4 Dock handoff redirects
   /// unload the browser tab.
   Future<void> flushProjectTreeToCloud(String projectId) async {
     final treeIds = _collectProjectDocumentTreeIds(projectId);
@@ -904,9 +906,11 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   void _remapEmbeddedEpicJsonAndClearSync(
     Map<String, String> sections, {
     String? newEpicDocId,
-    required bool clearUnrealSync,
+    required bool clearGodotSync,
   }) {
-    if (clearUnrealSync) {
+    if (clearGodotSync) {
+      sections.remove('last_godot_sync_ms');
+      sections.remove('godot_live_context_json');
       sections.remove('last_unreal_sync_ms');
       sections.remove('unreal_live_context_json');
     }
@@ -931,7 +935,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final newId = 'proj_${DateTime.now().microsecondsSinceEpoch}';
     final copyTitle = '${src.title} (Copy)';
     final copiedSections = Map<String, String>.from(src.sections);
-    _remapEmbeddedEpicJsonAndClearSync(copiedSections, clearUnrealSync: true);
+    _remapEmbeddedEpicJsonAndClearSync(copiedSections, clearGodotSync: true);
 
     final rawConcept = copiedSections['concept_blueprint_json'];
     if (rawConcept != null && rawConcept.isNotEmpty) {
@@ -975,7 +979,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _remapEmbeddedEpicJsonAndClearSync(
           epicSections,
           newEpicDocId: newEpicId,
-          clearUnrealSync: true,
+          clearGodotSync: true,
         );
         final clonedEpic = oldEpic.copyWith(
           id: newEpicId,
@@ -989,7 +993,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       }
 
       final relSections = Map<String, String>.from(oldRel.sections);
-      _remapEmbeddedEpicJsonAndClearSync(relSections, clearUnrealSync: true);
+      _remapEmbeddedEpicJsonAndClearSync(relSections, clearGodotSync: true);
       final newRelDoc = oldRel.copyWith(
         id: newRelId,
         parentId: newId,
@@ -1107,7 +1111,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _remapEmbeddedEpicJsonAndClearSync(
           newSections,
           newEpicDocId: d.tier == TierType.epic ? newId : null,
-          clearUnrealSync: hasCollision,
+          clearGodotSync: hasCollision,
         );
 
         String importedTitle = d.title;
@@ -1160,7 +1164,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final idsToRemove = _collectProjectDocumentTreeIds(projectId);
     if (idsToRemove.isEmpty) return;
 
-    _cachedUnrealLinkTokensByProjectId.remove(projectId);
+    _cachedGodotLinkTokensByProjectId.remove(projectId);
     _projectCollaborators.remove(projectId);
     final user = _authService.currentUser;
     for (final id in idsToRemove) {

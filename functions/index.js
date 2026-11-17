@@ -47,24 +47,24 @@ function extractBearerLinkToken(req) {
   return "";
 }
 
-async function verifyUnrealLinkToken(req) {
+async function verifyGodotLinkToken(req) {
   const rawToken = extractBearerLinkToken(req);
   if (!rawToken) {
     return {
       errorStatus: 401,
-      errorMessage: "Missing or invalid Unreal Project Link Token (lyr_...).",
+      errorMessage: "Missing or invalid Godot Project Link Token (lyr_...).",
     };
   }
   const tokenHash = hashLinkToken(rawToken);
   const snap = await getFirestore()
-    .collection("unreal_links")
+    .collection("godot_links")
     .where("tokenHash", "==", tokenHash)
     .limit(1)
     .get();
   if (snap.empty) {
     return {
       errorStatus: 401,
-      errorMessage: "Invalid or expired Unreal Project Link Token.",
+      errorMessage: "Invalid or expired Godot Project Link Token.",
     };
   }
   const linkDoc = snap.docs[0];
@@ -72,7 +72,7 @@ async function verifyUnrealLinkToken(req) {
   if (data.revoked === true || !data.uid || !data.projectId) {
     return {
       errorStatus: 401,
-      errorMessage: "This Unreal Project Link Token has been revoked.",
+      errorMessage: "This Godot Project Link Token has been revoked.",
     };
   }
   const email = String(data.email || "").trim().toLowerCase();
@@ -146,43 +146,194 @@ function resolveCoreFeelJs(raw) {
   return { id: "snappy", label: "Snappy Arcade" };
 }
 
+function resolveDimensionMetaJs(rawDim) {
+  const lower = String(rawDim || "").trim().toLowerCase();
+  const is2d = lower === "dim2d" || lower === "2d" || lower.includes("2d");
+  if (is2d) {
+    return {
+      id: "dim2d",
+      shortLabel: "Godot 4 · 2D",
+      pillLabel: "2D (px, px/s)",
+      architectureContract:
+        "Godot 4 2D (.tscn + GDScript .gd) — CharacterBody2D / Node2D + @export Inspector tuning (px, px/s)",
+      codePolicyContract:
+        "PURE GODOT 4 GDSCRIPT (.gd + .tscn) — Use typed GDScript 2.0, @export snake_case tuning vars, CharacterBody2D/Area2D/Camera2D, and project.godot InputMap.",
+      tuningColumnLabel: "@export GDScript Var",
+      inputContractLabel: "InputMap Actions (project.godot)",
+      distanceUnit: "px",
+      speedUnit: "px/s",
+    };
+  }
+  return {
+    id: "dim3d",
+    shortLabel: "Godot 4 · 3D",
+    pillLabel: "3D (m, m/s)",
+    architectureContract:
+      "Godot 4 3D (.tscn + GDScript .gd) — CharacterBody3D / Node3D + @export Inspector tuning (1 unit = 1 m)",
+    codePolicyContract:
+      "PURE GODOT 4 GDSCRIPT (.gd + .tscn) — Use typed GDScript 2.0, @export snake_case tuning vars, CharacterBody3D/Area3D/SpringArm3D/Camera3D, and project.godot InputMap.",
+    tuningColumnLabel: "@export GDScript Var",
+    inputContractLabel: "InputMap Actions (project.godot)",
+    distanceUnit: "m",
+    speedUnit: "m/s",
+  };
+}
+
+function toSnakeCaseTokenJs(raw) {
+  const spaced = String(raw || "")
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/([a-zA-Z])(\d)/g, "$1_$2");
+  const tokens = spaced
+    .split(/[^A-Za-z0-9]+/)
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  return tokens.length === 0 ? "item" : tokens.join("_");
+}
+
+function normalizeResPathJs(rawPath) {
+  let clean = String(rawPath || "").trim().replace(/\\/g, "/");
+  if (!clean) return "";
+  if (clean.startsWith("res://")) {
+    clean = clean.slice("res://".length);
+  }
+  clean = clean.replace(/^\/+/, "").replace(/\/{2,}/g, "/");
+  return clean ? `res://${clean}` : "";
+}
+
+function stripDiffLinePrefixes(rawCode) {
+  return String(rawCode || "")
+    .split(/\r?\n/)
+    .map((line) => (line.startsWith("+ ") ? line.slice(2) : line))
+    .join("\n")
+    .trim();
+}
+
+function extractResPathsListJs(rawText, extFilter = "") {
+  const matches = String(rawText || "").match(/res:\/\/[A-Za-z0-9_./-]+/g) || [];
+  const out = [];
+  const seen = new Set();
+  for (const m of matches) {
+    const norm = normalizeResPathJs(m);
+    if (!norm) continue;
+    if (extFilter && !norm.toLowerCase().endsWith(extFilter)) continue;
+    if (!seen.has(norm)) {
+      seen.add(norm);
+      out.push(norm);
+    }
+  }
+  return out;
+}
+
+function sanitizeGodotLineJs(raw, dimension = "dim3d") {
+  let out = String(raw || "")
+    .trim()
+    .replace(/^[-*•]+\s+/, "")
+    .trim();
+  if (!out) return "";
+  const is2d = resolveDimensionMetaJs(dimension).id === "dim2d";
+  const bodyClass = is2d ? "CharacterBody2D" : "CharacterBody3D";
+  const nodeClass = is2d ? "Node2D" : "Node3D";
+  const areaClass = is2d ? "Area2D" : "Area3D";
+  const camClass = is2d ? "Camera2D" : "Camera3D";
+  const particlesClass = is2d ? "GPUParticles2D" : "GPUParticles3D";
+  const springCam = is2d ? "Camera2D" : "SpringArm3D";
+
+  const replacements = [
+    [/\bUnreal Engine\b/gi, "Godot 4"],
+    [/\bUnreal\b/gi, "Godot 4"],
+    [/\bACharacter\b/gi, bodyClass],
+    [/\bAPawn\b/gi, bodyClass],
+    [/\bAActor\b/gi, nodeClass],
+    [/\bGameObjects\b/gi, `${nodeClass}s`],
+    [/\bGameObject\b/gi, nodeClass],
+    [/\bMonoBehaviour\b/gi, "GDScript Node"],
+    [/\bUBoxComponent\b/gi, areaClass],
+    [/\bUSpringArmComponent\b/gi, springCam],
+    [/\bSpringArm\b/gi, springCam],
+    [/\bUCameraComponent\b/gi, camClass],
+    [/\bUInputAction\b/gi, "InputMap Action"],
+    [/\bEnhanced Input\b/gi, "InputMap"],
+    [/\bIMC_[A-Za-z0-9_]+\b/g, "InputMap"],
+    [/\bNiagara\b/gi, particlesClass],
+    [/\bUMG\b/g, "Control HUD"],
+    [/\bPlayerStart\b/gi, "SpawnPoint"],
+    [/\bOutput Log\b/gi, "Godot Debugger"],
+    [/\bPIE\b/g, "Playtest"],
+    [/\bSerializeField\b/gi, "@export"],
+    [/\bUCLASS\s*(?:\([^)]*\))?/gi, "PackedScene"],
+    [/\bUPROPERTY\s*(?:\([^)]*\))?/gi, "@export"],
+    [/\bUFUNCTION\s*(?:\([^)]*\))?/gi, "GDScript Signal"],
+    [/\bBlueprint Class\b/gi, "PackedScene"],
+    [/\bBlueprints\b/gi, "Scenes/Scripts"],
+    [/\bBlueprint\b/gi, "Scene/Script"],
+    [/\bPrimaryDataAsset\b/gi, "Resource (.tres)"],
+    [/\bUDataAsset\b/gi, "Resource (.tres)"],
+    [/\.uasset\b/gi, ".tscn"],
+    [/\.uproject\b/gi, "project.godot"],
+    [/\.prefab\b/gi, ".tscn"],
+    [/\bPrefabs\b/gi, "PackedScenes"],
+    [/\bPrefab\b/gi, "PackedScene"],
+  ];
+  for (const [re, target] of replacements) {
+    out = out.replace(re, target);
+  }
+  out = out.replace(/\bIA_([A-Za-z0-9_]+)\b/g, (_, grp) =>
+    toSnakeCaseTokenJs(grp || "action")
+  );
+  out = out.replace(/\b(?:BP|BPI|WBP|DA)_([A-Za-z0-9_]+)\b/g, (_, grp) =>
+    toSnakeCaseTokenJs(grp || "entity")
+  );
+  out = out.replace(/\bL_([A-Za-z0-9_]+)\b/g, (_, grp) =>
+    `${toSnakeCaseTokenJs(grp || "arena")}.tscn`
+  );
+  out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.(?:cpp|hpp)\b/gi, (_, grp) =>
+    `${toSnakeCaseTokenJs(grp || "script")}.gd`
+  );
+  return out.replace(/\s{2,}/g, " ").trim();
+}
+
 function parseRootSpecJs(projectDoc) {
   const parsed =
     parseJsonObjectSafe(projectDoc?.sections?.concept_blueprint_json) || {};
-  const rawEngine = String(
-    parsed.targetEngine || projectDoc?.sections?.engine || "ue5Mcp"
-  )
-    .trim()
-    .toLowerCase();
-  const isUe6 = rawEngine === "ue6verse" || rawEngine.includes("verse") || rawEngine.includes("ue6");
-  const targetEngine = isUe6 ? "ue6Verse" : "ue5Mcp";
+  const dimMeta = resolveDimensionMetaJs(
+    parsed.dimension ||
+      projectDoc?.sections?.dimension ||
+      parsed.targetEngine ||
+      projectDoc?.sections?.engine ||
+      "dim3d"
+  );
   const rawTitle = String(
-    parsed.gameTitle || projectDoc?.title || "UNTITLED UNREAL PROJECT"
+    parsed.gameTitle || projectDoc?.title || "UNTITLED GODOT PROJECT"
   ).trim();
-  const normalizedTitle = rawTitle || "UNTITLED UNREAL PROJECT";
+  const normalizedTitle = rawTitle || "UNTITLED GODOT PROJECT";
   const coreFeel = resolveCoreFeelJs(parsed.feelChoiceId);
+  const defaultCamera =
+    dimMeta.id === "dim2d"
+      ? "Camera2D zoom Vector2(2.0, 2.0), position_smoothing_enabled = true, speed 7.0"
+      : "SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, Camera3D look-ahead smoothing 9.0";
+  const defaultScale =
+    dimMeta.id === "dim2d"
+      ? "CharacterBody2D CollisionShape2D 32x32 px · base walk speed 240 px/s · tile 32x32 px"
+      : "CharacterBody3D CapsuleShape3D radius 0.42 m · height 1.84 m · base walk speed 6.2 m/s";
 
   return {
     gameTitle: normalizedTitle,
     normalizedTitle,
-    targetEngine,
+    dimension: dimMeta.id,
     pitch: String(parsed.pitch || projectDoc?.sections?.goal || "").trim(),
     coreLoop: normalizeStringArrayJs(parsed.coreLoop),
-    cameraContract: String(
-      parsed.cameraContract ||
-        "SpringArm 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLag 9.0"
-    ).trim(),
-    characterScale: String(
-      parsed.characterScale ||
-        "ACharacter CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 620 cm/s"
-    ).trim(),
+    cameraContract: String(parsed.cameraContract || defaultCamera).trim(),
+    characterScale: String(parsed.characterScale || defaultScale).trim(),
     inputContract: String(
       parsed.inputContract ||
-        "Enhanced Input (IMC_Core + IA_Move / IA_Aim / IA_Primary / IA_Secondary)"
+        "InputMap (move_left/move_right/move_up/move_down, primary_action, secondary_action, ui_cancel)"
     ).trim(),
     assetPolicy: String(
       parsed.assetPolicy ||
-        "Prototype Greybox Primitives (Engine/BasicShapes) + Debug Materials; UDataAsset for tuning"
+        (dimMeta.id === "dim2d"
+          ? "Prototype ColorRect/Polygon2D/CSG2D geometry + Resource (.tres) config + typed GDScript 2.0"
+          : "Prototype CSGBox3D/CSGCylinder3D greybox geometry + StandardMaterial3D + Resource (.tres) + typed GDScript 2.0")
     ).trim(),
     feelChoiceId: coreFeel.id,
     coreFeelLabel: coreFeel.label,
@@ -205,118 +356,97 @@ function computeEpicPassedJs(spec) {
   return checks.length === 0 || checks.every((c) => Boolean(c?.passed));
 }
 
-function sanitizeTuningKeyJs(rawKey, fallback = "TuningVar") {
-  const trimmed = String(rawKey || "").trim();
-  if (!trimmed) return fallback;
-  if (/^[A-Za-z][A-Za-z0-9]*$/.test(trimmed)) {
-    if (
-      trimmed.length >= 2 &&
-      trimmed[0] === "b" &&
-      trimmed[1] === trimmed[1].toUpperCase() &&
-      trimmed[1] !== trimmed[1].toLowerCase()
-    ) {
-      return trimmed;
-    }
-    return trimmed[0].toUpperCase() + trimmed.slice(1);
+function sanitizeGodotTuningKeyJs(rawKey, fallback = "tuning_param") {
+  let clean = String(rawKey || "")
+    .trim()
+    .replace(/^@export\s+var\s+/i, "")
+    .replace(/[^A-Za-z0-9_]+/g, "_");
+  const boolMatch = clean.match(/^b([A-Z][A-Za-z0-9_]*)$/);
+  if (boolMatch) {
+    clean = boolMatch[1];
   }
-  const tokens = trimmed.split(/[^A-Za-z0-9]+/).filter(Boolean);
-  if (tokens.length === 0) return fallback;
-  const joined = tokens.map((t) => t[0].toUpperCase() + t.slice(1)).join("");
-  if (/^[0-9]/.test(joined)) return `Param${joined}`;
-  return joined;
+  if (!clean) return fallback;
+  const snake = toSnakeCaseTokenJs(clean);
+  if (!snake) return fallback;
+  return /^[0-9]/.test(snake) ? `param_${snake}` : snake;
 }
 
-function normalizeTuningUnitJs(key, rawUnit) {
-  const cleanUnit = String(rawUnit || "").trim();
-  const lowerUnit = cleanUnit.toLowerCase();
-  const lowerKey = String(key || "").toLowerCase();
-  if (
-    lowerUnit === "px" ||
-    lowerUnit === "pixels" ||
-    lowerUnit === "pixel" ||
-    lowerUnit === "uu"
-  ) {
-    return "cm";
+function normalizeGodotUnitJs(key, rawUnit, dimension = "dim3d") {
+  const unit = String(rawUnit || "").trim().toLowerCase();
+  const dimMeta = resolveDimensionMetaJs(dimension);
+  const speedUnit = dimMeta.speedUnit;
+  const distUnit = dimMeta.distanceUnit;
+  if (unit) {
+    if (
+      unit === "cm/s" ||
+      unit === "uu/s" ||
+      unit === "mps" ||
+      unit === "m/s" ||
+      unit === "px/s" ||
+      unit === "pixels/s"
+    ) {
+      return speedUnit;
+    }
+    if (
+      unit === "cm" ||
+      unit === "uu" ||
+      unit === "m" ||
+      unit === "meter" ||
+      unit === "meters" ||
+      unit === "px" ||
+      unit === "pixel" ||
+      unit === "pixels"
+    ) {
+      return distUnit;
+    }
+    if (unit === "degrees" || unit === "degree" || unit === "deg") return "deg";
+    if (unit === "sec" || unit === "secs" || unit === "seconds" || unit === "s") {
+      return "s";
+    }
+    if (unit === "pct" || unit === "percent" || unit === "%") return "%";
+    if (unit === "boolean" || unit === "bool") return "bool";
+    return unit;
   }
-  if (lowerUnit.startsWith("px/")) return `cm/${cleanUnit.slice(3)}`;
-  if (lowerUnit.startsWith("pixels/")) return `cm/${cleanUnit.slice(7)}`;
-  if (
-    lowerUnit === "sec" ||
-    lowerUnit === "secs" ||
-    lowerUnit === "second" ||
-    lowerUnit === "seconds"
-  ) {
-    return "s";
-  }
-  if (lowerUnit === "deg" || lowerUnit === "degree" || lowerUnit === "degrees") {
-    return "deg";
-  }
-  if (
-    lowerUnit === "pct" ||
-    lowerUnit === "percent" ||
-    lowerUnit === "percentage"
-  ) {
-    return "%";
-  }
-  if (cleanUnit) return cleanUnit;
+
+  const lowerKey = sanitizeGodotTuningKeyJs(key, "").toLowerCase();
   if (
     lowerKey.includes("speed") ||
     lowerKey.includes("velocity") ||
-    lowerKey.includes("impulse") ||
     lowerKey.includes("accel") ||
     lowerKey.includes("decel")
   ) {
-    return "cm/s";
+    return speedUnit;
   }
   if (
     lowerKey.includes("distance") ||
+    lowerKey.includes("range") ||
     lowerKey.includes("radius") ||
     lowerKey.includes("height") ||
-    lowerKey.includes("range") ||
-    lowerKey.includes("offset") ||
     lowerKey.includes("width") ||
     lowerKey.includes("length") ||
-    lowerKey.includes("springarm") ||
-    lowerKey.includes("boomarm")
+    lowerKey.includes("offset") ||
+    lowerKey.includes("reach")
   ) {
-    return "cm";
+    return distUnit;
   }
   if (
-    lowerKey.includes("angle") ||
-    lowerKey.includes("fov") ||
-    lowerKey.includes("pitch") ||
-    lowerKey.includes("yaw") ||
-    lowerKey.includes("roll") ||
-    lowerKey.includes("spread") ||
-    lowerKey.includes("deg")
-  ) {
-    return "deg";
-  }
-  if (
-    lowerKey.includes("time") ||
-    lowerKey.includes("duration") ||
     lowerKey.includes("cooldown") ||
+    lowerKey.includes("duration") ||
+    lowerKey.includes("time") ||
     lowerKey.includes("delay") ||
+    lowerKey.includes("interval") ||
     lowerKey.includes("window")
   ) {
     return "s";
   }
   if (
-    lowerKey.includes("chance") ||
-    lowerKey.includes("percent") ||
-    lowerKey.includes("pct")
+    lowerKey.includes("angle") ||
+    lowerKey.includes("pitch") ||
+    lowerKey.includes("yaw") ||
+    lowerKey.includes("fov") ||
+    lowerKey.includes("arc")
   ) {
-    return "%";
-  }
-  if (lowerKey.includes("rate")) {
-    return "%/s";
-  }
-  if (
-    lowerKey.includes("mult") ||
-    lowerKey.includes("scale") ||
-    lowerKey.includes("factor")
-  ) {
-    return "x";
+    return "deg";
   }
   if (
     lowerKey.includes("hp") ||
@@ -327,10 +457,26 @@ function normalizeTuningUnitJs(key, rawUnit) {
   ) {
     return "hp";
   }
-  return "count";
+  if (
+    lowerKey.includes("count") ||
+    lowerKey.includes("waves") ||
+    lowerKey.includes("charges") ||
+    lowerKey.includes("ammo") ||
+    lowerKey.includes("max_enemies")
+  ) {
+    return "count";
+  }
+  if (
+    lowerKey.includes("mult") ||
+    lowerKey.includes("scale") ||
+    lowerKey.includes("zoom")
+  ) {
+    return "x";
+  }
+  return "";
 }
 
-function inferTuningPropertyTypeJs(value, unit, isUe6Verse = false) {
+function inferGodotPropertyTypeJs(value, unit) {
   const cleanVal = String(value || "").trim().toLowerCase();
   const cleanUnit = String(unit || "").trim().toLowerCase();
   if (
@@ -339,15 +485,15 @@ function inferTuningPropertyTypeJs(value, unit, isUe6Verse = false) {
     cleanVal === "true" ||
     cleanVal === "false"
   ) {
-    return isUe6Verse ? "logic" : "bool";
+    return "bool";
   }
   if (cleanUnit === "count" && /^-?\d+$/.test(cleanVal)) {
-    return isUe6Verse ? "int" : "int32";
+    return "int";
   }
   return "float";
 }
 
-function parseEpicSpecJs(epicDoc, indexHint = 0) {
+function parseEpicSpecJs(epicDoc, indexHint = 0, dimension = "dim3d") {
   const sec =
     epicDoc?.sections && typeof epicDoc.sections === "object"
       ? epicDoc.sections
@@ -355,8 +501,7 @@ function parseEpicSpecJs(epicDoc, indexHint = 0) {
   const parsed = parseJsonObjectSafe(sec.epic_spec_json) || {};
   const fallbackCode = `E${String(indexHint + 1).padStart(2, "0")}`;
   const code =
-    String(sec.code || parsed.code || fallbackCode).trim() ||
-    fallbackCode;
+    String(sec.code || parsed.code || fallbackCode).trim() || fallbackCode;
   const lineageKey = String(
     sec.lineage_key || parsed.lineageKey || code.toLowerCase()
   ).trim();
@@ -409,8 +554,8 @@ function parseEpicSpecJs(epicDoc, indexHint = 0) {
     ? parsed.controls
         .filter((c) => c && typeof c === "object")
         .map((c) => ({
-          action: String(c.action || "IA_Action").trim(),
-          trigger: String(c.trigger || "Pressed (Tap)").trim(),
+          action: String(c.action || "primary_action").trim(),
+          trigger: String(c.trigger || "Just Pressed (Space)").trim(),
           rule: String(c.rule || "").trim(),
         }))
     : [];
@@ -419,11 +564,11 @@ function parseEpicSpecJs(epicDoc, indexHint = 0) {
     ? parsed.tuning
         .filter((t) => t && typeof t === "object")
         .map((t) => {
-          const cleanKey = sanitizeTuningKeyJs(t.key, "TuningVar");
+          const cleanKey = sanitizeGodotTuningKeyJs(t.key, "tuning_param");
           return {
             key: cleanKey,
             value: String(t.value ?? "0").trim() || "0",
-            unit: normalizeTuningUnitJs(cleanKey, t.unit),
+            unit: normalizeGodotUnitJs(cleanKey, t.unit, dimension),
           };
         })
     : [];
@@ -462,7 +607,7 @@ function parseEpicSpecJs(epicDoc, indexHint = 0) {
   return spec;
 }
 
-function sanitizeUprojectContextJs(raw) {
+function sanitizeGodotLiveContextJs(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return null;
   }
@@ -478,220 +623,205 @@ function sanitizeUprojectContextJs(raw) {
 
   return {
     project_name: cleanStr(raw.project_name),
-    current_level: cleanStr(raw.current_level),
-    game_mode: cleanStr(raw.game_mode),
-    default_pawn: cleanStr(raw.default_pawn),
-    input_assets: cleanArr(raw.input_assets, 16),
-    blueprint_assets: cleanArr(raw.blueprint_assets, 16),
-    data_assets: cleanArr(raw.data_assets, 12),
-    widget_assets: cleanArr(raw.widget_assets, 12),
-    level_assets: cleanArr(raw.level_assets, 10),
-    verse_files: cleanArr(raw.verse_files, 12),
+    main_scene: cleanStr(raw.main_scene),
+    input_actions: cleanArr(raw.input_actions, 16),
+    scene_files: cleanArr(raw.scene_files, 12),
+    script_files: cleanArr(raw.script_files, 14),
+    resource_files: cleanArr(raw.resource_files, 8),
     recent_errors: cleanArr(raw.recent_errors, 8),
   };
 }
 
-function renderServerUnrealMcpPayloadJs({
+function renderServerGodotEpicContextJs({
   rootSpec,
   epicSpec,
   releaseEpics = null,
-  uprojectContext,
+  liveGodotContext = null,
+  includeRootContext = true,
+  includeExecutionFooter = true,
 }) {
-  const isUe6 = rootSpec?.targetEngine === "ue6Verse";
-  const archContract = isUe6
-    ? "Verse Components + Scene Graph Entities (@editable exposed fields)"
-    : "100% Blueprint-Only (.uasset) — Blueprint Actors/Components (BP_*), Interfaces (BPI_*), & Blueprint DataAssets/Structs (Instance Editable tuning)";
-  const codePolicy = isUe6
-    ? "UE6 VERSE + SCENE GRAPH — Author gameplay in .verse components and New Scene Editor entities (@editable tuning); zero C++ (.h/.cpp)."
-    : "STRICT BLUEPRINT-ONLY — NEVER create or edit C++ files (.h/.cpp), Source/*.Build.cs, or trigger Live Coding / UBT compiles; build all gameplay in Blueprints (.uasset).";
-  const compileSaveClause = isUe6
-    ? "compile/save modified Verse & Scene Graph assets (zero C++ .h/.cpp)"
-    : "compile/save modified Blueprint (.uasset) assets (strictly zero C++ .h/.cpp)";
-  const buildRuleClause = isUe6
-    ? "author strictly in Verse & Scene Graph entities (zero C++ .h/.cpp)"
-    : "author 100% in Blueprints (.uasset) with zero C++ (.h/.cpp)";
-  const inputContractLabel = isUe6
-    ? "Enhanced Input → Verse InputAction"
-    : "Enhanced Input (UInputAction + IMC_Core)";
-  const tuningColLabel = isUe6
-    ? "@editable Verse Field"
-    : "DataAsset / Details Var";
-
-  const lines = [];
-  lines.push(`# ROOT_MCP_CONTEXT · ${rootSpec.normalizedTitle}`);
-  lines.push(`Target Architecture: ${archContract}`);
-  lines.push(`Code Policy: ${codePolicy}`);
-  lines.push("");
-  lines.push("## §01 Concept & 30s Core Loop");
-  lines.push(`- Vision: ${rootSpec.pitch}`);
-  if (Array.isArray(rootSpec.coreLoop) && rootSpec.coreLoop.length > 0) {
-    lines.push(`- Loop: ${rootSpec.coreLoop.join(" -> ")}`);
-  }
-  if (rootSpec.releaseDoneWhen && String(rootSpec.releaseDoneWhen).trim()) {
-    lines.push(`- Release Gate: ${String(rootSpec.releaseDoneWhen).trim()}`);
-  }
-  lines.push("");
-  lines.push("## §02 Global Unreal Contracts (1 UU = 1 cm)");
-  lines.push(`- Camera & Boom: ${rootSpec.cameraContract}`);
-  lines.push(`- Player Scale: ${rootSpec.characterScale}`);
-  lines.push(`- Input Contract: ${rootSpec.inputContract}`);
-  lines.push(`- Asset Policy: ${rootSpec.assetPolicy}`);
-  lines.push("");
-  lines.push("## §03 Pillars & Conflict Trade-Offs");
-  lines.push(`- Core Feel: ${rootSpec.coreFeelLabel || "Snappy Arcade"}`);
-  for (const pillar of rootSpec.pillars || []) {
-    lines.push(`- Pillar: ${pillar}`);
-  }
-  for (const tradeOff of rootSpec.tradeOffs || []) {
-    lines.push(`- Trade-Off: ${tradeOff}`);
-  }
-  if (Array.isArray(rootSpec.outOfScope) && rootSpec.outOfScope.length > 0) {
-    lines.push("");
-    lines.push("## §04 Hard Scope Cuts (Do Not Build)");
-    for (const cut of rootSpec.outOfScope) {
-      lines.push(`- ${cut}`);
-    }
-  }
-
-  if (uprojectContext && typeof uprojectContext === "object" && Object.keys(uprojectContext).length > 0) {
-    const snapshotLines = [];
-    const projName = String(uprojectContext.project_name || "").trim();
-    const level = String(uprojectContext.current_level || "").trim();
-    const gameMode = String(uprojectContext.game_mode || "").trim();
-    const pawn = String(uprojectContext.default_pawn || "").trim();
-    if (projName) snapshotLines.push(`- Project: ${projName}`);
-    if (level) snapshotLines.push(`- Open Level: ${level}`);
-    if (gameMode) snapshotLines.push(`- GameMode: ${gameMode}`);
-    if (pawn) snapshotLines.push(`- DefaultPawnClass: ${pawn}`);
-    const pushSnapshotList = (label, rawList, cap) => {
-      if (!Array.isArray(rawList) || rawList.length === 0) return;
-      const clean = rawList
-        .map((item) => String(item ?? "").trim())
-        .filter(Boolean)
-        .slice(0, cap);
-      if (clean.length === 0) return;
-      snapshotLines.push(`- ${label}: ${clean.join(", ")}`);
-    };
-    pushSnapshotList("Existing Enhanced Input Assets", uprojectContext.input_assets, 12);
-    pushSnapshotList("Existing Blueprints", uprojectContext.blueprint_assets, 12);
-    pushSnapshotList("Existing DataAssets & Tables", uprojectContext.data_assets, 8);
-    pushSnapshotList("Existing UMG Widgets", uprojectContext.widget_assets, 8);
-    pushSnapshotList("Existing Levels", uprojectContext.level_assets, 6);
-    pushSnapshotList("Existing Verse Files", uprojectContext.verse_files, 8);
-    if (Array.isArray(uprojectContext.recent_errors) && uprojectContext.recent_errors.length > 0) {
-      const cleanErrors = uprojectContext.recent_errors
-        .map((err) => String(err ?? "").trim())
-        .filter(Boolean)
-        .slice(0, 4);
-      if (cleanErrors.length > 0) {
-        snapshotLines.push("- Recent Editor/PIE Log Warnings:");
-        for (const err of cleanErrors) {
-          snapshotLines.push(`  - ${err}`);
-        }
-      }
-    }
-    if (snapshotLines.length > 0) {
-      lines.push("");
-      lines.push("## Live Unreal Project Snapshot (.uproject via LayersBridge)");
-      lines.push(...snapshotLines);
-    }
-  }
-
-  if (Array.isArray(releaseEpics) && releaseEpics.length >= 2) {
-    const passedCount = releaseEpics.filter((sib) =>
-      typeof sib?.isPassed === "boolean"
-        ? sib.isPassed
-        : computeEpicPassedJs(sib)
-    ).length;
-    lines.push("");
-    lines.push(
-      `## Release Epic Roadmap (${epicSpec.releaseVersion} · ${passedCount}/${releaseEpics.length} Passed)`
-    );
-    for (const sib of releaseEpics) {
-      const isCurrent =
-        (epicSpec.id && sib.id === epicSpec.id) ||
-        (!epicSpec.id && sib.code === epicSpec.code);
-      const sibPassed =
-        typeof sib?.isPassed === "boolean"
-          ? sib.isPassed
-          : computeEpicPassedJs(sib);
-      if (isCurrent) {
-        lines.push(
-          `- [ACTIVE →] ${sib.code} · ${sib.title} — build in this pass`
-        );
-      } else if (sibPassed) {
-        const seenContracts = new Set();
-        const contracts = [];
-        const addContract = (raw) => {
-          const clean = String(raw || "").trim();
-          if (!clean || contracts.length >= 3) return;
-          const key = clean.toLowerCase();
-          if (!seenContracts.has(key)) {
-            seenContracts.add(key);
-            contracts.push(clean);
-          }
-        };
-        for (const link of (Array.isArray(sib.links) ? sib.links : []).slice(0, 2)) {
-          addContract(link);
-        }
-        for (const ctrl of (Array.isArray(sib.controls) ? sib.controls : []).slice(0, 2)) {
-          addContract(ctrl?.action);
-        }
-        if (contracts.length > 0) {
-          lines.push(
-            `- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse (${contracts.join(", ")})`
-          );
-        } else {
-          lines.push(
-            `- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse existing assets`
-          );
-        }
-      } else {
-        lines.push(
-          `- [QUEUED — DEFER] ${sib.code} · ${sib.title} — do not build yet; stub interfaces only if needed`
-        );
-      }
-    }
-  }
-
+  const dimMeta = resolveDimensionMetaJs(rootSpec?.dimension);
   const openFixes = Array.isArray(epicSpec.openFixes)
     ? epicSpec.openFixes
     : (epicSpec.fixes || []).filter((f) => !f.resolved);
 
-  lines.push("");
-  lines.push("---");
-  lines.push("");
+  const lines = [];
+
+  if (includeRootContext) {
+    lines.push(`# ROOT_GODOT_CONTEXT · ${rootSpec.normalizedTitle}`);
+    lines.push(`Target Architecture: ${dimMeta.architectureContract}`);
+    lines.push(`Code Policy: ${dimMeta.codePolicyContract}`);
+    lines.push("");
+    lines.push("## §01 Concept & 30s Core Loop");
+    lines.push(`- Vision: ${String(rootSpec.pitch || "").trim()}`);
+    if (Array.isArray(rootSpec.coreLoop) && rootSpec.coreLoop.length > 0) {
+      lines.push(`- Loop: ${rootSpec.coreLoop.join(" -> ")}`);
+    }
+    if (rootSpec.releaseDoneWhen && String(rootSpec.releaseDoneWhen).trim()) {
+      lines.push(`- Release Gate: ${String(rootSpec.releaseDoneWhen).trim()}`);
+    }
+    lines.push("");
+    lines.push(`## §02 Global Godot 4 Contracts (${dimMeta.pillLabel})`);
+    lines.push(`- Camera Rig: ${String(rootSpec.cameraContract || "").trim()}`);
+    lines.push(`- Player Scale: ${String(rootSpec.characterScale || "").trim()}`);
+    lines.push(`- Input Contract: ${String(rootSpec.inputContract || "").trim()}`);
+    lines.push(`- Asset Policy: ${String(rootSpec.assetPolicy || "").trim()}`);
+    lines.push("");
+    lines.push("## §03 Pillars & Conflict Trade-Offs");
+    lines.push(`- Core Feel: ${rootSpec.coreFeelLabel || "Snappy Arcade"}`);
+    for (const pillar of rootSpec.pillars || []) {
+      lines.push(`- Pillar: ${pillar}`);
+    }
+    for (const tradeOff of rootSpec.tradeOffs || []) {
+      lines.push(`- Trade-Off: ${tradeOff}`);
+    }
+    if (Array.isArray(rootSpec.outOfScope) && rootSpec.outOfScope.length > 0) {
+      lines.push("");
+      lines.push("## §04 Hard Scope Cuts (Do Not Build)");
+      for (const cut of rootSpec.outOfScope) {
+        lines.push(`- ${cut}`);
+      }
+    }
+
+    if (
+      liveGodotContext &&
+      typeof liveGodotContext === "object" &&
+      Object.keys(liveGodotContext).length > 0
+    ) {
+      const snapshotLines = [];
+      const projName = String(liveGodotContext.project_name || "").trim();
+      const mainScene = String(liveGodotContext.main_scene || "").trim();
+      if (projName) snapshotLines.push(`- Project: ${projName}`);
+      if (mainScene) snapshotLines.push(`- Main Scene: ${mainScene}`);
+      const pushSnapshotList = (label, rawList, cap) => {
+        if (!Array.isArray(rawList) || rawList.length === 0) return;
+        const clean = rawList
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean)
+          .slice(0, cap);
+        if (clean.length === 0) return;
+        snapshotLines.push(`- ${label}: ${clean.join(", ")}`);
+      };
+      pushSnapshotList("Existing InputMap Actions", liveGodotContext.input_actions, 16);
+      pushSnapshotList("Existing Scenes (.tscn)", liveGodotContext.scene_files, 12);
+      pushSnapshotList("Existing Scripts (.gd)", liveGodotContext.script_files, 14);
+      pushSnapshotList("Existing Resources (.tres)", liveGodotContext.resource_files, 8);
+      if (
+        Array.isArray(liveGodotContext.recent_errors) &&
+        liveGodotContext.recent_errors.length > 0
+      ) {
+        const cleanErrors = liveGodotContext.recent_errors
+          .map((err) => String(err ?? "").trim())
+          .filter(Boolean)
+          .slice(0, 4);
+        if (cleanErrors.length > 0) {
+          snapshotLines.push("- Recent Editor/Debugger Errors:");
+          for (const err of cleanErrors) {
+            snapshotLines.push(`  - ${err}`);
+          }
+        }
+      }
+      if (snapshotLines.length > 0) {
+        lines.push("");
+        lines.push("## Live Godot Project Snapshot (project.godot via Dock)");
+        lines.push(...snapshotLines);
+      }
+    }
+
+    if (Array.isArray(releaseEpics) && releaseEpics.length >= 2) {
+      const passedCount = releaseEpics.filter((sib) =>
+        typeof sib?.isPassed === "boolean"
+          ? sib.isPassed
+          : computeEpicPassedJs(sib)
+      ).length;
+      lines.push("");
+      lines.push(
+        `## Release Epic Roadmap (${epicSpec.releaseVersion} · ${passedCount}/${releaseEpics.length} Passed)`
+      );
+      for (const sib of releaseEpics) {
+        const isCurrent =
+          (epicSpec.id && sib.id === epicSpec.id) ||
+          (!epicSpec.id && sib.code === epicSpec.code);
+        const sibPassed =
+          typeof sib?.isPassed === "boolean"
+            ? sib.isPassed
+            : computeEpicPassedJs(sib);
+        if (isCurrent) {
+          lines.push(
+            `- [ACTIVE →] ${sib.code} · ${sib.title} — build in this pass`
+          );
+        } else if (sibPassed) {
+          const seenContracts = new Set();
+          const contracts = [];
+          const addContract = (raw) => {
+            const clean = String(raw || "").trim();
+            if (!clean || contracts.length >= 3) return;
+            const key = clean.toLowerCase();
+            if (!seenContracts.has(key)) {
+              seenContracts.add(key);
+              contracts.push(clean);
+            }
+          };
+          for (const link of (Array.isArray(sib.links) ? sib.links : []).slice(0, 2)) {
+            addContract(link);
+          }
+          for (const ctrl of (Array.isArray(sib.controls) ? sib.controls : []).slice(0, 2)) {
+            addContract(ctrl?.action);
+          }
+          if (contracts.length > 0) {
+            lines.push(
+              `- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse (${contracts.join(", ")})`
+            );
+          } else {
+            lines.push(
+              `- [BUILT ✓] ${sib.code} · ${sib.title} — preserve & reuse existing scenes/scripts`
+            );
+          }
+        } else {
+          lines.push(
+            `- [QUEUED — DEFER] ${sib.code} · ${sib.title} — do not build yet; stub signals only if needed`
+          );
+        }
+      }
+    }
+
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+  }
+
   lines.push(
     `# ACTIVE EPIC SPEC · ${epicSpec.code} · ${epicSpec.title} (${epicSpec.releaseVersion})`
   );
   if (openFixes.length > 0) {
     lines.push(
-      `Execution Mode: FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX]) — surgical edits only; keep passing checks intact`
+      `Execution Mode: FOCUSED PLAYTEST REVISION PASS (${openFixes.length} OPEN [FIX]) — surgical edits only; keep passing checks intact`
     );
-  } else {
+  } else if (includeExecutionFooter) {
     lines.push("Execution Mode: FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK");
   }
   lines.push("");
-  lines.push("## §01 System Intent & Actor Links");
-  if (epicSpec.coreLoopBeat) {
-    lines.push(`- Core Loop Beat: ${epicSpec.coreLoopBeat}`);
+  lines.push("## §01 System Intent & Scene Links");
+  if (epicSpec.coreLoopBeat && String(epicSpec.coreLoopBeat).trim()) {
+    lines.push(`- Core Loop Beat: ${String(epicSpec.coreLoopBeat).trim()}`);
   }
-  lines.push(`- Goal: ${epicSpec.goal}`);
-  if (epicSpec.links.length > 0) {
+  lines.push(`- Goal: ${String(epicSpec.goal || "").trim()}`);
+  if (Array.isArray(epicSpec.links) && epicSpec.links.length > 0) {
     lines.push(`- Links: ${epicSpec.links.join(" · ")}`);
   }
-  if (epicSpec.outOfScope.length > 0) {
+  if (Array.isArray(epicSpec.outOfScope) && epicSpec.outOfScope.length > 0) {
     lines.push(`- Out of Scope: ${epicSpec.outOfScope.join("; ")}`);
   }
   if (
     Array.isArray(epicSpec.baselineSummary) &&
     epicSpec.baselineSummary.length > 0 &&
-    (epicSpec.releaseVersion !== "v0.1" || epicSpec.upgradeDeltas.length > 0)
+    (epicSpec.releaseVersion !== "v0.1" ||
+      (Array.isArray(epicSpec.upgradeDeltas) && epicSpec.upgradeDeltas.length > 0))
   ) {
     lines.push(`- Locked Baseline: ${epicSpec.baselineSummary.join(" · ")}`);
   }
 
-  if (epicSpec.upgradeDeltas.length > 0) {
+  if (Array.isArray(epicSpec.upgradeDeltas) && epicSpec.upgradeDeltas.length > 0) {
     lines.push("");
     lines.push(
       `## ${epicSpec.releaseVersion} Upgrade Deltas (atop locked v0.1 baseline)`
@@ -703,8 +833,8 @@ function renderServerUnrealMcpPayloadJs({
   }
 
   lines.push("");
-  lines.push(`## §02 Controls (${inputContractLabel})`);
-  if (epicSpec.controls.length === 0) {
+  lines.push(`## §02 Controls (${dimMeta.inputContractLabel})`);
+  if (!Array.isArray(epicSpec.controls) || epicSpec.controls.length === 0) {
     lines.push("- None (passive/system-driven Epic)");
   } else {
     for (const c of epicSpec.controls) {
@@ -714,32 +844,36 @@ function renderServerUnrealMcpPayloadJs({
 
   lines.push("");
   lines.push("## §03 State Flow & Interrupt Rules");
-  if (epicSpec.states.length === 0 && epicSpec.interrupts.length === 0) {
-    lines.push("- Stateless / event-driven Epic");
+  if (
+    (!Array.isArray(epicSpec.states) || epicSpec.states.length === 0) &&
+    (!Array.isArray(epicSpec.interrupts) || epicSpec.interrupts.length === 0)
+  ) {
+    lines.push("- Stateless / signal-driven Epic");
   } else {
-    for (const s of epicSpec.states) {
+    for (const s of epicSpec.states || []) {
       lines.push(`- State: ${s}`);
     }
-    for (const rule of epicSpec.interrupts) {
+    for (const rule of epicSpec.interrupts || []) {
       lines.push(`- Interrupt: ${rule}`);
     }
   }
 
   lines.push("");
-  lines.push(`## §04 Spatial & Exposed Tuning (${tuningColLabel})`);
-  if (epicSpec.tuning.length === 0) {
+  lines.push(`## §04 Spatial & Exposed Tuning (${dimMeta.tuningColumnLabel})`);
+  if (!Array.isArray(epicSpec.tuning) || epicSpec.tuning.length === 0) {
     lines.push("- None");
   } else {
     for (const t of epicSpec.tuning) {
-      const unitSuffix = t.unit ? ` ${t.unit}` : "";
-      const propType = inferTuningPropertyTypeJs(t.value, t.unit, isUe6);
+      const trimmedUnit = String(t.unit || "").trim();
+      const unitSuffix = trimmedUnit ? ` ${trimmedUnit}` : "";
+      const propType = inferGodotPropertyTypeJs(t.value, trimmedUnit);
       lines.push(`- ${t.key}: ${t.value}${unitSuffix} [${propType}]`);
     }
   }
 
   lines.push("");
-  lines.push("## §05 Viewport, UMG & Audio Cues");
-  if (epicSpec.feedback.length === 0) {
+  lines.push("## §05 Viewport, UI & Audio Cues");
+  if (!Array.isArray(epicSpec.feedback) || epicSpec.feedback.length === 0) {
     lines.push("- Minimal greybox debug visuals");
   } else {
     for (const f of epicSpec.feedback) {
@@ -748,11 +882,11 @@ function renderServerUnrealMcpPayloadJs({
   }
 
   lines.push("");
-  lines.push("## §06 Test Level Staging & PIE Acceptance Gate");
-  if (epicSpec.levelStaging) {
-    lines.push(`- Test Level: ${epicSpec.levelStaging}`);
+  lines.push("## §06 Test Scene Staging & Playtest Acceptance Gate");
+  if (epicSpec.levelStaging && String(epicSpec.levelStaging).trim()) {
+    lines.push(`- Test Scene: ${String(epicSpec.levelStaging).trim()}`);
   }
-  epicSpec.checks.forEach((chk, i) => {
+  (epicSpec.checks || []).forEach((chk, i) => {
     const tag = chk.passed ? "[PASSED]" : "[VERIFY]";
     lines.push(`  ${tag} Check ${i + 1}: ${chk.text}`);
   });
@@ -766,26 +900,28 @@ function renderServerUnrealMcpPayloadJs({
       lines.push(`- [FIX] ${fx.text}${idTag}`);
     }
     lines.push("");
-    lines.push(`### FOCUSED PIE REVISION PASS (${openFixes.length} OPEN [FIX])`);
     lines.push(
-      `Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, ${compileSaveClause}, and report via layers_resolve_pie_fix(fix_id) + layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).`
+      `### FOCUSED PLAYTEST REVISION PASS (${openFixes.length} OPEN [FIX])`
     );
-  } else {
+    lines.push(
+      `Targeted edits only to resolve every open [FIX] item above; keep already-passing checks intact, emit compile-clean Godot 4 .gd/.tscn/${dimMeta.shortLabel} updates, and leave final pass sign-off to human playtest.`
+    );
+  } else if (includeExecutionFooter) {
     lines.push("");
     lines.push("### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK");
     lines.push(
-      `Implement §01-§06 in one Unreal MCP pass matching ROOT_MCP_CONTEXT contracts (${buildRuleClause}), expose every §04 tuning variable, then run PIE self-check against every §06 Check and call layers_toggle_pie_check(check_id, passed=true). Do NOT call layers_pass_active_epic (reserved for human PIE sign-off).`
+      `Synthesize §01-§06 cleanly into Godot 4 (${dimMeta.shortLabel}: .gd scripts + .tscn sceneOps + project.godot inputOps) matching ROOT_GODOT_CONTEXT contracts, expose every §04 @export variable in snake_case, and ensure zero GDScript compile errors.`
     );
   }
 
   return lines.join("\n").trimRight();
 }
 
-function computeActiveUnrealEpicPayload({
+function computeActiveGodotEpicPayload({
   docsById,
   projectId,
   webStudioUrl = DEFAULT_WEB_STUDIO_URL,
-  uprojectContext = null,
+  liveGodotContext = null,
   preferredEpicId = "",
 }) {
   const projectDoc = projectId ? docsById.get(projectId) || null : null;
@@ -799,7 +935,8 @@ function computeActiveUnrealEpicPayload({
       epicPosition: 0,
       webStudioUrl,
       activeEpic: null,
-      mcpPayloadMarkdown: "",
+      releaseEpicsSummary: [],
+      godotContextMarkdown: "",
     };
   }
 
@@ -809,9 +946,9 @@ function computeActiveUnrealEpicPayload({
       ? projectDoc.sections
       : {};
   const liveCtx =
-    uprojectContext && typeof uprojectContext === "object"
-      ? uprojectContext
-      : parseJsonObjectSafe(projSections.unreal_live_context_json);
+    liveGodotContext && typeof liveGodotContext === "object"
+      ? liveGodotContext
+      : parseJsonObjectSafe(projSections.godot_live_context_json);
 
   let releases = (Array.isArray(projectDoc.childrenIds) ? projectDoc.childrenIds : [])
     .map((id) => docsById.get(id))
@@ -840,7 +977,7 @@ function computeActiveUnrealEpicPayload({
       ok: true,
       projectId: projectDoc.id,
       projectTitle: rootSpec.normalizedTitle,
-      targetEngine: rootSpec.targetEngine,
+      dimension: rootSpec.dimension,
       releaseVersion: "v0.1",
       releaseTitle: "",
       epicPosition: 0,
@@ -848,7 +985,8 @@ function computeActiveUnrealEpicPayload({
       allEpicsCompleted: false,
       webStudioUrl,
       activeEpic: null,
-      mcpPayloadMarkdown: renderServerUnrealMcpPayloadJs({
+      releaseEpicsSummary: [],
+      godotContextMarkdown: renderServerGodotEpicContextJs({
         rootSpec,
         epicSpec: {
           id: "none",
@@ -869,7 +1007,7 @@ function computeActiveUnrealEpicPayload({
           fixes: [],
           openFixes: [],
         },
-        uprojectContext: liveCtx,
+        liveGodotContext: liveCtx,
       }).split("\n---\n")[0],
     };
   }
@@ -889,13 +1027,15 @@ function computeActiveUnrealEpicPayload({
     }
   }
 
-  const parsedEpics = epicDocs.map((d, idx) => parseEpicSpecJs(d, idx));
+  const parsedEpics = epicDocs.map((d, idx) =>
+    parseEpicSpecJs(d, idx, rootSpec.dimension)
+  );
   if (parsedEpics.length === 0) {
     return {
       ok: true,
       projectId: projectDoc.id,
       projectTitle: rootSpec.normalizedTitle,
-      targetEngine: rootSpec.targetEngine,
+      dimension: rootSpec.dimension,
       releaseVersion,
       releaseTitle: String(activeRel.title || releaseVersion),
       epicPosition: 0,
@@ -903,7 +1043,8 @@ function computeActiveUnrealEpicPayload({
       allEpicsCompleted: false,
       webStudioUrl,
       activeEpic: null,
-      mcpPayloadMarkdown: "",
+      releaseEpicsSummary: [],
+      godotContextMarkdown: "",
     };
   }
 
@@ -936,26 +1077,49 @@ function computeActiveUnrealEpicPayload({
     projectDoc.id
   )}&epic=${encodeURIComponent(activeEpic.id)}`;
 
-  const mcpPayloadMarkdown = renderServerUnrealMcpPayloadJs({
+  const godotContextMarkdown = renderServerGodotEpicContextJs({
     rootSpec,
     epicSpec: activeEpic,
     releaseEpics: parsedEpics,
-    uprojectContext: liveCtx,
+    liveGodotContext: liveCtx,
   });
+
+  const stagingTscns = extractResPathsListJs(activeEpic.levelStaging, ".tscn");
+  const linkTscns = extractResPathsListJs((activeEpic.links || []).join(" "), ".tscn");
+  const liveMainScene = normalizeResPathJs(liveCtx?.main_scene || "");
+  const liveScenes = Array.isArray(liveCtx?.scene_files)
+    ? liveCtx.scene_files.map((s) => normalizeResPathJs(s)).filter(Boolean)
+    : [];
+  const arenaScenePath =
+    stagingTscns[0] || liveMainScene || linkTscns[0] || liveScenes[0] || "";
+
+  const releaseEpicsSummary = parsedEpics.map((ep) => ({
+    id: ep.id,
+    code: ep.code,
+    title: ep.title,
+    isPassed: Boolean(ep.isPassed),
+    openFixesCount: Number(ep.openFixesCount || 0),
+    passedChecksCount: Number(ep.passedChecksCount || 0),
+    totalChecks: Array.isArray(ep.checks) ? ep.checks.length : 0,
+  }));
 
   return {
     ok: true,
     projectId: projectDoc.id,
     projectTitle: rootSpec.normalizedTitle,
-    targetEngine: rootSpec.targetEngine,
+    dimension: rootSpec.dimension,
     releaseVersion,
     releaseTitle: String(activeRel.title || releaseVersion),
     epicPosition: activeIdx + 1,
     totalEpics: parsedEpics.length,
     allEpicsCompleted,
     webStudioUrl: epicStudioUrl,
+    arenaScenePath,
     activeEpic,
-    mcpPayloadMarkdown,
+    releaseEpicsSummary,
+    godotContextMarkdown,
+    rootSpec,
+    releaseEpics: parsedEpics,
   };
 }
 
@@ -968,7 +1132,7 @@ function resolveTargetEpicDocIdJs({
 }) {
   const reqId = String(requestedEpicId || "").trim();
   if (!reqId) {
-    const payload = computeActiveUnrealEpicPayload({
+    const payload = computeActiveGodotEpicPayload({
       docsById,
       projectId,
       webStudioUrl,
@@ -983,6 +1147,7 @@ function resolveTargetEpicDocIdJs({
 
   const lowerReq = reqId.toLowerCase();
   const projectDoc = docsById.get(projectId);
+  const rootSpec = parseRootSpecJs(projectDoc);
   const savedRelId = String(projectDoc?.sections?.active_release_id || "").trim();
 
   const epicDocs = [];
@@ -1001,7 +1166,7 @@ function resolveTargetEpicDocIdJs({
 
   for (let i = 0; i < ordered.length; i += 1) {
     const doc = ordered[i];
-    const parsed = parseEpicSpecJs(doc, i);
+    const parsed = parseEpicSpecJs(doc, i, rootSpec.dimension);
     if (
       parsed.code.toLowerCase() === lowerReq ||
       parsed.lineageKey.toLowerCase() === lowerReq
@@ -1013,7 +1178,7 @@ function resolveTargetEpicDocIdJs({
   return reqId;
 }
 
-const UNREAL_UPDATE_VALID_ACTIONS = new Set([
+const GODOT_UPDATE_VALID_ACTIONS = new Set([
   "toggle_check",
   "update_tuning",
   "set_tuning",
@@ -1021,20 +1186,23 @@ const UNREAL_UPDATE_VALID_ACTIONS = new Set([
   "resolve_fix",
   "pass_epic",
   "reopen_epic",
-  "sync_uproject",
+  "sync_project",
+  "build_epic",
+  "fix_epic",
 ]);
 
-function applyUnrealEpicMutationJs({
+function applyGodotEpicMutationJs({
   epicDoc,
   action,
   body = {},
+  dimension = "dim3d",
   nowMs = Date.now(),
 }) {
   const sec =
     epicDoc?.sections && typeof epicDoc.sections === "object"
       ? { ...epicDoc.sections }
       : {};
-  const spec = parseEpicSpecJs(epicDoc);
+  const spec = parseEpicSpecJs(epicDoc, 0, dimension);
   delete spec.openFixes;
   delete spec.openFixesCount;
   delete spec.passedChecksCount;
@@ -1069,7 +1237,7 @@ function applyUnrealEpicMutationJs({
     }
     if (matchedIdx < 0) {
       const err = new Error(
-        `Matching PIE check not found for "${checkId || checkIdx}".`
+        `Matching Playtest check not found for "${checkId || checkIdx}".`
       );
       err.statusCode = 404;
       throw err;
@@ -1088,7 +1256,7 @@ function applyUnrealEpicMutationJs({
           : "active";
     }
   } else if (action === "update_tuning" || action === "set_tuning") {
-    const cleanKey = sanitizeTuningKeyJs(body.key, "");
+    const cleanKey = sanitizeGodotTuningKeyJs(body.key, "");
     const rawVal =
       body.value === undefined || body.value === null
         ? ""
@@ -1106,12 +1274,16 @@ function applyUnrealEpicMutationJs({
     );
     if (existing) {
       existing.value = rawVal;
-      existing.unit = normalizeTuningUnitJs(existing.key, rawUnit || existing.unit);
+      existing.unit = normalizeGodotUnitJs(
+        existing.key,
+        rawUnit || existing.unit,
+        dimension
+      );
     } else {
       spec.tuning.push({
         key: cleanKey,
         value: rawVal,
-        unit: normalizeTuningUnitJs(cleanKey, rawUnit),
+        unit: normalizeGodotUnitJs(cleanKey, rawUnit, dimension),
       });
     }
     if (spec.lifecycle === "queued") {
@@ -1215,7 +1387,7 @@ function applyUnrealEpicMutationJs({
       for (const c of spec.checks) c.passed = false;
     }
   } else {
-    const err = new Error(`Unsupported Unreal Epic action: ${action}`);
+    const err = new Error(`Unsupported Godot Epic action: ${action}`);
     err.statusCode = 400;
     throw err;
   }
@@ -1228,7 +1400,7 @@ function applyUnrealEpicMutationJs({
   sec.goal = spec.goal;
   sec.epic_spec_json = JSON.stringify(spec);
   sec.updated_at_ms = String(nowMs);
-  sec.last_unreal_sync_ms = String(nowMs);
+  sec.last_godot_sync_ms = String(nowMs);
 
   const subtasks = spec.checks.map((c) => ({
     id: c.id,
@@ -1237,6 +1409,310 @@ function applyUnrealEpicMutationJs({
   }));
 
   return { sections: sec, isCompleted, subtasks, epicSpec: spec };
+}
+
+const VALID_SCENE_OPS = new Set([
+  "ensure_node",
+  "set_property",
+  "reparent_node",
+  "attach_script",
+  "detach_script",
+  "connect_signal",
+  "instance_scene",
+  "remove_node",
+  "add_to_group",
+]);
+
+function normalizeAgentBundle(rawObj, mode, opts = {}) {
+  const obj = rawObj && typeof rawObj === "object" ? rawObj : {};
+  const rawUpdates = Array.isArray(obj.scriptUpdates) ? obj.scriptUpdates : [];
+  const scriptUpdates = [];
+  for (const u of rawUpdates) {
+    if (!u || typeof u !== "object") continue;
+    const resPath = normalizeResPathJs(u.resPath || u.res_path || "");
+    const content = stripDiffLinePrefixes(u.content || "");
+    if (!resPath || !content) continue;
+    scriptUpdates.push({
+      resPath,
+      attachTo: String(u.attachTo || u.attach_to || "").trim(),
+      scenePath: normalizeResPathJs(u.scenePath || u.scene_path || ""),
+      language: String(u.language || "gdscript").trim().toLowerCase(),
+      content,
+    });
+  }
+
+  const rawOps = Array.isArray(obj.sceneOps) ? obj.sceneOps : [];
+  const sceneOps = [];
+  for (const opObj of rawOps) {
+    if (!opObj || typeof opObj !== "object") continue;
+    const op = String(opObj.op || opObj.type || "").trim().toLowerCase();
+    if (!VALID_SCENE_OPS.has(op)) continue;
+    sceneOps.push({
+      op,
+      scenePath: normalizeResPathJs(opObj.scenePath || opObj.scene_path || ""),
+      nodePath: String(opObj.nodePath || opObj.node_path || "").trim(),
+      parentPath: String(opObj.parentPath || opObj.parent_path || "").trim(),
+      newParentPath: String(
+        opObj.newParentPath || opObj.new_parent_path || ""
+      ).trim(),
+      nodeName: String(opObj.nodeName || opObj.node_name || "").trim(),
+      nodeType: String(opObj.nodeType || opObj.node_type || "").trim(),
+      subResourceClass: String(
+        opObj.subResourceClass || opObj.sub_resource_class || ""
+      ).trim(),
+      subResourceProps:
+        opObj.subResourceProps && typeof opObj.subResourceProps === "object"
+          ? opObj.subResourceProps
+          : {},
+      properties:
+        opObj.properties && typeof opObj.properties === "object"
+          ? opObj.properties
+          : {},
+      groups: Array.isArray(opObj.groups)
+        ? opObj.groups.map((g) => String(g || "").trim()).filter(Boolean)
+        : [],
+      scriptPath: normalizeResPathJs(opObj.scriptPath || opObj.script_path || ""),
+      sourcePath: String(opObj.sourcePath || opObj.source_path || "").trim(),
+      signalName: String(opObj.signalName || opObj.signal_name || "").trim(),
+      targetPath: String(opObj.targetPath || opObj.target_path || "").trim(),
+      methodName: String(opObj.methodName || opObj.method_name || "").trim(),
+      instancePath: normalizeResPathJs(
+        opObj.instancePath || opObj.instance_path || ""
+      ),
+    });
+  }
+
+  const rawInputs = Array.isArray(obj.inputOps)
+    ? obj.inputOps
+    : Array.isArray(obj.input_ops)
+      ? obj.input_ops
+      : [];
+  const inputOps = [];
+  for (const inp of rawInputs) {
+    if (!inp || typeof inp !== "object") continue;
+    const action = String(inp.action || inp.name || "").trim();
+    const rawKeys = Array.isArray(inp.keys)
+      ? inp.keys
+      : inp.key
+        ? [inp.key]
+        : [];
+    const keys = rawKeys.map((k) => String(k || "").trim()).filter(Boolean);
+    const remove =
+      Boolean(inp.remove) ||
+      String(inp.op || inp.type || "").trim().toLowerCase() === "remove_action";
+    const overwrite = Boolean(inp.overwrite);
+    if (!action) continue;
+    const normInput = { action, keys };
+    if (remove) normInput.remove = true;
+    if (overwrite) normInput.overwrite = true;
+    inputOps.push(normInput);
+  }
+
+  const arenaScenePath = normalizeResPathJs(
+    obj.arenaScenePath || obj.arena_scene_path || opts.arenaScenePath || ""
+  );
+  const featureScenePath = normalizeResPathJs(
+    obj.epicScenePath ||
+      obj.epic_scene_path ||
+      obj.featureScenePath ||
+      obj.feature_scene_path ||
+      opts.epicScenePath ||
+      arenaScenePath ||
+      ""
+  );
+
+  return {
+    mode: String(obj.mode || mode || "build_epic").trim(),
+    summary: String(obj.summary || "").trim(),
+    diagnosis: String(obj.diagnosis || "").trim(),
+    dimension: opts.dimension || "dim3d",
+    arenaScenePath,
+    featureScenePath,
+    epicScenePath: featureScenePath,
+    scriptUpdates,
+    sceneOps,
+    inputOps,
+  };
+}
+
+async function callGeminiFlashJson({
+  apiKey,
+  systemInstruction,
+  userPrompt,
+  thinkingLevel = "LOW",
+  maxOutputTokens = 16384,
+}) {
+  const models = ["gemini-4-hydrogen", "gemini-flash-latest"];
+  let lastError = "Gemini request failed.";
+  for (const modelId of models) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${encodeURIComponent(
+      apiKey
+    )}`;
+    const basePayload = {
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens,
+        responseMimeType: "application/json",
+      },
+    };
+    const payloads =
+      modelId === "gemini-4-hydrogen"
+        ? [
+            {
+              ...basePayload,
+              generationConfig: {
+                ...basePayload.generationConfig,
+                thinkingConfig: { thinkingLevel },
+              },
+            },
+            basePayload,
+          ]
+        : [basePayload];
+
+    for (const payload of payloads) {
+      try {
+        const resp = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) {
+          const errTxt = await resp.text();
+          lastError = `${modelId} HTTP ${resp.status}: ${errTxt.slice(0, 220)}`;
+          if (resp.status === 400 && payload !== payloads[payloads.length - 1]) {
+            continue;
+          }
+          break;
+        }
+        const jsonResp = await resp.json();
+        const parts = jsonResp?.candidates?.[0]?.content?.parts || [];
+        const rawText = parts
+          .filter((p) => p && !p.thought && typeof p.text === "string")
+          .map((p) => p.text)
+          .join("\n")
+          .trim();
+        if (!rawText) {
+          lastError = `${modelId} returned empty response.`;
+          continue;
+        }
+        const cleanJson = rawText
+          .replace(/^```json\s*/i, "")
+          .replace(/^```\s*/i, "")
+          .replace(/```\s*$/i, "")
+          .trim();
+        const parsed = JSON.parse(cleanJson);
+        return { ok: true, model: modelId, data: parsed };
+      } catch (err) {
+        lastError = `${modelId}: ${String(err && err.message ? err.message : err)}`;
+      }
+    }
+  }
+  return { ok: false, error: lastError };
+}
+
+async function runGodotEpicAgentWithGemini({
+  apiKey,
+  mode,
+  rootSpec,
+  epicSpec,
+  godotContextMarkdown,
+  liveScripts,
+  sceneSnapshot,
+  inputMapSnapshot,
+  projectDiagnostics,
+  liveGodotContext,
+  prompt,
+  errorText,
+  arenaScenePath,
+  epicScenePath,
+}) {
+  const dimMeta = resolveDimensionMetaJs(rootSpec?.dimension);
+  const mergedScripts = {};
+  if (liveScripts && typeof liveScripts === "object") {
+    for (const [k, v] of Object.entries(liveScripts)) {
+      const norm = normalizeResPathJs(k);
+      if (norm && typeof v === "string") mergedScripts[norm] = v;
+    }
+  }
+
+  const dimRules =
+    dimMeta.id === "dim2d"
+      ? "DIMENSION CONTRACT (Godot 4 · 2D): Use CharacterBody2D / Node2D / Area2D / Camera2D / Sprite2D or ColorRect/Polygon2D in pixel space (px, px/s)."
+      : "DIMENSION CONTRACT (Godot 4 · 3D): Use CharacterBody3D / Node3D / Area3D / SpringArm3D / Camera3D / CSGBox3D / CSGCylinder3D / MeshInstance3D in meters (1 unit = 1 m). Ground at Y=0.";
+
+  const systemInstruction = [
+    "You are LAYERS Godot 4 Epic Co-Builder targeting Godot 4.7.2.stable.",
+    dimRules,
+    "Return strictly valid JSON with keys: mode, summary, diagnosis, arenaScenePath, epicScenePath, scriptUpdates, sceneOps, inputOps.",
+    "STRICT ENGINE & GODOT 4.7 OUTPUT RULES:",
+    "1. NEVER emit push_warning(...) placeholders or stub comments. Emit real, playable typed GDScript 2.0 and real sceneOps.",
+    "2. GODOT 4.7 STRICT TYPING: NEVER write ':=' when assigning from a Variant dictionary/array/JSON getter (e.g. dict.get(...), JSON.parse_string(...), arr[0]). Always annotate explicit types ('var x: String = ...', 'var f: float = ...', 'var parsed: Variant = ...') and typed Array constructors.",
+    "3. scriptUpdates: array of { resPath, attachTo, scenePath, language: 'gdscript', content }. Expose EVERY §04 tuning variable with exact snake_case '@export var ...' at the top of the relevant script with defaults matching §04.",
+    "4. sceneOps: array of structured scene mutations: ensure_node, set_property, reparent_node, attach_script, detach_script, connect_signal, instance_scene, remove_node, add_to_group.",
+    "5. ClassDB SAFETY: NEVER attach a script whose 'extends <Class>' is incompatible with the target node class.",
+    "6. SIGNAL & ARITY SAFETY: Connect signals ONLY to nodes defining methodName with matching parameter count (use optional '_arg: Variant = null' if emitting args).",
+    "7. MATERIALS & SHAPES: Specify explicit subResourceClass + subResourceProps (BoxShape3D/CapsuleShape3D/SphereShape3D or RectangleShape2D/CircleShape2D, BoxMesh/CapsuleMesh, StandardMaterial3D albedo_color).",
+    "8. SCENE TREE & _ready() SAFETY: Use add_child(inst) BEFORE setting inst.global_position; use call_deferred when adding siblings inside _ready(). Clean up projectiles/enemies with queue_free().",
+    "9. INPUT OPS: Declare every §02 InputMap action in inputOps: [{ action: 'snake_case', keys: ['SHIFT'], overwrite: true }] using W/A/S/D/SPACE/SHIFT/CTRL/E/Q/F/R/TAB/LMB/RMB/MMB. Emit { action: 'bad_action', remove: true } to prune stale conflicts.",
+    "10. MOUSE & PAUSE SAFETY: If capturing mouse in 3D, wire ESC ('ui_cancel') toggle in _unhandled_input. Put HUD Controls inside CanvasLayer.",
+    "11. 3D FACING & INSTANT HIT WINDOWS: Align VisualRig forward direction (+basis.z for atan2(dir.x, dir.z), -basis.z for look_at), parent hitbox pivots under VisualRig, and check get_overlapping_bodies() with a hit_targets guard on swing open.",
+    "12. OBSERVABLE PLAYTEST FEEDBACK: Trigger albedo/modulate flashes, knockback, camera punch, cooldown HUD bar, and clear Test Scene greybox props matching §05 & §06.",
+  ].join("\n");
+
+  const contextPayload = {
+    mode,
+    dimension: dimMeta.id,
+    projectTitle: rootSpec?.normalizedTitle || "LAYERS Project",
+    arenaScenePath: String(arenaScenePath || ""),
+    epicScenePath: String(epicScenePath || ""),
+    godotContextMarkdown: String(godotContextMarkdown || "").slice(0, 14000),
+    epicSpec: epicSpec || {},
+    userPrompt: String(prompt || "").trim(),
+    errorText: String(errorText || "").trim(),
+    liveGodotContext: liveGodotContext || {},
+    liveScripts: mergedScripts,
+    liveSceneSnapshot: sceneSnapshot || {},
+    liveInputMap:
+      inputMapSnapshot && typeof inputMapSnapshot === "object"
+        ? inputMapSnapshot
+        : {},
+    projectDiagnostics: Array.isArray(projectDiagnostics)
+      ? projectDiagnostics
+      : [],
+  };
+
+  const userPrompt = [
+    mode === "build_epic"
+      ? `TASK: Synthesize the complete cohesive Godot 4 (${dimMeta.shortLabel}) Epic §01-§06 (scenes .tscn, scripts .gd, InputMap actions, tuning @exports, greybox test staging) so the developer can press Play immediately.`
+      : "TASK: Diagnose and repair the compile error(s), runtime error(s), or open [FIX] item(s) across affected Godot scripts, scenes, and InputMap while preserving passing playtest gates.",
+    "PROJECT & EPIC CONTEXT JSON:",
+    JSON.stringify(contextPayload),
+  ].join("\n\n");
+
+  const aiResp = await callGeminiFlashJson({
+    apiKey,
+    systemInstruction,
+    userPrompt,
+    thinkingLevel: mode === "fix_epic" ? "MEDIUM" : "LOW",
+    maxOutputTokens: 16384,
+  });
+  if (!aiResp.ok) {
+    return { ok: false, error: aiResp.error || "Gemini Epic agent request failed." };
+  }
+  const bundle = normalizeAgentBundle(aiResp.data, mode, {
+    dimension: dimMeta.id,
+    arenaScenePath: arenaScenePath || "",
+    epicScenePath: epicScenePath || "",
+  });
+  if (!bundle.summary) {
+    bundle.summary =
+      mode === "build_epic"
+        ? `Built ${epicSpec?.code || "Epic"} · ${epicSpec?.title || "System"} (${bundle.scriptUpdates.length} scripts, ${bundle.sceneOps.length} scene ops).`
+        : `Applied ${epicSpec?.code || "Epic"} fix (${bundle.scriptUpdates.length} scripts, ${bundle.sceneOps.length} scene ops).`;
+  }
+  return { ok: true, model: aiResp.model, bundle };
 }
 
 function parseAdminEmails() {
@@ -1652,9 +2128,9 @@ exports.geminiProxy = onRequest(
     }
 
     // -------------------------------------------------------------------------
-    // Route 3B: POST /unrealLink/token (Google Sign-In auth: generate/reuse/rotate lyr_... token)
+    // Route 3B: POST /godotLink/token (Google Sign-In auth: generate/reuse/rotate lyr_... token)
     // -------------------------------------------------------------------------
-    if (cleanPath === "/unrealLink/token") {
+    if (cleanPath === "/godotLink/token") {
       if (req.method !== "POST") {
         res.status(405).json({ error: { code: 405, message: "Expected POST." } });
         return;
@@ -1693,7 +2169,7 @@ exports.geminiProxy = onRequest(
 
       const db = getFirestore();
       const linkDocId = `${projectId}_${caller.uid}`;
-      const linkRef = db.collection("unreal_links").doc(linkDocId);
+      const linkRef = db.collection("godot_links").doc(linkDocId);
       const existingSnap = await linkRef.get();
       const existingData = existingSnap.exists ? existingSnap.data() || {} : null;
 
@@ -1744,14 +2220,14 @@ exports.geminiProxy = onRequest(
     }
 
     // -------------------------------------------------------------------------
-    // Route 3C: GET / POST /unrealLink/epic (LayersBridge: ROOT_MCP_CONTEXT + 1 active Epic Spec)
+    // Route 3C: GET / POST /godotLink/epic (Godot Dock: ROOT_GODOT_CONTEXT + 1 active Epic Spec)
     // -------------------------------------------------------------------------
-    if (cleanPath === "/unrealLink/epic") {
+    if (cleanPath === "/godotLink/epic") {
       if (req.method !== "GET" && req.method !== "POST") {
         res.status(405).json({ error: { code: 405, message: "Expected GET or POST." } });
         return;
       }
-      const linkAuth = await verifyUnrealLinkToken(req);
+      const linkAuth = await verifyGodotLinkToken(req);
       if (linkAuth.errorStatus) {
         res.status(linkAuth.errorStatus).json({
           error: { code: linkAuth.errorStatus, message: linkAuth.errorMessage },
@@ -1760,7 +2236,10 @@ exports.geminiProxy = onRequest(
       }
 
       const body = req.method === "POST" ? parseJsonBody(req) : {};
-      const uprojectContext = sanitizeUprojectContextJs(body.uprojectContext);
+      const liveGodotContext = sanitizeGodotLiveContextJs(
+        body.godotContext || body.liveGodotContext
+      );
+      const preferredEpicId = String(body.epicId || "").trim();
 
       const db = getFirestore();
       const docsSnap = await db
@@ -1773,11 +2252,12 @@ exports.geminiProxy = onRequest(
         docsById.set(d.id, { id: d.id, ...(d.data() || {}) });
       }
 
-      const payload = computeActiveUnrealEpicPayload({
+      const payload = computeActiveGodotEpicPayload({
         docsById,
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
-        uprojectContext,
+        liveGodotContext,
+        preferredEpicId,
       });
       if (!payload.ok) {
         res.status(404).json({
@@ -1788,10 +2268,10 @@ exports.geminiProxy = onRequest(
 
       const nowMs = String(Date.now());
       const nextProjSections = {
-        last_unreal_sync_ms: nowMs,
+        last_godot_sync_ms: nowMs,
       };
-      if (uprojectContext) {
-        nextProjSections.unreal_live_context_json = JSON.stringify(uprojectContext);
+      if (liveGodotContext) {
+        nextProjSections.godot_live_context_json = JSON.stringify(liveGodotContext);
       }
       if (payload.activeEpic?.id) {
         nextProjSections.selected_epic_id = payload.activeEpic.id;
@@ -1805,19 +2285,20 @@ exports.geminiProxy = onRequest(
         .set({ sections: nextProjSections }, { merge: true })
         .catch(() => {});
 
-      res.status(200).json(payload);
+      const { rootSpec: _rs, releaseEpics: _re, ...clientPayload } = payload;
+      res.status(200).json(clientPayload);
       return;
     }
 
     // -------------------------------------------------------------------------
-    // Route 3D: POST /unrealLink/update (LayersBridge: toggle_check / log_fix / resolve_fix / pass_epic / reopen_epic / sync_uproject)
+    // Route 3D: POST /godotLink/update (Godot Dock: toggle_check / update_tuning / log_fix / resolve_fix / pass_epic / reopen_epic / sync_project / build_epic / fix_epic)
     // -------------------------------------------------------------------------
-    if (cleanPath === "/unrealLink/update") {
+    if (cleanPath === "/godotLink/update") {
       if (req.method !== "POST") {
         res.status(405).json({ error: { code: 405, message: "Expected POST." } });
         return;
       }
-      const linkAuth = await verifyUnrealLinkToken(req);
+      const linkAuth = await verifyGodotLinkToken(req);
       if (linkAuth.errorStatus) {
         res.status(linkAuth.errorStatus).json({
           error: { code: linkAuth.errorStatus, message: linkAuth.errorMessage },
@@ -1827,12 +2308,12 @@ exports.geminiProxy = onRequest(
 
       const body = parseJsonBody(req);
       const action = String(body.action || "").trim();
-      if (!UNREAL_UPDATE_VALID_ACTIONS.has(action)) {
+      if (!GODOT_UPDATE_VALID_ACTIONS.has(action)) {
         res.status(400).json({
           error: {
             code: 400,
             message:
-              "Expected valid action (toggle_check, update_tuning, log_fix, resolve_fix, pass_epic, reopen_epic, or sync_uproject).",
+              "Expected valid action (toggle_check, update_tuning, log_fix, resolve_fix, pass_epic, reopen_epic, sync_project, build_epic, or fix_epic).",
           },
         });
         return;
@@ -1844,7 +2325,9 @@ exports.geminiProxy = onRequest(
         return;
       }
 
-      const uprojectContext = sanitizeUprojectContextJs(body.uprojectContext);
+      const liveGodotContext = sanitizeGodotLiveContextJs(
+        body.godotContext || body.liveGodotContext
+      );
 
       const db = getFirestore();
       const docsCol = db
@@ -1859,7 +2342,7 @@ exports.geminiProxy = onRequest(
       }
 
       let targetEpicId = String(body.epicId || "").trim();
-      if (action !== "sync_uproject") {
+      if (action !== "sync_project") {
         targetEpicId = resolveTargetEpicDocIdJs({
           docsById,
           projectId: linkAuth.projectId,
@@ -1876,8 +2359,83 @@ exports.geminiProxy = onRequest(
       }
 
       const nowMs = Date.now();
+
+      // 1-Click In-Dock Cloud Gemini AI Builder (build_epic / fix_epic)
+      if (action === "build_epic" || action === "fix_epic") {
+        const apiKey = String(GEMINI_API_KEY.value() || "").trim();
+        if (!apiKey) {
+          res.status(500).json({
+            error: { code: 500, message: "Server GEMINI_API_KEY secret is not configured." },
+          });
+          return;
+        }
+        const payload = computeActiveGodotEpicPayload({
+          docsById,
+          projectId: linkAuth.projectId,
+          webStudioUrl: linkAuth.webStudioUrl,
+          liveGodotContext,
+          preferredEpicId: targetEpicId,
+        });
+        if (!payload.ok || !payload.activeEpic) {
+          res.status(404).json({
+            error: { code: 404, message: payload.error || "Active Epic not found." },
+          });
+          return;
+        }
+
+        const agentResp = await runGodotEpicAgentWithGemini({
+          apiKey,
+          mode: action,
+          rootSpec: payload.rootSpec,
+          epicSpec: payload.activeEpic,
+          godotContextMarkdown: payload.godotContextMarkdown,
+          liveScripts: body.liveScripts,
+          sceneSnapshot: body.sceneSnapshot,
+          inputMapSnapshot: body.inputMapSnapshot,
+          projectDiagnostics: body.projectDiagnostics,
+          liveGodotContext,
+          prompt: body.prompt,
+          errorText: body.errorText,
+          arenaScenePath: body.arenaScenePath || payload.arenaScenePath,
+          epicScenePath: body.epicScenePath || payload.arenaScenePath,
+        });
+
+        if (!agentResp.ok) {
+          res.status(502).json({
+            error: {
+              code: 502,
+              message: agentResp.error || "Gemini Epic agent request failed.",
+            },
+          });
+          return;
+        }
+
+        const nextProjSec = {
+          last_godot_sync_ms: String(nowMs),
+          selected_epic_id: payload.activeEpic.id,
+        };
+        if (liveGodotContext) {
+          nextProjSec.godot_live_context_json = JSON.stringify(liveGodotContext);
+        }
+        linkAuth.linkRef.set({ lastSyncAt: nowMs }, { merge: true }).catch(() => {});
+        docsCol
+          .doc(linkAuth.projectId)
+          .set({ sections: nextProjSec }, { merge: true })
+          .catch(() => {});
+
+        const { rootSpec: _rs, releaseEpics: _re, ...clientPayload } = payload;
+        res.status(200).json({
+          ...clientPayload,
+          mode: action,
+          model: agentResp.model,
+          agentBundle: agentResp.bundle,
+        });
+        return;
+      }
+
+      const rootSpecForDim = parseRootSpecJs(docsById.get(linkAuth.projectId));
       let updatedEpicDoc = null;
-      if (action !== "sync_uproject") {
+      if (action !== "sync_project") {
         const epicRef = docsCol.doc(targetEpicId);
         try {
           await db.runTransaction(async (tx) => {
@@ -1888,10 +2446,11 @@ exports.geminiProxy = onRequest(
               throw notFound;
             }
             const epicData = snap.data() || {};
-            const mutated = applyUnrealEpicMutationJs({
+            const mutated = applyGodotEpicMutationJs({
               epicDoc: { id: snap.id, ...epicData },
               action,
               body,
+              dimension: rootSpecForDim.dimension,
               nowMs,
             });
             tx.update(epicRef, {
@@ -1926,9 +2485,9 @@ exports.geminiProxy = onRequest(
           inMemProj.sections && typeof inMemProj.sections === "object"
             ? { ...inMemProj.sections }
             : {};
-        existingSec.last_unreal_sync_ms = String(nowMs);
-        if (uprojectContext) {
-          existingSec.unreal_live_context_json = JSON.stringify(uprojectContext);
+        existingSec.last_godot_sync_ms = String(nowMs);
+        if (liveGodotContext) {
+          existingSec.godot_live_context_json = JSON.stringify(liveGodotContext);
         }
         if (action === "pass_epic") {
           existingSec.selected_epic_id = "";
@@ -1938,12 +2497,12 @@ exports.geminiProxy = onRequest(
         inMemProj.sections = existingSec;
       }
 
-      const isInPlaceMutation = action !== "pass_epic" && action !== "sync_uproject";
-      const payload = computeActiveUnrealEpicPayload({
+      const isInPlaceMutation = action !== "pass_epic" && action !== "sync_project";
+      const payload = computeActiveGodotEpicPayload({
         docsById,
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
-        uprojectContext,
+        liveGodotContext,
         preferredEpicId: isInPlaceMutation ? targetEpicId : "",
       });
       if (!payload.ok) {
@@ -1954,10 +2513,10 @@ exports.geminiProxy = onRequest(
       }
 
       const nextProjSec = {
-        last_unreal_sync_ms: String(nowMs),
+        last_godot_sync_ms: String(nowMs),
       };
-      if (uprojectContext) {
-        nextProjSec.unreal_live_context_json = JSON.stringify(uprojectContext);
+      if (liveGodotContext) {
+        nextProjSec.godot_live_context_json = JSON.stringify(liveGodotContext);
       }
       if (payload.activeEpic?.id) {
         nextProjSec.selected_epic_id = payload.activeEpic.id;
@@ -1969,7 +2528,8 @@ exports.geminiProxy = onRequest(
         .set({ sections: nextProjSec }, { merge: true })
         .catch(() => {});
 
-      res.status(200).json(payload);
+      const { rootSpec: _rs, releaseEpics: _re, ...clientPayload } = payload;
+      res.status(200).json(clientPayload);
       return;
     }
 
@@ -2103,15 +2663,18 @@ exports.geminiProxy = onRequest(
 
 exports._testHelpers = {
   hashLinkToken,
-  UNREAL_UPDATE_VALID_ACTIONS,
-  sanitizeTuningKeyJs,
-  normalizeTuningUnitJs,
-  inferTuningPropertyTypeJs,
-  sanitizeUprojectContextJs,
+  GODOT_UPDATE_VALID_ACTIONS,
+  resolveDimensionMetaJs,
+  sanitizeGodotLineJs,
+  sanitizeGodotTuningKeyJs,
+  normalizeGodotUnitJs,
+  inferGodotPropertyTypeJs,
+  sanitizeGodotLiveContextJs,
   parseRootSpecJs,
   parseEpicSpecJs,
-  renderServerUnrealMcpPayloadJs,
-  computeActiveUnrealEpicPayload,
+  renderServerGodotEpicContextJs,
+  computeActiveGodotEpicPayload,
   resolveTargetEpicDocIdJs,
-  applyUnrealEpicMutationJs,
+  applyGodotEpicMutationJs,
+  normalizeAgentBundle,
 };

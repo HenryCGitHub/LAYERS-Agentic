@@ -2,12 +2,12 @@ import 'dart:convert';
 import '../constants/text_style_guide.dart';
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
-import '../utils/unreal_spec_guard.dart';
+import '../utils/godot_spec_guard.dart';
 import 'gemini_agent_client.dart';
 
-/// Stage 2 Unreal Progressive Release Planner Agent (`v0.1 -> v0.2 -> v0.3+`).
+/// Stage 2 Godot 4 Progressive Release Planner Agent (`v0.1 -> v0.2 -> v0.3+`).
 /// Generates Co-Pilot release direction presets, `[UPGRADE]` delta checkboxes per baseline Epic,
-/// and candidate `[NEW]` 6-section Unreal Epics without ever duplicating cards.
+/// and candidate `[NEW]` 6-section Godot 4 Epics without ever duplicating cards.
 class ReleasePlannerAgent {
   static String extractReleaseVersionTag(String? rawTitle) {
     final text = (rawTitle ?? '').trim();
@@ -47,9 +47,9 @@ class ReleasePlannerAgent {
   }
 
   static Map<String, dynamic> get _progressiveReleaseSchema => <String, dynamic>{
-        'name': 'propose_progressive_unreal_release',
+        'name': 'propose_progressive_godot_release',
         'description':
-            'Propose next Unreal release presets, baseline Epic [UPGRADE] deltas, and candidate [NEW] 6-section Epics.',
+            'Propose next Godot 4 release presets, baseline Epic [UPGRADE] deltas, and candidate [NEW] 6-section Epics.',
         'parameters': <String, dynamic>{
           'type': 'OBJECT',
           'required': ['presets', 'upgrades', 'newEpics'],
@@ -104,7 +104,7 @@ class ReleasePlannerAgent {
             },
             'newEpics': {
               'type': 'ARRAY',
-              'description': 'Candidate NEW 6-section Unreal Epics for this release.',
+              'description': 'Candidate NEW 6-section Godot 4 Epics for this release.',
               'items': {
                 'type': 'OBJECT',
                 'required': [
@@ -132,7 +132,7 @@ class ReleasePlannerAgent {
                   'coreLoopBeat': {
                     'type': 'STRING',
                     'description':
-                        'Which §01 Core Loop beat(s) this Epic expands in PIE.',
+                        'Which §01 Core Loop beat(s) this Epic expands in Playtest.',
                   },
                   'chosen': {'type': 'BOOLEAN'},
                   'goal': {'type': 'STRING'},
@@ -141,7 +141,7 @@ class ReleasePlannerAgent {
                     'items': {
                       'type': 'STRING',
                       'description':
-                          LayersTextStyleGuide.unrealActorLinkSchemaDesc,
+                          LayersTextStyleGuide.godotSceneLinkSchemaDesc,
                     },
                   },
                   'outOfScope': {
@@ -163,7 +163,7 @@ class ReleasePlannerAgent {
                         'rule': {
                           'type': 'STRING',
                           'description':
-                              LayersTextStyleGuide.unrealControlRuleSchemaDesc,
+                              LayersTextStyleGuide.godotControlRuleSchemaDesc,
                         },
                       },
                     },
@@ -185,13 +185,13 @@ class ReleasePlannerAgent {
                         'key': {
                           'type': 'STRING',
                           'description':
-                              LayersTextStyleGuide.unrealTuningKeySchemaDesc,
+                              LayersTextStyleGuide.godotTuningKeySchemaDesc,
                         },
                         'value': {'type': 'STRING'},
                         'unit': {
                           'type': 'STRING',
                           'description':
-                              LayersTextStyleGuide.unrealTuningUnitSchemaDesc,
+                              LayersTextStyleGuide.godotTuningUnitSchemaDesc,
                         },
                       },
                     },
@@ -203,7 +203,7 @@ class ReleasePlannerAgent {
                   'levelStaging': {
                     'type': 'STRING',
                     'description':
-                        LayersTextStyleGuide.unrealLevelStagingSchemaDesc,
+                        LayersTextStyleGuide.godotSceneStagingSchemaDesc,
                   },
                   'checks': {
                     'type': 'ARRAY',
@@ -214,7 +214,7 @@ class ReleasePlannerAgent {
                         'text': {
                           'type': 'STRING',
                           'description':
-                              LayersTextStyleGuide.causalPieCheckSchemaDesc,
+                              LayersTextStyleGuide.causalPlaytestCheckSchemaDesc,
                         },
                       },
                     },
@@ -270,12 +270,16 @@ class ReleasePlannerAgent {
         },
     ];
 
+    final unitHint = rootSpec.dimension == GodotProjectDimension.dim2d
+        ? '2D px / px/s'
+        : '3D 1 unit = 1 m / m/s';
+
     final prompt = '''
 ${LayersTextStyleGuide.compactStyleRules}
 
-You are planning Unreal Engine release `$targetVersion` for project `${rootSpec.normalizedTitle}`.
-Target Architecture: ${rootSpec.targetEngine.architectureContract}
-Code Policy: ${rootSpec.targetEngine.codePolicyContract}
+You are planning Godot 4 release `$targetVersion` for project `${rootSpec.normalizedTitle}`.
+Target Architecture: ${rootSpec.dimension.architectureContract}
+Code Policy: ${rootSpec.dimension.codePolicyContract}
 Vision: ${rootSpec.pitch}
 ${rootSpec.releaseDoneWhen.trim().isNotEmpty ? 'Release Gate (§05): ${rootSpec.releaseDoneWhen.trim()}\n' : ''}Core Loop (§01): ${rootSpec.coreLoop.join(' -> ')}
 Camera Contract (§02): ${rootSpec.cameraContract}
@@ -293,9 +297,9 @@ ${jsonEncode(existingSummary)}
 Generate:
 1. 2 distinct Release Direction Presets (`presets`) matching IDs of upgrades/newEpics.
 2. Small additive `[UPGRADE]` delta options for relevant baseline Epics (`lineageKey`).
-3. 1-2 complete `[NEW]` 6-section Unreal Epics with codes `${EpicSpec.formatCode(currentEpics.length + 1)}` onward using 1 UU = 1 cm tuning units.
+3. 1-2 complete `[NEW]` 6-section Godot 4 Epics with codes `${EpicSpec.formatCode(currentEpics.length + 1)}` onward using $unitHint and snake_case `@export` vars.
 CRITICAL RULES:
-- Every `[UPGRADE]` delta and `[NEW]` Epic MUST obey §02 Camera/Scale/Input contracts (1 UU = 1 cm), reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.
+- Every `[UPGRADE]` delta and `[NEW]` Epic MUST obey §02 Camera/Scale/InputMap contracts, reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.
 - Never recreate existing baseline Epics or add Feature sub-tickets.
 ''';
 
@@ -317,12 +321,17 @@ CRITICAL RULES:
               final rawPreset = ReleaseDirectionPreset.fromJson(
                 Map<String, dynamic>.from(item),
               );
-              final cleanLabel = UnrealSpecGuard.sanitizeLine(rawPreset.label);
+              final cleanLabel = GodotSpecGuard.sanitizeLine(
+                rawPreset.label,
+                dimension: rootSpec.dimension,
+              );
               return ReleaseDirectionPreset(
                 id: rawPreset.id,
                 label: cleanLabel.isEmpty ? 'Release Direction' : cleanLabel,
-                description:
-                    UnrealSpecGuard.sanitizeLine(rawPreset.description),
+                description: GodotSpecGuard.sanitizeLine(
+                  rawPreset.description,
+                  dimension: rootSpec.dimension,
+                ),
                 upgradeIds: rawPreset.upgradeIds,
                 newEpicIds: rawPreset.newEpicIds,
               );
@@ -359,7 +368,10 @@ CRITICAL RULES:
             Map<String, dynamic>.from(opts[i] as Map),
             i,
           );
-          final cleanText = UnrealSpecGuard.sanitizeLine(opt.text);
+          final cleanText = GodotSpecGuard.sanitizeLine(
+            opt.text,
+            dimension: rootSpec.dimension,
+          );
           if (cleanText.isNotEmpty) {
             opt.text = cleanText;
           }
@@ -393,8 +405,9 @@ CRITICAL RULES:
         parsed.chosenForNextRelease =
             (rawNewEpics[i] as Map)['chosen'] == true || i == 0;
         candidateNew.add(
-          UnrealSpecGuard.sanitizeEpicSpec(
+          GodotSpecGuard.sanitizeEpicSpec(
             parsed,
+            dimension: rootSpec.dimension,
             forceReleaseVersion: targetVersion,
           ),
         );
@@ -497,19 +510,19 @@ CRITICAL RULES:
           : 'Loop Escalation',
       chosenForNextRelease: true,
       goal:
-          'Expand $targetVersion loop continuity with wave escalation, UMG counter readout, and instant quick-restart.',
+          'Expand $targetVersion loop continuity with wave escalation, Control HUD counter readout, and instant quick-restart.',
       links: [
         if (currentEpics.isNotEmpty)
-          'Spawns / resets ${currentEpics.last.code} (${currentEpics.last.title}) actors',
-        'Updates UMG_ArenaHUD status banner and round counter',
+          'Instantiates / resets ${currentEpics.last.code} (${currentEpics.last.title}) scenes',
+        'Updates Control HUD wave label and remaining enemy counter',
       ],
       outOfScope: const [
         'No main menu save-slot persistence',
       ],
       controls: [
         EpicControlBinding(
-          action: 'IA_QuickRestart (Bool)',
-          trigger: 'Pressed (R)',
+          action: 'quick_restart',
+          trigger: 'Just Pressed (R)',
           rule: 'Resets round counter and player health cleanly in < 0.2s',
         ),
       ],
@@ -520,25 +533,26 @@ CRITICAL RULES:
         'Player defeat cleanly halts wave spawner timers and displays retry prompt',
       ],
       tuning: [
-        EpicTuningParam(key: 'RoundWaveCount', value: '3', unit: 'count'),
-        EpicTuningParam(key: 'WaveDelay', value: '2.0', unit: 's'),
+        EpicTuningParam(key: 'round_wave_count', value: '3', unit: 'count'),
+        EpicTuningParam(key: 'wave_delay', value: '2.0', unit: 's'),
       ],
       feedback: const [
-        'Top-center UMG wave counter flashes bright cyan on wave transition',
+        'Top-center HUD wave counter flashes bright cyan on wave transition',
       ],
       levelStaging:
-          'Reuse active v0.1 Prototype Level with 3 tagged SpawnPoint markers',
+          'Reuse active v0.1 prototype scene with 3 SpawnPoint marker nodes',
       checks: [
         EpicPieCheck(
           id: '${nextCode.toLowerCase()}_c1',
-          text: 'Clear wave 1 actors -> HUD updates and wave 2 spawns cleanly after 2.0s',
+          text: 'Clear wave 1 enemies -> HUD updates and wave 2 spawns cleanly after 2.0s',
         ),
       ],
     );
 
     final candidateList = [
-      UnrealSpecGuard.sanitizeEpicSpec(
+      GodotSpecGuard.sanitizeEpicSpec(
         newEpic,
+        dimension: rootSpec.dimension,
         forceReleaseVersion: targetVersion,
       ),
     ];

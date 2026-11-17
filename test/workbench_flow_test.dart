@@ -274,7 +274,7 @@ void main() {
     );
 
     test(
-      'Deep-link (?project=&epic=) and shouldPreferRemoteDocumentOnSync (last_unreal_sync_ms & PIE checks)',
+      'Deep-link (?project=&epic=) and shouldPreferRemoteDocumentOnSync (last_godot_sync_ms & Playtest checks)',
       () {
         final wb = WorkbenchProvider(enableAutoLoad: false);
         wb.loadPresetSpark('shellbreaker');
@@ -298,7 +298,7 @@ void main() {
         expect(wb.selectedEpicId, equals(targetE02.id));
         expect(wb.currentStage, equals(WorkbenchStage.releaseWorkbench));
 
-        // Cloud merge conflict test: newer `last_unreal_sync_ms` wins
+        // Cloud merge conflict test: newer `last_godot_sync_ms` wins
         final localEpic = wb.documents[targetE02.id]!.copyWith(
           sections: {
             ...wb.documents[targetE02.id]!.sections,
@@ -309,36 +309,36 @@ void main() {
           sections: {
             ...wb.documents[targetE02.id]!.sections,
             'updated_at_ms': '1000',
-            'last_unreal_sync_ms': '5000',
+            'last_godot_sync_ms': '5000',
           },
         );
         expect(shouldPreferRemoteDocumentOnSync(localEpic, remoteEpic), isTrue);
 
-        // Equal timestamps: completed PIE checks break ties
+        // Equal timestamps: completed Playtest checks break ties
         final tiedRemote = remoteEpic.copyWith(
           isCompleted: true,
           sections: {
             ...remoteEpic.sections,
-            'last_unreal_sync_ms': '1000',
+            'last_godot_sync_ms': '1000',
           },
         );
         final tiedLocal = localEpic.copyWith(
           isCompleted: false,
           sections: {
             ...localEpic.sections,
-            'last_unreal_sync_ms': '1000',
+            'last_godot_sync_ms': '1000',
           },
         );
         expect(shouldPreferRemoteDocumentOnSync(tiedLocal, tiedRemote), isTrue);
 
-        // Equal timestamps: Unreal `[FIX]` log beats 0-fix local doc; live `.uproject` snapshot beats empty Project doc
+        // Equal timestamps: Godot `[FIX]` log beats 0-fix local doc; live snapshot beats empty Project doc
         final fixSpec = EpicSpec.fromDocument(tiedLocal)
           ..fixes.add(EpicPieFix(id: 'fx_live', text: 'Dash clips stair ramp'));
         final remoteWithFix = fixSpec.applyToDocument(tiedLocal).copyWith(
           sections: {
             ...fixSpec.applyToDocument(tiedLocal).sections,
             'updated_at_ms': '1000',
-            'last_unreal_sync_ms': '1000',
+            'last_godot_sync_ms': '1000',
           },
         );
         expect(shouldPreferRemoteDocumentOnSync(tiedLocal, remoteWithFix), isTrue);
@@ -352,7 +352,7 @@ void main() {
         final remoteProjWithCtx = localProj.copyWith(
           sections: {
             ...localProj.sections,
-            'unreal_live_context_json': '{"project_name":"ShellbreakerUE5"}',
+            'godot_live_context_json': '{"project_name":"ShellbreakerGodot"}',
           },
         );
         expect(
@@ -379,7 +379,7 @@ void main() {
           sections: {
             ...wb.documents[p1]!.sections,
             'selected_epic_id': targetE02.id,
-            'unreal_live_context_json': '{"project_name":"ShellbreakerUE5"}',
+            'godot_live_context_json': '{"project_name":"ShellbreakerGodot"}',
           },
         );
 
@@ -387,8 +387,8 @@ void main() {
         expect(wb.selectedEpicId, equals(targetE02.id));
         expect(wb.activeReleaseEpics.first.tuning.first.value, equals('999'));
         expect(
-          wb.latestLiveUprojectContext?['project_name'],
-          equals('ShellbreakerUE5'),
+          wb.latestLiveGodotContext?['project_name'],
+          equals('ShellbreakerGodot'),
         );
       },
     );
@@ -491,7 +491,7 @@ void main() {
     );
 
     test(
-      'deleteProject cancels pending debounced tuning timers and clears cached Unreal link tokens',
+      'deleteProject cancels pending debounced tuning timers and clears cached Godot link tokens',
       () async {
         final fakeBackend = _MemoryVaultStorageBackend(
           const VaultLoadResult(documents: {}),

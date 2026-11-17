@@ -4,12 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/epic_spec.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
-import 'widgets/unreal_bridge_modals.dart';
+import 'widgets/godot_bridge_modals.dart';
 
 part 'workbench_progressive_planner_part.dart';
 
-/// Stage 2: `2. Epic Specs` (`Project -> Release -> Epic` 6-Section Unreal MCP Spec Studio).
-/// Left Outliner Rail + Centered Single-Column Spec Document (`Clean Epic Spec` | `Exact Unreal MCP Payload`).
+/// Stage 2: `2. Epic Specs` (`Project -> Release -> Epic` 6-Section Godot 4 Spec Studio).
+/// Left Outliner Rail + Centered Single-Column Spec Document (`Clean Epic Spec` | `Exact Godot Build Context`).
 class ReleaseWorkbenchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
 
@@ -46,7 +46,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'No Unreal Epics planned yet.',
+                'No Godot Epics planned yet.',
                 style: AppTheme.displayFont(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -168,7 +168,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   ),
                 const SizedBox(height: 6),
                 Text(
-                  '$passedCount / ${epics.length} Epics Passed PIE',
+                  '$passedCount / ${epics.length} Epics Passed Playtest',
                   style: GoogleFonts.jetBrainsMono(
                     fontSize: 11,
                     color: passedCount == epics.length ? green : muted,
@@ -276,7 +276,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             ),
           ),
 
-          // Bottom Release Gate & LayersBridge card
+          // Bottom Release Gate & Godot 4 Plugin card
           Divider(height: 1, color: border),
           Padding(
             padding: const EdgeInsets.all(12),
@@ -305,16 +305,16 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                 ),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
-                  onPressed: () => showConnectUnrealPluginDialog(context, wb),
+                  onPressed: () => showConnectGodotPluginDialog(context, wb),
                   icon: Icon(
                     Icons.cable,
                     size: 14,
-                    color: wb.isActiveProjectSyncedWithUnreal ? green : cyan,
+                    color: wb.isActiveProjectSyncedWithGodot ? green : cyan,
                   ),
                   label: Text(
-                    wb.isActiveProjectSyncedWithUnreal
-                        ? wb.formatUnrealSyncStatusLabel()
-                        : 'LayersBridge Setup',
+                    wb.isActiveProjectSyncedWithGodot
+                        ? wb.formatGodotSyncStatusLabel()
+                        : 'Godot 4 Plugin Setup',
                     style: const TextStyle(fontSize: 11.5),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -393,7 +393,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     final red = AppTheme.accentRedFor(isDark);
 
     final openFixesCount = epic.openFixesCount;
-    final payloadText = wb.activeEpicMcpPayload(epic);
+    final payloadText = wb.activeEpicGodotContext(epic);
 
     return Column(
       children: [
@@ -471,19 +471,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       onChanged: (isRaw) => wb.toggleRawEpicPayload(isRaw),
                     ),
                     OutlinedButton.icon(
-                      key: const ValueKey('copy_epic_mcp_payload_btn'),
+                      key: const ValueKey('copy_epic_godot_context_btn'),
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: payloadText));
                         AppToast.show(
                           context,
                           openFixesCount > 0
-                              ? 'Copied Focused Revision Payload ($openFixesCount [FIX])'
-                              : 'Copied Full Unreal MCP Payload (${epic.code})',
+                              ? 'Copied Focused Revision Context ($openFixesCount [FIX])'
+                              : 'Copied Full Godot Build Context (${epic.code})',
                           isDark: isDark,
                         );
                       },
                       icon: const Icon(Icons.copy, size: 14),
-                      label: const Text('Copy MCP Payload', style: TextStyle(fontSize: 12)),
+                      label: const Text('Copy Build Context', style: TextStyle(fontSize: 12)),
                     ),
                   ],
                 ),
@@ -544,8 +544,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               const SizedBox(width: 8),
               Text(
                 openFixesCount > 0
-                    ? 'WIRE PREVIEW · FOCUSED PIE REVISION PASS ($openFixesCount OPEN [FIX])'
-                    : 'WIRE PREVIEW · SINGLE-PASS FULL EPIC PAYLOAD (ROOT + ${epic.code})',
+                    ? 'WIRE PREVIEW · FOCUSED PLAYTEST REVISION PASS ($openFixesCount OPEN [FIX])'
+                    : 'WIRE PREVIEW · SINGLE-PASS FULL EPIC CONTEXT (ROOT + ${epic.code})',
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 11.5,
                   fontWeight: FontWeight.w700,
@@ -557,7 +557,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           const SizedBox(height: 12),
           SelectableText(
             payloadText,
-            key: const ValueKey('raw_epic_mcp_payload_text'),
+            key: const ValueKey('raw_epic_godot_context_text'),
             style: GoogleFonts.jetBrainsMono(
               fontSize: 12.5,
               color: primary,
@@ -580,17 +580,17 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     Color green,
     Color red,
   ) {
-    final target = wb.targetEngine;
+    final target = wb.projectDimension;
     final secondary = AppTheme.textSecondaryFor(isDark);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // §01 System Intent & Actor Links
+        // §01 System Intent & Scene Links
         _EpicSectionCard(
           isDark: isDark,
           code: '§01',
-          title: 'System Intent & Actor Links',
+          title: 'System Intent & Scene Links',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -631,7 +631,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               if (epic.links.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Actor & Asset Links',
+                  'Scene & Asset Links',
                   style: GoogleFonts.jetBrainsMono(fontSize: 11, color: muted),
                 ),
                 const SizedBox(height: 6),
@@ -749,7 +749,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         ),
         const SizedBox(height: 14),
 
-        // §04 Spatial & Exposed Tuning (Live Editable -> Immediate MCP Payload Update)
+        // §04 Spatial & Exposed Tuning (Live Editable -> Immediate Context Update)
         _EpicSectionCard(
           isDark: isDark,
           code: '§04',
@@ -771,11 +771,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         ),
         const SizedBox(height: 14),
 
-        // §05 Viewport, UMG & Audio Cues
+        // §05 Viewport, UI & Audio Cues
         _EpicSectionCard(
           isDark: isDark,
           code: '§05',
-          title: 'Viewport, UMG & Audio Cues',
+          title: 'Viewport, UI & Audio Cues',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -789,11 +789,11 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         ),
         const SizedBox(height: 14),
 
-        // §06 Test Level Staging & PIE Acceptance Gate
+        // §06 Test Scene Staging & Playtest Acceptance Gate
         _EpicSectionCard(
           isDark: isDark,
           code: '§06',
-          title: 'Test Level Staging & PIE Acceptance Gate',
+          title: 'Test Scene Staging & Playtest Acceptance Gate',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -807,7 +807,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     border: Border.all(color: border),
                   ),
                   child: Text(
-                    'Test Level: ${epic.levelStaging}',
+                    'Test Scene: ${epic.levelStaging}',
                     style: GoogleFonts.jetBrainsMono(fontSize: 12, color: cyan),
                   ),
                 ),
@@ -838,7 +838,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               const SizedBox(height: 14),
               // [FIX] Flagging input + list
               Text(
-                'Flag Playtest Revision ([FIX]) — switches Epic MCP payload to Focused Revision Pass:',
+                'Flag Playtest Revision ([FIX]) — switches Epic context to Focused Revision Pass:',
                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: secondary),
               ),
               const SizedBox(height: 8),
@@ -953,7 +953,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ),
                       ),
                       icon: const Icon(Icons.verified_outlined, size: 16),
-                      label: Text('Pass ${epic.code} PIE Gate ✓'),
+                      label: Text('Pass ${epic.code} Playtest Gate ✓'),
                     ),
                 ],
               ),
@@ -1030,7 +1030,7 @@ class _SpecViewTabSwitch extends StatelessWidget {
                 borderRadius: BorderRadius.circular(AppTheme.radiusXs),
               ),
               child: Text(
-                'Exact Unreal MCP Payload',
+                'Exact Godot Build Context',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isRaw ? FontWeight.w600 : FontWeight.w400,

@@ -43,10 +43,5 @@ service cloud.firestore {
     match /godot_links/{linkId} {
       allow read, write: if false;
     }
-
-    // Server-only Unreal Engine LayersBridge project link tokens (Admin SDK only)
-    match /unreal_links/{linkId} {
-      allow read, write: if false;
-    }
   }
 }
