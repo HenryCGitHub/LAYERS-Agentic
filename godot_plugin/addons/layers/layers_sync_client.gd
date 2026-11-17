@@ -4,6 +4,7 @@ extends Node
 signal epic_updated(payload: Dictionary)
 signal sync_failed(message: String)
 signal busy_changed(is_busy: bool)
+signal agent_busy_changed(is_agent_busy: bool)
 signal agent_bundle_received(agent_bundle: Dictionary, payload: Dictionary)
 signal auth_completed(project_title: String)
 signal auth_status_changed(waiting: bool, message: String)
@@ -32,7 +33,7 @@ var _link_token: String = ""
 var _sync_base_url: String = DEFAULT_SYNC_BASE_URL
 var _is_busy: bool = false
 var _agent_busy: bool = false
-var _pending_request: Dictionary = {}
+var _pending_requests: Array[Dictionary] = []
 
 var _update_busy: bool = false
 var _update_mode: String = ""
@@ -96,6 +97,18 @@ func is_busy() -> bool:
 	return _is_busy or _agent_busy
 
 
+func is_agent_busy() -> bool:
+	return _agent_busy
+
+
+func get_pending_request_count() -> int:
+	return _pending_requests.size()
+
+
+func clear_pending_requests() -> void:
+	_pending_requests.clear()
+
+
 func is_waiting_for_auth() -> bool:
 	return _auth_tcp != null and _auth_tcp.is_listening()
 
@@ -136,7 +149,7 @@ func save_link_token(token: String, base_url: String = DEFAULT_SYNC_BASE_URL) ->
 
 func clear_link_token() -> void:
 	_link_token = ""
-	_pending_request = {}
+	_pending_requests.clear()
 	if FileAccess.file_exists(LINK_CFG_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(LINK_CFG_PATH))
 	if FileAccess.file_exists(CACHE_JSON_PATH):
@@ -316,6 +329,10 @@ func _handle_loopback_http_request(peer: StreamPeerTCP, raw_http: String) -> boo
 		_send_loopback_response(peer, 400, "text/plain", "Bad Request")
 		return false
 
+	if parts[0].strip_edges().to_upper() == "OPTIONS":
+		_send_loopback_response(peer, 204, "text/plain", "")
+		return false
+
 	var req_target: String = parts[1].strip_edges()
 	var q_pos: int = req_target.find("?")
 	var req_path: String = req_target.substr(0, q_pos) if q_pos >= 0 else req_target
@@ -364,7 +381,7 @@ func _send_loopback_response(peer: StreamPeerTCP, status_code: int, content_type
 	elif status_code == 204:
 		reason = "No Content"
 	var body_bytes: PackedByteArray = body_text.to_utf8_buffer()
-	var header := "HTTP/1.1 %d %s\r\nContent-Type: %s; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % [
+	var header := "HTTP/1.1 %d %s\r\nAccess-Control-Allow-Origin: *\r\nContent-Type: %s; charset=utf-8\r\nContent-Length: %d\r\nConnection: close\r\n\r\n" % [
 		status_code,
 		reason,
 		content_type,
@@ -477,17 +494,25 @@ func run_epic_agent(
 
 
 func _dispatch_or_queue(req: Dictionary) -> void:
-	if _http == null:
-		return
 	if _is_busy:
-		if req.get("kind") == "update" or _pending_request.is_empty():
-			_pending_request = req
+		var kind: String = str(req.get("kind", "")).strip_edges()
+		if kind == "get_epic":
+			for i in range(_pending_requests.size() - 1, -1, -1):
+				var existing: Dictionary = _pending_requests[i]
+				if str(existing.get("kind", "")) == "get_epic":
+					_pending_requests.remove_at(i)
+			_pending_requests.append(req)
+		elif _pending_requests.size() < 32:
+			_pending_requests.append(req)
+		return
+	if _http == null:
 		return
 	_start_request(req)
 
 
 func _emit_busy_state() -> void:
 	busy_changed.emit(_is_busy or _agent_busy)
+	agent_busy_changed.emit(_agent_busy)
 
 
 func _start_request(req: Dictionary) -> void:
@@ -524,7 +549,7 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	elif typeof(parsed_raw) == TYPE_DICTIONARY:
 		var parsed: Dictionary = parsed_raw as Dictionary
 		if bool(parsed.get("ok", false)):
-			if not _agent_busy:
+			if not _agent_busy and _pending_requests.is_empty():
 				_write_cache(parsed)
 				epic_updated.emit(parsed)
 		else:
@@ -532,10 +557,11 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 	else:
 		sync_failed.emit("Unexpected sync response.")
 
-	if not _pending_request.is_empty():
-		var next_req: Dictionary = _pending_request
-		_pending_request = {}
-		_start_request(next_req)
+	if not _pending_requests.is_empty():
+		var next_raw: Variant = _pending_requests.pop_front()
+		if typeof(next_raw) == TYPE_DICTIONARY:
+			var next_req: Dictionary = next_raw as Dictionary
+			_start_request(next_req)
 
 
 func _on_agent_http_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:

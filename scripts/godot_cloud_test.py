@@ -53,6 +53,11 @@ const cleaned = sanitizeGodotLineJs("Attach BP_CrabPlayer and ACharacter with PI
 assert(!cleaned.includes("ACharacter") && cleaned.includes("CharacterBody3D"), cleaned);
 assert(!cleaned.includes("PIE") && cleaned.includes("Playtest"), cleaned);
 
+const cleanedUnits3d = sanitizeGodotLineJs("Dash 1850 cm/s across 550 cm arena", "dim3d");
+assert(cleanedUnits3d.includes("18.5 m/s") && cleanedUnits3d.includes("5.5 m"), cleanedUnits3d);
+const cleanedUnits2d = sanitizeGodotLineJs("Move 320 cm/s in 64 cm hall", "dim2d");
+assert(cleanedUnits2d.includes("320 px/s") && cleanedUnits2d.includes("64 px"), cleanedUnits2d);
+
 const docsById = new Map();
 docsById.set("proj_1", {
   id: "proj_1",
@@ -190,14 +195,66 @@ assert.strictEqual(reopened.epicSpec.checks[1].passed, false, "v0.2 delta check 
 
 const bundle = normalizeAgentBundle({
   summary: "Built E01",
-  scriptUpdates: [{ resPath: "scripts/player.gd", content: "+ extends CharacterBody3D\nfunc _ready(): pass" }],
+  scriptUpdates: [{ resPath: "scripts/player.gd", content: "+ extends CharacterBody3D\n+func _ready(): pass" }],
   sceneOps: [{ op: "ensure_node", scenePath: "scenes/arena_3d.tscn", parentPath: ".", nodeName: "Player", nodeType: "CharacterBody3D" }],
   inputOps: [{ action: "claw_dash", keys: ["SPACE"], overwrite: true }],
 }, "build_epic", { dimension: "dim3d" });
 assert.strictEqual(bundle.scriptUpdates[0].resPath, "res://scripts/player.gd");
 assert(bundle.scriptUpdates[0].content.startsWith("extends CharacterBody3D"));
+assert(bundle.scriptUpdates[0].content.includes("func _ready(): pass"), bundle.scriptUpdates[0].content);
+assert.strictEqual(bundle.arenaScenePath, "res://scenes/arena_3d.tscn");
 assert.strictEqual(bundle.sceneOps[0].scenePath, "res://scenes/arena_3d.tscn");
 assert.strictEqual(resolveTargetEpicDocIdJs({ docsById, projectId: "proj_1" }), "epic_2");
+
+const customFixMut = applyGodotEpicMutationJs({
+  epicDoc: docsById.get("epic_1"),
+  action: "log_fix",
+  body: { fixId: "fix_custom_1", fixText: "[FIX] Move ACharacter 400 cm/s in PIE" },
+  dimension: "dim2d",
+});
+const customFix = customFixMut.epicSpec.fixes.find((f) => f.id === "fix_custom_1");
+assert(customFix, "Expected custom fixId preserved");
+assert.strictEqual(customFix.text, "Move CharacterBody2D 400 px/s in Playtest");
+
+const blank2dDocs = new Map();
+blank2dDocs.set("proj_2d", {
+  id: "proj_2d",
+  tier: "PROJECT",
+  title: "Emberkeep",
+  childrenIds: ["rel_2d"],
+  sections: {
+    concept_blueprint_json: JSON.stringify({
+      gameTitle: "Emberkeep",
+      dimension: "dim2d",
+      pitch: "Torch Survival — 2D pixel dungeon.",
+      coreLoop: ["Move", "Dodge"],
+    }),
+  },
+});
+blank2dDocs.set("rel_2d", {
+  id: "rel_2d",
+  tier: "RELEASE",
+  parentId: "proj_2d",
+  title: "v0.1",
+  sections: { release_version: "v0.1" },
+  childrenIds: ["ep_2d"],
+});
+blank2dDocs.set("ep_2d", {
+  id: "ep_2d",
+  tier: "EPIC",
+  parentId: "rel_2d",
+  title: "Runner Movement",
+  isCompleted: false,
+  sections: {
+    code: "E01",
+    epic_spec_json: JSON.stringify({ code: "E01", title: "Runner Movement", goal: "Move in 2D." }),
+  },
+});
+const payload2dBlank = computeActiveGodotEpicPayload({
+  docsById: blank2dDocs,
+  projectId: "proj_2d",
+});
+assert.strictEqual(payload2dBlank.arenaScenePath, "res://scenes/arena_2d.tscn");
 
 console.log("GODOT_CLOUD_TEST_OK");
 """

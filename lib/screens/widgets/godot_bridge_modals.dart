@@ -117,7 +117,7 @@ Future<void> showConnectGodotPluginDialog(
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
-                                    'Unzip into `<YourGodotProject>/addons/layers` and enable Project Settings → Plugins → LAYERS. Adds `[ ⚡ Build E01 | 1/3 ✓ ▾ ]` directly inside the Godot Dock.',
+                                    'Unzip into `<YourGodotProject>/addons/layers` and enable Project Settings → Plugins → LAYERS. Adds `[ ⚡ Build E01 ] [ ▶ Play ] [ ↶ Undo ]`, `@export` tuning, and Playtest Gate checks directly inside the Godot Dock.',
                                     style: TextStyle(fontSize: 12, color: muted),
                                   ),
                                 ],

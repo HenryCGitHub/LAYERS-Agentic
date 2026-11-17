@@ -204,9 +204,19 @@ function normalizeResPathJs(rawPath) {
 function stripDiffLinePrefixes(rawCode) {
   return String(rawCode || "")
     .split(/\r?\n/)
-    .map((line) => (line.startsWith("+ ") ? line.slice(2) : line))
+    .map((line) => {
+      if (line.startsWith("+ ")) return line.slice(2);
+      if (line === "+") return "";
+      if (line.startsWith("+") && !line.startsWith("++")) return line.slice(1);
+      return line;
+    })
     .join("\n")
     .trim();
+}
+
+function formatCleanNumJs(v) {
+  if (Math.abs(v - Math.round(v)) < 0.001) return String(Math.round(v));
+  return v.toFixed(2).replace(/\.?0+$/, "");
 }
 
 function extractResPathsListJs(rawText, extFilter = "") {
@@ -290,6 +300,42 @@ function sanitizeGodotLineJs(raw, dimension = "dim3d") {
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.(?:cpp|hpp)\b/gi, (_, grp) =>
     `${toSnakeCaseTokenJs(grp || "script")}.gd`
   );
+  out = out.replace(/\b(\d+(?:\.\d+)?)\s*cm\/s\b/gi, (_, numStr) => {
+    const rawNum = Number(numStr) || 0;
+    return is2d ? `${formatCleanNumJs(rawNum)} px/s` : `${formatCleanNumJs(rawNum / 100)} m/s`;
+  });
+  out = out.replace(/\b(\d+(?:\.\d+)?)\s*cm\b/gi, (_, numStr) => {
+    const rawNum = Number(numStr) || 0;
+    return is2d ? `${formatCleanNumJs(rawNum)} px` : `${formatCleanNumJs(rawNum / 100)} m`;
+  });
+  const jargonMap = [
+    ["leveraging", "using"],
+    ["leverages", "uses"],
+    ["leverage", "use"],
+    ["validates", "checks"],
+    ["validated", "checked"],
+    ["validate", "check"],
+    ["verified", "checked"],
+    ["delivering", "producing"],
+    ["delivers", "produces"],
+    ["deliver", "produce"],
+    ["husbandry", "breeding"],
+    ["homestead", "base"],
+    ["expedition", "run"],
+    ["ordinance", "weaponry"],
+  ];
+  for (const [fromWord, toLower] of jargonMap) {
+    out = out.replace(new RegExp(`\\b${fromWord}\\b`, "gi"), (matched) => {
+      if (
+        matched &&
+        matched[0] === matched[0].toUpperCase() &&
+        matched[0] !== matched[0].toLowerCase()
+      ) {
+        return `${toLower[0].toUpperCase()}${toLower.slice(1)}`;
+      }
+      return toLower;
+    });
+  }
   return out.replace(/\s{2,}/g, " ").trim();
 }
 
@@ -1090,8 +1136,12 @@ function computeActiveGodotEpicPayload({
   const liveScenes = Array.isArray(liveCtx?.scene_files)
     ? liveCtx.scene_files.map((s) => normalizeResPathJs(s)).filter(Boolean)
     : [];
+  const defaultArenaScene =
+    rootSpec.dimension === "dim2d"
+      ? "res://scenes/arena_2d.tscn"
+      : "res://scenes/arena_3d.tscn";
   const arenaScenePath =
-    stagingTscns[0] || liveMainScene || linkTscns[0] || liveScenes[0] || "";
+    stagingTscns[0] || liveMainScene || linkTscns[0] || liveScenes[0] || defaultArenaScene;
 
   const releaseEpicsSummary = parsedEpics.map((ep) => ({
     id: ep.id,
@@ -1290,10 +1340,11 @@ function applyGodotEpicMutationJs({
       spec.lifecycle = "active";
     }
   } else if (action === "log_fix") {
-    const cleanText = String(body.fixText || "")
+    const rawText = String(body.fixText || "")
       .trim()
       .replace(/^\[FIX\]\s*/i, "")
       .trim();
+    const cleanText = sanitizeGodotLineJs(rawText, dimension);
     if (!cleanText) {
       const err = new Error("Expected non-empty fixText for log_fix.");
       err.statusCode = 400;
@@ -1508,8 +1559,12 @@ function normalizeAgentBundle(rawObj, mode, opts = {}) {
     inputOps.push(normInput);
   }
 
+  const defaultDimScene =
+    opts.dimension === "dim2d"
+      ? "res://scenes/arena_2d.tscn"
+      : "res://scenes/arena_3d.tscn";
   const arenaScenePath = normalizeResPathJs(
-    obj.arenaScenePath || obj.arena_scene_path || opts.arenaScenePath || ""
+    obj.arenaScenePath || obj.arena_scene_path || opts.arenaScenePath || defaultDimScene
   );
   const featureScenePath = normalizeResPathJs(
     obj.epicScenePath ||
@@ -1518,7 +1573,7 @@ function normalizeAgentBundle(rawObj, mode, opts = {}) {
       obj.feature_scene_path ||
       opts.epicScenePath ||
       arenaScenePath ||
-      ""
+      defaultDimScene
   );
 
   return {

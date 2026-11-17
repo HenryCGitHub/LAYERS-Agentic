@@ -59,8 +59,18 @@ class _LayersEditorLogger extends Logger:
 		_entries.clear()
 		_mutex.unlock()
 
+	func inject(msg: String) -> void:
+		var clean: String = msg.strip_edges().left(340)
+		if clean.is_empty():
+			return
+		_mutex.lock()
+		if _entries.size() >= 24:
+			_entries.pop_front()
+		_entries.append({ "ts": Time.get_unix_time_from_system() + 1.0, "msg": clean })
+		_mutex.unlock()
 
-var editor_interface: EditorInterface = null
+
+var editor_interface: Variant = null
 var undo_redo: EditorUndoRedoManager = null
 
 var _sync_client: Node = null
@@ -75,6 +85,10 @@ var _status_message: String = ""
 var _status_is_error: bool = false
 var _available_update_ver: String = ""
 var _pending_build_preferred_scene: String = ""
+var _last_built_scene_path: String = ""
+var _errors_cleared_unix: float = 0.0
+var _ignored_error_signatures: Dictionary = {}
+var _manual_update_check: bool = false
 var _show_token_fallback: bool = false
 
 # UI Nodes
@@ -115,6 +129,7 @@ var _pass_reopen_btn: Button
 
 var _errors_card: PanelContainer
 var _errors_list_box: VBoxContainer
+var _clear_errors_btn: Button
 var _auto_fix_errors_btn: Button
 
 var _fixes_box: VBoxContainer
@@ -349,10 +364,20 @@ func _build_ui() -> void:
 	err_vbox.add_theme_constant_override("separation", 6)
 	_errors_card.add_child(err_vbox)
 
+	var err_hdr_row := HBoxContainer.new()
+	err_hdr_row.add_theme_constant_override("separation", 6)
+	err_vbox.add_child(err_hdr_row)
+
 	var err_hdr := Label.new()
 	err_hdr.text = "DETECTED GODOT ERRORS"
+	err_hdr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	err_hdr.add_theme_font_size_override("font_size", 10)
-	err_vbox.add_child(err_hdr)
+	err_hdr_row.add_child(err_hdr)
+
+	_clear_errors_btn = Button.new()
+	_clear_errors_btn.text = "Clear"
+	_clear_errors_btn.tooltip_text = "Acknowledge & clear detected errors"
+	err_hdr_row.add_child(_clear_errors_btn)
 
 	_errors_list_box = VBoxContainer.new()
 	_errors_list_box.add_theme_constant_override("separation", 3)
@@ -448,6 +473,7 @@ func _wire_signals() -> void:
 	_play_btn.pressed.connect(_on_play_pressed)
 	_undo_btn.pressed.connect(_on_undo_pressed)
 	_pass_reopen_btn.pressed.connect(_on_pass_reopen_pressed)
+	_clear_errors_btn.pressed.connect(clear_captured_errors)
 	_auto_fix_errors_btn.pressed.connect(func() -> void:
 		_auto_heal_attempted = false
 		_trigger_epic_agent("fix_epic")
@@ -459,10 +485,12 @@ func _wire_signals() -> void:
 		_sync_client.connect("epic_updated", _on_epic_updated)
 		_sync_client.connect("sync_failed", _on_sync_failed)
 		_sync_client.connect("busy_changed", _on_busy_changed)
+		_sync_client.connect("agent_busy_changed", _on_agent_busy_changed)
 		_sync_client.connect("agent_bundle_received", _on_agent_bundle_received)
 		_sync_client.connect("auth_completed", _on_auth_completed)
 		_sync_client.connect("auth_status_changed", _on_auth_status_changed)
 		_sync_client.connect("update_available", _on_update_available)
+		_sync_client.connect("update_check_finished", _on_update_check_finished)
 		_sync_client.connect("update_ready_to_reload", _on_update_ready_to_reload)
 		_sync_client.connect("update_failed", _on_update_failed)
 
@@ -483,23 +511,119 @@ func notify_editor_state_changed() -> void:
 	_refresh_errors_card()
 
 
+func _as_editor_interface() -> EditorInterface:
+	return editor_interface as EditorInterface if editor_interface is EditorInterface else null
+
+
+func _extract_tscn_paths_from_text(raw_text: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	if raw_text.strip_edges().is_empty():
+		return out
+	var rx := RegEx.new()
+	rx.compile("res://[A-Za-z0-9_./-]+\\.tscn")
+	for m in rx.search_all(raw_text):
+		var p: String = m.get_string(0).strip_edges()
+		if not p.is_empty() and not (p in out):
+			out.append(p)
+	return out
+
+
+func _resolve_play_scene_path() -> String:
+	var candidates := PackedStringArray()
+	if not _last_built_scene_path.strip_edges().is_empty():
+		candidates.append(_last_built_scene_path.strip_edges())
+	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+	if not arena_scene.is_empty():
+		candidates.append(arena_scene)
+	var epic: Dictionary = _get_active_epic()
+	if not epic.is_empty():
+		for sp in _extract_tscn_paths_from_text(str(epic.get("levelStaging", ""))):
+			candidates.append(sp)
+		var links_v: Variant = epic.get("links", [])
+		if typeof(links_v) == TYPE_ARRAY:
+			for lk in (links_v as Array):
+				for sp2 in _extract_tscn_paths_from_text(str(lk)):
+					candidates.append(sp2)
+	var main_sc: String = str(ProjectSettings.get_setting("application/run/main_scene", "")).strip_edges()
+	if not main_sc.is_empty():
+		candidates.append(main_sc)
+	if editor_interface != null and editor_interface.has_method("get_edited_scene_root"):
+		var ed_raw: Variant = editor_interface.call("get_edited_scene_root")
+		if ed_raw != null and ed_raw is Node:
+			var ed_path: String = String((ed_raw as Node).scene_file_path).strip_edges()
+			if not ed_path.is_empty():
+				candidates.append(ed_path)
+	if _executor != null and _executor.has_method("collect_project_scene_paths"):
+		var proj_raw: Variant = _executor.call("collect_project_scene_paths", "res://", 8)
+		if typeof(proj_raw) == TYPE_ARRAY or typeof(proj_raw) == TYPE_PACKED_STRING_ARRAY:
+			for ps in proj_raw:
+				candidates.append(str(ps).strip_edges())
+	for c in candidates:
+		if not c.is_empty() and c.ends_with(".tscn") and FileAccess.file_exists(c):
+			return c
+	return ""
+
+
 func refresh_from_focus() -> void:
-	if _sync_client != null and bool(_sync_client.call("has_link_token")) and not bool(_sync_client.call("is_busy")):
+	if _sync_client != null and bool(_sync_client.call("has_link_token")) and not bool(_sync_client.call("is_busy")) and not bool(_sync_client.call("is_waiting_for_auth")):
 		_sync_with_cloud()
 
 
 func _collect_recent_errors() -> Array[String]:
 	var errs: Array[String] = []
+	var logger_errs: Array[String] = []
 	if _logger != null:
-		errs.append_array(_logger.snapshot_errors())
-	if _executor != null and editor_interface != null:
-		var ed_raw: Variant = _executor.call("read_editor_and_playtest_errors", editor_interface, "", 4)
+		logger_errs = _logger.snapshot_errors(_errors_cleared_unix)
+		for le in logger_errs:
+			_ignored_error_signatures.erase(le)
+			if not errs.has(le):
+				errs.append(le)
+	var base_ctrl: Node = null
+	if editor_interface != null and editor_interface.has_method("get_base_control"):
+		var bc_raw: Variant = editor_interface.call("get_base_control")
+		if bc_raw is Node:
+			base_ctrl = bc_raw as Node
+	if _executor != null and (base_ctrl != null or not logger_errs.is_empty()):
+		var ed_raw: Variant = _executor.call(
+			"read_editor_and_playtest_errors",
+			base_ctrl,
+			logger_errs,
+			_ignored_error_signatures,
+			_errors_cleared_unix,
+			5
+		)
 		if typeof(ed_raw) == TYPE_ARRAY or typeof(ed_raw) == TYPE_PACKED_STRING_ARRAY:
 			for e in ed_raw:
 				var es: String = str(e).strip_edges()
-				if not es.is_empty() and not errs.has(es):
+				if not es.is_empty() and not _ignored_error_signatures.has(es) and not errs.has(es):
 					errs.append(es)
 	return errs
+
+
+func _acknowledge_resolved_errors() -> void:
+	var cur_errs: Array[String] = _collect_recent_errors()
+	for e in cur_errs:
+		_ignored_error_signatures[e] = true
+	_errors_cleared_unix = Time.get_unix_time_from_system()
+	if _logger != null:
+		_logger.clear()
+
+
+func clear_captured_errors() -> void:
+	_acknowledge_resolved_errors()
+	_refresh_ui()
+	_set_status("Cleared captured errors.", false)
+
+
+func inject_test_error(msg: String) -> void:
+	var clean: String = msg.strip_edges().left(340)
+	if clean.is_empty():
+		return
+	if _logger == null:
+		_logger = _LayersEditorLogger.new()
+	_ignored_error_signatures.erase(clean)
+	_logger.inject(clean)
+	_refresh_ui()
 
 
 func _collect_live_context() -> Dictionary:
@@ -532,18 +656,19 @@ func _on_menu_id_pressed(id: int) -> void:
 			_on_google_signin_pressed()
 		2:
 			if _sync_client != null:
+				_manual_update_check = true
 				_set_status("Checking GitHub for LAYERS plugin updates...", false)
 				_sync_client.call("check_for_plugin_update", false)
 		3:
-			if _logger != null:
-				_logger.clear()
-			_refresh_errors_card()
-			_set_status("Cleared captured errors.", false)
+			clear_captured_errors()
 		4:
 			if _sync_client != null:
 				_sync_client.call("clear_link_token")
 			_payload = {}
 			_last_bundle_snapshot = {}
+			_last_built_scene_path = ""
+			_ignored_error_signatures.clear()
+			_errors_cleared_unix = 0.0
 			_set_status("Unlinked project.", false)
 			_refresh_ui()
 
@@ -582,6 +707,9 @@ func _on_auth_completed(project_title: String) -> void:
 
 func _on_auth_status_changed(waiting: bool, message: String) -> void:
 	_cancel_signin_btn.visible = waiting
+	if _google_signin_btn != null:
+		_google_signin_btn.text = "Waiting for Browser Sign-In..." if waiting else "⚡ Sign in with Google"
+		_google_signin_btn.disabled = waiting
 	if not message.is_empty():
 		_set_status(message, false)
 
@@ -598,12 +726,16 @@ func _on_sync_failed(message: String) -> void:
 
 
 func _on_busy_changed(busy: bool) -> void:
-	_sync_btn.disabled = busy
-	_primary_cta_btn.disabled = busy
-	_auto_fix_errors_btn.disabled = busy
-	_pass_reopen_btn.disabled = busy
-	_epic_selector.disabled = busy
-	_flag_fix_btn.disabled = busy
+	if _sync_btn != null:
+		_sync_btn.disabled = busy
+
+
+func _on_agent_busy_changed(agent_busy: bool) -> void:
+	_primary_cta_btn.disabled = agent_busy
+	_auto_fix_errors_btn.disabled = agent_busy
+	_pass_reopen_btn.disabled = agent_busy
+	_epic_selector.disabled = agent_busy
+	_flag_fix_btn.disabled = agent_busy
 
 
 func _on_epic_selected(idx: int) -> void:
@@ -622,27 +754,83 @@ func _get_active_epic() -> Dictionary:
 	return {}
 
 
-func _on_primary_cta_pressed() -> void:
+func _get_active_epic_open_fixes_count(epic: Dictionary) -> int:
+	var raw_open: Variant = epic.get("openFixes", null)
+	if typeof(raw_open) == TYPE_ARRAY:
+		return (raw_open as Array).size()
+	return int(epic.get("openFixesCount", 0))
+
+
+func _sync_active_epic_summary_counts() -> void:
 	var epic: Dictionary = _get_active_epic()
 	if epic.is_empty():
 		return
-	var open_fixes: int = int(epic.get("openFixesCount", 0))
+	var active_id: String = str(epic.get("id", ""))
+	var open_fixes: int = _get_active_epic_open_fixes_count(epic)
+	epic["openFixesCount"] = open_fixes
 	var checks_raw: Variant = epic.get("checks", [])
 	var checks: Array = checks_raw as Array if typeof(checks_raw) == TYPE_ARRAY else []
-	var passed_count: int = int(epic.get("passedChecksCount", 0))
-	var is_passed: bool = bool(epic.get("isPassed", false))
-	var errs: Array[String] = _collect_recent_errors()
+	var passed_count: int = 0
+	for cv in checks:
+		if typeof(cv) == TYPE_DICTIONARY and bool((cv as Dictionary).get("passed", false)):
+			passed_count += 1
+	epic["passedChecksCount"] = passed_count
+	var summary_v: Variant = _payload.get("releaseEpicsSummary", [])
+	if typeof(summary_v) == TYPE_ARRAY:
+		for sv in (summary_v as Array):
+			if typeof(sv) == TYPE_DICTIONARY and str((sv as Dictionary).get("id", "")) == active_id:
+				var sd: Dictionary = sv as Dictionary
+				sd["openFixesCount"] = open_fixes
+				sd["passedChecksCount"] = passed_count
+				sd["isPassed"] = bool(epic.get("isPassed", false))
 
-	if not is_passed and open_fixes == 0 and errs.is_empty() and not checks.is_empty() and passed_count >= checks.size():
+
+func compute_primary_cta_state() -> Dictionary:
+	var epic: Dictionary = _get_active_epic()
+	if epic.is_empty():
+		return {"mode": "sync", "text": "↻ Sync Epics", "issue_count": 0}
+	var ecode: String = str(epic.get("code", "E01"))
+	var open_fixes: int = _get_active_epic_open_fixes_count(epic)
+	var errs: Array[String] = _collect_recent_errors()
+	var issue_count: int = open_fixes + errs.size()
+	var checks_raw: Variant = epic.get("checks", [])
+	var checks: Array = checks_raw as Array if typeof(checks_raw) == TYPE_ARRAY else []
+	var passed_count: int = 0
+	if not checks.is_empty():
+		for cv in checks:
+			if typeof(cv) == TYPE_DICTIONARY and bool((cv as Dictionary).get("passed", false)):
+				passed_count += 1
+	else:
+		passed_count = int(epic.get("passedChecksCount", 0))
+	var is_passed: bool = bool(epic.get("isPassed", false))
+
+	if issue_count > 0:
+		return {"mode": "fix", "text": "🔧 Fix %s (%d)" % [ecode, issue_count], "issue_count": issue_count}
+	if not is_passed and not checks.is_empty() and passed_count >= checks.size():
+		return {"mode": "pass", "text": "✓ Pass %s →" % ecode, "issue_count": 0}
+	return {
+		"mode": "build",
+		"text": ("⚡ Rebuild %s" % ecode) if is_passed else ("⚡ Build %s" % ecode),
+		"issue_count": 0,
+	}
+
+
+func _on_primary_cta_pressed() -> void:
+	var epic: Dictionary = _get_active_epic()
+	if epic.is_empty():
+		_sync_with_cloud()
+		return
+	var cta: Dictionary = compute_primary_cta_state()
+	var mode: String = str(cta.get("mode", "build"))
+	if mode == "pass":
 		if _sync_client != null:
 			_sync_client.call("push_epic_mutation", {
 				"action": "pass_epic",
 				"epicId": str(epic.get("id", "")),
 			}, _collect_live_context())
 		return
-
 	_auto_heal_attempted = false
-	if open_fixes > 0 or not errs.is_empty():
+	if mode == "fix":
 		_trigger_epic_agent("fix_epic")
 	else:
 		_trigger_epic_agent("build_epic")
@@ -655,19 +843,42 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 	if epic.is_empty():
 		return
 	var epic_id: String = str(epic.get("id", ""))
+	var dim_str: String = str(_payload.get("dimension", "dim3d")).strip_edges().to_lower()
+	var default_arena: String = "res://scenes/arena_2d.tscn" if dim_str == "dim2d" else "res://scenes/arena_3d.tscn"
 	var arena_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
+	if arena_scene.is_empty():
+		arena_scene = _resolve_play_scene_path()
+	if arena_scene.is_empty():
+		arena_scene = default_arena
 	var live_ctx: Dictionary = _collect_live_context()
 
-	var live_scripts_v: Variant = _executor.call("read_all_live_project_scripts", "res://", editor_interface)
+	var ed_int: EditorInterface = _as_editor_interface()
+	var live_scripts_v: Variant = _executor.call("read_all_live_project_scripts", "res://", ed_int)
 	var live_scripts: Dictionary = live_scripts_v as Dictionary if typeof(live_scripts_v) == TYPE_DICTIONARY else {}
 
+	var diag_scenes: Array = []
 	var extra_scenes := PackedStringArray()
-	if not arena_scene.is_empty():
-		extra_scenes.append(arena_scene)
-	var snap_v: Variant = _executor.call("capture_rich_scene_snapshot", editor_interface, extra_scenes)
+	for cand in [arena_scene, _resolve_play_scene_path()]:
+		var cs: String = str(cand).strip_edges()
+		if not cs.is_empty() and cs.ends_with(".tscn") and not (cs in extra_scenes):
+			extra_scenes.append(cs)
+			diag_scenes.append(cs)
+	for sp_lvl in _extract_tscn_paths_from_text(str(epic.get("levelStaging", ""))):
+		if not (sp_lvl in extra_scenes):
+			extra_scenes.append(sp_lvl)
+			diag_scenes.append(sp_lvl)
+	var links_v: Variant = epic.get("links", [])
+	if typeof(links_v) == TYPE_ARRAY:
+		for lk in (links_v as Array):
+			for sp_lk in _extract_tscn_paths_from_text(str(lk)):
+				if not (sp_lk in extra_scenes):
+					extra_scenes.append(sp_lk)
+					diag_scenes.append(sp_lk)
+
+	var snap_v: Variant = _executor.call("capture_rich_scene_snapshot", ed_int, extra_scenes)
 	var input_v: Variant = _executor.call("capture_input_map_snapshot")
 	var input_snap: Dictionary = input_v as Dictionary if typeof(input_v) == TYPE_DICTIONARY else {}
-	var diag_v: Variant = _executor.call("diagnose_project_combat_and_wiring", snap_v, live_scripts, input_snap)
+	var diag_v: Variant = _executor.call("diagnose_project_combat_and_wiring", diag_scenes, live_scripts, ed_int)
 	var diag_arr: Array = diag_v as Array if typeof(diag_v) == TYPE_ARRAY or typeof(diag_v) == TYPE_PACKED_STRING_ARRAY else []
 
 	var errs: Array[String] = _collect_recent_errors()
@@ -708,28 +919,34 @@ func _on_agent_bundle_received(agent_bundle: Dictionary, _payload_resp: Dictiona
 		_set_status("Cloud Gemini returned empty bundle.", true)
 		return
 
-	if editor_interface != null:
-		var snap_v: Variant = _executor.call(
-			"capture_bundle_snapshot",
-			editor_interface,
-			agent_bundle,
-			_pending_build_preferred_scene
-		)
-		if typeof(snap_v) == TYPE_DICTIONARY:
-			_last_bundle_snapshot = snap_v as Dictionary
-			_undo_btn.disabled = _last_bundle_snapshot.is_empty()
+	var ed_int: EditorInterface = _as_editor_interface()
+	var snap_v: Variant = _executor.call(
+		"capture_bundle_snapshot",
+		ed_int,
+		agent_bundle,
+		_pending_build_preferred_scene
+	)
+	if typeof(snap_v) == TYPE_DICTIONARY:
+		_last_bundle_snapshot = snap_v as Dictionary
+		_undo_btn.disabled = _last_bundle_snapshot.is_empty()
 
 	var res_v: Variant = _executor.call(
 		"apply_agent_bundle",
-		editor_interface,
+		ed_int,
 		undo_redo,
 		agent_bundle,
 		_pending_build_preferred_scene
 	)
 	var res: Dictionary = res_v as Dictionary if typeof(res_v) == TYPE_DICTIONARY else {}
 
-	if editor_interface != null:
-		var rfs: Variant = editor_interface.get_resource_filesystem()
+	for cand_path in [agent_bundle.get("epicScenePath", ""), agent_bundle.get("arenaScenePath", ""), _pending_build_preferred_scene]:
+		var cp: String = str(cand_path).strip_edges()
+		if not cp.is_empty() and cp.ends_with(".tscn") and FileAccess.file_exists(cp):
+			_last_built_scene_path = cp
+			break
+
+	if ed_int != null:
+		var rfs: Variant = ed_int.get_resource_filesystem()
 		if rfs != null and rfs.has_method("scan"):
 			rfs.call("scan")
 
@@ -747,33 +964,154 @@ func _on_agent_bundle_received(agent_bundle: Dictionary, _payload_resp: Dictiona
 	if not compile_errs.is_empty():
 		_set_status("Applied with compile warning: %s" % compile_errs[0], true)
 	else:
-		_set_status(summary, false)
+		_acknowledge_resolved_errors()
+		var epic: Dictionary = _get_active_epic()
+		if _get_active_epic_open_fixes_count(epic) > 0:
+			_set_status("%s — press ▶ Play, then click ✓ on resolved [FIX] items." % summary, false)
+		else:
+			_set_status(summary, false)
 	_refresh_ui()
 
 
 func _on_play_pressed() -> void:
 	if editor_interface == null:
 		return
-	var target_scene: String = str(_payload.get("arenaScenePath", "")).strip_edges()
-	if not target_scene.is_empty() and FileAccess.file_exists(target_scene):
-		editor_interface.play_custom_scene(target_scene)
-	else:
-		editor_interface.play_main_scene()
+	var target_scene: String = _resolve_play_scene_path()
+	if target_scene.is_empty():
+		var epic: Dictionary = _get_active_epic()
+		var ecode: String = str(epic.get("code", "E01"))
+		_set_status("No scene built yet — click ⚡ Build %s first." % ecode, true)
+		return
+	if editor_interface.has_method("save_scene"):
+		editor_interface.call("save_scene")
+	if editor_interface.has_method("play_custom_scene"):
+		editor_interface.call("play_custom_scene", target_scene)
+	elif editor_interface.has_method("play_main_scene"):
+		editor_interface.call("play_main_scene")
 
 
 func _on_undo_pressed() -> void:
 	if _executor == null or _last_bundle_snapshot.is_empty():
 		return
-	var res_v: Variant = _executor.call("restore_bundle_snapshot", editor_interface, _last_bundle_snapshot)
+	var ed_int: EditorInterface = _as_editor_interface()
+	var res_v: Variant = _executor.call("restore_bundle_snapshot", ed_int, _last_bundle_snapshot)
 	var res: Dictionary = res_v as Dictionary if typeof(res_v) == TYPE_DICTIONARY else {}
 	if bool(res.get("ok", false)):
 		_last_bundle_snapshot = {}
 		_undo_btn.disabled = true
-		if editor_interface != null and editor_interface.get_resource_filesystem() != null:
-			editor_interface.get_resource_filesystem().scan()
+		if ed_int != null and ed_int.get_resource_filesystem() != null:
+			ed_int.get_resource_filesystem().scan()
 		_set_status("Restored pre-build project snapshot.", false)
 	else:
 		_set_status("Nothing to undo.", true)
+
+
+func toggle_epic_check_by_id(check_id: String, pressed: bool) -> void:
+	var epic: Dictionary = _get_active_epic()
+	if epic.is_empty():
+		return
+	var checks_v: Variant = epic.get("checks", [])
+	if typeof(checks_v) == TYPE_ARRAY:
+		for cv in (checks_v as Array):
+			if typeof(cv) == TYPE_DICTIONARY and str((cv as Dictionary).get("id", "")) == check_id:
+				(cv as Dictionary)["passed"] = pressed
+				break
+	_sync_active_epic_summary_counts()
+	_refresh_ui()
+	if _sync_client != null and bool(_sync_client.call("has_link_token")):
+		_sync_client.call("push_epic_mutation", {
+			"action": "toggle_check",
+			"epicId": str(epic.get("id", "")),
+			"checkId": check_id,
+			"passed": pressed,
+		}, _collect_live_context())
+
+
+func log_epic_fix_text(raw_text: String) -> String:
+	var txt: String = raw_text.strip_edges()
+	var epic: Dictionary = _get_active_epic()
+	if txt.is_empty() or epic.is_empty():
+		return ""
+	var fix_id: String = "fix_%d_%04d" % [int(Time.get_unix_time_from_system() * 1000.0), randi() % 10000]
+	var open_v: Variant = epic.get("openFixes", null)
+	if typeof(open_v) != TYPE_ARRAY:
+		open_v = []
+		epic["openFixes"] = open_v
+	(open_v as Array).append({
+		"id": fix_id,
+		"text": txt,
+		"resolved": false,
+	})
+	_sync_active_epic_summary_counts()
+	_refresh_ui()
+	_set_status("Logged [FIX] revision on %s." % str(epic.get("code", "Epic")), false)
+	if _sync_client != null and bool(_sync_client.call("has_link_token")):
+		_sync_client.call("push_epic_mutation", {
+			"action": "log_fix",
+			"epicId": str(epic.get("id", "")),
+			"fixId": fix_id,
+			"fixText": txt,
+		}, _collect_live_context())
+	return fix_id
+
+
+func resolve_epic_fix_by_id(fix_id: String) -> void:
+	var epic: Dictionary = _get_active_epic()
+	if epic.is_empty():
+		return
+	var open_v: Variant = epic.get("openFixes", [])
+	if typeof(open_v) == TYPE_ARRAY:
+		var arr: Array = open_v as Array
+		for i in range(arr.size() - 1, -1, -1):
+			if typeof(arr[i]) == TYPE_DICTIONARY and str((arr[i] as Dictionary).get("id", "")) == fix_id:
+				arr.remove_at(i)
+	_sync_active_epic_summary_counts()
+	_refresh_ui()
+	_set_status("Marked [FIX] resolved.", false)
+	if _sync_client != null and bool(_sync_client.call("has_link_token")):
+		_sync_client.call("push_epic_mutation", {
+			"action": "resolve_fix",
+			"epicId": str(epic.get("id", "")),
+			"fixId": fix_id,
+			"resolved": true,
+		}, _collect_live_context())
+
+
+func apply_epic_tuning_value(tkey: String, next_v: String, tunit: String = "") -> void:
+	var clean_val: String = next_v.strip_edges()
+	var epic: Dictionary = _get_active_epic()
+	if clean_val.is_empty() or epic.is_empty():
+		return
+	var tuning_v: Variant = epic.get("tuning", [])
+	if typeof(tuning_v) == TYPE_ARRAY:
+		for tv in (tuning_v as Array):
+			if typeof(tv) == TYPE_DICTIONARY and str((tv as Dictionary).get("key", "")) == tkey:
+				(tv as Dictionary)["value"] = clean_val
+				break
+	var local_updated := false
+	if _executor != null and _executor.has_method("apply_live_export_tuning"):
+		var tune_res_v: Variant = _executor.call(
+			"apply_live_export_tuning",
+			_as_editor_interface(),
+			tkey,
+			clean_val,
+			tunit,
+			_resolve_play_scene_path()
+		)
+		if typeof(tune_res_v) == TYPE_DICTIONARY:
+			local_updated = bool((tune_res_v as Dictionary).get("ok", false))
+	if _sync_client != null and bool(_sync_client.call("has_link_token")):
+		_sync_client.call("push_epic_mutation", {
+			"action": "update_tuning",
+			"epicId": str(epic.get("id", "")),
+			"key": tkey,
+			"value": clean_val,
+			"unit": tunit,
+		}, _collect_live_context())
+	if local_updated:
+		_set_status("Updated %s = %s %s in local .gd/.tscn and Web Studio." % [tkey, clean_val, tunit], false)
+	else:
+		_set_status("Updated %s = %s %s in Web Studio." % [tkey, clean_val, tunit], false)
 
 
 func _on_pass_reopen_pressed() -> void:
@@ -789,23 +1127,24 @@ func _on_pass_reopen_pressed() -> void:
 
 func _on_flag_fix_pressed() -> void:
 	var txt: String = _fix_input.text.strip_edges()
-	if txt.is_empty() or _sync_client == null:
-		return
-	var epic: Dictionary = _get_active_epic()
-	if epic.is_empty():
+	if txt.is_empty():
 		return
 	_fix_input.text = ""
-	_sync_client.call("push_epic_mutation", {
-		"action": "log_fix",
-		"epicId": str(epic.get("id", "")),
-		"fixText": txt,
-	}, _collect_live_context())
+	log_epic_fix_text(txt)
 
 
 func _on_update_available(_local_ver: String, remote_ver: String) -> void:
+	_manual_update_check = false
 	_available_update_ver = remote_ver
 	_update_label.text = "LAYERS v%s available" % remote_ver
 	_update_banner.visible = true
+
+
+func _on_update_check_finished(up_to_date: bool, local_ver: String, _remote_ver: String) -> void:
+	var was_manual: bool = _manual_update_check
+	_manual_update_check = false
+	if was_manual and up_to_date:
+		_set_status("LAYERS plugin v%s is up to date." % local_ver, false)
 
 
 func _on_apply_update_pressed() -> void:
@@ -823,6 +1162,7 @@ func _on_update_ready_to_reload(new_ver: String, _updated_gd_paths: PackedString
 
 
 func _on_update_failed(message: String) -> void:
+	_manual_update_check = false
 	_update_apply_btn.disabled = false
 	_set_status(message, true)
 
@@ -861,6 +1201,9 @@ func _refresh_ui() -> void:
 
 	_unlinked_panel.visible = not linked
 	_cancel_signin_btn.visible = waiting_auth
+	if _google_signin_btn != null:
+		_google_signin_btn.text = "Waiting for Browser Sign-In..." if waiting_auth else "⚡ Sign in with Google"
+		_google_signin_btn.disabled = waiting_auth
 	_linked_scroll.visible = linked
 	_sync_btn.visible = linked
 
@@ -911,20 +1254,11 @@ func _refresh_ui() -> void:
 		return
 
 	var ecode: String = str(epic.get("code", "E01"))
-	var open_fixes: int = int(epic.get("openFixesCount", 0))
 	var checks_v: Variant = epic.get("checks", [])
 	var checks: Array = checks_v as Array if typeof(checks_v) == TYPE_ARRAY else []
-	var passed_count: int = int(epic.get("passedChecksCount", 0))
 	var is_passed: bool = bool(epic.get("isPassed", false))
-	var errs: Array[String] = _collect_recent_errors()
-
-	if not is_passed and open_fixes == 0 and errs.is_empty() and not checks.is_empty() and passed_count >= checks.size():
-		_primary_cta_btn.text = "✓ Pass %s →" % ecode
-	elif open_fixes > 0 or not errs.is_empty():
-		var count_n: int = maxi(open_fixes, errs.size())
-		_primary_cta_btn.text = "🔧 Fix %s (%d)" % [ecode, count_n]
-	else:
-		_primary_cta_btn.text = "⚡ Build %s" % ecode
+	var cta: Dictionary = compute_primary_cta_state()
+	_primary_cta_btn.text = str(cta.get("text", "⚡ Build %s" % ecode))
 
 	_goal_label.text = str(epic.get("goal", ""))
 
@@ -980,18 +1314,7 @@ func _refresh_ui() -> void:
 			row.add_child(set_btn)
 
 			var commit_tuning := func() -> void:
-				if _sync_client == null:
-					return
-				var next_v: String = v_edit.text.strip_edges()
-				if next_v.is_empty():
-					return
-				_sync_client.call("push_epic_mutation", {
-					"action": "update_tuning",
-					"epicId": active_eid,
-					"key": tkey,
-					"value": next_v,
-					"unit": tunit,
-				}, _collect_live_context())
+				apply_epic_tuning_value(tkey, v_edit.text, tunit)
 
 			set_btn.pressed.connect(commit_tuning)
 			v_edit.text_submitted.connect(func(_s: String) -> void: commit_tuning.call())
@@ -1011,14 +1334,7 @@ func _refresh_ui() -> void:
 		cb.button_pressed = cpassed
 		cb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cb.toggled.connect(func(pressed: bool) -> void:
-			if _sync_client == null:
-				return
-			_sync_client.call("push_epic_mutation", {
-				"action": "toggle_check",
-				"epicId": active_eid,
-				"checkId": cid,
-				"passed": pressed,
-			}, _collect_live_context())
+			toggle_epic_check_by_id(cid, pressed)
 		)
 		_checks_box.add_child(cb)
 
@@ -1052,14 +1368,7 @@ func _refresh_ui() -> void:
 			res_btn.text = "✓"
 			res_btn.tooltip_text = "Mark [FIX] resolved"
 			res_btn.pressed.connect(func() -> void:
-				if _sync_client == null:
-					return
-				_sync_client.call("push_epic_mutation", {
-					"action": "resolve_fix",
-					"epicId": active_eid,
-					"fixId": fid,
-					"resolved": true,
-				}, _collect_live_context())
+				resolve_epic_fix_by_id(fid)
 			)
 			frow.add_child(res_btn)
 	else:

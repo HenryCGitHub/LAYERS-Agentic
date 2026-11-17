@@ -1,5 +1,28 @@
 extends SceneTree
 
+
+class _MockEditorInterface extends RefCounted:
+	var base_ctrl: Control = Control.new()
+	var edited_root: Node = null
+	var played_scene: String = ""
+	var saved_count: int = 0
+
+	func get_base_control() -> Control:
+		return base_ctrl
+
+	func get_edited_scene_root() -> Node:
+		return edited_root
+
+	func save_scene() -> void:
+		saved_count += 1
+
+	func play_custom_scene(p: String) -> void:
+		played_scene = p
+
+	func get_resource_filesystem() -> Variant:
+		return null
+
+
 func _init() -> void:
 	call_deferred("_run_test")
 
@@ -200,6 +223,185 @@ func _physics_process(_delta: float) -> void:
 	if typeof(gfiles_v) != TYPE_ARRAY or not (gfiles_v as Array).has("res://scripts/test_player_2d.gd"):
 		_fail("collect_godot_project_context missing script_files: %s" % str(live_ctx))
 		return
+
+	# 6. Test FIFO mutation queue & get_epic deduplication on sync_client
+	sync_client.call("save_link_token", "lyr_test_queue_token_1234567890")
+	sync_client.set("_is_busy", true)
+	sync_client.call("push_epic_mutation", {"action": "toggle_check", "checkId": "c1", "passed": true})
+	sync_client.call("push_epic_mutation", {"action": "toggle_check", "checkId": "c2", "passed": true})
+	sync_client.call("push_epic_mutation", {"action": "update_tuning", "key": "move_speed", "value": "8.0"})
+	if int(sync_client.call("get_pending_request_count")) != 3:
+		_fail("Expected 3 queued mutations in FIFO queue, got: %s" % str(sync_client.call("get_pending_request_count")))
+		return
+	sync_client.call("fetch_active_epic", {}, "e01")
+	sync_client.call("fetch_active_epic", {}, "e02")
+	if int(sync_client.call("get_pending_request_count")) != 4:
+		_fail("Expected get_epic deduplication to keep 4 pending requests, got: %s" % str(sync_client.call("get_pending_request_count")))
+		return
+	sync_client.set("_is_busy", false)
+	sync_client.call("clear_pending_requests")
+	sync_client.call("clear_link_token")
+
+	# 7. Test live @export tuning updates in both 3D (m/s) and 2D (px/s)
+	var tune3d_v: Variant = exec.call("apply_live_export_tuning", null, "move_speed", "9.25", "m/s", "res://scenes/test_3d.tscn")
+	var tune3d: Dictionary = tune3d_v as Dictionary if typeof(tune3d_v) == TYPE_DICTIONARY else {}
+	if not bool(tune3d.get("ok", false)):
+		_fail("3D apply_live_export_tuning failed: %s" % str(tune3d))
+		return
+	var txt3d_after: String = FileAccess.get_file_as_string("res://scripts/test_player_3d.gd")
+	if not ("@export var move_speed: float = 9.25" in txt3d_after):
+		_fail("3D script missing updated @export move_speed=9.25: %s" % txt3d_after)
+		return
+	var ps3d_tuned: PackedScene = ResourceLoader.load("res://scenes/test_3d.tscn", "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+	if ps3d_tuned == null:
+		_fail("Could not reload 3D scene after tuning.")
+		return
+	var root3d_tuned: Node = ps3d_tuned.instantiate()
+	var pnode3d_tuned: Node = root3d_tuned.get_node_or_null("Player")
+	if pnode3d_tuned == null or absf(float(pnode3d_tuned.get("move_speed")) - 9.25) >= 0.001:
+		var got3d: Variant = pnode3d_tuned.get("move_speed") if pnode3d_tuned != null else null
+		root3d_tuned.free()
+		_fail("3D scene node move_speed expected 9.25, got: %s" % str(got3d))
+		return
+	root3d_tuned.free()
+
+	var tune2d_v: Variant = exec.call("apply_live_export_tuning", null, "move_speed", "310", "px/s", "res://scenes/test_2d.tscn")
+	var tune2d: Dictionary = tune2d_v as Dictionary if typeof(tune2d_v) == TYPE_DICTIONARY else {}
+	if not bool(tune2d.get("ok", false)):
+		_fail("2D apply_live_export_tuning failed: %s" % str(tune2d))
+		return
+	var ps2d_tuned: PackedScene = ResourceLoader.load("res://scenes/test_2d.tscn", "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+	if ps2d_tuned == null:
+		_fail("Could not reload 2D scene after tuning.")
+		return
+	var root2d_tuned: Node = ps2d_tuned.instantiate()
+	if absf(float(root2d_tuned.get("move_speed")) - 310.0) >= 0.001:
+		var got2d: Variant = root2d_tuned.get("move_speed")
+		root2d_tuned.free()
+		_fail("2D scene root move_speed expected 310.0, got: %s" % str(got2d))
+		return
+	root2d_tuned.free()
+
+	# 8. Test 4-Step Dock Flow & Primary CTA State Machine
+	var mock_editor := _MockEditorInterface.new()
+	dock.editor_interface = mock_editor
+	var dock_sync: Node = dock.get("_sync_client") as Node
+	dock_sync.call("save_link_token", "lyr_test_dock_flow_1234567890")
+	dock_sync.set("_is_busy", true)
+
+	var test_payload := {
+		"ok": true,
+		"projectTitle": "Shellbreaker",
+		"dimension": "dim3d",
+		"releaseVersion": "v0.1",
+		"epicPosition": 1,
+		"totalEpics": 2,
+		"arenaScenePath": "res://scenes/test_3d.tscn",
+		"releaseEpicsSummary": [
+			{"id": "epic_e01", "code": "E01", "title": "Player Movement", "isPassed": false, "openFixesCount": 0},
+			{"id": "epic_e02", "code": "E02", "title": "Claw Dash", "isPassed": false, "openFixesCount": 0},
+		],
+		"activeEpic": {
+			"id": "epic_e01",
+			"code": "E01",
+			"title": "Player Movement",
+			"goal": "Move across the test arena smoothly.",
+			"isPassed": false,
+			"openFixes": [],
+			"openFixesCount": 0,
+			"passedChecksCount": 0,
+			"checks": [
+				{"id": "c1", "text": "Hold WASD -> Moves smoothly", "passed": false},
+				{"id": "c2", "text": "Collide wall -> Slides cleanly", "passed": false},
+			],
+			"tuning": [
+				{"key": "move_speed", "value": "9.25", "unit": "m/s"},
+			],
+		},
+	}
+	dock.call("_on_epic_updated", test_payload)
+
+	var cta1_v: Variant = dock.call("compute_primary_cta_state")
+	var cta1: Dictionary = cta1_v as Dictionary if typeof(cta1_v) == TYPE_DICTIONARY else {}
+	if str(cta1.get("mode", "")) != "build" or str(cta1.get("text", "")) != "⚡ Build E01":
+		_fail("Expected build CTA '⚡ Build E01', got: %s" % str(cta1))
+		return
+
+	var fix_id: String = str(dock.call("log_epic_fix_text", "Claw dash clips corner"))
+	if fix_id.is_empty():
+		_fail("Expected non-empty fix_id from log_epic_fix_text.")
+		return
+	var cta2_v: Variant = dock.call("compute_primary_cta_state")
+	var cta2: Dictionary = cta2_v as Dictionary if typeof(cta2_v) == TYPE_DICTIONARY else {}
+	if str(cta2.get("mode", "")) != "fix" or int(cta2.get("issue_count", 0)) != 1 or str(cta2.get("text", "")) != "🔧 Fix E01 (1)":
+		_fail("Expected fix CTA with count 1, got: %s" % str(cta2))
+		return
+
+	dock.call("inject_test_error", "SCRIPT ERROR: test crash (res://scripts/test_player_3d.gd:9 in _physics_process)")
+	var cta3_v: Variant = dock.call("compute_primary_cta_state")
+	var cta3: Dictionary = cta3_v as Dictionary if typeof(cta3_v) == TYPE_DICTIONARY else {}
+	if str(cta3.get("mode", "")) != "fix" or int(cta3.get("issue_count", 0)) != 2 or str(cta3.get("text", "")) != "🔧 Fix E01 (2)":
+		_fail("Expected fix CTA with count 2, got: %s" % str(cta3))
+		return
+
+	dock.call("_on_agent_bundle_received", bundle_3d, test_payload)
+	var errs_after_build: Variant = dock.call("_collect_recent_errors")
+	if typeof(errs_after_build) != TYPE_ARRAY or not (errs_after_build as Array).is_empty():
+		_fail("Expected captured errors cleared after clean agent bundle, got: %s" % str(errs_after_build))
+		return
+	var undo_btn_v: Variant = dock.get("_undo_btn")
+	if undo_btn_v is Button and (undo_btn_v as Button).disabled:
+		_fail("Expected Undo button enabled after _on_agent_bundle_received.")
+		return
+	var cta4_v: Variant = dock.call("compute_primary_cta_state")
+	var cta4: Dictionary = cta4_v as Dictionary if typeof(cta4_v) == TYPE_DICTIONARY else {}
+	if str(cta4.get("text", "")) != "🔧 Fix E01 (1)":
+		_fail("Expected CTA '🔧 Fix E01 (1)' for remaining [FIX], got: %s" % str(cta4))
+		return
+
+	dock.call("resolve_epic_fix_by_id", fix_id)
+	var cta5_v: Variant = dock.call("compute_primary_cta_state")
+	var cta5: Dictionary = cta5_v as Dictionary if typeof(cta5_v) == TYPE_DICTIONARY else {}
+	if str(cta5.get("mode", "")) != "build" or str(cta5.get("text", "")) != "⚡ Build E01":
+		_fail("Expected CTA back to '⚡ Build E01' after resolving [FIX], got: %s" % str(cta5))
+		return
+
+	dock.call("toggle_epic_check_by_id", "c1", true)
+	dock.call("toggle_epic_check_by_id", "c2", true)
+	var cta6_v: Variant = dock.call("compute_primary_cta_state")
+	var cta6: Dictionary = cta6_v as Dictionary if typeof(cta6_v) == TYPE_DICTIONARY else {}
+	if str(cta6.get("mode", "")) != "pass" or str(cta6.get("text", "")) != "✓ Pass E01 →":
+		_fail("Expected pass CTA '✓ Pass E01 →', got: %s" % str(cta6))
+		return
+
+	dock.call("inject_test_error", "SCRIPT ERROR: late error while checks passed")
+	var cta7_v: Variant = dock.call("compute_primary_cta_state")
+	var cta7: Dictionary = cta7_v as Dictionary if typeof(cta7_v) == TYPE_DICTIONARY else {}
+	if str(cta7.get("text", "")) != "🔧 Fix E01 (1)":
+		_fail("Expected runtime error to override pass CTA, got: %s" % str(cta7))
+		return
+
+	dock.call("clear_captured_errors")
+	var cta8_v: Variant = dock.call("compute_primary_cta_state")
+	var cta8: Dictionary = cta8_v as Dictionary if typeof(cta8_v) == TYPE_DICTIONARY else {}
+	if str(cta8.get("text", "")) != "✓ Pass E01 →":
+		_fail("Expected pass CTA restored after clear_captured_errors, got: %s" % str(cta8))
+		return
+
+	dock.call("_on_play_pressed")
+	if mock_editor.played_scene != "res://scenes/test_3d.tscn":
+		_fail("Expected _on_play_pressed to launch 'res://scenes/test_3d.tscn', got: '%s'" % mock_editor.played_scene)
+		return
+
+	dock.call("_on_undo_pressed")
+	if undo_btn_v is Button and not (undo_btn_v as Button).disabled:
+		_fail("Expected Undo button disabled after _on_undo_pressed.")
+		return
+
+	dock_sync.set("_is_busy", false)
+	dock_sync.call("clear_pending_requests")
+	dock_sync.call("clear_link_token")
+	mock_editor.base_ctrl.free()
 
 	print("GODOT_PLUGIN_TEST_OK")
 	quit(0)

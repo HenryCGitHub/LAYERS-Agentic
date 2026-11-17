@@ -2230,9 +2230,17 @@ func apply_agent_bundle(
 
 	# 2. Group sceneOps by scenePath and execute safely.
 	var ops_by_scene := {}
+	var arena_hint := String(bundle.get("arenaScenePath", "")).strip_edges()
+	var dim_hint := String(bundle.get("dimension", "")).strip_edges().to_lower()
 	var default_scene := preferred_scene.strip_edges()
 	if default_scene.is_empty():
-		default_scene = initial_open_scene
+		default_scene = String(bundle.get("epicScenePath", "")).strip_edges()
+	if default_scene.is_empty():
+		default_scene = arena_hint
+	if default_scene.is_empty():
+		default_scene = initial_open_scene.strip_edges()
+	if default_scene.is_empty():
+		default_scene = "res://scenes/arena_2d.tscn" if dim_hint == "dim2d" else "res://scenes/arena_3d.tscn"
 	for raw_op in bundle.get("sceneOps", []):
 		if typeof(raw_op) != TYPE_DICTIONARY:
 			continue
@@ -2262,8 +2270,6 @@ func apply_agent_bundle(
 			if not nt.is_empty() and (pp.is_empty() or np == "." or (pp == "." and nn == scene_stem)):
 				root_type_hints[spath] = nt
 
-	var arena_hint := String(bundle.get("arenaScenePath", ""))
-	var dim_hint := String(bundle.get("dimension", "")).strip_edges().to_lower()
 	var mode_lower := String(bundle.get("mode", "")).strip_edges().to_lower()
 	var preserve_visuals := mode_lower == "build_feature" or mode_lower == "build_epic"
 	for spath_key in ops_by_scene.keys():
@@ -3779,5 +3785,175 @@ static func collect_godot_project_context(editor_interface: Variant = null, rece
 		"script_files": script_files,
 		"resource_files": resource_files,
 		"recent_errors": clean_errors,
+	}
+
+
+func _format_tuning_literal_for_type(raw_val: String, unit_str: String, type_hint: String) -> Dictionary:
+	var clean_v: String = raw_val.strip_edges()
+	var val_lower: String = clean_v.to_lower()
+	var unit_lower: String = unit_str.strip_edges().to_lower()
+	var th_lower: String = type_hint.strip_edges().to_lower()
+	if th_lower == "bool" or unit_lower == "bool" or unit_lower == "boolean" or val_lower == "true" or val_lower == "false":
+		var bval: bool = (val_lower == "true" or val_lower == "1")
+		return {"ok": true, "literal": "true" if bval else "false", "typed": bval}
+	if th_lower == "int" or (unit_lower == "count" and clean_v.is_valid_int()):
+		if not clean_v.is_valid_float():
+			return {"ok": false, "literal": "", "typed": null}
+		var ival: int = int(roundf(clean_v.to_float()))
+		return {"ok": true, "literal": str(ival), "typed": ival}
+	if not clean_v.is_valid_float():
+		return {"ok": false, "literal": "", "typed": null}
+	var fval: float = clean_v.to_float()
+	var flit: String = clean_v if ("." in clean_v or "e" in val_lower) else ("%s.0" % str(int(fval)))
+	return {"ok": true, "literal": flit, "typed": fval}
+
+
+func _node_has_script_property(node: Node, prop_key: String) -> bool:
+	if node == null or prop_key.is_empty():
+		return false
+	var scr_v: Variant = node.get_script()
+	if not (scr_v is Script):
+		return false
+	for p_raw in (scr_v as Script).get_script_property_list():
+		if typeof(p_raw) != TYPE_DICTIONARY:
+			continue
+		var pd: Dictionary = p_raw as Dictionary
+		if String(pd.get("name", "")) == prop_key:
+			return true
+	return false
+
+
+func apply_live_export_tuning(
+	editor_interface: EditorInterface,
+	key: String,
+	raw_value: String,
+	unit: String = "",
+	preferred_scene: String = ""
+) -> Dictionary:
+	var updated_scripts := PackedStringArray()
+	var updated_scenes := PackedStringArray()
+	var clean_key: String = key.strip_edges()
+	var key_rx := RegEx.new()
+	key_rx.compile("^[a-zA-Z_][a-zA-Z0-9_]*$")
+	if key_rx.search(clean_key) == null:
+		return {
+			"ok": false,
+			"updated_scripts": updated_scripts,
+			"updated_scenes": updated_scenes,
+		}
+
+	var clean_val: String = raw_value.strip_edges()
+	var clean_unit: String = unit.strip_edges()
+	var exp_rx := RegEx.new()
+	exp_rx.compile("(?m)^([ \\t]*@export(?:_[a-z_]+(?:\\([^)]*\\))?)?[ \\t]+var[ \\t]+" + clean_key + "\\b[ \\t]*(?::[ \\t]*([A-Za-z0-9_]+))?[ \\t]*:?=[ \\t]*)([^#\\r\\n]+?)([ \\t]*(?:#.*)?)$")
+
+	var live_scripts: Dictionary = read_all_live_project_scripts("res://", editor_interface)
+	for sp_raw in live_scripts.keys():
+		var sp: String = String(sp_raw).strip_edges()
+		var src: String = String(live_scripts.get(sp_raw, ""))
+		if sp.is_empty() or src.is_empty():
+			continue
+		var m: RegExMatch = exp_rx.search(src)
+		if m == null:
+			continue
+		var type_hint: String = m.get_string(2).strip_edges()
+		var fmt: Dictionary = _format_tuning_literal_for_type(clean_val, clean_unit, type_hint)
+		if not bool(fmt.get("ok", false)):
+			continue
+		var replacement: String = m.get_string(1) + String(fmt.get("literal", "")) + m.get_string(4)
+		var new_src: String = src.substr(0, m.get_start()) + replacement + src.substr(m.get_end())
+		if not bool(check_gdscript_compiles(new_src).get("ok", false)):
+			continue
+		var write_src: String = new_src if new_src.ends_with("\n") else (new_src + "\n")
+		_ensure_dir_for_res_path(sp)
+		var fw := FileAccess.open(sp, FileAccess.WRITE)
+		if fw == null:
+			continue
+		fw.store_string(write_src)
+		fw.close()
+		reload_script_safely(sp, write_src)
+		_sync_open_script_editor_after_disk_write(editor_interface, sp, write_src)
+		updated_scripts.append(sp)
+
+	if editor_interface != null and not updated_scripts.is_empty():
+		_reload_open_script_editors(editor_interface)
+
+	var fmt_any: Dictionary = _format_tuning_literal_for_type(clean_val, clean_unit, "")
+	if bool(fmt_any.get("ok", false)):
+		var typed_val: Variant = fmt_any.get("typed", null)
+		var visited_scenes := {}
+		var open_roots: Dictionary = _get_open_scene_roots_by_path(editor_interface)
+		var edited_root: Node = editor_interface.get_edited_scene_root() if editor_interface != null else null
+		for ep_raw in open_roots.keys():
+			var ep: String = String(ep_raw).strip_edges()
+			var open_r: Node = open_roots.get(ep_raw, null) as Node
+			if open_r == null:
+				continue
+			if not ep.is_empty():
+				visited_scenes[ep] = true
+			var dirty_open := false
+			var ostack: Array[Node] = [open_r]
+			while not ostack.is_empty():
+				var cur: Node = ostack.pop_back()
+				var scr_v: Variant = cur.get_script()
+				if scr_v is Script:
+					var scr_p: String = String((scr_v as Script).resource_path).strip_edges()
+					if updated_scripts.has(scr_p) or _node_has_script_property(cur, clean_key):
+						if cur.get(clean_key) != typed_val:
+							cur.set(clean_key, typed_val)
+							dirty_open = true
+				for ch in cur.get_children():
+					ostack.append(ch)
+			if dirty_open:
+				if editor_interface != null and open_r == edited_root and editor_interface.has_method("save_scene"):
+					editor_interface.call("save_scene")
+				elif not ep.is_empty():
+					_save_disk_scene_root(open_r, ep)
+				if not ep.is_empty() and not (ep in updated_scenes):
+					updated_scenes.append(ep)
+
+		var candidate_scenes := PackedStringArray()
+		for cand_raw in [preferred_scene, String(ProjectSettings.get_setting("application/run/main_scene", ""))]:
+			var cp: String = String(cand_raw).strip_edges()
+			if cp.begins_with("res://") and cp.ends_with(".tscn") and not (cp in candidate_scenes):
+				candidate_scenes.append(cp)
+		for proj_sc in collect_project_scene_paths("res://", 16):
+			if not (proj_sc in candidate_scenes):
+				candidate_scenes.append(proj_sc)
+
+		for sc_p in candidate_scenes:
+			if visited_scenes.has(sc_p) or not FileAccess.file_exists(sc_p):
+				continue
+			visited_scenes[sc_p] = true
+			var ps: PackedScene = ResourceLoader.load(sc_p, "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+			if ps == null:
+				continue
+			var sroot: Node = ps.instantiate()
+			if sroot == null:
+				continue
+			var dirty_disk := false
+			var dstack: Array[Node] = [sroot]
+			while not dstack.is_empty():
+				var cur_d: Node = dstack.pop_back()
+				var scr_dv: Variant = cur_d.get_script()
+				if scr_dv is Script:
+					var scr_dp: String = String((scr_dv as Script).resource_path).strip_edges()
+					if updated_scripts.has(scr_dp) or _node_has_script_property(cur_d, clean_key):
+						if cur_d.get(clean_key) != typed_val:
+							cur_d.set(clean_key, typed_val)
+							dirty_disk = true
+				for ch_d in cur_d.get_children():
+					dstack.append(ch_d)
+			if dirty_disk:
+				if _save_disk_scene_root(sroot, sc_p) and not (sc_p in updated_scenes):
+					updated_scenes.append(sc_p)
+			sroot.free()
+
+	if not updated_scripts.is_empty() or not updated_scenes.is_empty():
+		invalidate_eval_cache()
+	return {
+		"ok": not updated_scripts.is_empty() or not updated_scenes.is_empty(),
+		"updated_scripts": updated_scripts,
+		"updated_scenes": updated_scenes,
 	}
 
