@@ -13,9 +13,9 @@ Run a bounded autonomous sweep (`default N = 3` loops when omitted, or `1..50` w
    PYTHONDONTWRITEBYTECODE=1 python3 .agents/skills/auto-goal/scripts/discover_signals.py
    ```
    Pass any optional user focus phrase after the script (e.g. `... godot` or `... stage 2`).
-2. Read `1–3` candidate files surfaced by `focusMatches`, `unrealLeakageHits`, `untestedModules`, `monolithHotspots`, `godotSmoke`, or `todoMarkers`.
+2. Read `1–3` candidate files surfaced by `focusMatches`, `unrealLeakageHits`, `untestedModules`, `monolithHotspots`, `godotCloudTest`, or `todoMarkers`.
 3. Select the **`#1` highest-confidence non-speculative target** ranked by `(Reliability Gain × Parity Impact) / Blast Radius`.
-   - **Strictly In Bounds**: Bug fixes, Stage 1 → Stage 2 → Godot 4 Dock (`addons/layers`) / Cloud Functions parity, validation/guardrails, and missing unit/widget/smoke tests.
+   - **Strictly In Bounds**: Bug fixes, Stage 1 → Stage 2 → Godot 4 Dock (`addons/layers`) / Cloud Functions parity, validation/guardrails, and missing unit/widget/headless tests.
    - **Never Speculative UI**: Never invent unrequested UI panels, cosmetic redesigns, or new workflow toggles during hands-off `/auto-goal`.
 4. Output a single `[Round k/N Goal]` banner line + lock the 3-part Goal Contract:
    - **Goal**: One plain-English sentence naming what changes and why.
@@ -24,7 +24,7 @@ Run a bounded autonomous sweep (`default N = 3` loops when omitted, or `1..50` w
 
 ## Phase 2 — Closed Verification Loop (`Red → Verify → Commit`)
 1. Call `exit_plan_mode` with the concrete file + test plan.
-2. Add or refine a failing unit/widget test (`test/`) or Godot/Cloud smoke probe (`scripts/godot_plugin_smoke.gd` / `scripts/godot_cloud_smoke.py` / `scripts/workflow_hook_smoke.py`) first.
+2. Add or refine a failing unit/widget test (`test/`) or Godot/Cloud test script (`scripts/godot_plugin_test.gd` / `scripts/godot_cloud_test.py` / `scripts/workflow_hook_test.py`) first.
 3. Implement the smallest clean fix, run `./scripts/verify_loop.sh` (`--fix-zip` if `godot_plugin/` changed) until exit `0`, and commit cleanly to `main` (without leaving `__pycache__` or `.pyc` files).
 
 ## Phase 3 — Bounded Next-Round Handoff & Completion Summary

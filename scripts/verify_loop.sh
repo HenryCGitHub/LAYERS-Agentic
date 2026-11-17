@@ -83,7 +83,7 @@ if ! check_zip_parity; then
   fi
 fi
 
-echo "=== [3/4] Headless Godot 4.7.2 + Cloud Function & Workflow Hook smoke checks ==="
+echo "=== [3/4] Headless Godot 4.7.2, Cloud Function & Workflow Hook tests ==="
 GODOT_EXEC="${GODOT_BIN:-}"
 if [ -z "$GODOT_EXEC" ] && [ -x "/Users/henry/Godot/Editors/4.7.2-stable/Godot.app/Contents/MacOS/Godot" ]; then
   GODOT_EXEC="/Users/henry/Godot/Editors/4.7.2-stable/Godot.app/Contents/MacOS/Godot"
@@ -98,15 +98,15 @@ if [ -n "$GODOT_EXEC" ]; then
 config_version=5
 
 [application]
-config/name="LAYERS Smoke"
+config/name="LAYERS Plugin Test"
 EOF
   cp -R "$ROOT_DIR/godot_plugin/addons" "$TMP_GODOT/addons"
-  "$GODOT_EXEC" --headless --path "$TMP_GODOT" --script "$ROOT_DIR/scripts/godot_plugin_smoke.gd"
+  "$GODOT_EXEC" --headless --path "$TMP_GODOT" --script "$ROOT_DIR/scripts/godot_plugin_test.gd"
 else
   echo "SKIP headless Godot binary check (Godot binary not found)." >&2
 fi
-PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/godot_cloud_smoke.py"
-PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/workflow_hook_smoke.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/godot_cloud_test.py"
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/workflow_hook_test.py"
 
 echo "=== [4/4] Dart analyze & Flutter tests ==="
 dart analyze

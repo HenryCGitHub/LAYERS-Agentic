@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Smoke test verifying composable Auto-Goal, Auto-Grill & 2-Step Auto-GG workflows."""
+"""Test verifying composable Auto-Goal, Auto-Grill & 2-Step Auto-GG workflows."""
 
 from __future__ import annotations
 
@@ -74,7 +74,7 @@ def _verify_skills_and_discovery() -> None:
   env = dict(os.environ)
   env["PYTHONDONTWRITEBYTECODE"] = "1"
   proc = subprocess.run(
-      [sys.executable, str(DISCOVER_PATH), "--no-smoke", "godot"],
+      [sys.executable, str(DISCOVER_PATH), "--no-test", "godot"],
       cwd=str(REPO_ROOT),
       capture_output=True,
       text=True,
@@ -491,7 +491,7 @@ def main() -> int:
   _verify_auto_goal_bounded()
   _verify_auto_grill_single_pass()
   _verify_auto_gg_two_step()
-  print("WORKFLOW_SMOKE_OK")
+  print("WORKFLOW_HOOK_TEST_OK")
   return 0
 
 

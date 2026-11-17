@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Headless smoke check for LAYERS Godot 4 Cloud Function helpers (`functions/index.js`)."""
+"""Headless test for LAYERS Godot 4 Cloud Function helpers (`functions/index.js`)."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import sys
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
-NODE_SMOKE = r"""
+NODE_TEST = r"""
 const assert = require("assert");
 const path = require("path");
 const { _testHelpers } = require(path.resolve(process.argv[1], "functions", "index.js"));
@@ -199,13 +199,13 @@ assert(bundle.scriptUpdates[0].content.startsWith("extends CharacterBody3D"));
 assert.strictEqual(bundle.sceneOps[0].scenePath, "res://scenes/arena_3d.tscn");
 assert.strictEqual(resolveTargetEpicDocIdJs({ docsById, projectId: "proj_1" }), "epic_2");
 
-console.log("GODOT_CLOUD_SMOKE_OK");
+console.log("GODOT_CLOUD_TEST_OK");
 """
 
 
 def main() -> int:
   proc = subprocess.run(
-      ["node", "-e", NODE_SMOKE, ROOT],
+      ["node", "-e", NODE_TEST, ROOT],
       cwd=ROOT,
       capture_output=True,
       text=True,

@@ -11,7 +11,7 @@ Execute these checks in order so `main`, Cloud Functions, and GitHub Pages stay 
 
 1. **Run Full Multi-Stack Verification**:
    - `./scripts/verify_loop.sh --fix-zip`
-   - Must exit `0` (`node --check`, `web/layers_godot_plugin.zip` parity, `godot_plugin_smoke.gd`, `scripts/godot_cloud_smoke.py`, `dart analyze`, and full `flutter test`).
+   - Must exit `0` (`node --check`, `web/layers_godot_plugin.zip` parity, `godot_plugin_test.gd`, `scripts/godot_cloud_test.py`, `dart analyze`, and full `flutter test`).
 2. **Deploy Cloud Functions** *(if `functions/` changed)*:
    - Run `firebase deploy --only functions` (or `/Users/henry/.npm/_npx/7750544ccf494d8b/node_modules/.bin/firebase deploy --only functions`).
 3. **Commit & Push `main`**:

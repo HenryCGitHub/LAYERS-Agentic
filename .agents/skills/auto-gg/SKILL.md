@@ -25,7 +25,7 @@ Compose [`auto-goal`](../auto-goal/SKILL.md) discovery and [`auto-grill`](../aut
 
 ## Step 3 — Closed Verification Loop (`Red → Verify → Commit`)
 1. Lock the 3-part Goal Contract (**Goal**, **In Scope**, **Done When**) and call `exit_plan_mode`.
-2. Write/update a failing test or smoke probe first, implement the change, run `./scripts/verify_loop.sh` (`--fix-zip` if `godot_plugin/` changed) until exit `0`, and commit cleanly to `main`.
+2. Write/update a failing test script first, implement the change, run `./scripts/verify_loop.sh` (`--fix-zip` if `godot_plugin/` changed) until exit `0`, and commit cleanly to `main`.
 
 ## Step 4 — Next-Round Handoff or Bounded Summary
 1. Call `enter_plan_mode` with `reason` prefixed by `[round-complete]` and a 1-line summary of the shipped commit.

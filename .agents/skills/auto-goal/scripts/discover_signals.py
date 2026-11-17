@@ -101,20 +101,20 @@ def _check_zip_parity() -> bool:
   return expected == actual
 
 
-def _run_godot_smoke() -> dict[str, object]:
-  smoke_script = REPO_ROOT / "scripts" / "godot_cloud_smoke.py"
-  if not smoke_script.is_file():
+def _run_godot_cloud_test() -> dict[str, object]:
+  test_script = REPO_ROOT / "scripts" / "godot_cloud_test.py"
+  if not test_script.is_file():
     return {
         "ok": False,
         "skipped": True,
-        "warningsAndErrors": ["scripts/godot_cloud_smoke.py unavailable."],
+        "warningsAndErrors": ["scripts/godot_cloud_test.py unavailable."],
     }
 
   try:
     env = dict(os.environ)
     env["PYTHONDONTWRITEBYTECODE"] = "1"
     proc = _run(
-        [sys.executable, str(smoke_script)],
+        [sys.executable, str(test_script)],
         REPO_ROOT,
         timeout=25,
         env=env,
@@ -124,7 +124,7 @@ def _run_godot_smoke() -> dict[str, object]:
     warnings_and_errors = [
         line for line in lines if WARNING_PATTERN.search(line)
     ][:12]
-    ok = proc.returncode == 0 and "GODOT_CLOUD_SMOKE_OK" in proc.stdout
+    ok = proc.returncode == 0 and "GODOT_CLOUD_TEST_OK" in proc.stdout
     return {
         "ok": ok,
         "warningsAndErrors": warnings_and_errors,
@@ -132,7 +132,7 @@ def _run_godot_smoke() -> dict[str, object]:
   except Exception as exc:
     return {
         "ok": False,
-        "warningsAndErrors": [f"Godot cloud smoke exception: {exc}"],
+        "warningsAndErrors": [f"Godot cloud test exception: {exc}"],
     }
 
 
@@ -218,8 +218,8 @@ def _scan_untested_modules() -> list[str]:
   for tf in _iter_source_files(
       [
           REPO_ROOT / "test",
-          REPO_ROOT / "scripts" / "godot_cloud_smoke.py",
-          REPO_ROOT / "scripts" / "godot_plugin_smoke.gd",
+          REPO_ROOT / "scripts" / "godot_cloud_test.py",
+          REPO_ROOT / "scripts" / "godot_plugin_test.gd",
       ],
       (".dart", ".py", ".gd"),
   ):
@@ -295,13 +295,13 @@ def _scan_todo_markers(limit: int = 15) -> list[str]:
 
 def main() -> int:
   raw_args = sys.argv[1:]
-  no_smoke = "--no-smoke" in raw_args
-  focus = " ".join(arg for arg in raw_args if arg != "--no-smoke").strip()
+  skip_tests = "--no-test" in raw_args
+  focus = " ".join(arg for arg in raw_args if arg != "--no-test").strip()
 
-  godot_smoke = (
+  godot_cloud_test = (
       {"ok": True, "skipped": True, "warningsAndErrors": []}
-      if no_smoke
-      else _run_godot_smoke()
+      if skip_tests
+      else _run_godot_cloud_test()
   )
 
   report = {
@@ -311,7 +311,7 @@ def main() -> int:
       "dirtyFiles": _git_lines(["status", "--short"]),
       "pluginVersion": _read_plugin_version(),
       "zipParityOk": _check_zip_parity(),
-      "godotSmoke": godot_smoke,
+      "godotCloudTest": godot_cloud_test,
       "monolithHotspots": _scan_monolith_hotspots(),
       "untestedModules": _scan_untested_modules(),
       "unrealLeakageHits": _scan_unreal_leakage(),

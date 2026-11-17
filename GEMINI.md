@@ -33,20 +33,20 @@
 - **Opt-In `SEA` Lens (`/sea` or `"SEA"` — Subtract, Enhance, Add)**:
   - Activate [SKILL.md](.agents/skills/sea/SKILL.md) **only** when `/sea` or `SEA` is explicitly written in the prompt (including `auto gg SEA ...`) to audit, grill, and execute strictly in **Subtract → Enhance → Add** order.
 - **Auto-Goal (Self-Derived Goal Contracts — Always On)**:
-  - On any symptom report, audit request, or open-ended prompt, inspect the codebase, tests, and headless Godot/Cloud/workflow smoke probes (`scripts/godot_plugin_smoke.gd`, `scripts/godot_cloud_smoke.py`, `scripts/workflow_hook_smoke.py`) first to derive a concrete **Goal Contract** (`Goal`, `In Scope`, and machine-verifiable `Done When` checks).
+  - On any symptom report, audit request, or open-ended prompt, inspect the codebase, tests, and headless Godot/Cloud/workflow test scripts (`scripts/godot_plugin_test.gd`, `scripts/godot_cloud_test.py`, `scripts/workflow_hook_test.py`) first to derive a concrete **Goal Contract** (`Goal`, `In Scope`, and machine-verifiable `Done When` checks).
   - When a prompt is open-ended (e.g., *"audit LAYERS"* or a broad symptom with multiple gaps), automatically select the **#1 highest-impact safe goal** and run its verification loop immediately rather than pausing on a backlog menu.
 - **Auto-Grill (Upfront Clarification via `ask_question` — Only on Real UX/Scope Forks)**:
-  - Resolve pure engineering, data-structure, and Godot Context contract trade-offs internally against the codebase and headless smoke probes—never ask the user technical minutiae.
+  - Resolve pure engineering, data-structure, and Godot Context contract trade-offs internally against the codebase and headless tests—never ask the user technical minutiae.
   - When genuine product, UX, or scope trade-offs exist, ask 1–3 concise multiple-choice questions upfront using `ask_question` (`(Recommended)` option first) before editing.
 - **Execution Gate (When to Pause vs. Loop Immediately)**:
-  - **Clear / Small-to-Medium Tasks, Bug Fixes & `/goal` Runs**: Once Auto-Grill resolves any ambiguity (or immediately if unambiguous), write/run a failing test or smoke probe first, then iterate autonomously (`Edit → ./scripts/verify_loop.sh → Self-Repair`) to `0` errors without an extra `implementation_plan.md` pause.
+  - **Clear / Small-to-Medium Tasks, Bug Fixes & `/goal` Runs**: Once Auto-Grill resolves any ambiguity (or immediately if unambiguous), write/run a failing test first, then iterate autonomously (`Edit → ./scripts/verify_loop.sh → Self-Repair`) to `0` errors without an extra `implementation_plan.md` pause.
   - **Major UI Redesigns & Core Architecture Changes**: Present a concise `implementation_plan.md` (`Goal`, `In Scope`, `Affected Files`, `Done When`) and wait for explicit user approval before editing project code files.
 - **External User Game Projects Strictly Read-Only**:
   - External user game projects (such as `/Users/henry/Godot/Projects/*`) are strictly **read-only** reference fixtures (enforced by `.agents/hooks.json`). Always fix LAYERS's own app/plugin code instead.
 
 ## 2. Multi-Stack Verification & Loop Gate
 - Run `./scripts/verify_loop.sh` (pass `--fix-zip` if `godot_plugin/addons/layers/` changed) before committing.
-- Passing requires `0` errors across: `node --check functions/index.js`, `web/layers_godot_plugin.zip` byte parity, headless Godot `4.7.2` plugin smoke (`godot_plugin_smoke.gd` -> `GODOT_SMOKE_OK`), Cloud smoke (`scripts/godot_cloud_smoke.py` -> `GODOT_CLOUD_SMOKE_OK`), workflow hook smoke (`scripts/workflow_hook_smoke.py` -> `WORKFLOW_SMOKE_OK`), `dart analyze`, and `100%` passing `flutter test` (enforced automatically on turn completion by `.agents/hooks.json`).
+- Passing requires `0` errors across: `node --check functions/index.js`, `web/layers_godot_plugin.zip` byte parity, headless Godot `4.7.2` plugin test (`godot_plugin_test.gd` -> `GODOT_PLUGIN_TEST_OK`), Cloud test (`scripts/godot_cloud_test.py` -> `GODOT_CLOUD_TEST_OK`), workflow hook test (`scripts/workflow_hook_test.py` -> `WORKFLOW_HOOK_TEST_OK`), `dart analyze`, and `100%` passing `flutter test` (enforced automatically on turn completion by `.agents/hooks.json`).
 
 ## 3. Communication Style
 - Keep responses concise and focused.

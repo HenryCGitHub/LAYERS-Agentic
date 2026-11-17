@@ -20,5 +20,5 @@ Use this standalone for a user-supplied feature/target (single-pass), or as the 
 
 ## Phase 3 — Lock Goal Contract & Execute Once
 1. Lock the 3-part Goal Contract (**Goal**, **In Scope**, **Done When**) incorporating the user's answers.
-2. Unless the task is a major UI redesign or core architecture overhaul needing `implementation_plan.md` sign-off, call `exit_plan_mode`, add/update a failing test or smoke probe first, implement the change, and run `./scripts/verify_loop.sh` (`--fix-zip` if `godot_plugin/` changed) until exit `0`.
+2. Unless the task is a major UI redesign or core architecture overhaul needing `implementation_plan.md` sign-off, call `exit_plan_mode`, add/update a failing test script first, implement the change, and run `./scripts/verify_loop.sh` (`--fix-zip` if `godot_plugin/` changed) until exit `0`.
 3. Deliver a concise summary with clickable `file:///` links and stop cleanly (single-pass).

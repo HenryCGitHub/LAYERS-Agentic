@@ -1,7 +1,7 @@
 extends SceneTree
 
 func _init() -> void:
-	call_deferred("_run_smoke")
+	call_deferred("_run_test")
 
 
 func _write_text(res_path: String, content: String) -> bool:
@@ -21,7 +21,7 @@ func _fail(msg: String) -> void:
 	quit(1)
 
 
-func _run_smoke() -> void:
+func _run_test() -> void:
 	# 1. Strict Godot 4.7.2 load/compile check across all plugin scripts
 	var plugin_scripts: PackedStringArray = PackedStringArray([
 		"res://addons/layers/layers_step_executor.gd",
@@ -60,7 +60,7 @@ func _run_smoke() -> void:
 	get_root().add_child(dock)
 
 	# 2. Test TCPServer Google Sign-In Loopback (400 bad state -> 200 valid state & token)
-	var auth_info_v: Variant = sync_client.call("start_google_sign_in", "SmokeProject", "https://example.com/", false)
+	var auth_info_v: Variant = sync_client.call("start_google_sign_in", "TestProject", "https://example.com/", false)
 	var auth_info: Dictionary = auth_info_v as Dictionary if typeof(auth_info_v) == TYPE_DICTIONARY else {}
 	if not bool(auth_info.get("ok", false)):
 		_fail("start_google_sign_in failed: %s" % str(auth_info))
@@ -71,7 +71,7 @@ func _run_smoke() -> void:
 		_fail("Invalid loopback auth port/state.")
 		return
 
-	var bad_resp: String = await _send_loopback_http(sync_client, auth_port, "/callback?state=wrong_state&token=lyr_smoke_1234567890123456&project=Bad")
+	var bad_resp: String = await _send_loopback_http(sync_client, auth_port, "/callback?state=wrong_state&token=lyr_test_1234567890123456&project=Bad")
 	if not ("400" in bad_resp):
 		_fail("Expected 400 on bad state callback, got: %s" % bad_resp)
 		return
@@ -79,8 +79,8 @@ func _run_smoke() -> void:
 		_fail("Token must NOT be saved on invalid state callback.")
 		return
 
-	var valid_token := "lyr_smoke_token_abcdef1234567890"
-	var ok_resp: String = await _send_loopback_http(sync_client, auth_port, "/callback?state=%s&token=%s&project=SmokeGame" % [auth_state, valid_token])
+	var valid_token := "lyr_test_token_abcdef1234567890"
+	var ok_resp: String = await _send_loopback_http(sync_client, auth_port, "/callback?state=%s&token=%s&project=TestGame" % [auth_state, valid_token])
 	if not ("200" in ok_resp):
 		_fail("Expected 200 on valid loopback callback, got: %s" % ok_resp)
 		return
@@ -103,34 +103,34 @@ func _physics_process(_delta: float) -> void:
 	var bundle_3d := {
 		"mode": "build_epic",
 		"dimension": "dim3d",
-		"summary": "Smoke built 3D player epic",
-		"arenaScenePath": "res://scenes/smoke_3d.tscn",
-		"epicScenePath": "res://scenes/smoke_3d.tscn",
+		"summary": "Built test 3D player epic",
+		"arenaScenePath": "res://scenes/test_3d.tscn",
+		"epicScenePath": "res://scenes/test_3d.tscn",
 		"scriptUpdates": [
 			{
-				"resPath": "res://scripts/smoke_player_3d.gd",
+				"resPath": "res://scripts/test_player_3d.gd",
 				"attachTo": "Player",
-				"scenePath": "res://scenes/smoke_3d.tscn",
+				"scenePath": "res://scenes/test_3d.tscn",
 				"language": "gdscript",
 				"content": player3d_code,
 			},
 		],
 		"sceneOps": [
-			{"op": "ensure_node", "scenePath": "res://scenes/smoke_3d.tscn", "parentPath": ".", "nodeName": "Smoke3D", "nodeType": "Node3D"},
-			{"op": "ensure_node", "scenePath": "res://scenes/smoke_3d.tscn", "parentPath": ".", "nodeName": "Player", "nodeType": "CharacterBody3D"},
-			{"op": "attach_script", "scenePath": "res://scenes/smoke_3d.tscn", "nodePath": "Player", "scriptPath": "res://scripts/smoke_player_3d.gd"},
+			{"op": "ensure_node", "scenePath": "res://scenes/test_3d.tscn", "parentPath": ".", "nodeName": "Test3D", "nodeType": "Node3D"},
+			{"op": "ensure_node", "scenePath": "res://scenes/test_3d.tscn", "parentPath": ".", "nodeName": "Player", "nodeType": "CharacterBody3D"},
+			{"op": "attach_script", "scenePath": "res://scenes/test_3d.tscn", "nodePath": "Player", "scriptPath": "res://scripts/test_player_3d.gd"},
 		],
 		"inputOps": [
 			{"action": "move_left", "keys": ["A"], "overwrite": true},
 			{"action": "move_right", "keys": ["D"], "overwrite": true},
 		],
 	}
-	var res3d_v: Variant = exec.call("apply_agent_bundle", null, null, bundle_3d, "res://scenes/smoke_3d.tscn")
+	var res3d_v: Variant = exec.call("apply_agent_bundle", null, null, bundle_3d, "res://scenes/test_3d.tscn")
 	var res3d: Dictionary = res3d_v as Dictionary if typeof(res3d_v) == TYPE_DICTIONARY else {}
-	if not bool(res3d.get("ok", false)) or not FileAccess.file_exists("res://scenes/smoke_3d.tscn"):
+	if not bool(res3d.get("ok", false)) or not FileAccess.file_exists("res://scenes/test_3d.tscn"):
 		_fail("3D apply_agent_bundle failed: %s" % str(res3d))
 		return
-	var ps3d: PackedScene = ResourceLoader.load("res://scenes/smoke_3d.tscn", "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+	var ps3d: PackedScene = ResourceLoader.load("res://scenes/test_3d.tscn", "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
 	if ps3d == null:
 		_fail("Could not load generated 3D scene.")
 		return
@@ -155,30 +155,30 @@ func _physics_process(_delta: float) -> void:
 	var bundle_2d := {
 		"mode": "build_epic",
 		"dimension": "dim2d",
-		"summary": "Smoke built 2D player epic",
-		"arenaScenePath": "res://scenes/smoke_2d.tscn",
-		"epicScenePath": "res://scenes/smoke_2d.tscn",
+		"summary": "Built test 2D player epic",
+		"arenaScenePath": "res://scenes/test_2d.tscn",
+		"epicScenePath": "res://scenes/test_2d.tscn",
 		"scriptUpdates": [
 			{
-				"resPath": "res://scripts/smoke_player_2d.gd",
+				"resPath": "res://scripts/test_player_2d.gd",
 				"attachTo": ".",
-				"scenePath": "res://scenes/smoke_2d.tscn",
+				"scenePath": "res://scenes/test_2d.tscn",
 				"language": "gdscript",
 				"content": player2d_code,
 			},
 		],
 		"sceneOps": [
-			{"op": "ensure_node", "scenePath": "res://scenes/smoke_2d.tscn", "parentPath": ".", "nodeName": "SmokePlayer2D", "nodeType": "CharacterBody2D"},
-			{"op": "attach_script", "scenePath": "res://scenes/smoke_2d.tscn", "nodePath": ".", "scriptPath": "res://scripts/smoke_player_2d.gd"},
+			{"op": "ensure_node", "scenePath": "res://scenes/test_2d.tscn", "parentPath": ".", "nodeName": "TestPlayer2D", "nodeType": "CharacterBody2D"},
+			{"op": "attach_script", "scenePath": "res://scenes/test_2d.tscn", "nodePath": ".", "scriptPath": "res://scripts/test_player_2d.gd"},
 		],
 		"inputOps": [],
 	}
-	var res2d_v: Variant = exec.call("apply_agent_bundle", null, null, bundle_2d, "res://scenes/smoke_2d.tscn")
+	var res2d_v: Variant = exec.call("apply_agent_bundle", null, null, bundle_2d, "res://scenes/test_2d.tscn")
 	var res2d: Dictionary = res2d_v as Dictionary if typeof(res2d_v) == TYPE_DICTIONARY else {}
-	if not bool(res2d.get("ok", false)) or not FileAccess.file_exists("res://scenes/smoke_2d.tscn"):
+	if not bool(res2d.get("ok", false)) or not FileAccess.file_exists("res://scenes/test_2d.tscn"):
 		_fail("2D apply_agent_bundle failed: %s" % str(res2d))
 		return
-	var ps2d: PackedScene = ResourceLoader.load("res://scenes/smoke_2d.tscn", "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+	var ps2d: PackedScene = ResourceLoader.load("res://scenes/test_2d.tscn", "PackedScene", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
 	if ps2d == null:
 		_fail("Could not load generated 2D scene.")
 		return
@@ -194,14 +194,14 @@ func _physics_process(_delta: float) -> void:
 	var live_ctx: Dictionary = live_ctx_v as Dictionary if typeof(live_ctx_v) == TYPE_DICTIONARY else {}
 	var sfiles_v: Variant = live_ctx.get("scene_files", [])
 	var gfiles_v: Variant = live_ctx.get("script_files", [])
-	if typeof(sfiles_v) != TYPE_ARRAY or not (sfiles_v as Array).has("res://scenes/smoke_3d.tscn"):
+	if typeof(sfiles_v) != TYPE_ARRAY or not (sfiles_v as Array).has("res://scenes/test_3d.tscn"):
 		_fail("collect_godot_project_context missing scene_files: %s" % str(live_ctx))
 		return
-	if typeof(gfiles_v) != TYPE_ARRAY or not (gfiles_v as Array).has("res://scripts/smoke_player_2d.gd"):
+	if typeof(gfiles_v) != TYPE_ARRAY or not (gfiles_v as Array).has("res://scripts/test_player_2d.gd"):
 		_fail("collect_godot_project_context missing script_files: %s" % str(live_ctx))
 		return
 
-	print("GODOT_SMOKE_OK")
+	print("GODOT_PLUGIN_TEST_OK")
 	quit(0)
 
 
