@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
+import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/models/tier_document.dart';
@@ -953,6 +954,226 @@ void main() {
           find.byKey(const ValueKey('locked_baseline_banner')),
           findsNothing,
         );
+      },
+    );
+  });
+
+  group('Round 6 — Exporters, Legacy Vault Migration & Sync Parity', () {
+    test(
+      'Legacy 3-tier vault migration & activeGodotSyncContext backwards compatibility',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        final legacyBundle = {
+          'format': 'layers-agentic-project-v2',
+          'documents': [
+            {
+              'id': 'legacy_proj_1',
+              'title': 'LEGACY DRIFTER',
+              'tier': 'project',
+              'childrenIds': ['legacy_rel_1'],
+              'sections': {
+                'current_stage': 'releaseWorkbench',
+                'active_release_id': 'legacy_rel_1',
+                'selected_epic_id': 'legacy_ep_1',
+                'concept_blueprint_json': jsonEncode({
+                  'gameTitle': 'LEGACY DRIFTER',
+                  'dimension': '3d',
+                  'pitch': 'High-speed hover sprint across canyon plates',
+                  'approved': true,
+                }),
+              },
+            },
+            {
+              'id': 'legacy_rel_1',
+              'title': 'v0.1 · Prototype',
+              'tier': 'release',
+              'parentId': 'legacy_proj_1',
+              'childrenIds': ['legacy_ep_1'],
+              'sections': {'release_version': 'v0.1'},
+            },
+            {
+              'id': 'legacy_ep_1',
+              'title': 'Hover Thruster Core',
+              'tier': 'epic',
+              'parentId': 'legacy_rel_1',
+              'childrenIds': [],
+              'sections': {
+                'code': 'E01',
+                'release_version': 'v0.1',
+                'lifecycle': 'active',
+                'epic_spec_json': jsonEncode({
+                  'id': 'legacy_ep_1',
+                  'code': 'E01',
+                  'title': 'Hover Thruster Core',
+                  'releaseVersion': 'v0.1',
+                  'lifecycle': 'active',
+                  'goal': 'Propel hover craft along canyon track.',
+                  'links': ['Scene res://scenes/hover_craft.tscn'],
+                  'levelStaging': 'res://scenes/canyon_proto.tscn: straight test lane',
+                  'controls': [
+                    {
+                      'action': 'boost_dash',
+                      'trigger': 'Just Pressed (Space)',
+                      'rule': 'Surges forward 6.0 m cleanly',
+                    },
+                  ],
+                  'tuning': [
+                    {'key': 'cruise_speed', 'value': '18.0', 'unit': 'm/s'},
+                  ],
+                  'checks': [
+                    {
+                      'id': 'leg_c1',
+                      'text': 'Hold W -> Hover craft cruises at 18.0 m/s',
+                      'passed': true,
+                    },
+                  ],
+                  'fixes': [
+                    {'id': 'leg_fx1', 'text': 'Reduce ramp bounce', 'resolved': false},
+                  ],
+                }),
+              },
+            },
+            {
+              'id': 'legacy_stale_feat',
+              'title': 'Legacy Standalone Feature Doc',
+              'tier': 'feature',
+              'parentId': 'legacy_ep_1',
+              'childrenIds': [],
+              'sections': {},
+            },
+            {
+              'id': 'legacy_stale_task',
+              'title': 'Legacy Standalone Task Doc',
+              'tier': 'task',
+              'parentId': 'legacy_stale_feat',
+              'childrenIds': [],
+              'sections': {},
+            },
+          ],
+        };
+
+        final impId = wb.importProjectFromJson(jsonEncode(legacyBundle));
+        expect(impId, isNotNull);
+        expect(
+          wb.documents.values.where((d) => d.tier == TierType.feature),
+          isEmpty,
+        );
+        expect(
+          wb.documents.values.any(
+            (d) => d.title.contains('Legacy Standalone'),
+          ),
+          isFalse,
+        );
+
+        final migratedEpic = wb.selectedEpicSpec!;
+        expect(migratedEpic.features.length, equals(1));
+        expect(migratedEpic.features.first.code, equals('F01'));
+        expect(migratedEpic.features.first.tuning.first.key, equals('cruise_speed'));
+        expect(migratedEpic.features.first.checks.first.passed, isTrue);
+        expect(migratedEpic.features.first.openFixesCount, equals(1));
+        expect(migratedEpic.sceneOwnership, isNotEmpty);
+
+        // Legacy Cloud/Dock Epic payload remains intact for functions/index.js
+        expect(
+          wb.activeEpicGodotContext(migratedEpic),
+          contains('ACTIVE EPIC SPEC · E01 · Hover Thruster Core'),
+        );
+
+        // Sync context adapts cleanly across Feature Sheet, Epic Domain Sheet & explicit empty-feature Epics
+        expect(
+          wb.activeGodotSyncContext(),
+          contains('# ACTIVE FEATURE SPEC · F01 · Hover Thruster Core'),
+        );
+        wb.selectEpic(migratedEpic.id);
+        expect(
+          wb.activeGodotSyncContext(),
+          contains('# GODOT 4 EPIC ARCHITECTURE BRIEF · E01'),
+        );
+
+        final explicitEmptyEpic = EpicSpec(
+          id: 'explicit_empty',
+          code: 'E02',
+          title: 'Raw Dock Fallback',
+          goal: 'Preserve legacy payload when features list is explicitly empty.',
+        );
+        expect(
+          wb.activeGodotSyncContext(epicOverride: explicitEmptyEpic),
+          contains('ACTIVE EPIC SPEC · E02 · Raw Dock Fallback'),
+        );
+      },
+    );
+
+    testWidgets(
+      '4-tier Markdown exports (3D/2D) & global Shell Export menu active prompt item',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+        for (final ep in wb.epicsForRelease(v01Id)) {
+          wb.passActiveEpic(ep.id);
+        }
+        await wb.openProgressiveReleaseCopilot();
+        wb.commitProgressiveReleaseDraft();
+
+        // Active Feature selection export
+        final featExport = wb.buildActiveSelectionMarkdownExport();
+        expect(
+          featExport.filename,
+          endsWith('_f02_armored_claw_dash_prompt.md'),
+        );
+        expect(featExport.content, contains('# ACTIVE FEATURE SPEC · F02'));
+
+        // Epic Domain Sheet export
+        wb.selectEpic(wb.activeReleaseEpics.first.id);
+        final epicExport = wb.buildActiveSelectionMarkdownExport();
+        expect(epicExport.filename, contains('_e01_'));
+        expect(epicExport.filename, endsWith('_architecture.md'));
+        expect(
+          epicExport.content,
+          contains('# GODOT 4 EPIC ARCHITECTURE BRIEF · E01'),
+        );
+
+        // Full project & active v0.2 release bundles (0 Task/Step noise)
+        final fullExport = wb.buildFullProjectMarkdownExport();
+        expect(fullExport.filename, equals('shellbreaker_project_spec.md'));
+        expect(fullExport.content, contains('v0.1'));
+        expect(fullExport.content, contains('v0.2'));
+        expect(fullExport.content, isNot(contains('## Tasks')));
+        expect(fullExport.content, isNot(contains('## Steps')));
+
+        final relExport = wb.buildActiveReleaseMarkdownExport();
+        expect(relExport.filename, equals('godot_release_v0_2.md'));
+        expect(relExport.content, contains('F07'));
+        expect(relExport.content, contains('Delta'));
+
+        // Global Export menu renders and triggers Export Active Build Prompt (.md)
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('global_export_spec_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('export_active_prompt_item')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('export_active_prompt_item')));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+
+        // 2D preset (emberkeep) exports px/px/s with zero 3D m/s leakage
+        wb.createNewProject();
+        wb.loadPresetSpark('emberkeep');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final ekExport = wb.buildFullProjectMarkdownExport();
+        expect(ekExport.filename, equals('ember_keep_project_spec.md'));
+        expect(ekExport.content, contains('px/s'));
+        expect(ekExport.content, isNot(contains('m/s')));
       },
     );
   });

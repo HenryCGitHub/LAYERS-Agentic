@@ -66,6 +66,104 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
     );
   }
 
+  /// Returns the 4-tier Godot 4 sync context for Cloud/Dock callers while keeping
+  /// legacy explicit-empty-feature Epics backwards-compatible with [activeEpicGodotContext].
+  String activeGodotSyncContext({
+    EpicSpec? epicOverride,
+    FeatureSpec? featureOverride,
+  }) {
+    final epic = epicOverride ?? selectedEpicSpec;
+    if (epic == null) {
+      return activeRootGodotMarkdown;
+    }
+    final feat = featureOverride ??
+        (epicOverride == null ? selectedFeatureSpec : null);
+    if (feat != null) {
+      return activeFeatureBuildPrompt(epic, feat);
+    }
+    if (epic.hasFeatures) {
+      return activeEpicArchitecturePrompt(epic);
+    }
+    return activeEpicGodotContext(epic);
+  }
+
+  /// Builds filename + Markdown payload for the currently active selection
+  /// (`Feature Build Prompt` | `Epic Architecture Brief` | `PROJECT_SPEC.md`).
+  ({String filename, String content}) buildActiveSelectionMarkdownExport() {
+    final projTitle = _conceptDraft?.normalizedTitle ??
+        activeProject?.title ??
+        'layers_project';
+    final epic = selectedEpicSpec;
+    final feat = selectedFeatureSpec;
+    if (epic != null && feat != null) {
+      return (
+        filename: buildFeaturePromptFilename(
+          projTitle,
+          epic.code,
+          feat.code,
+          feat.title,
+        ),
+        content: activeFeatureBuildPrompt(epic, feat),
+      );
+    }
+    if (epic != null) {
+      return (
+        filename: buildEpicArchitectureFilename(
+          projTitle,
+          epic.code,
+          epic.title,
+        ),
+        content: activeEpicArchitecturePrompt(epic),
+      );
+    }
+    return (
+      filename: buildProjectSpecFilename(projTitle),
+      content: activeRootGodotMarkdown,
+    );
+  }
+
+  /// Builds filename + full structured project Markdown across all releases, Epics, and Features.
+  ({String filename, String content}) buildFullProjectMarkdownExport() {
+    final rootSpec = _conceptDraft ??
+        ProjectConceptBlueprint(
+          gameTitle: activeProject?.title ?? 'layers_project',
+        );
+    final epicsByRelease = <String, List<EpicSpec>>{
+      for (final rel in projectReleases)
+        releaseDisplayName(rel): epicsForRelease(rel.id),
+    };
+    return (
+      filename: buildProjectSpecFilename(rootSpec.normalizedTitle),
+      content: GodotContextBuilder.buildFullProjectSpecMarkdown(
+        rootSpec: rootSpec,
+        epicsByReleaseLabel: epicsByRelease,
+        liveGodotContext: latestLiveGodotContext,
+      ),
+    );
+  }
+
+  /// Builds filename + active release Markdown context bundle (`ROOT_GODOT_CONTEXT` + Release Epics/Features).
+  ({String filename, String content}) buildActiveReleaseMarkdownExport() {
+    final rootSpec = _conceptDraft ??
+        ProjectConceptBlueprint(
+          gameTitle: activeProject?.title ?? 'layers_project',
+        );
+    final rel = activeRelease;
+    final releaseLabel =
+        rel != null ? releaseDisplayName(rel) : 'v0.1 · Prototype';
+    return (
+      filename:
+          'godot_release_${activeReleaseVersionTag.replaceAll('.', '_')}.md',
+      content: GodotContextBuilder.buildReleaseContextBundle(
+        rootSpec: rootSpec,
+        releaseLabel: releaseLabel,
+        releaseEpics: activeReleaseEpics,
+        releaseOrder: projectReleaseOrder,
+        liveGodotContext: latestLiveGodotContext,
+      ),
+    );
+  }
+
   /// Generates, fetches, or rotates a per-project Cloud Link Token (`lyr_...`) for the Godot 4 Dock.
   Future<({String? token, String? error})> fetchOrCreateGodotLinkToken({
     bool rotate = false,

@@ -1,7 +1,28 @@
 part of '../main.dart';
 
 extension _WorkbenchShellExporters on WorkbenchShell {
-  /// Exports the complete Stage 1 + Stage 2 project markdown (`PROJECT_SPEC.md`).
+  /// Exports the active Feature Build Prompt or Epic Architecture Brief (`*_prompt.md` / `*_architecture.md`).
+  Future<void> _exportActiveSelectionPrompt(BuildContext context) async {
+    final wb = workbench;
+    final isDark = wb.isDark;
+    final bundle = wb.buildActiveSelectionMarkdownExport();
+
+    await Clipboard.setData(ClipboardData(text: bundle.content));
+    final downloaded = triggerMarkdownFileDownload(
+      filename: bundle.filename,
+      content: bundle.content,
+    );
+    if (!context.mounted) return;
+    AppToast.show(
+      context,
+      downloaded
+          ? 'Downloaded ${bundle.filename} & copied to clipboard'
+          : 'Copied active build prompt (${bundle.filename})',
+      isDark: isDark,
+    );
+  }
+
+  /// Exports the complete Stage 1 + Stage 2 project markdown (`*_project_spec.md`).
   Future<void> _exportFullProjectSpec(BuildContext context) async {
     final wb = workbench;
     final isDark = wb.isDark;
@@ -16,40 +37,23 @@ extension _WorkbenchShellExporters on WorkbenchShell {
       return;
     }
 
-    final releases = wb.projectReleases;
-    final epicsByRelease = <String, List<EpicSpec>>{};
-    for (final rel in releases) {
-      epicsByRelease[wb.releaseDisplayName(rel)] = wb.epicsForRelease(rel.id);
-    }
-
-    final md = GodotContextBuilder.buildFullProjectSpecMarkdown(
-      rootSpec: rootSpec,
-      epicsByReleaseLabel: epicsByRelease,
-      liveGodotContext: wb.latestLiveGodotContext,
-    );
-
-    final safeSlug = sanitizeExportSlug(
-      rootSpec.normalizedTitle,
-      fallback: 'layers',
-    );
-    final filename = '${safeSlug}_project_spec.md';
-
-    await Clipboard.setData(ClipboardData(text: md));
+    final bundle = wb.buildFullProjectMarkdownExport();
+    await Clipboard.setData(ClipboardData(text: bundle.content));
     final downloaded = triggerMarkdownFileDownload(
-      filename: filename,
-      content: md,
+      filename: bundle.filename,
+      content: bundle.content,
     );
     if (!context.mounted) return;
     AppToast.show(
       context,
       downloaded
-          ? 'Downloaded $filename & copied to clipboard'
+          ? 'Downloaded ${bundle.filename} & copied to clipboard'
           : 'Copied full PROJECT_SPEC.md to clipboard',
       isDark: isDark,
     );
   }
 
-  /// Exports the active Release (`ROOT_GODOT_CONTEXT` + all active Epic contexts).
+  /// Exports the active Release (`ROOT_GODOT_CONTEXT` + all active Epics & Features).
   Future<void> _exportActiveReleaseAgentsMd(BuildContext context) async {
     final wb = workbench;
     final isDark = wb.isDark;
@@ -63,28 +67,18 @@ extension _WorkbenchShellExporters on WorkbenchShell {
       );
       return;
     }
-    final rel = wb.activeRelease;
-    final releaseLabel =
-        rel != null ? wb.releaseDisplayName(rel) : 'v0.1 · Prototype';
-    final md = GodotContextBuilder.buildReleaseContextBundle(
-      rootSpec: rootSpec,
-      releaseLabel: releaseLabel,
-      releaseEpics: wb.activeReleaseEpics,
-      liveGodotContext: wb.latestLiveGodotContext,
-    );
 
-    final filename =
-        'godot_release_${wb.activeReleaseVersionTag.replaceAll('.', '_')}.md';
-    await Clipboard.setData(ClipboardData(text: md));
+    final bundle = wb.buildActiveReleaseMarkdownExport();
+    await Clipboard.setData(ClipboardData(text: bundle.content));
     final downloaded = triggerMarkdownFileDownload(
-      filename: filename,
-      content: md,
+      filename: bundle.filename,
+      content: bundle.content,
     );
     if (!context.mounted) return;
     AppToast.show(
       context,
       downloaded
-          ? 'Downloaded $filename & copied to clipboard'
+          ? 'Downloaded ${bundle.filename} & copied to clipboard'
           : 'Copied active Release Godot bundle to clipboard',
       isDark: isDark,
     );

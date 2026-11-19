@@ -4,13 +4,11 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
-import 'models/epic_spec.dart';
 import 'models/tier_document.dart';
 import 'providers/workbench_provider.dart';
 import 'screens/project_pitch_screen.dart';
 import 'screens/release_workbench_screen.dart';
 import 'screens/widgets/godot_bridge_modals.dart';
-import 'utils/godot_context_builder.dart';
 import 'theme/app_theme.dart';
 import 'utils/markdown_exporter.dart';
 
@@ -485,7 +483,7 @@ class WorkbenchShell extends StatelessWidget {
                           ),
                         ),
                         child: Text(
-                          '2. Epic Specs',
+                          '2. Release Workbench',
                           style: GoogleFonts.inter(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w600,
@@ -585,6 +583,10 @@ class WorkbenchShell extends StatelessWidget {
                           key: const ValueKey('global_export_spec_btn'),
                           tooltip:
                               'Export Project Spec or AI Coding Agent Context (AGENTS.md)',
+                          constraints: const BoxConstraints(
+                            minWidth: 280,
+                            maxWidth: 340,
+                          ),
                           color: bgSurface,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(6),
@@ -593,6 +595,8 @@ class WorkbenchShell extends StatelessWidget {
                           onSelected: (val) {
                             if (val == 'connect_godot') {
                               showConnectGodotPluginDialog(context, workbench);
+                            } else if (val == 'active_prompt') {
+                              _exportActiveSelectionPrompt(context);
                             } else if (val == 'spec') {
                               _exportFullProjectSpec(context);
                             } else if (val == 'agents_md') {
@@ -604,115 +608,49 @@ class WorkbenchShell extends StatelessWidget {
                             }
                           },
                           itemBuilder: (ctx) => [
-                            PopupMenuItem<String>(
+                            _buildExportMenuItem(
                               value: 'connect_godot',
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.extension_rounded,
-                                    size: 13,
-                                    color: Color(0xFF38BDF8),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Connect Godot 4 Editor Plugin',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              icon: Icons.extension_rounded,
+                              iconColor: const Color(0xFF38BDF8),
+                              label: 'Connect Godot 4 Editor Plugin',
+                              textColor: textPrimary,
                             ),
-                            PopupMenuItem<String>(
+                            if (workbench.selectedEpicSpec != null)
+                              _buildExportMenuItem(
+                                key: const ValueKey('export_active_prompt_item'),
+                                value: 'active_prompt',
+                                icon: Icons.bolt_rounded,
+                                iconColor: AppTheme.accentCyanFor(isDark),
+                                label: 'Export Active Build Prompt (.md)',
+                                textColor: textPrimary,
+                              ),
+                            _buildExportMenuItem(
                               value: 'spec',
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.copy_rounded,
-                                    size: 13,
-                                    color: textSecondary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Copy Full Project Spec (.md)',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              icon: Icons.copy_rounded,
+                              iconColor: textSecondary,
+                              label: 'Copy Full Project Spec (.md)',
+                              textColor: textPrimary,
                             ),
-                            PopupMenuItem<String>(
+                            _buildExportMenuItem(
                               value: 'agents_md',
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.terminal_rounded,
-                                    size: 13,
-                                    color: textSecondary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Export AI Agent Context (AGENTS.md)',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              icon: Icons.terminal_rounded,
+                              iconColor: textSecondary,
+                              label: 'Export AI Agent Context (AGENTS.md)',
+                              textColor: textPrimary,
                             ),
-                            PopupMenuItem<String>(
+                            _buildExportMenuItem(
                               value: 'json_export',
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.download_rounded,
-                                    size: 13,
-                                    color: textSecondary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Export Project Vault (.layers.json)',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              icon: Icons.download_rounded,
+                              iconColor: textSecondary,
+                              label: 'Export Project Vault (.layers.json)',
+                              textColor: textPrimary,
                             ),
-                            PopupMenuItem<String>(
+                            _buildExportMenuItem(
                               value: 'json_import',
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    Icons.file_upload_outlined,
-                                    size: 13,
-                                    color: textSecondary,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Import Project Backup (.layers.json)',
-                                    style: GoogleFonts.inter(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                      color: textPrimary,
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              icon: Icons.file_upload_outlined,
+                              iconColor: textSecondary,
+                              label: 'Import Project Backup (.layers.json)',
+                              textColor: textPrimary,
                             ),
                           ],
                           child: Padding(
@@ -1224,6 +1162,38 @@ class WorkbenchShell extends StatelessWidget {
             ),
           if (workbench.hasPendingGodotAuth)
             GodotAuthHandoffOverlay(workbench: workbench),
+        ],
+      ),
+    );
+  }
+
+  PopupMenuItem<String> _buildExportMenuItem({
+    Key? key,
+    required String value,
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required Color textColor,
+  }) {
+    return PopupMenuItem<String>(
+      key: key,
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon, size: 13, color: iconColor),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ),
         ],
       ),
     );
