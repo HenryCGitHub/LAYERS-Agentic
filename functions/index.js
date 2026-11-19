@@ -2392,20 +2392,38 @@ const VALID_SCENE_OPS = new Set([
 
 function normalizeAgentBundle(rawObj, mode, opts = {}) {
   const obj = rawObj && typeof rawObj === "object" ? rawObj : {};
+  const effectiveMode = String(obj.mode || mode || "build_epic").trim();
   const rawUpdates = Array.isArray(obj.scriptUpdates) ? obj.scriptUpdates : [];
   const scriptUpdates = [];
   for (const u of rawUpdates) {
     if (!u || typeof u !== "object") continue;
     const resPath = normalizeResPathJs(u.resPath || u.res_path || "");
     const content = stripDiffLinePrefixes(u.content || "");
-    if (!resPath || !content) continue;
-    scriptUpdates.push({
+    const rawPatches = Array.isArray(u.patches) ? u.patches : [];
+    const patches = [];
+    for (const p of rawPatches) {
+      if (!p || typeof p !== "object") continue;
+      const rawFind = p.find ?? p.search ?? p.old;
+      const rawReplace = p.replace ?? p.replacement ?? p.new;
+      if (typeof rawFind !== "string" || rawFind.length === 0) continue;
+      if (typeof rawReplace !== "string") continue;
+      patches.push({
+        find: rawFind.replace(/\r\n/g, "\n"),
+        replace: rawReplace.replace(/\r\n/g, "\n"),
+      });
+    }
+    if (!resPath || (!content && patches.length === 0)) continue;
+    const entry = {
       resPath,
       attachTo: String(u.attachTo || u.attach_to || "").trim(),
       scenePath: normalizeResPathJs(u.scenePath || u.scene_path || ""),
       language: String(u.language || "gdscript").trim().toLowerCase(),
       content,
-    });
+    };
+    if (patches.length > 0) {
+      entry.patches = patches;
+    }
+    scriptUpdates.push(entry);
   }
 
   const rawOps = Array.isArray(obj.sceneOps) ? obj.sceneOps : [];
@@ -2449,6 +2467,12 @@ function normalizeAgentBundle(rawObj, mode, opts = {}) {
     });
   }
 
+  const protectedActions = new Set(
+    (Array.isArray(opts.preserveInputActions) ? opts.preserveInputActions : [])
+      .map((a) => String(a || "").trim().toLowerCase())
+      .filter(Boolean)
+  );
+
   const rawInputs = Array.isArray(obj.inputOps)
     ? obj.inputOps
     : Array.isArray(obj.input_ops)
@@ -2469,6 +2493,12 @@ function normalizeAgentBundle(rawObj, mode, opts = {}) {
       String(inp.op || inp.type || "").trim().toLowerCase() === "remove_action";
     const overwrite = Boolean(inp.overwrite);
     if (!action) continue;
+    if (
+      remove &&
+      (effectiveMode === "build_feature" || protectedActions.has(action.toLowerCase()))
+    ) {
+      continue;
+    }
     const normInput = { action, keys };
     if (remove) normInput.remove = true;
     if (overwrite) normInput.overwrite = true;
@@ -2491,12 +2521,22 @@ function normalizeAgentBundle(rawObj, mode, opts = {}) {
       arenaScenePath ||
       defaultDimScene
   );
+  const preserveExports = Array.from(
+    new Set(
+      (Array.isArray(opts.preserveExports) ? opts.preserveExports : [])
+        .map((k) => sanitizeGodotTuningKeyJs(k, ""))
+        .filter(Boolean)
+    )
+  );
 
   return {
-    mode: String(obj.mode || mode || "build_epic").trim(),
+    mode: effectiveMode,
     summary: String(obj.summary || "").trim(),
     diagnosis: String(obj.diagnosis || "").trim(),
     dimension: opts.dimension || "dim3d",
+    featureId: String(obj.featureId || opts.featureId || "").trim(),
+    featureCode: String(obj.featureCode || opts.featureCode || "").trim(),
+    preserveExports,
     arenaScenePath,
     featureScenePath,
     epicScenePath: featureScenePath,
@@ -2583,11 +2623,12 @@ async function callGeminiFlashJson({
   return { ok: false, error: lastError };
 }
 
-async function runGodotEpicAgentWithGemini({
-  apiKey,
+function buildGodotAgentPrompts({
   mode,
   rootSpec,
   epicSpec,
+  featureSpec = null,
+  siblingFeaturesSummary = [],
   godotContextMarkdown,
   liveScripts,
   sceneSnapshot,
@@ -2608,29 +2649,83 @@ async function runGodotEpicAgentWithGemini({
     }
   }
 
+  const isFixMode = mode === "fix_feature" || mode === "fix_epic";
+  const isFeatureMode =
+    Boolean(featureSpec) &&
+    (mode === "build_feature" ||
+      mode === "fix_feature" ||
+      (mode !== "build_epic" && mode !== "fix_epic"));
+
+  const siblings = Array.isArray(siblingFeaturesSummary)
+    ? siblingFeaturesSummary
+    : [];
+  const passedSiblings = siblings.filter((s) =>
+    Boolean(s?.isPassed || s?.isLockedBaseline)
+  );
+  const preserveExports = Array.from(
+    new Set(
+      passedSiblings
+        .flatMap((s) => (Array.isArray(s.tuningKeys) ? s.tuningKeys : []))
+        .map((k) => sanitizeGodotTuningKeyJs(k, ""))
+        .filter(Boolean)
+    )
+  );
+  const preserveInputActions = Array.from(
+    new Set(
+      passedSiblings
+        .flatMap((s) => (Array.isArray(s.inputActions) ? s.inputActions : []))
+        .map((a) => String(a || "").trim())
+        .filter(Boolean)
+    )
+  );
+
   const dimRules =
     dimMeta.id === "dim2d"
       ? "DIMENSION CONTRACT (Godot 4 · 2D): Use CharacterBody2D / Node2D / Area2D / Camera2D / Sprite2D or ColorRect/Polygon2D in pixel space (px, px/s)."
       : "DIMENSION CONTRACT (Godot 4 · 3D): Use CharacterBody3D / Node3D / Area3D / SpringArm3D / Camera3D / CSGBox3D / CSGCylinder3D / MeshInstance3D in meters (1 unit = 1 m). Ground at Y=0.";
 
   const systemInstruction = [
-    "You are LAYERS Godot 4 Epic Co-Builder targeting Godot 4.7.2.stable.",
+    "You are LAYERS Godot 4 Feature Co-Builder targeting Godot 4.7.2.stable.",
     dimRules,
     "Return strictly valid JSON with keys: mode, summary, diagnosis, arenaScenePath, epicScenePath, scriptUpdates, sceneOps, inputOps.",
     "STRICT ENGINE & GODOT 4.7 OUTPUT RULES:",
     "1. NEVER emit push_warning(...) placeholders or stub comments. Emit real, playable typed GDScript 2.0 and real sceneOps.",
     "2. GODOT 4.7 STRICT TYPING: NEVER write ':=' when assigning from a Variant dictionary/array/JSON getter (e.g. dict.get(...), JSON.parse_string(...), arr[0]). Always annotate explicit types ('var x: String = ...', 'var f: float = ...', 'var parsed: Variant = ...') and typed Array constructors.",
-    "3. scriptUpdates: array of { resPath, attachTo, scenePath, language: 'gdscript', content }. Expose EVERY §04 tuning variable with exact snake_case '@export var ...' at the top of the relevant script with defaults matching §04.",
-    "4. sceneOps: array of structured scene mutations: ensure_node, set_property, reparent_node, attach_script, detach_script, connect_signal, instance_scene, remove_node, add_to_group.",
-    "5. ClassDB SAFETY: NEVER attach a script whose 'extends <Class>' is incompatible with the target node class.",
-    "6. SIGNAL & ARITY SAFETY: Connect signals ONLY to nodes defining methodName with matching parameter count (use optional '_arg: Variant = null' if emitting args).",
-    "7. MATERIALS & SHAPES: Specify explicit subResourceClass + subResourceProps (BoxShape3D/CapsuleShape3D/SphereShape3D or RectangleShape2D/CircleShape2D, BoxMesh/CapsuleMesh, StandardMaterial3D albedo_color).",
-    "8. SCENE TREE & _ready() SAFETY: Use add_child(inst) BEFORE setting inst.global_position; use call_deferred when adding siblings inside _ready(). Clean up projectiles/enemies with queue_free().",
-    "9. INPUT OPS: Declare every §02 InputMap action in inputOps: [{ action: 'snake_case', keys: ['SHIFT'], overwrite: true }] using W/A/S/D/SPACE/SHIFT/CTRL/E/Q/F/R/TAB/LMB/RMB/MMB. Emit { action: 'bad_action', remove: true } to prune stale conflicts.",
-    "10. MOUSE & PAUSE SAFETY: If capturing mouse in 3D, wire ESC ('ui_cancel') toggle in _unhandled_input. Put HUD Controls inside CanvasLayer.",
-    "11. 3D FACING & INSTANT HIT WINDOWS: Align VisualRig forward direction (+basis.z for atan2(dir.x, dir.z), -basis.z for look_at), parent hitbox pivots under VisualRig, and check get_overlapping_bodies() with a hit_targets guard on swing open.",
-    "12. OBSERVABLE PLAYTEST FEEDBACK: Trigger albedo/modulate flashes, knockback, camera punch, cooldown HUD bar, and clear Test Scene greybox props matching §05 & §06.",
+    "3. TARGETED .gd PATCHES FOR EXISTING SCRIPTS: For ANY existing .gd file already present in liveScripts, emit scriptUpdates entries with patches: [{ find, replace }] (exact contiguous blocks copied verbatim from liveScripts[resPath] with exact leading tabs and 2-4 surrounding context lines) instead of rewriting the full file. Emit full content ONLY for brand-new .gd files absent from liveScripts (or when errorText explicitly reports a PATCH MISMATCH requiring a full rewrite).",
+    "4. @EXPORT TUNING VARS: Expose EVERY §03 tuning variable from the active Feature with exact snake_case '@export var ...' at the top of the relevant script with matching defaults.",
+    "5. PRESERVE PASSING SIBLING FEATURES: Keep EVERY passed/baseline sibling Feature working; never delete or break existing @export vars in preserveExports, InputMap actions in preserveInputActions, existing scene nodes, or signal connections.",
+    "6. sceneOps: array of structured scene mutations: ensure_node, set_property, reparent_node, attach_script, detach_script, connect_signal, instance_scene, remove_node, add_to_group.",
+    "7. ClassDB SAFETY: NEVER attach a script whose 'extends <Class>' is incompatible with the target node class.",
+    "8. SIGNAL & ARITY SAFETY: Connect signals ONLY to nodes defining methodName with matching parameter count (use optional '_arg: Variant = null' if emitting args).",
+    "9. MATERIALS & SHAPES: Specify explicit subResourceClass + subResourceProps (BoxShape3D/CapsuleShape3D/SphereShape3D or RectangleShape2D/CircleShape2D, BoxMesh/CapsuleMesh, StandardMaterial3D albedo_color).",
+    "10. SCENE TREE & _ready() SAFETY: Use add_child(inst) BEFORE setting inst.global_position; use call_deferred when adding siblings inside _ready(). Clean up projectiles/enemies with queue_free().",
+    "11. ADDITIVE INPUT OPS: Declare each InputMap action in inputOps: [{ action: 'snake_case', keys: ['SHIFT'], overwrite: true }] using W/A/S/D/SPACE/SHIFT/CTRL/E/Q/F/R/TAB/LMB/RMB/MMB. Never remove protected sibling actions; on build_feature keep inputOps strictly additive.",
+    "12. MOUSE & PAUSE SAFETY: If capturing mouse in 3D, wire ESC ('ui_cancel') toggle in _unhandled_input. Put HUD Controls inside CanvasLayer.",
+    "13. 3D FACING & INSTANT HIT WINDOWS: Align VisualRig forward direction (+basis.z for atan2(dir.x, dir.z), -basis.z for look_at), parent hitbox pivots under VisualRig, and check get_overlapping_bodies() with a hit_targets guard on swing open.",
+    "14. OBSERVABLE PLAYTEST FEEDBACK: Trigger albedo/modulate flashes, knockback, camera punch, cooldown HUD bar, and clear Test Scene greybox props matching §04 & §05.",
   ].join("\n");
+
+  const compactEpicArchitecture = featureSpec
+    ? {
+        id: epicSpec?.id || "",
+        code: epicSpec?.code || "",
+        title: epicSpec?.title || "",
+        releaseVersion: epicSpec?.releaseVersion || "v0.1",
+        goal: epicSpec?.goal || "",
+        inScope: Array.isArray(epicSpec?.inScope) ? epicSpec.inScope : [],
+        doneWhen: Array.isArray(epicSpec?.doneWhen) ? epicSpec.doneWhen : [],
+        sceneOwnership: Array.isArray(epicSpec?.sceneOwnership)
+          ? epicSpec.sceneOwnership
+          : [],
+        stateFlow: Array.isArray(epicSpec?.stateFlow)
+          ? epicSpec.stateFlow
+          : epicSpec?.states || [],
+        interruptRules: Array.isArray(epicSpec?.interruptRules)
+          ? epicSpec.interruptRules
+          : epicSpec?.interrupts || [],
+        outOfScope: Array.isArray(epicSpec?.outOfScope) ? epicSpec.outOfScope : [],
+      }
+    : null;
 
   const contextPayload = {
     mode,
@@ -2638,8 +2733,18 @@ async function runGodotEpicAgentWithGemini({
     projectTitle: rootSpec?.normalizedTitle || "LAYERS Project",
     arenaScenePath: String(arenaScenePath || ""),
     epicScenePath: String(epicScenePath || ""),
-    godotContextMarkdown: String(godotContextMarkdown || "").slice(0, 14000),
-    epicSpec: epicSpec || {},
+    godotContextMarkdown: String(godotContextMarkdown || "").slice(0, 16000),
+    ...(featureSpec
+      ? {
+          epicArchitecture: compactEpicArchitecture,
+          activeFeature: featureSpec,
+          siblingFeaturesSummary: siblings,
+          preserveExports,
+          preserveInputActions,
+        }
+      : {
+          epicSpec: epicSpec || {},
+        }),
     userPrompt: String(prompt || "").trim(),
     errorText: String(errorText || "").trim(),
     liveGodotContext: liveGodotContext || {},
@@ -2654,34 +2759,100 @@ async function runGodotEpicAgentWithGemini({
       : [],
   };
 
-  const userPrompt = [
-    mode === "build_epic"
-      ? `TASK: Synthesize the complete cohesive Godot 4 (${dimMeta.shortLabel}) Epic §01-§06 (scenes .tscn, scripts .gd, InputMap actions, tuning @exports, greybox test staging) so the developer can press Play immediately.`
-      : "TASK: Diagnose and repair the compile error(s), runtime error(s), or open [FIX] item(s) across affected Godot scripts, scenes, and InputMap while preserving passing playtest gates.",
-    "PROJECT & EPIC CONTEXT JSON:",
-    JSON.stringify(contextPayload),
-  ].join("\n\n");
+  let taskHeader;
+  if (isFeatureMode) {
+    const fLabel = `${featureSpec.code || "Feature"} · ${featureSpec.title || "Slice"}`;
+    taskHeader = isFixMode
+      ? `TASK: Diagnose and repair compile errors, runtime errors, or open [FIX] notes on ${fLabel} using targeted .gd patches while keeping passed sibling Features intact.`
+      : `TASK: Build Feature slice ${fLabel} inside the parent Epic ${epicSpec?.code || ""} architecture (${dimMeta.shortLabel}) using targeted .gd patches on existing scripts, new .gd scripts where needed, additive inputOps, and sceneOps so Playtest works immediately.`;
+  } else {
+    taskHeader =
+      mode === "build_epic"
+        ? `TASK: Build the cohesive Godot 4 (${dimMeta.shortLabel}) Epic §01-§06 (scenes .tscn, scripts .gd, InputMap actions, tuning @exports, greybox test room props) so the developer can press Play immediately.`
+        : "TASK: Diagnose and repair compile errors, runtime errors, or open [FIX] items across affected Godot scripts, scenes, and InputMap while preserving passing playtest gates.";
+  }
+
+  const payloadLabel = isFeatureMode
+    ? "PROJECT & FEATURE CONTEXT JSON:"
+    : "PROJECT & EPIC CONTEXT JSON:";
+
+  const userPrompt = [taskHeader, payloadLabel, JSON.stringify(contextPayload)].join(
+    "\n\n"
+  );
+
+  return {
+    systemInstruction,
+    userPrompt,
+    thinkingLevel: isFixMode ? "MEDIUM" : "LOW",
+    preserveExports,
+    preserveInputActions,
+    isFeatureMode,
+    isFixMode,
+  };
+}
+
+async function runGodotEpicAgentWithGemini({
+  apiKey,
+  mode,
+  rootSpec,
+  epicSpec,
+  featureSpec = null,
+  siblingFeaturesSummary = [],
+  godotContextMarkdown,
+  liveScripts,
+  sceneSnapshot,
+  inputMapSnapshot,
+  projectDiagnostics,
+  liveGodotContext,
+  prompt,
+  errorText,
+  arenaScenePath,
+  epicScenePath,
+}) {
+  const dimMeta = resolveDimensionMetaJs(rootSpec?.dimension);
+  const built = buildGodotAgentPrompts({
+    mode,
+    rootSpec,
+    epicSpec,
+    featureSpec,
+    siblingFeaturesSummary,
+    godotContextMarkdown,
+    liveScripts,
+    sceneSnapshot,
+    inputMapSnapshot,
+    projectDiagnostics,
+    liveGodotContext,
+    prompt,
+    errorText,
+    arenaScenePath,
+    epicScenePath,
+  });
 
   const aiResp = await callGeminiFlashJson({
     apiKey,
-    systemInstruction,
-    userPrompt,
-    thinkingLevel: mode === "fix_epic" ? "MEDIUM" : "LOW",
+    systemInstruction: built.systemInstruction,
+    userPrompt: built.userPrompt,
+    thinkingLevel: built.thinkingLevel,
     maxOutputTokens: 16384,
   });
   if (!aiResp.ok) {
-    return { ok: false, error: aiResp.error || "Gemini Epic agent request failed." };
+    return { ok: false, error: aiResp.error || "Gemini Feature agent request failed." };
   }
   const bundle = normalizeAgentBundle(aiResp.data, mode, {
     dimension: dimMeta.id,
     arenaScenePath: arenaScenePath || "",
     epicScenePath: epicScenePath || "",
+    featureId: featureSpec?.id || "",
+    featureCode: featureSpec?.code || "",
+    preserveExports: built.preserveExports,
+    preserveInputActions: built.preserveInputActions,
   });
   if (!bundle.summary) {
-    bundle.summary =
-      mode === "build_epic"
-        ? `Built ${epicSpec?.code || "Epic"} · ${epicSpec?.title || "System"} (${bundle.scriptUpdates.length} scripts, ${bundle.sceneOps.length} scene ops).`
-        : `Applied ${epicSpec?.code || "Epic"} fix (${bundle.scriptUpdates.length} scripts, ${bundle.sceneOps.length} scene ops).`;
+    const targetCode = featureSpec?.code || epicSpec?.code || "Feature";
+    const targetTitle = featureSpec?.title || epicSpec?.title || "Slice";
+    bundle.summary = built.isFixMode
+      ? `Applied ${targetCode} fix (${bundle.scriptUpdates.length} scripts, ${bundle.sceneOps.length} scene ops).`
+      : `Built ${targetCode} · ${targetTitle} (${bundle.scriptUpdates.length} scripts, ${bundle.sceneOps.length} scene ops).`;
   }
   return { ok: true, model: aiResp.model, bundle };
 }
@@ -3378,6 +3549,8 @@ exports.geminiProxy = onRequest(
           mode: action,
           rootSpec: payload.rootSpec,
           epicSpec: payload.activeEpic,
+          featureSpec: payload.activeFeature || null,
+          siblingFeaturesSummary: payload.siblingFeaturesSummary || [],
           godotContextMarkdown:
             payload.activeFeatureContextMarkdown || payload.godotContextMarkdown,
           liveScripts: body.liveScripts,
@@ -3688,4 +3861,5 @@ exports._testHelpers = {
   resolveTargetEpicDocIdJs,
   applyGodotEpicMutationJs,
   normalizeAgentBundle,
+  buildGodotAgentPrompts,
 };

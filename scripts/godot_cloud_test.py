@@ -34,6 +34,7 @@ const {
   resolveTargetEpicDocIdJs,
   applyGodotEpicMutationJs,
   normalizeAgentBundle,
+  buildGodotAgentPrompts,
 } = _testHelpers;
 
 assert(GODOT_UPDATE_VALID_ACTIONS.has("build_epic"));
@@ -482,6 +483,111 @@ assert.strictEqual(reopenedF02.epicSpec.features[1].checks[0].passed, true);
 assert.strictEqual(reopenedF02.epicSpec.features[1].releaseDeltaChecks[0].passed, false);
 assert.strictEqual(reopenedF02.isCompleted, false);
 assert.strictEqual(reopenedF02.epicSpec.lifecycle, "upgrading");
+
+// Targeted .gd patches, exact tab preservation & additive inputOps protection
+const patchedBundle = normalizeAgentBundle({
+  summary: "Added Armored Claw Dash",
+  scriptUpdates: [
+    {
+      resPath: "scripts/player.gd",
+      patches: [
+        {
+          find: "\tmove_and_slide()",
+          replace: "\tif Input.is_action_just_pressed('claw_dash'):\n\t\t_start_dash()\n\tmove_and_slide()",
+        },
+      ],
+    },
+    {
+      resPath: "res://scripts/hud.gd",
+      patches: [{ search: "var a := 1", replacement: "var a: int = 2" }],
+    },
+    {
+      resPath: "scripts/dash_trail.gd",
+      content: "extends Node3D\n@export var fade_s: float = 0.22\n",
+    },
+  ],
+  inputOps: [
+    { action: "claw_dash", keys: ["SPACE"], overwrite: true },
+    { action: "move_left", remove: true },
+  ],
+}, "build_feature", {
+  dimension: "dim3d",
+  featureId: "f02",
+  featureCode: "F02",
+  preserveExports: ["move_speed"],
+  preserveInputActions: ["move_left"],
+});
+assert.strictEqual(patchedBundle.mode, "build_feature");
+assert.strictEqual(patchedBundle.featureId, "f02");
+assert.strictEqual(patchedBundle.featureCode, "F02");
+assert.deepStrictEqual(patchedBundle.preserveExports, ["move_speed"]);
+assert.strictEqual(patchedBundle.scriptUpdates.length, 3);
+assert.strictEqual(patchedBundle.scriptUpdates[0].resPath, "res://scripts/player.gd");
+assert.strictEqual(patchedBundle.scriptUpdates[0].patches.length, 1);
+assert.strictEqual(patchedBundle.scriptUpdates[0].patches[0].find, "\tmove_and_slide()");
+assert.strictEqual(patchedBundle.scriptUpdates[0].content, "");
+assert.strictEqual(patchedBundle.scriptUpdates[1].patches[0].find, "var a := 1");
+assert.strictEqual(patchedBundle.scriptUpdates[1].patches[0].replace, "var a: int = 2");
+assert.strictEqual(patchedBundle.inputOps.length, 1);
+assert.strictEqual(patchedBundle.inputOps[0].action, "claw_dash");
+
+// fix_feature still blocks removing protected sibling InputMap actions while allowing stale cleanup
+const fixBundle = normalizeAgentBundle({
+  summary: "Fixed stale action",
+  inputOps: [
+    { action: "move_left", remove: true },
+    { action: "stale_bad_action", remove: true },
+  ],
+}, "fix_feature", {
+  dimension: "dim3d",
+  featureId: "f02",
+  featureCode: "F02",
+  preserveInputActions: ["move_left"],
+});
+assert.strictEqual(fixBundle.inputOps.length, 1);
+assert.strictEqual(fixBundle.inputOps[0].action, "stale_bad_action");
+assert.strictEqual(fixBundle.inputOps[0].remove, true);
+
+// buildGodotAgentPrompts builds 4-tier compact prompt & thinkingLevel
+const buildPromptRes = buildGodotAgentPrompts({
+  mode: "build_feature",
+  rootSpec: payload4t.rootSpec,
+  epicSpec: payload4t.activeEpic,
+  featureSpec: payload4t.activeFeature,
+  siblingFeaturesSummary: payload4t.siblingFeaturesSummary,
+  godotContextMarkdown: payload4t.activeFeatureContextMarkdown,
+  liveScripts: {
+    "res://scripts/player.gd": "extends CharacterBody3D\n@export var move_speed: float = 6.4\n",
+  },
+  arenaScenePath: payload4t.arenaScenePath,
+  epicScenePath: "res://scenes/player_mech.tscn",
+});
+assert.strictEqual(buildPromptRes.thinkingLevel, "LOW");
+assert(buildPromptRes.systemInstruction.includes("patches"), buildPromptRes.systemInstruction);
+assert(buildPromptRes.systemInstruction.includes("find") && buildPromptRes.systemInstruction.includes("replace"));
+assert(buildPromptRes.systemInstruction.includes("passedSiblings") || buildPromptRes.systemInstruction.includes("sibling"));
+assert(buildPromptRes.preserveExports.includes("move_speed"));
+assert(!buildPromptRes.preserveExports.includes("chain_window"));
+assert(buildPromptRes.preserveInputActions.includes("move_left"));
+assert(buildPromptRes.userPrompt.includes("F02"));
+assert(buildPromptRes.userPrompt.includes("Armored Claw Dash"));
+assert(buildPromptRes.userPrompt.includes("move_speed"));
+const parsedContextInPrompt = JSON.parse(
+  buildPromptRes.userPrompt.split("PROJECT & FEATURE CONTEXT JSON:\n\n")[1]
+);
+assert(parsedContextInPrompt.epicArchitecture, "Expected compact epicArchitecture object");
+assert(!("features" in parsedContextInPrompt.epicArchitecture), "Should not duplicate features array");
+
+const fixPromptRes = buildGodotAgentPrompts({
+  mode: "fix_feature",
+  rootSpec: payload4t.rootSpec,
+  epicSpec: payload4t.activeEpic,
+  featureSpec: payload4t.activeFeature,
+  siblingFeaturesSummary: payload4t.siblingFeaturesSummary,
+  godotContextMarkdown: payload4t.activeFeatureContextMarkdown,
+  errorText: "SCRIPT ERROR: Nil base",
+});
+assert.strictEqual(fixPromptRes.thinkingLevel, "MEDIUM");
 
 console.log("GODOT_CLOUD_TEST_OK");
 """
