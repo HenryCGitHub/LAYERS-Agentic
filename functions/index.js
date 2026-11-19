@@ -392,14 +392,218 @@ function parseRootSpecJs(projectDoc) {
   };
 }
 
+function parseVersionTupleJs(rawVer) {
+  const clean = String(rawVer || "").trim().toLowerCase().replace(/^v/, "");
+  if (!clean) return [0, 0];
+  return clean.split(".").map((p) => Number.parseInt(p, 10) || 0);
+}
+
+function compareReleaseVersionsJs(a, b, releaseOrder = []) {
+  const va = String(a || "").trim().toLowerCase();
+  const vb = String(b || "").trim().toLowerCase();
+  if (va === vb) return 0;
+  if (Array.isArray(releaseOrder) && releaseOrder.length > 0) {
+    const normOrder = releaseOrder.map((r) => String(r || "").trim().toLowerCase());
+    const ia = normOrder.indexOf(va);
+    const ib = normOrder.indexOf(vb);
+    if (ia >= 0 && ib >= 0) return ia - ib;
+  }
+  const pa = parseVersionTupleJs(va);
+  const pb = parseVersionTupleJs(vb);
+  const maxLen = Math.max(pa.length, pb.length);
+  for (let i = 0; i < maxLen; i += 1) {
+    const da = i < pa.length ? pa[i] : 0;
+    const db = i < pb.length ? pb[i] : 0;
+    if (da !== db) return da - db;
+  }
+  return va.localeCompare(vb);
+}
+
+function isFeatureLockedBaselineJs(feature, targetReleaseVersion, releaseOrder = []) {
+  const target = String(targetReleaseVersion || "").trim();
+  if (!target || !feature) return false;
+  return (
+    compareReleaseVersionsJs(feature.introducedIn || "v0.1", target, releaseOrder) < 0 &&
+    !String(feature.releaseDelta || "").trim()
+  );
+}
+
+function getEffectiveChecksForReleaseJs(feature, releaseVersion) {
+  const rel = String(releaseVersion || "v0.1").trim() || "v0.1";
+  const checks = Array.isArray(feature?.checks) ? feature.checks : [];
+  const deltaChecks = Array.isArray(feature?.releaseDeltaChecks)
+    ? feature.releaseDeltaChecks
+    : [];
+  if (rel !== "v0.1" && deltaChecks.length > 0) {
+    return [...checks, ...deltaChecks];
+  }
+  return checks;
+}
+
+function computeFeaturePassedJs(feature) {
+  if (!feature) return false;
+  if (String(feature.status || "").trim().toLowerCase() !== "passed") {
+    return false;
+  }
+  const fixes = Array.isArray(feature.fixes) ? feature.fixes : [];
+  return fixes.every((f) => Boolean(f?.resolved));
+}
+
+function isFeaturePassedForReleaseJs(feature, releaseVersion, releaseOrder = []) {
+  return (
+    isFeatureLockedBaselineJs(feature, releaseVersion, releaseOrder) ||
+    computeFeaturePassedJs(feature)
+  );
+}
+
+function getVisibleFeaturesForReleaseJs(epicSpec, releaseVersion, releaseOrder = []) {
+  const features = Array.isArray(epicSpec?.features) ? epicSpec.features : [];
+  const target = String(releaseVersion || epicSpec?.releaseVersion || "v0.1").trim() || "v0.1";
+  return features.filter(
+    (f) => compareReleaseVersionsJs(f.introducedIn || "v0.1", target, releaseOrder) <= 0
+  );
+}
+
+function extractLegacySceneOwnershipJs(links = [], levelStaging = "") {
+  const seen = new Set();
+  const out = [];
+  const resRx = /res:\/\/[^\s,)\];"]+/g;
+  const scan = (src, fallbackRole) => {
+    const trimmed = String(src || "").trim();
+    if (!trimmed) return;
+    const matches = trimmed.match(resRx) || [];
+    for (const rawPath of matches) {
+      const p = normalizeResPathJs(rawPath);
+      if (!p || seen.has(p)) continue;
+      seen.add(p);
+      let role = fallbackRole;
+      const split = trimmed.split(/\s+[—-]\s+/);
+      if (split.length > 1 && split[0].includes(rawPath)) {
+        role = split.slice(1).join(" - ").trim() || fallbackRole;
+      }
+      out.push({ path: p, role });
+    }
+  };
+  for (const link of links) scan(link, "Shared scene or script");
+  scan(levelStaging, "Playtest room scene");
+  return out;
+}
+
+function parseFeatureSpecJs(raw, indexHint = 0, dimension = "dim3d", fallbackRelease = "v0.1") {
+  const obj = raw && typeof raw === "object" ? raw : {};
+  const fallbackCode = `F${String(indexHint + 1).padStart(2, "0")}`;
+  const code = String(obj.code || fallbackCode).trim() || fallbackCode;
+  const statusRaw = String(obj.status || "queued").trim().toLowerCase();
+  let status = "queued";
+  if (statusRaw === "passed" || statusRaw === "stable" || statusRaw === "done") {
+    status = "passed";
+  } else if (statusRaw === "active" || statusRaw === "in_progress" || statusRaw === "inprogress") {
+    status = "active";
+  }
+
+  const parseCheckList = (rawArr, idPrefix) =>
+    Array.isArray(rawArr)
+      ? rawArr
+          .map((item, idx) => {
+            if (item && typeof item === "object") {
+              return {
+                id: String(item.id || `${idPrefix}_${idx + 1}`),
+                text: String(item.text || "").trim(),
+                passed: Boolean(item.passed ?? item.completed),
+              };
+            }
+            const txt = String(item || "").trim();
+            return txt ? { id: `${idPrefix}_${idx + 1}`, text: txt, passed: false } : null;
+          })
+          .filter((c) => c && c.text)
+      : [];
+
+  const controls = Array.isArray(obj.controls)
+    ? obj.controls
+        .filter((c) => c && typeof c === "object")
+        .map((c) => ({
+          action: String(c.action || "primary_action").trim(),
+          trigger: String(c.trigger || "Just Pressed (Space)").trim(),
+          rule: String(c.rule || "").trim(),
+        }))
+    : [];
+
+  const tuning = Array.isArray(obj.tuning)
+    ? obj.tuning
+        .filter((t) => t && typeof t === "object")
+        .map((t) => {
+          const cleanKey = sanitizeGodotTuningKeyJs(t.key, "tuning_param");
+          return {
+            key: cleanKey,
+            value: String(t.value ?? "0").trim() || "0",
+            unit: normalizeGodotUnitJs(cleanKey, t.unit, dimension),
+          };
+        })
+    : [];
+
+  const rawFixes = Array.isArray(obj.fixes) ? obj.fixes : [];
+  const fixes = rawFixes
+    .map((item, idx) => {
+      if (item && typeof item === "object") {
+        return {
+          id: String(item.id || `ffix_${idx + 1}`),
+          text: String(item.text || "").trim(),
+          resolved: Boolean(item.resolved),
+          createdAtMs: Number(item.createdAtMs || 0) || 0,
+        };
+      }
+      const txt = String(item || "").trim();
+      return txt ? { id: `ffix_${idx + 1}`, text: txt, resolved: false, createdAtMs: 0 } : null;
+    })
+    .filter((f) => f && f.text);
+
+  const checks = parseCheckList(obj.checks, "fchk");
+  const releaseDeltaChecks = parseCheckList(
+    obj.releaseDeltaChecks || obj.v02Checks,
+    "fdchk"
+  );
+
+  const feat = {
+    id: String(obj.id || `feat_${indexHint + 1}`).trim() || `feat_${indexHint + 1}`,
+    code,
+    title: String(obj.title || "Untitled Feature").trim(),
+    introducedIn: String(obj.introducedIn || fallbackRelease || "v0.1").trim() || "v0.1",
+    sliceTime: String(obj.sliceTime || "45 min").trim() || "45 min",
+    status,
+    goal: String(obj.goal || "").trim(),
+    inScope: normalizeStringArrayJs(obj.inScope),
+    doneWhen: normalizeStringArrayJs(obj.doneWhen),
+    releaseDelta: String(obj.releaseDelta || obj.v02Delta || "").trim(),
+    controls,
+    tuning,
+    cues: normalizeStringArrayJs(obj.cues || obj.feedback),
+    checks,
+    releaseDeltaChecks,
+    fixes,
+  };
+  feat.openFixes = feat.fixes.filter((f) => !f.resolved);
+  feat.openFixesCount = feat.openFixes.length;
+  feat.passedChecksCount = feat.checks.filter((c) => c.passed).length;
+  feat.isPassed = computeFeaturePassedJs(feat);
+  return feat;
+}
+
 function computeEpicPassedJs(spec) {
   if (!spec) return false;
-  const checks = Array.isArray(spec.checks) ? spec.checks : [];
   const fixes = Array.isArray(spec.fixes) ? spec.fixes : [];
-  const openFixes = fixes.filter((f) => !f?.resolved);
-  if (openFixes.length > 0) return false;
-  if (String(spec.lifecycle || "").toLowerCase() !== "stable") return false;
-  return checks.length === 0 || checks.every((c) => Boolean(c?.passed));
+  if (fixes.some((f) => !f?.resolved)) return false;
+  const features = Array.isArray(spec.features) ? spec.features : [];
+  if (features.some((ft) => Array.isArray(ft?.fixes) && ft.fixes.some((fx) => !fx?.resolved))) {
+    return false;
+  }
+  const checks = Array.isArray(spec.checks) ? spec.checks : [];
+  if (String(spec.lifecycle || "").toLowerCase() === "stable") {
+    return checks.length === 0 || checks.every((c) => Boolean(c?.passed));
+  }
+  if (features.length > 0) {
+    return features.every((ft) => computeFeaturePassedJs(ft));
+  }
+  return false;
 }
 
 function sanitizeGodotTuningKeyJs(rawKey, fallback = "tuning_param") {
@@ -619,32 +823,126 @@ function parseEpicSpecJs(epicDoc, indexHint = 0, dimension = "dim3d") {
         })
     : [];
 
+  const links = normalizeStringArrayJs(parsed.links || parsed.plugsInto);
+  const levelStaging = String(parsed.levelStaging || "").trim();
+  const rawOwnership = Array.isArray(parsed.sceneOwnership) ? parsed.sceneOwnership : [];
+  const sceneOwnership =
+    rawOwnership.length > 0
+      ? rawOwnership
+          .map((item) => {
+            if (item && typeof item === "object") {
+              const p = normalizeResPathJs(item.path || "");
+              return p ? { path: p, role: String(item.role || "").trim() } : null;
+            }
+            const rawStr = String(item || "").trim();
+            if (!rawStr) return null;
+            const split = rawStr.split(/\s+[—-]\s+/);
+            const p = normalizeResPathJs(split[0]);
+            return p
+              ? {
+                  path: p,
+                  role: split.length > 1 ? split.slice(1).join(" - ").trim() : "",
+                }
+              : null;
+          })
+          .filter(Boolean)
+      : extractLegacySceneOwnershipJs(links, levelStaging);
+
+  const states = normalizeStringArrayJs(parsed.states);
+  const interrupts = normalizeStringArrayJs(parsed.interrupts);
+  const stateFlow = normalizeStringArrayJs(parsed.stateFlow || parsed.states);
+  const interruptRules = normalizeStringArrayJs(parsed.interruptRules || parsed.interrupts);
+  const inScope = normalizeStringArrayJs(parsed.inScope);
+  const doneWhen = normalizeStringArrayJs(parsed.doneWhen);
+  const feedback = normalizeStringArrayJs(parsed.feedback);
+  const goalText = String(parsed.goal || sec.goal || "").trim();
+  const epicTitle = String(epicDoc?.title || parsed.title || "Untitled System").trim();
+  const epicId = String(epicDoc?.id || parsed.id || `epic_${indexHint + 1}`);
+  const upgradeDeltas = normalizeStringArrayJs(parsed.upgradeDeltas);
+
+  let synthesizedLegacyFeatures = false;
+  let features = [];
+  if (Array.isArray(parsed.features)) {
+    features = parsed.features
+      .filter((f) => f && typeof f === "object")
+      .map((f, idx) =>
+        parseFeatureSpecJs(f, idx, dimension, releaseVersion || "v0.1")
+      );
+  } else if (
+    controls.length > 0 ||
+    tuning.length > 0 ||
+    checks.length > 0 ||
+    fixes.length > 0 ||
+    feedback.length > 0
+  ) {
+    synthesizedLegacyFeatures = true;
+    const hasOpenFixes = fixes.some((f) => !f.resolved);
+    let migratedStatus = "queued";
+    if (lifecycle === "stable" && !hasOpenFixes) {
+      migratedStatus = "passed";
+    } else if (lifecycle === "active" || hasOpenFixes || checks.some((c) => c.passed)) {
+      migratedStatus = "active";
+    }
+    const f01 = {
+      id: `${epicId}_f01`,
+      code: "F01",
+      title: epicTitle,
+      introducedIn: releaseVersion || "v0.1",
+      sliceTime: "60 min",
+      status: migratedStatus,
+      goal: goalText,
+      inScope: [...inScope],
+      doneWhen: [...doneWhen],
+      releaseDelta: upgradeDeltas.join(" ; "),
+      controls: controls.map((c) => ({ ...c })),
+      tuning: tuning.map((t) => ({ ...t })),
+      cues: [...feedback],
+      checks: checks.map((c) => ({ ...c })),
+      releaseDeltaChecks: [],
+      fixes: fixes.map((f) => ({ ...f })),
+    };
+    f01.openFixes = f01.fixes.filter((f) => !f.resolved);
+    f01.openFixesCount = f01.openFixes.length;
+    f01.passedChecksCount = f01.checks.filter((c) => c.passed).length;
+    f01.isPassed = computeFeaturePassedJs(f01);
+    features = [f01];
+  }
+
   const spec = {
-    id: String(epicDoc?.id || parsed.id || `epic_${indexHint + 1}`),
+    id: epicId,
     code,
     lineageKey,
-    title: String(epicDoc?.title || parsed.title || "Untitled System").trim(),
+    title: epicTitle,
     releaseVersion,
     lifecycle,
     coreLoopBeat: String(parsed.coreLoopBeat || "").trim(),
-    goal: String(parsed.goal || sec.goal || "").trim(),
-    links: normalizeStringArrayJs(parsed.links || parsed.plugsInto),
+    goal: goalText,
+    inScope,
+    doneWhen,
+    sceneOwnership,
+    links,
     outOfScope: normalizeStringArrayJs(parsed.outOfScope),
     controls,
-    states: normalizeStringArrayJs(parsed.states),
-    interrupts: normalizeStringArrayJs(parsed.interrupts),
+    states,
+    interrupts,
+    stateFlow,
+    interruptRules,
     tuning,
-    feedback: normalizeStringArrayJs(parsed.feedback),
-    levelStaging: String(parsed.levelStaging || "").trim(),
+    feedback,
+    levelStaging,
     checks,
     fixes,
+    features,
     baselineSummary: normalizeStringArrayJs(parsed.baselineSummary),
-    upgradeDeltas: normalizeStringArrayJs(parsed.upgradeDeltas),
+    upgradeDeltas,
     copilotUpgrades: Array.isArray(parsed.copilotUpgrades)
       ? parsed.copilotUpgrades
       : [],
     chosen: Boolean(parsed.chosen),
   };
+  if (synthesizedLegacyFeatures) {
+    spec._synthesizedLegacyFeatures = true;
+  }
 
   spec.openFixes = spec.fixes.filter((f) => !f.resolved);
   spec.openFixesCount = spec.openFixes.length;
@@ -963,12 +1261,189 @@ function renderServerGodotEpicContextJs({
   return lines.join("\n").trimRight();
 }
 
+function renderServerGodotFeatureContextJs({
+  rootSpec,
+  epicSpec,
+  featureSpec,
+  releaseVersion = "v0.1",
+  siblingFeaturesSummary = [],
+  liveGodotContext = null,
+}) {
+  const dimMeta = resolveDimensionMetaJs(rootSpec?.dimension);
+  const ver =
+    String(releaseVersion || featureSpec?.introducedIn || epicSpec?.releaseVersion || "v0.1").trim() ||
+    "v0.1";
+  const openFixes = Array.isArray(featureSpec?.openFixes)
+    ? featureSpec.openFixes
+    : (featureSpec?.fixes || []).filter((f) => !f?.resolved);
+  const effChecks = getEffectiveChecksForReleaseJs(featureSpec, ver);
+
+  const rootHeader = renderServerGodotEpicContextJs({
+    rootSpec,
+    epicSpec,
+    liveGodotContext,
+    includeRootContext: true,
+    includeExecutionFooter: false,
+  }).split("\n---\n")[0];
+
+  const lines = [rootHeader.trimRight(), "", "---", ""];
+
+  lines.push(`## 2. Parent Epic Architecture (${epicSpec.code} · ${epicSpec.title})`);
+  lines.push(`- Domain Goal: ${String(epicSpec.goal || "").trim()}`);
+  if (Array.isArray(epicSpec.inScope) && epicSpec.inScope.length > 0) {
+    lines.push("- Domain In Scope:");
+    for (const s of epicSpec.inScope) lines.push(`  - ${s}`);
+  }
+  if (Array.isArray(epicSpec.doneWhen) && epicSpec.doneWhen.length > 0) {
+    lines.push("- Domain Done When:");
+    for (const d of epicSpec.doneWhen) lines.push(`  - ${d}`);
+  }
+  const ownership = Array.isArray(epicSpec.sceneOwnership) ? epicSpec.sceneOwnership : [];
+  if (ownership.length > 0) {
+    lines.push("- Shared Scene & Script Ownership:");
+    for (const own of ownership) {
+      const roleSuffix = own.role ? ` — ${own.role}` : "";
+      lines.push(`  - ${own.path}${roleSuffix}`);
+    }
+  }
+  const sFlow = Array.isArray(epicSpec.stateFlow) && epicSpec.stateFlow.length > 0
+    ? epicSpec.stateFlow
+    : epicSpec.states || [];
+  const iRules = Array.isArray(epicSpec.interruptRules) && epicSpec.interruptRules.length > 0
+    ? epicSpec.interruptRules
+    : epicSpec.interrupts || [];
+  if (sFlow.length > 0) {
+    lines.push(`- State Flow: ${sFlow.join(" -> ")}`);
+  }
+  for (const r of iRules) {
+    lines.push(`- Interrupt Rule: ${r}`);
+  }
+  if (Array.isArray(epicSpec.outOfScope) && epicSpec.outOfScope.length > 0) {
+    lines.push(`- Domain Out of Scope: ${epicSpec.outOfScope.join("; ")}`);
+  }
+
+  lines.push("");
+  lines.push("---");
+  lines.push("");
+  lines.push(
+    `# ACTIVE FEATURE SPEC · ${featureSpec.code} · ${featureSpec.title} (${ver} · ${featureSpec.sliceTime || "45 min"})`
+  );
+  lines.push(`Dimension Contract: ${dimMeta.pillLabel} (${dimMeta.shortLabel})`);
+  if (openFixes.length > 0) {
+    lines.push(
+      `Execution Mode: FOCUSED [FIX] PASS (${openFixes.length} OPEN [FIX]) — surgical edits only; keep passing sibling checks intact`
+    );
+  } else {
+    lines.push("Execution Mode: FULL FEATURE BUILD");
+  }
+
+  if (ver !== "v0.1" && String(featureSpec.releaseDelta || "").trim()) {
+    const cleanDelta = String(featureSpec.releaseDelta).trim().replace(/^\+\s*/, "");
+    lines.push("");
+    lines.push(`## ${ver} Upgrade Delta`);
+    lines.push(`- +${cleanDelta}`);
+  }
+
+  lines.push("");
+  lines.push("## §01 Feature Scope");
+  lines.push(`- Goal: ${String(featureSpec.goal || "").trim()}`);
+  if (Array.isArray(featureSpec.inScope) && featureSpec.inScope.length > 0) {
+    lines.push("- In Scope:");
+    for (const item of featureSpec.inScope) lines.push(`  - ${item}`);
+  }
+  if (Array.isArray(featureSpec.doneWhen) && featureSpec.doneWhen.length > 0) {
+    lines.push("- Done When:");
+    for (const item of featureSpec.doneWhen) lines.push(`  - ${item}`);
+  }
+
+  lines.push("");
+  lines.push(`## §02 Input Actions (${dimMeta.inputContractLabel})`);
+  if (!Array.isArray(featureSpec.controls) || featureSpec.controls.length === 0) {
+    lines.push("- None (signal/system-driven slice)");
+  } else {
+    lines.push("| InputMap Action | Binding | Trigger Rule |");
+    lines.push("| --- | --- | --- |");
+    for (const c of featureSpec.controls) {
+      lines.push(`| ${c.action} | ${c.trigger} | ${c.rule} |`);
+    }
+  }
+
+  lines.push("");
+  lines.push(`## §03 Exposed Tuning (${dimMeta.tuningColumnLabel})`);
+  if (!Array.isArray(featureSpec.tuning) || featureSpec.tuning.length === 0) {
+    lines.push("- None");
+  } else {
+    lines.push("```gdscript");
+    for (const t of featureSpec.tuning) {
+      const propType = inferGodotPropertyTypeJs(t.value, t.unit);
+      const unitComment = String(t.unit || "").trim() ? ` # ${String(t.unit).trim()}` : "";
+      lines.push(`@export var ${t.key}: ${propType} = ${t.value}${unitComment}`);
+    }
+    lines.push("```");
+  }
+
+  lines.push("");
+  lines.push("## §04 Viewport, UI & Audio Cues");
+  if (!Array.isArray(featureSpec.cues) || featureSpec.cues.length === 0) {
+    lines.push("- Minimal greybox debug visuals");
+  } else {
+    for (const cue of featureSpec.cues) lines.push(`- ${cue}`);
+  }
+
+  lines.push("");
+  lines.push("## §05 Playtest Gate");
+  if (effChecks.length === 0) {
+    lines.push("- [ ] Confirm observable player response inside Godot Playtest");
+  } else {
+    for (const chk of effChecks) {
+      lines.push(`- [${chk.passed ? "x" : " "}] ${chk.text}`);
+    }
+  }
+
+  if (openFixes.length > 0) {
+    lines.push("");
+    lines.push("## Open Playtest Revisions ([FIX])");
+    for (const fx of openFixes) {
+      const fxId = String(fx.id || "").trim();
+      lines.push(`- [FIX] ${fx.text}${fxId ? ` (id: ${fxId})` : ""}`);
+    }
+  }
+
+  if (Array.isArray(siblingFeaturesSummary) && siblingFeaturesSummary.length > 0) {
+    lines.push("");
+    lines.push("## Preserve Passing Sibling Features");
+    for (const sib of siblingFeaturesSummary) {
+      const statusTag = sib.isLockedBaseline
+        ? "BASELINE LOCKED ✓"
+        : sib.isPassed
+          ? "PASSED ✓"
+          : String(sib.status || "queued").toUpperCase();
+      const parts = [];
+      if (Array.isArray(sib.tuningKeys) && sib.tuningKeys.length > 0) {
+        parts.push(`@export: ${sib.tuningKeys.join(", ")}`);
+      }
+      if (Array.isArray(sib.inputActions) && sib.inputActions.length > 0) {
+        parts.push(`InputMap: ${sib.inputActions.join(", ")}`);
+      }
+      if (Array.isArray(sib.checksSummary) && sib.checksSummary.length > 0) {
+        parts.push(`Checks: ${sib.checksSummary.join("; ")}`);
+      }
+      lines.push(
+        `- [${statusTag}] ${sib.code} · ${sib.title}${parts.length > 0 ? ` — ${parts.join(" | ")}` : ""}`
+      );
+    }
+  }
+
+  return lines.join("\n").trimRight();
+}
+
 function computeActiveGodotEpicPayload({
   docsById,
   projectId,
   webStudioUrl = DEFAULT_WEB_STUDIO_URL,
   liveGodotContext = null,
   preferredEpicId = "",
+  preferredFeatureId = "",
 }) {
   const projectDoc = projectId ? docsById.get(projectId) || null : null;
   if (!projectDoc) {
@@ -981,6 +1456,10 @@ function computeActiveGodotEpicPayload({
       epicPosition: 0,
       webStudioUrl,
       activeEpic: null,
+      activeFeature: null,
+      activeEpicFeatures: [],
+      siblingFeaturesSummary: [],
+      activeFeatureContextMarkdown: "",
       releaseEpicsSummary: [],
       godotContextMarkdown: "",
     };
@@ -1031,6 +1510,10 @@ function computeActiveGodotEpicPayload({
       allEpicsCompleted: false,
       webStudioUrl,
       activeEpic: null,
+      activeFeature: null,
+      activeEpicFeatures: [],
+      siblingFeaturesSummary: [],
+      activeFeatureContextMarkdown: "",
       releaseEpicsSummary: [],
       godotContextMarkdown: renderServerGodotEpicContextJs({
         rootSpec,
@@ -1089,11 +1572,16 @@ function computeActiveGodotEpicPayload({
       allEpicsCompleted: false,
       webStudioUrl,
       activeEpic: null,
+      activeFeature: null,
+      activeEpicFeatures: [],
+      siblingFeaturesSummary: [],
+      activeFeatureContextMarkdown: "",
       releaseEpicsSummary: [],
       godotContextMarkdown: "",
     };
   }
 
+  const releaseOrder = releases.map((r) => resolveVersionTag(r));
   const selectedId = String(projSections.selected_epic_id || "").trim();
   const selIdx = selectedId
     ? parsedEpics.findIndex((e) => e.id === selectedId)
@@ -1118,10 +1606,89 @@ function computeActiveGodotEpicPayload({
   }
 
   const activeEpic = parsedEpics[activeIdx];
+  const visibleFeaturesRaw = getVisibleFeaturesForReleaseJs(
+    activeEpic,
+    releaseVersion,
+    releaseOrder
+  );
+  const annotatedFeatures = visibleFeaturesRaw.map((f) => {
+    const effChecks = getEffectiveChecksForReleaseJs(f, releaseVersion);
+    const isLocked = isFeatureLockedBaselineJs(f, releaseVersion, releaseOrder);
+    const isPassedForRel = isLocked || computeFeaturePassedJs(f);
+    return {
+      ...f,
+      isLockedBaseline: isLocked,
+      isPassedForRelease: isPassedForRel,
+      effectiveChecks: effChecks,
+      passedChecksCount: effChecks.filter((c) => Boolean(c?.passed)).length,
+      totalChecksCount: effChecks.length,
+    };
+  });
+
+  const prefFeatId = String(preferredFeatureId || "").trim();
+  const selectedFeatId = String(projSections.selected_feature_id || "").trim();
+  let activeFeature = null;
+  if (prefFeatId) {
+    const lowerPref = prefFeatId.toLowerCase();
+    activeFeature =
+      annotatedFeatures.find(
+        (f) => f.id === prefFeatId || f.code.toLowerCase() === lowerPref
+      ) || null;
+  }
+  if (!activeFeature && selectedFeatId) {
+    const selFeat = annotatedFeatures.find((f) => f.id === selectedFeatId);
+    if (selFeat && !selFeat.isPassedForRelease) {
+      activeFeature = selFeat;
+    }
+  }
+  if (!activeFeature) {
+    activeFeature = annotatedFeatures.find((f) => !f.isPassedForRelease) || null;
+  }
+  if (!activeFeature && selectedFeatId) {
+    activeFeature = annotatedFeatures.find((f) => f.id === selectedFeatId) || null;
+  }
+  if (!activeFeature && annotatedFeatures.length > 0) {
+    activeFeature = annotatedFeatures[annotatedFeatures.length - 1];
+  }
+
+  const activeEpicFeatures = annotatedFeatures.map((f) => ({
+    id: f.id,
+    code: f.code,
+    title: f.title,
+    introducedIn: f.introducedIn,
+    sliceTime: f.sliceTime,
+    status: f.status,
+    isLockedBaseline: Boolean(f.isLockedBaseline),
+    isPassed: Boolean(f.isPassedForRelease),
+    openFixesCount: Number(f.openFixesCount || 0),
+    passedChecksCount: Number(f.passedChecksCount || 0),
+    totalChecks: Number(f.totalChecksCount || 0),
+  }));
+
+  const siblingFeaturesSummary = annotatedFeatures
+    .filter((f) => !activeFeature || f.id !== activeFeature.id)
+    .map((f) => ({
+      id: f.id,
+      code: f.code,
+      title: f.title,
+      introducedIn: f.introducedIn,
+      status: f.status,
+      isLockedBaseline: Boolean(f.isLockedBaseline),
+      isPassed: Boolean(f.isPassedForRelease),
+      tuningKeys: (f.tuning || []).map((t) => t.key).filter(Boolean),
+      inputActions: (f.controls || []).map((c) => c.action).filter(Boolean),
+      checksSummary: (f.effectiveChecks || [])
+        .slice(0, 4)
+        .map((c) => c.text)
+        .filter(Boolean),
+    }));
+
   const baseUrl = String(webStudioUrl || DEFAULT_WEB_STUDIO_URL).replace(/\/+$/, "");
   const epicStudioUrl = `${baseUrl}/?project=${encodeURIComponent(
     projectDoc.id
-  )}&epic=${encodeURIComponent(activeEpic.id)}`;
+  )}&epic=${encodeURIComponent(activeEpic.id)}${
+    activeFeature ? `&feature=${encodeURIComponent(activeFeature.id)}` : ""
+  }`;
 
   const godotContextMarkdown = renderServerGodotEpicContextJs({
     rootSpec,
@@ -1130,7 +1697,28 @@ function computeActiveGodotEpicPayload({
     liveGodotContext: liveCtx,
   });
 
+  const activeFeatureContextMarkdown = activeFeature
+    ? renderServerGodotFeatureContextJs({
+        rootSpec,
+        epicSpec: activeEpic,
+        featureSpec: activeFeature,
+        releaseVersion,
+        siblingFeaturesSummary,
+        liveGodotContext: liveCtx,
+      })
+    : "";
+
   const stagingTscns = extractResPathsListJs(activeEpic.levelStaging, ".tscn");
+  const ownershipTscns = (Array.isArray(activeEpic.sceneOwnership)
+    ? activeEpic.sceneOwnership
+    : []
+  )
+    .map((o) => normalizeResPathJs(o?.path || ""))
+    .filter((p) => p && p.toLowerCase().endsWith(".tscn"));
+  const ownershipPreferredArena =
+    ownershipTscns.find((p) => /(?:arena|proto|level|room|world|main)/i.test(p)) ||
+    ownershipTscns[0] ||
+    "";
   const linkTscns = extractResPathsListJs((activeEpic.links || []).join(" "), ".tscn");
   const liveMainScene = normalizeResPathJs(liveCtx?.main_scene || "");
   const liveScenes = Array.isArray(liveCtx?.scene_files)
@@ -1141,17 +1729,39 @@ function computeActiveGodotEpicPayload({
       ? "res://scenes/arena_2d.tscn"
       : "res://scenes/arena_3d.tscn";
   const arenaScenePath =
-    stagingTscns[0] || liveMainScene || linkTscns[0] || liveScenes[0] || defaultArenaScene;
+    stagingTscns[0] ||
+    ownershipPreferredArena ||
+    liveMainScene ||
+    linkTscns[0] ||
+    liveScenes[0] ||
+    defaultArenaScene;
 
-  const releaseEpicsSummary = parsedEpics.map((ep) => ({
-    id: ep.id,
-    code: ep.code,
-    title: ep.title,
-    isPassed: Boolean(ep.isPassed),
-    openFixesCount: Number(ep.openFixesCount || 0),
-    passedChecksCount: Number(ep.passedChecksCount || 0),
-    totalChecks: Array.isArray(ep.checks) ? ep.checks.length : 0,
-  }));
+  const releaseEpicsSummary = parsedEpics.map((ep) => {
+    const epVis = getVisibleFeaturesForReleaseJs(ep, releaseVersion, releaseOrder);
+    return {
+      id: ep.id,
+      code: ep.code,
+      title: ep.title,
+      isPassed: Boolean(ep.isPassed),
+      openFixesCount:
+        Number(ep.openFixesCount || 0) +
+        epVis.reduce((acc, f) => acc + Number(f.openFixesCount || 0), 0),
+      passedChecksCount: Number(ep.passedChecksCount || 0),
+      totalChecks: Array.isArray(ep.checks) ? ep.checks.length : 0,
+      featuresCount: epVis.length,
+      passedFeaturesCount: epVis.filter((f) =>
+        isFeaturePassedForReleaseJs(f, releaseVersion, releaseOrder)
+      ).length,
+      totalOpenFeatureFixes: epVis.reduce(
+        (acc, f) => acc + Number(f.openFixesCount || 0),
+        0
+      ),
+    };
+  });
+
+  for (const ep of parsedEpics) {
+    delete ep._synthesizedLegacyFeatures;
+  }
 
   return {
     ok: true,
@@ -1166,6 +1776,10 @@ function computeActiveGodotEpicPayload({
     webStudioUrl: epicStudioUrl,
     arenaScenePath,
     activeEpic,
+    activeFeature,
+    activeEpicFeatures,
+    siblingFeaturesSummary,
+    activeFeatureContextMarkdown,
     releaseEpicsSummary,
     godotContextMarkdown,
     rootSpec,
@@ -1236,10 +1850,34 @@ const GODOT_UPDATE_VALID_ACTIONS = new Set([
   "resolve_fix",
   "pass_epic",
   "reopen_epic",
+  "pass_feature",
+  "reopen_feature",
   "sync_project",
   "build_epic",
   "fix_epic",
+  "build_feature",
+  "fix_feature",
 ]);
+
+function syncEpicLifecycleFromFeaturesJs(spec, releaseVersion, releaseOrder = []) {
+  const visible = getVisibleFeaturesForReleaseJs(spec, releaseVersion, releaseOrder);
+  if (visible.length === 0) return;
+  const hasAnyOpenFixes =
+    (spec.fixes || []).some((f) => !f?.resolved) ||
+    visible.some((f) => (f.fixes || []).some((fx) => !fx?.resolved));
+  const allFeaturesPassed = visible.every((f) =>
+    isFeaturePassedForReleaseJs(f, releaseVersion, releaseOrder)
+  );
+  if (!hasAnyOpenFixes && allFeaturesPassed) {
+    spec.lifecycle = "stable";
+    for (const c of spec.checks || []) c.passed = true;
+  } else if (spec.lifecycle === "stable" || spec.lifecycle === "queued") {
+    const hasDelta =
+      (Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) ||
+      visible.some((f) => String(f.releaseDelta || "").trim() !== "");
+    spec.lifecycle = hasDelta ? "upgrading" : "active";
+  }
+}
 
 function applyGodotEpicMutationJs({
   epicDoc,
@@ -1247,18 +1885,250 @@ function applyGodotEpicMutationJs({
   body = {},
   dimension = "dim3d",
   nowMs = Date.now(),
+  releaseOrder = [],
 }) {
   const sec =
     epicDoc?.sections && typeof epicDoc.sections === "object"
       ? { ...epicDoc.sections }
       : {};
   const spec = parseEpicSpecJs(epicDoc, 0, dimension);
+  const wasSynthesizedLegacy = Boolean(spec._synthesizedLegacyFeatures);
+  delete spec._synthesizedLegacyFeatures;
   delete spec.openFixes;
   delete spec.openFixesCount;
   delete spec.passedChecksCount;
   delete spec.isPassed;
 
-  if (action === "toggle_check") {
+  const requestedFeatureId = String(body.featureId || "").trim();
+  const isFeatureAction =
+    action === "pass_feature" ||
+    action === "reopen_feature" ||
+    requestedFeatureId.length > 0;
+
+  if (isFeatureAction) {
+    const features = Array.isArray(spec.features) ? spec.features : [];
+    const relVer = spec.releaseVersion || "v0.1";
+    let targetFeat = null;
+    if (requestedFeatureId) {
+      const lowerReqF = requestedFeatureId.toLowerCase();
+      targetFeat =
+        features.find(
+          (f) => f.id === requestedFeatureId || f.code.toLowerCase() === lowerReqF
+        ) || null;
+    } else if (action === "pass_feature") {
+      targetFeat =
+        features.find((f) => !isFeaturePassedForReleaseJs(f, relVer, releaseOrder)) ||
+        features[0] ||
+        null;
+    } else if (action === "reopen_feature") {
+      targetFeat = features[features.length - 1] || null;
+    }
+    if (!targetFeat) {
+      const err = new Error(
+        `Target Feature not found for "${requestedFeatureId || action}".`
+      );
+      err.statusCode = 404;
+      throw err;
+    }
+    if (isFeatureLockedBaselineJs(targetFeat, relVer, releaseOrder)) {
+      const err = new Error(
+        `Feature ${targetFeat.code} is a locked ${targetFeat.introducedIn} baseline in ${relVer}.`
+      );
+      err.statusCode = 409;
+      throw err;
+    }
+
+    if (action === "toggle_check") {
+      const effList = [...(targetFeat.checks || []), ...(targetFeat.releaseDeltaChecks || [])];
+      const checkId = String(body.checkId || "").trim();
+      const checkIdx =
+        body.checkIndex !== undefined &&
+        body.checkIndex !== null &&
+        String(body.checkIndex).trim() !== "" &&
+        Number.isInteger(Number(body.checkIndex))
+          ? Number(body.checkIndex)
+          : -1;
+      const oneBasedIdx = /^\d+$/.test(checkId) ? Number(checkId) - 1 : -1;
+      const lowerCheckId = checkId.toLowerCase();
+
+      let matched = null;
+      for (let i = 0; i < effList.length; i += 1) {
+        if ((checkId && effList[i].id === checkId) || i === checkIdx) {
+          matched = effList[i];
+          break;
+        }
+      }
+      if (!matched && oneBasedIdx >= 0 && oneBasedIdx < effList.length) {
+        matched = effList[oneBasedIdx];
+      }
+      if (!matched && lowerCheckId) {
+        matched = effList.find((c) => c.text.toLowerCase().includes(lowerCheckId)) || null;
+      }
+      if (!matched) {
+        const err = new Error(
+          `Matching Playtest check not found on ${targetFeat.code} for "${checkId || checkIdx}".`
+        );
+        err.statusCode = 404;
+        throw err;
+      }
+      matched.passed = typeof body.passed === "boolean" ? body.passed : !matched.passed;
+      const activeList = getEffectiveChecksForReleaseJs(targetFeat, relVer);
+      const allEffPassed = activeList.every((c) => Boolean(c?.passed));
+      if (targetFeat.status === "queued") {
+        targetFeat.status = "active";
+      } else if (targetFeat.status === "passed" && !allEffPassed) {
+        targetFeat.status = "active";
+      }
+      syncEpicLifecycleFromFeaturesJs(spec, relVer, releaseOrder);
+    } else if (action === "update_tuning" || action === "set_tuning") {
+      const cleanKey = sanitizeGodotTuningKeyJs(body.key, "");
+      const rawVal =
+        body.value === undefined || body.value === null
+          ? ""
+          : String(body.value).trim();
+      if (!cleanKey || !rawVal) {
+        const err = new Error("Expected non-empty key and value for update_tuning.");
+        err.statusCode = 400;
+        throw err;
+      }
+      const rawUnit = String(body.unit || "").trim();
+      const existing = targetFeat.tuning.find(
+        (t) => t.key.toLowerCase() === cleanKey.toLowerCase()
+      );
+      const nextUnit = existing
+        ? normalizeGodotUnitJs(existing.key, rawUnit || existing.unit, dimension)
+        : normalizeGodotUnitJs(cleanKey, rawUnit, dimension);
+      if (existing) {
+        existing.value = rawVal;
+        existing.unit = nextUnit;
+      } else {
+        targetFeat.tuning.push({ key: cleanKey, value: rawVal, unit: nextUnit });
+      }
+      for (const p of spec.tuning || []) {
+        if (p.key.toLowerCase() === cleanKey.toLowerCase()) {
+          p.value = rawVal;
+          p.unit = nextUnit;
+        }
+      }
+      if (targetFeat.status === "queued") {
+        targetFeat.status = "active";
+      }
+      syncEpicLifecycleFromFeaturesJs(spec, relVer, releaseOrder);
+    } else if (action === "log_fix") {
+      const rawText = String(body.fixText || "")
+        .trim()
+        .replace(/^\[FIX\]\s*/i, "")
+        .trim();
+      const cleanText = sanitizeGodotLineJs(rawText, dimension);
+      if (!cleanText) {
+        const err = new Error("Expected non-empty fixText for log_fix.");
+        err.statusCode = 400;
+        throw err;
+      }
+      const newId =
+        String(body.fixId || "").trim() ||
+        `ffix_${nowMs}_${Math.random().toString(36).slice(2, 6)}`;
+      targetFeat.fixes.push({
+        id: newId,
+        text: cleanText,
+        resolved: false,
+        createdAtMs: Number(nowMs) || Date.now(),
+      });
+      targetFeat.status = "active";
+      syncEpicLifecycleFromFeaturesJs(spec, relVer, releaseOrder);
+    } else if (action === "resolve_fix") {
+      const targetId = String(body.fixId || "").trim();
+      const nextResolved = body.resolved !== false;
+      let matched = false;
+      if (targetId === "latest") {
+        for (let i = targetFeat.fixes.length - 1; i >= 0; i -= 1) {
+          if (!targetFeat.fixes[i].resolved) {
+            targetFeat.fixes[i].resolved = nextResolved;
+            matched = true;
+            break;
+          }
+        }
+      } else if (targetId) {
+        const lowerTarget = targetId.toLowerCase();
+        for (const f of targetFeat.fixes) {
+          if (f.id === targetId || String(f.text || "").toLowerCase() === lowerTarget) {
+            f.resolved = nextResolved;
+            matched = true;
+          }
+        }
+        if (!matched && /^\d+$/.test(targetId)) {
+          const oneBased = Number(targetId) - 1;
+          const unresolved = targetFeat.fixes.filter((f) => !f.resolved);
+          if (oneBased >= 0 && oneBased < unresolved.length) {
+            unresolved[oneBased].resolved = nextResolved;
+            matched = true;
+          }
+        }
+        if (!matched) {
+          for (const f of targetFeat.fixes) {
+            if (!f.resolved && String(f.text || "").toLowerCase().includes(lowerTarget)) {
+              f.resolved = nextResolved;
+              matched = true;
+              break;
+            }
+          }
+        }
+      }
+      if (!matched && !targetId) {
+        for (let i = targetFeat.fixes.length - 1; i >= 0; i -= 1) {
+          if (!targetFeat.fixes[i].resolved) {
+            targetFeat.fixes[i].resolved = nextResolved;
+            break;
+          }
+        }
+      }
+      if (!nextResolved) {
+        targetFeat.status = "active";
+      }
+      syncEpicLifecycleFromFeaturesJs(spec, relVer, releaseOrder);
+    } else if (action === "pass_feature") {
+      for (const f of targetFeat.fixes || []) f.resolved = true;
+      for (const c of targetFeat.checks || []) c.passed = true;
+      for (const c of targetFeat.releaseDeltaChecks || []) c.passed = true;
+      targetFeat.status = "passed";
+      syncEpicLifecycleFromFeaturesJs(spec, relVer, releaseOrder);
+    } else if (action === "reopen_feature") {
+      targetFeat.status = "active";
+      const hasDelta =
+        relVer !== "v0.1" &&
+        Boolean(String(targetFeat.releaseDelta || "").trim()) &&
+        Array.isArray(targetFeat.releaseDeltaChecks) &&
+        targetFeat.releaseDeltaChecks.length > 0;
+      if (hasDelta) {
+        for (const c of targetFeat.releaseDeltaChecks) c.passed = false;
+      } else {
+        for (const c of targetFeat.checks || []) c.passed = false;
+      }
+      if (spec.lifecycle === "stable" || spec.lifecycle === "queued") {
+        const epicHasDelta =
+          (Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) ||
+          hasDelta ||
+          features.some((f) => String(f.releaseDelta || "").trim() !== "");
+        spec.lifecycle = epicHasDelta ? "upgrading" : "active";
+      }
+    } else {
+      const err = new Error(`Unsupported Godot Feature action: ${action}`);
+      err.statusCode = 400;
+      throw err;
+    }
+
+    for (const f of spec.features) {
+      delete f.openFixes;
+      delete f.openFixesCount;
+      delete f.passedChecksCount;
+      delete f.isPassed;
+      delete f.isLockedBaseline;
+      delete f.isPassedForRelease;
+      delete f.effectiveChecks;
+      delete f.totalChecksCount;
+    }
+  } else {
+    if (action === "toggle_check") {
     const checkId = String(body.checkId || "").trim();
     const checkIdx =
       body.checkIndex !== undefined &&
@@ -1415,6 +2285,16 @@ function applyGodotEpicMutationJs({
     for (const f of spec.fixes) f.resolved = true;
     for (const c of spec.checks) c.passed = true;
     spec.lifecycle = "stable";
+    if (!wasSynthesizedLegacy && Array.isArray(spec.features)) {
+      const relVer = spec.releaseVersion || "v0.1";
+      for (const ft of spec.features) {
+        if (isFeatureLockedBaselineJs(ft, relVer, releaseOrder)) continue;
+        for (const f of ft.fixes || []) f.resolved = true;
+        for (const c of ft.checks || []) c.passed = true;
+        for (const c of ft.releaseDeltaChecks || []) c.passed = true;
+        ft.status = "passed";
+      }
+    }
   } else if (action === "reopen_epic") {
     if (Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) {
       spec.lifecycle = "upgrading";
@@ -1433,14 +2313,50 @@ function applyGodotEpicMutationJs({
       } else {
         for (const c of spec.checks) c.passed = false;
       }
+      if (!wasSynthesizedLegacy && Array.isArray(spec.features)) {
+        const relVer = spec.releaseVersion || "v0.1";
+        for (const ft of spec.features) {
+          if (isFeatureLockedBaselineJs(ft, relVer, releaseOrder)) continue;
+          ft.status = "active";
+          if (Array.isArray(ft.releaseDeltaChecks) && ft.releaseDeltaChecks.length > 0) {
+            for (const c of ft.releaseDeltaChecks) c.passed = false;
+          } else {
+            for (const c of ft.checks || []) c.passed = false;
+          }
+        }
+      }
     } else {
       spec.lifecycle = "active";
       for (const c of spec.checks) c.passed = false;
+      if (!wasSynthesizedLegacy && Array.isArray(spec.features)) {
+        const relVer = spec.releaseVersion || "v0.1";
+        for (const ft of spec.features) {
+          if (isFeatureLockedBaselineJs(ft, relVer, releaseOrder)) continue;
+          ft.status = "active";
+          for (const c of ft.checks || []) c.passed = false;
+        }
+      }
     }
   } else {
     const err = new Error(`Unsupported Godot Epic action: ${action}`);
     err.statusCode = 400;
     throw err;
+  }
+
+  if (wasSynthesizedLegacy) {
+    delete spec.features;
+  } else if (Array.isArray(spec.features)) {
+    for (const f of spec.features) {
+      delete f.openFixes;
+      delete f.openFixesCount;
+      delete f.passedChecksCount;
+      delete f.isPassed;
+      delete f.isLockedBaseline;
+      delete f.isPassedForRelease;
+      delete f.effectiveChecks;
+      delete f.totalChecksCount;
+    }
+  }
   }
 
   const isCompleted = computeEpicPassedJs(spec);
@@ -2295,6 +3211,7 @@ exports.geminiProxy = onRequest(
         body.godotContext || body.liveGodotContext
       );
       const preferredEpicId = String(body.epicId || "").trim();
+      const preferredFeatureId = String(body.featureId || "").trim();
 
       const db = getFirestore();
       const docsSnap = await db
@@ -2313,6 +3230,7 @@ exports.geminiProxy = onRequest(
         webStudioUrl: linkAuth.webStudioUrl,
         liveGodotContext,
         preferredEpicId,
+        preferredFeatureId,
       });
       if (!payload.ok) {
         res.status(404).json({
@@ -2331,6 +3249,9 @@ exports.geminiProxy = onRequest(
       if (payload.activeEpic?.id) {
         nextProjSections.selected_epic_id = payload.activeEpic.id;
       }
+      if (payload.activeFeature?.id) {
+        nextProjSections.selected_feature_id = payload.activeFeature.id;
+      }
 
       linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
       db.collection("users")
@@ -2346,7 +3267,7 @@ exports.geminiProxy = onRequest(
     }
 
     // -------------------------------------------------------------------------
-    // Route 3D: POST /godotLink/update (Godot Dock: toggle_check / update_tuning / log_fix / resolve_fix / pass_epic / reopen_epic / sync_project / build_epic / fix_epic)
+    // Route 3D: POST /godotLink/update (Godot Dock: toggle_check / update_tuning / log_fix / resolve_fix / pass_feature / reopen_feature / pass_epic / reopen_epic / sync_project / build_feature / fix_feature / build_epic / fix_epic)
     // -------------------------------------------------------------------------
     if (cleanPath === "/godotLink/update") {
       if (req.method !== "POST") {
@@ -2368,7 +3289,7 @@ exports.geminiProxy = onRequest(
           error: {
             code: 400,
             message:
-              "Expected valid action (toggle_check, update_tuning, log_fix, resolve_fix, pass_epic, reopen_epic, sync_project, build_epic, or fix_epic).",
+              "Expected valid action (toggle_check, update_tuning, log_fix, resolve_fix, pass_feature, reopen_feature, pass_epic, reopen_epic, sync_project, build_feature, fix_feature, build_epic, or fix_epic).",
           },
         });
         return;
@@ -2383,6 +3304,7 @@ exports.geminiProxy = onRequest(
       const liveGodotContext = sanitizeGodotLiveContextJs(
         body.godotContext || body.liveGodotContext
       );
+      const requestedFeatureId = String(body.featureId || "").trim();
 
       const db = getFirestore();
       const docsCol = db
@@ -2414,9 +3336,21 @@ exports.geminiProxy = onRequest(
       }
 
       const nowMs = Date.now();
+      const projDocForRel = docsById.get(linkAuth.projectId);
+      const releaseOrder = (
+        Array.isArray(projDocForRel?.childrenIds) ? projDocForRel.childrenIds : []
+      )
+        .map((id) => docsById.get(id))
+        .filter((d) => d && String(d.tier || "").toUpperCase() === "RELEASE")
+        .map((r) => resolveVersionTag(r));
 
-      // 1-Click In-Dock Cloud Gemini AI Builder (build_epic / fix_epic)
-      if (action === "build_epic" || action === "fix_epic") {
+      // 1-Click In-Dock Cloud Gemini AI Builder (build_feature / fix_feature / build_epic / fix_epic)
+      if (
+        action === "build_epic" ||
+        action === "fix_epic" ||
+        action === "build_feature" ||
+        action === "fix_feature"
+      ) {
         const apiKey = String(GEMINI_API_KEY.value() || "").trim();
         if (!apiKey) {
           res.status(500).json({
@@ -2430,6 +3364,7 @@ exports.geminiProxy = onRequest(
           webStudioUrl: linkAuth.webStudioUrl,
           liveGodotContext,
           preferredEpicId: targetEpicId,
+          preferredFeatureId: requestedFeatureId,
         });
         if (!payload.ok || !payload.activeEpic) {
           res.status(404).json({
@@ -2443,7 +3378,8 @@ exports.geminiProxy = onRequest(
           mode: action,
           rootSpec: payload.rootSpec,
           epicSpec: payload.activeEpic,
-          godotContextMarkdown: payload.godotContextMarkdown,
+          godotContextMarkdown:
+            payload.activeFeatureContextMarkdown || payload.godotContextMarkdown,
           liveScripts: body.liveScripts,
           sceneSnapshot: body.sceneSnapshot,
           inputMapSnapshot: body.inputMapSnapshot,
@@ -2468,6 +3404,7 @@ exports.geminiProxy = onRequest(
         const nextProjSec = {
           last_godot_sync_ms: String(nowMs),
           selected_epic_id: payload.activeEpic.id,
+          selected_feature_id: payload.activeFeature?.id || "",
         };
         if (liveGodotContext) {
           nextProjSec.godot_live_context_json = JSON.stringify(liveGodotContext);
@@ -2507,6 +3444,7 @@ exports.geminiProxy = onRequest(
               body,
               dimension: rootSpecForDim.dimension,
               nowMs,
+              releaseOrder,
             });
             tx.update(epicRef, {
               sections: mutated.sections,
@@ -2534,6 +3472,9 @@ exports.geminiProxy = onRequest(
       if (targetEpicId && updatedEpicDoc) {
         docsById.set(targetEpicId, updatedEpicDoc);
       }
+      const epicCompletedOnPass =
+        action === "pass_epic" ||
+        (action === "pass_feature" && Boolean(updatedEpicDoc?.isCompleted));
       const inMemProj = docsById.get(linkAuth.projectId);
       if (inMemProj) {
         const existingSec =
@@ -2544,21 +3485,31 @@ exports.geminiProxy = onRequest(
         if (liveGodotContext) {
           existingSec.godot_live_context_json = JSON.stringify(liveGodotContext);
         }
-        if (action === "pass_epic") {
+        if (epicCompletedOnPass) {
           existingSec.selected_epic_id = "";
+          existingSec.selected_feature_id = "";
+        } else if (action === "pass_feature") {
+          existingSec.selected_epic_id = targetEpicId;
+          existingSec.selected_feature_id = "";
         } else if (targetEpicId) {
           existingSec.selected_epic_id = targetEpicId;
+          if (requestedFeatureId) {
+            existingSec.selected_feature_id = requestedFeatureId;
+          }
         }
         inMemProj.sections = existingSec;
       }
 
-      const isInPlaceMutation = action !== "pass_epic" && action !== "sync_project";
+      const stayOnEpic = !epicCompletedOnPass && action !== "sync_project";
+      const stayOnFeature =
+        action !== "pass_epic" && action !== "pass_feature" && action !== "sync_project";
       const payload = computeActiveGodotEpicPayload({
         docsById,
         projectId: linkAuth.projectId,
         webStudioUrl: linkAuth.webStudioUrl,
         liveGodotContext,
-        preferredEpicId: isInPlaceMutation ? targetEpicId : "",
+        preferredEpicId: stayOnEpic ? targetEpicId : "",
+        preferredFeatureId: stayOnFeature ? requestedFeatureId : "",
       });
       if (!payload.ok) {
         res.status(404).json({
@@ -2576,6 +3527,7 @@ exports.geminiProxy = onRequest(
       if (payload.activeEpic?.id) {
         nextProjSec.selected_epic_id = payload.activeEpic.id;
       }
+      nextProjSec.selected_feature_id = payload.activeFeature?.id || "";
 
       linkAuth.linkRef.set({ lastSyncAt: nowMs }, { merge: true }).catch(() => {});
       docsCol
@@ -2727,7 +3679,11 @@ exports._testHelpers = {
   sanitizeGodotLiveContextJs,
   parseRootSpecJs,
   parseEpicSpecJs,
+  parseFeatureSpecJs,
+  computeFeaturePassedJs,
+  isFeatureLockedBaselineJs,
   renderServerGodotEpicContextJs,
+  renderServerGodotFeatureContextJs,
   computeActiveGodotEpicPayload,
   resolveTargetEpicDocIdJs,
   applyGodotEpicMutationJs,

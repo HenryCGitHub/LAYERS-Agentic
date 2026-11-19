@@ -25,7 +25,11 @@ const {
   sanitizeGodotLiveContextJs,
   parseRootSpecJs,
   parseEpicSpecJs,
+  parseFeatureSpecJs,
+  computeFeaturePassedJs,
+  isFeatureLockedBaselineJs,
   renderServerGodotEpicContextJs,
+  renderServerGodotFeatureContextJs,
   computeActiveGodotEpicPayload,
   resolveTargetEpicDocIdJs,
   applyGodotEpicMutationJs,
@@ -34,9 +38,13 @@ const {
 
 assert(GODOT_UPDATE_VALID_ACTIONS.has("build_epic"));
 assert(GODOT_UPDATE_VALID_ACTIONS.has("fix_epic"));
+assert(GODOT_UPDATE_VALID_ACTIONS.has("build_feature"));
+assert(GODOT_UPDATE_VALID_ACTIONS.has("fix_feature"));
 assert(GODOT_UPDATE_VALID_ACTIONS.has("toggle_check"));
 assert(GODOT_UPDATE_VALID_ACTIONS.has("pass_epic"));
 assert(GODOT_UPDATE_VALID_ACTIONS.has("reopen_epic"));
+assert(GODOT_UPDATE_VALID_ACTIONS.has("pass_feature"));
+assert(GODOT_UPDATE_VALID_ACTIONS.has("reopen_feature"));
 assert.strictEqual(hashLinkToken("lyr_abc").length, 64);
 
 assert.strictEqual(resolveDimensionMetaJs("dim2d").speedUnit, "px/s");
@@ -255,6 +263,225 @@ const payload2dBlank = computeActiveGodotEpicPayload({
   projectId: "proj_2d",
 });
 assert.strictEqual(payload2dBlank.arenaScenePath, "res://scenes/arena_2d.tscn");
+
+// 4-tier Project -> Release -> Epic -> Feature payload & 2-way Feature mutations
+const docs4t = new Map();
+docs4t.set("proj_4t", {
+  id: "proj_4t",
+  tier: "PROJECT",
+  title: "Shellbreaker 4T",
+  childrenIds: ["rel_4t_v01", "rel_4t_v02"],
+  sections: {
+    active_release_id: "rel_4t_v02",
+    concept_blueprint_json: JSON.stringify({
+      gameTitle: "Shellbreaker 4T",
+      dimension: "dim3d",
+      pitch: "Arcade Claw Brawler — Top-down 3D crab arena.",
+      coreLoop: ["Move", "Dash", "Break Armor"],
+      pillars: ["Every dash commits"],
+      tradeOffs: [{ prefer: "Snappy arcade", avoid: "Slow drift" }],
+      outOfScope: ["No main menu"],
+    }),
+  },
+});
+docs4t.set("rel_4t_v01", {
+  id: "rel_4t_v01",
+  tier: "RELEASE",
+  parentId: "proj_4t",
+  title: "v0.1 · Prototype",
+  sections: { release_version: "v0.1" },
+  childrenIds: [],
+});
+docs4t.set("rel_4t_v02", {
+  id: "rel_4t_v02",
+  tier: "RELEASE",
+  parentId: "proj_4t",
+  title: "v0.2 · Chain Dash",
+  sections: { release_version: "v0.2" },
+  childrenIds: ["ep_4t_e01"],
+});
+docs4t.set("ep_4t_e01", {
+  id: "ep_4t_e01",
+  tier: "EPIC",
+  parentId: "rel_4t_v02",
+  title: "Player Movement",
+  isCompleted: false,
+  sections: {
+    code: "E01",
+    lineage_key: "e01",
+    release_version: "v0.2",
+    lifecycle: "upgrading",
+    epic_spec_json: JSON.stringify({
+      code: "E01",
+      lineageKey: "e01",
+      title: "Player Movement",
+      releaseVersion: "v0.2",
+      lifecycle: "upgrading",
+      goal: "Own locomotion, dash commitments, and follow camera rig.",
+      sceneOwnership: [
+        { path: "res://scenes/player_mech.tscn", role: "Player rig" },
+        { path: "res://scenes/arena_proto.tscn", role: "Arena room" },
+      ],
+      stateFlow: ["Idle", "Walk", "ClawDash"],
+      interruptRules: ["ClawDash locks walk for 0.18 s"],
+      outOfScope: ["No wall jump"],
+      features: [
+        {
+          id: "f01",
+          code: "F01",
+          title: "8-Way Walk",
+          introducedIn: "v0.1",
+          status: "passed",
+          releaseDelta: "",
+          goal: "Smooth 8-way arena walk.",
+          controls: [{ action: "move_left", trigger: "Hold A", rule: "Strafe left" }],
+          tuning: [{ key: "move_speed", value: "6.4", unit: "m/s" }],
+          checks: [{ id: "f01_c1", text: "Hold A -> Moves left", passed: true }],
+        },
+        {
+          id: "f02",
+          code: "F02",
+          title: "Armored Claw Dash",
+          introducedIn: "v0.1",
+          status: "active",
+          releaseDelta: "+ Refund dash on armor break",
+          goal: "Forward 4 m claw dash.",
+          controls: [{ action: "claw_dash", trigger: "Space", rule: "Dash 4 m" }],
+          tuning: [{ key: "dash_distance", value: "4.0", unit: "m" }],
+          checks: [{ id: "f02_c1", text: "Tap Space -> Dashes 4 m", passed: true }],
+          releaseDeltaChecks: [{ id: "f02_dc1", text: "Break armor -> Dash resets", passed: false }],
+        },
+        {
+          id: "f03",
+          code: "F03",
+          title: "Chain Dash Refund",
+          introducedIn: "v0.2",
+          status: "queued",
+          goal: "Chain second dash inside 0.35 s window.",
+          tuning: [{ key: "chain_window", value: "0.35", unit: "s" }],
+          checks: [{ id: "f03_c1", text: "Chain dash triggers in 0.35 s", passed: false }],
+        },
+      ],
+    }),
+  },
+});
+
+const payload4t = computeActiveGodotEpicPayload({
+  docsById: docs4t,
+  projectId: "proj_4t",
+  liveGodotContext: liveCtx,
+});
+assert.strictEqual(payload4t.ok, true);
+assert(payload4t.activeFeature, "Expected activeFeature resolved");
+assert.strictEqual(payload4t.activeFeature.id, "f02");
+assert.strictEqual(payload4t.arenaScenePath, "res://scenes/arena_proto.tscn");
+assert.strictEqual(payload4t.activeEpicFeatures.length, 3);
+assert.strictEqual(payload4t.activeEpicFeatures[0].isLockedBaseline, true);
+assert.strictEqual(payload4t.activeEpicFeatures[1].isLockedBaseline, false);
+assert.strictEqual(payload4t.activeEpicFeatures[2].introducedIn, "v0.2");
+assert.strictEqual(payload4t.siblingFeaturesSummary.length, 2);
+const f01Sib = payload4t.siblingFeaturesSummary.find((s) => s.id === "f01");
+assert(f01Sib, "Expected f01 in siblingFeaturesSummary");
+assert(f01Sib.tuningKeys.includes("move_speed"));
+assert(f01Sib.inputActions.includes("move_left"));
+assert(!payload4t.siblingFeaturesSummary.some((s) => s.id === "f02"));
+assert(payload4t.activeFeatureContextMarkdown.includes("# ACTIVE FEATURE SPEC · F02"));
+assert(payload4t.activeFeatureContextMarkdown.includes("Parent Epic Architecture"));
+assert(payload4t.activeFeatureContextMarkdown.includes("res://scenes/player_mech.tscn"));
+assert(payload4t.activeFeatureContextMarkdown.includes("Preserve Passing Sibling Features"));
+assert(payload4t.activeFeatureContextMarkdown.includes("move_speed"));
+
+const payload4tPrefF03 = computeActiveGodotEpicPayload({
+  docsById: docs4t,
+  projectId: "proj_4t",
+  preferredFeatureId: "f03",
+});
+assert.strictEqual(payload4tPrefF03.activeFeature.id, "f03");
+
+// Locked [v0.1] baseline guard on f01 in v0.2
+for (const [act, bodyArg] of [
+  ["update_tuning", { featureId: "f01", key: "move_speed", value: "12.0" }],
+  ["toggle_check", { featureId: "f01", checkId: "f01_c1", passed: false }],
+  ["log_fix", { featureId: "f01", fixText: "Should block on locked baseline" }],
+  ["reopen_feature", { featureId: "f01" }],
+]) {
+  assert.throws(
+    () =>
+      applyGodotEpicMutationJs({
+        epicDoc: docs4t.get("ep_4t_e01"),
+        action: act,
+        body: bodyArg,
+        dimension: "dim3d",
+      }),
+    (err) => err && err.statusCode === 409,
+    `Expected 409 on locked baseline action ${act}`
+  );
+}
+
+// 2-way Feature mutations on f02 & f03
+const tunedF02 = applyGodotEpicMutationJs({
+  epicDoc: docs4t.get("ep_4t_e01"),
+  action: "update_tuning",
+  body: { featureId: "f02", key: "dash_distance", value: "5.5", unit: "m" },
+  dimension: "dim3d",
+});
+assert.strictEqual(tunedF02.epicSpec.features[1].tuning[0].value, "5.5");
+assert.strictEqual(tunedF02.epicSpec.features[0].tuning[0].value, "6.4");
+
+const loggedF02 = applyGodotEpicMutationJs({
+  epicDoc: { id: "ep_4t_e01", sections: tunedF02.sections },
+  action: "log_fix",
+  body: { featureId: "f02", fixId: "fx_4t_1", fixText: "Dash clips pillar corner" },
+  dimension: "dim3d",
+});
+assert.strictEqual(loggedF02.epicSpec.features[1].fixes.filter((f) => !f.resolved).length, 1);
+
+const resolvedF02 = applyGodotEpicMutationJs({
+  epicDoc: { id: "ep_4t_e01", sections: loggedF02.sections },
+  action: "resolve_fix",
+  body: { featureId: "f02", fixId: "fx_4t_1", resolved: true },
+  dimension: "dim3d",
+});
+assert.strictEqual(resolvedF02.epicSpec.features[1].fixes.filter((f) => !f.resolved).length, 0);
+
+const checkedF02 = applyGodotEpicMutationJs({
+  epicDoc: { id: "ep_4t_e01", sections: resolvedF02.sections },
+  action: "toggle_check",
+  body: { featureId: "f02", checkId: "f02_dc1", passed: true },
+  dimension: "dim3d",
+});
+assert.strictEqual(checkedF02.epicSpec.features[1].releaseDeltaChecks[0].passed, true);
+
+const passedF02 = applyGodotEpicMutationJs({
+  epicDoc: { id: "ep_4t_e01", sections: checkedF02.sections },
+  action: "pass_feature",
+  body: { featureId: "f02" },
+  dimension: "dim3d",
+});
+assert.strictEqual(passedF02.epicSpec.features[1].status, "passed");
+assert.strictEqual(passedF02.isCompleted, false, "Epic stays incomplete while f03 is queued");
+
+const passedF03 = applyGodotEpicMutationJs({
+  epicDoc: { id: "ep_4t_e01", sections: passedF02.sections },
+  action: "pass_feature",
+  body: { featureId: "f03" },
+  dimension: "dim3d",
+});
+assert.strictEqual(passedF03.epicSpec.features[2].status, "passed");
+assert.strictEqual(passedF03.isCompleted, true, "All features passed rolls Epic up to completed");
+assert.strictEqual(passedF03.epicSpec.lifecycle, "stable");
+
+const reopenedF02 = applyGodotEpicMutationJs({
+  epicDoc: { id: "ep_4t_e01", sections: passedF03.sections, isCompleted: true },
+  action: "reopen_feature",
+  body: { featureId: "f02" },
+  dimension: "dim3d",
+});
+assert.strictEqual(reopenedF02.epicSpec.features[1].status, "active");
+assert.strictEqual(reopenedF02.epicSpec.features[1].checks[0].passed, true);
+assert.strictEqual(reopenedF02.epicSpec.features[1].releaseDeltaChecks[0].passed, false);
+assert.strictEqual(reopenedF02.isCompleted, false);
+assert.strictEqual(reopenedF02.epicSpec.lifecycle, "upgrading");
 
 console.log("GODOT_CLOUD_TEST_OK");
 """
