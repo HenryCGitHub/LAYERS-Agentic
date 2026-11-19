@@ -387,6 +387,116 @@ class GodotSpecGuard {
     ];
   }
 
+  static List<String> _sanitizeStringList(
+    List<String> items,
+    GodotProjectDimension dim,
+  ) =>
+      [
+        for (final item in items)
+          if (sanitizeLine(item, dimension: dim).isNotEmpty)
+            sanitizeLine(item, dimension: dim),
+      ];
+
+  static List<EpicControlBinding> _sanitizeControls(
+    List<EpicControlBinding> items,
+    GodotProjectDimension dim,
+  ) =>
+      [
+        for (final c in items)
+          EpicControlBinding(
+            action: _toSnakeCaseToken(
+              c.action.replaceAll(RegExp(r'^IA_', caseSensitive: false), ''),
+            ),
+            trigger: sanitizeLine(c.trigger, dimension: dim),
+            rule: sanitizeLine(c.rule, dimension: dim),
+          ),
+      ];
+
+  static List<EpicTuningParam> _sanitizeTuning(
+    List<EpicTuningParam> items,
+    GodotProjectDimension dim,
+  ) =>
+      [
+        for (int i = 0; i < items.length; i++)
+          () {
+            final cleanKey = sanitizeTuningKey(
+              items[i].key,
+              fallback: 'param_${i + 1}',
+            );
+            final rawUnit = items[i].unit.trim().toLowerCase();
+            var cleanVal = items[i].value.trim();
+            if (dim == GodotProjectDimension.dim3d &&
+                (rawUnit == 'cm' || rawUnit == 'cm/s')) {
+              final numVal = double.tryParse(cleanVal);
+              if (numVal != null) {
+                cleanVal = _formatCleanNum(numVal / 100.0);
+              }
+            }
+            return EpicTuningParam(
+              key: cleanKey,
+              value: cleanVal,
+              unit: normalizeGodotUnit(
+                cleanKey,
+                items[i].unit,
+                dimension: dim,
+              ),
+            );
+          }(),
+      ];
+
+  static List<EpicPieCheck> _sanitizeChecks(
+    List<EpicPieCheck> items,
+    GodotProjectDimension dim,
+  ) =>
+      [
+        for (final chk in items)
+          EpicPieCheck(
+            id: chk.id,
+            text: sanitizeLine(chk.text, dimension: dim),
+            passed: chk.passed,
+          ),
+      ];
+
+  static List<EpicPieFix> _sanitizeFixes(
+    List<EpicPieFix> items,
+    GodotProjectDimension dim,
+  ) =>
+      [
+        for (final fx in items)
+          EpicPieFix(
+            id: fx.id,
+            text: sanitizeLine(fx.text, dimension: dim),
+            resolved: fx.resolved,
+            createdAtMs: fx.createdAtMs,
+          ),
+      ];
+
+  static FeatureSpec sanitizeFeatureSpec(
+    FeatureSpec spec, {
+    GodotProjectDimension dimension = GodotProjectDimension.dim3d,
+    String? forceCode,
+  }) {
+    final out = spec.deepCopy();
+    if (forceCode != null && forceCode.trim().isNotEmpty) {
+      out.code = forceCode.trim();
+    } else if (out.code.trim().isEmpty) {
+      out.code = 'F01';
+    }
+    out.title = sanitizeLine(out.title, dimension: dimension);
+    out.goal = sanitizeLine(out.goal, dimension: dimension);
+    out.sliceTime = sanitizeLine(out.sliceTime, dimension: dimension);
+    out.releaseDelta = sanitizeLine(out.releaseDelta, dimension: dimension);
+    out.inScope = _sanitizeStringList(out.inScope, dimension);
+    out.doneWhen = _sanitizeStringList(out.doneWhen, dimension);
+    out.controls = _sanitizeControls(out.controls, dimension);
+    out.tuning = _sanitizeTuning(out.tuning, dimension);
+    out.cues = _sanitizeStringList(out.cues, dimension);
+    out.checks = _sanitizeChecks(out.checks, dimension);
+    out.releaseDeltaChecks = _sanitizeChecks(out.releaseDeltaChecks, dimension);
+    out.fixes = _sanitizeFixes(out.fixes, dimension);
+    return out;
+  }
+
   static EpicSpec sanitizeEpicSpec(
     EpicSpec spec, {
     GodotProjectDimension dimension = GodotProjectDimension.dim3d,
@@ -408,95 +518,42 @@ class GodotSpecGuard {
     out.title = sanitizeLine(out.title, dimension: dimension);
     out.coreLoopBeat = sanitizeLine(out.coreLoopBeat, dimension: dimension);
     out.goal = sanitizeLine(out.goal, dimension: dimension);
-    out.levelStaging = sanitizeLine(out.levelStaging, dimension: dimension);
-
-    out.links = [
-      for (final l in out.links)
-        if (sanitizeLine(l, dimension: dimension).isNotEmpty)
-          sanitizeLine(l, dimension: dimension),
+    out.inScope = _sanitizeStringList(out.inScope, dimension);
+    out.doneWhen = _sanitizeStringList(out.doneWhen, dimension);
+    out.sceneOwnership = [
+      for (final o in out.sceneOwnership)
+        if (sanitizeLine(o.path, dimension: dimension).isNotEmpty)
+          EpicSceneOwnership(
+            path: sanitizeLine(o.path, dimension: dimension),
+            role: sanitizeLine(o.role, dimension: dimension),
+          ),
     ];
+    out.levelStaging = sanitizeLine(out.levelStaging, dimension: dimension);
+    out.links = _sanitizeStringList(out.links, dimension);
     out.outOfScope = [
       for (final o in out.outOfScope)
         if (sanitizeExclusion(o, dimension: dimension).isNotEmpty)
           sanitizeExclusion(o, dimension: dimension),
     ];
-    out.controls = [
-      for (final c in out.controls)
-        EpicControlBinding(
-          action: _toSnakeCaseToken(c.action.replaceAll(RegExp(r'^IA_', caseSensitive: false), '')),
-          trigger: sanitizeLine(c.trigger, dimension: dimension),
-          rule: sanitizeLine(c.rule, dimension: dimension),
+    out.controls = _sanitizeControls(out.controls, dimension);
+    out.states = _sanitizeStringList(out.states, dimension);
+    out.interrupts = _sanitizeStringList(out.interrupts, dimension);
+    out.tuning = _sanitizeTuning(out.tuning, dimension);
+    out.feedback = _sanitizeStringList(out.feedback, dimension);
+    out.checks = _sanitizeChecks(out.checks, dimension);
+    out.fixes = _sanitizeFixes(out.fixes, dimension);
+    out.features = [
+      for (int i = 0; i < out.features.length; i++)
+        sanitizeFeatureSpec(
+          out.features[i],
+          dimension: dimension,
+          forceCode: out.features[i].code.trim().isEmpty
+              ? FeatureSpec.formatCode(i + 1)
+              : null,
         ),
     ];
-    out.states = [
-      for (final s in out.states)
-        if (sanitizeLine(s, dimension: dimension).isNotEmpty)
-          sanitizeLine(s, dimension: dimension),
-    ];
-    out.interrupts = [
-      for (final r in out.interrupts)
-        if (sanitizeLine(r, dimension: dimension).isNotEmpty)
-          sanitizeLine(r, dimension: dimension),
-    ];
-    out.tuning = [
-      for (int i = 0; i < out.tuning.length; i++)
-        () {
-          final cleanKey = sanitizeTuningKey(
-            out.tuning[i].key,
-            fallback: 'param_${i + 1}',
-          );
-          final rawUnit = out.tuning[i].unit.trim().toLowerCase();
-          var cleanVal = out.tuning[i].value.trim();
-          if (dimension == GodotProjectDimension.dim3d &&
-              (rawUnit == 'cm' || rawUnit == 'cm/s')) {
-            final numVal = double.tryParse(cleanVal);
-            if (numVal != null) {
-              cleanVal = _formatCleanNum(numVal / 100.0);
-            }
-          }
-          return EpicTuningParam(
-            key: cleanKey,
-            value: cleanVal,
-            unit: normalizeGodotUnit(
-              cleanKey,
-              out.tuning[i].unit,
-              dimension: dimension,
-            ),
-          );
-        }(),
-    ];
-    out.feedback = [
-      for (final f in out.feedback)
-        if (sanitizeLine(f, dimension: dimension).isNotEmpty)
-          sanitizeLine(f, dimension: dimension),
-    ];
-    out.checks = [
-      for (final chk in out.checks)
-        EpicPieCheck(
-          id: chk.id,
-          text: sanitizeLine(chk.text, dimension: dimension),
-          passed: chk.passed,
-        ),
-    ];
-    out.fixes = [
-      for (final fx in out.fixes)
-        EpicPieFix(
-          id: fx.id,
-          text: sanitizeLine(fx.text, dimension: dimension),
-          resolved: fx.resolved,
-          createdAtMs: fx.createdAtMs,
-        ),
-    ];
-    out.baselineSummary = [
-      for (final b in out.baselineSummary)
-        if (sanitizeLine(b, dimension: dimension).isNotEmpty)
-          sanitizeLine(b, dimension: dimension),
-    ];
-    out.upgradeDeltas = [
-      for (final d in out.upgradeDeltas)
-        if (sanitizeLine(d, dimension: dimension).isNotEmpty)
-          sanitizeLine(d, dimension: dimension),
-    ];
+    out.baselineSummary = _sanitizeStringList(out.baselineSummary, dimension);
+    out.upgradeDeltas = _sanitizeStringList(out.upgradeDeltas, dimension);
     return out;
   }
 

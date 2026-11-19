@@ -894,5 +894,296 @@ console.log(JSON.stringify({
         expect(emptyParsed.features, isEmpty);
       },
     );
+
+    test(
+      '14. GodotContextBuilder.buildFeatureContext & buildEpicArchitectureContext bundle 3D/2D context, v0.2 deltas & [FIX] mode',
+      () {
+        final spec3d = GodotSparkPresets.byId('shellbreaker');
+        final f01 = FeatureSpec(
+          id: 'f01',
+          code: 'F01',
+          title: '8-Way Walk & Iso Camera',
+          introducedIn: 'v0.1',
+          sliceTime: '45 min',
+          status: FeatureStatus.passed,
+          goal: 'Implement camera-relative 8-way walk and follow Camera3D.',
+          checks: [
+            EpicPieCheck(
+              id: 'c1',
+              text: 'Hold W+D -> Mech slides smoothly',
+              passed: true,
+            ),
+          ],
+        );
+        final f02 = FeatureSpec(
+          id: 'f02',
+          code: 'F02',
+          title: 'Armored Claw Dash',
+          introducedIn: 'v0.1',
+          sliceTime: '60 min',
+          status: FeatureStatus.active,
+          goal: 'Forward 4 m commitment dash with i-frames and cyan trail.',
+          inScope: ['Space input buffer', '4 m horizontal lunge'],
+          doneWhen: ['Tap Space -> Mech crosses 4 m cleanly'],
+          releaseDelta: '+ Reset dash cooldown when breaking cracked shell',
+          releaseDeltaChecks: [
+            EpicPieCheck(
+              id: 'dc1',
+              text: 'Break shell then tap Space -> Second dash chains cleanly',
+            ),
+          ],
+          controls: [
+            EpicControlBinding(
+              action: 'claw_dash',
+              trigger: 'Space / L-Trigger',
+              rule: '0.65 s cooldown',
+            ),
+          ],
+          tuning: [
+            EpicTuningParam(key: 'dash_distance_m', value: '4.0', unit: 'm'),
+            EpicTuningParam(key: 'max_chains', value: '3', unit: 'count'),
+          ],
+          cues: ['Cyan ribbon trail fades over 0.22 s'],
+          checks: [
+            EpicPieCheck(
+              id: 'c2_1',
+              text: 'Tap Space -> Mech crosses 4 m',
+              passed: true,
+            ),
+            EpicPieCheck(
+              id: 'c2_2',
+              text: 'Collide with cracked shell -> Enemy staggers 1.5 m',
+              passed: false,
+            ),
+          ],
+        );
+        final f03 = FeatureSpec(
+          id: 'f03',
+          code: 'F03',
+          title: 'Chain Dash on Shell Break',
+          introducedIn: 'v0.2',
+          sliceTime: '45 min',
+          status: FeatureStatus.queued,
+          goal: 'Refund cooldown on shell break.',
+        );
+
+        final e01 = EpicSpec(
+          id: 'e01',
+          code: 'E01',
+          title: 'Player Movement & Camera',
+          goal: 'Own mech locomotion, dash commitments, and follow camera rig.',
+          inScope: ['8-way walk', 'Claw dash commitments'],
+          doneWhen: ['All E01 Features pass Playtest Gate'],
+          sceneOwnership: [
+            EpicSceneOwnership(
+              path: 'res://scenes/player_mech.tscn',
+              role: 'CharacterBody3D + CameraRig',
+            ),
+          ],
+          stateFlow: ['Idle', 'Walk', 'ClawDash', 'Recovery'],
+          interruptRules: ['ClawDash locks walk accel for 0.18 s'],
+          outOfScope: ['No stamina bar in v0.1'],
+          features: [f01, f02, f03],
+        );
+
+        final ctxV01 = GodotContextBuilder.buildFeatureContext(
+          rootSpec: spec3d,
+          epic: e01,
+          feature: f02,
+          releaseVersion: 'v0.1',
+        );
+        expect(ctxV01, contains('# ROOT_GODOT_CONTEXT · SHELLBREAKER'));
+        expect(
+          ctxV01,
+          contains('## 2. PARENT EPIC ARCHITECTURE (E01 · Player Movement & Camera)'),
+        );
+        expect(ctxV01, contains('res://scenes/player_mech.tscn'));
+        expect(ctxV01, contains('Idle -> Walk -> ClawDash -> Recovery'));
+        expect(ctxV01, contains('No stamina bar in v0.1'));
+        expect(
+          ctxV01,
+          contains('# ACTIVE FEATURE SPEC · F02 · Armored Claw Dash (v0.1 · 60 min)'),
+        );
+        expect(ctxV01, contains('Execution Mode: FULL FEATURE BUILD'));
+        expect(ctxV01, contains('| InputMap Action | Binding | Trigger Rule |'));
+        expect(ctxV01, contains('| claw_dash | Space / L-Trigger | 0.65 s cooldown |'));
+        expect(ctxV01, contains('```gdscript'));
+        expect(ctxV01, contains('@export var dash_distance_m: float = 4.0 # m'));
+        expect(ctxV01, contains('@export var max_chains: int = 3 # count'));
+        expect(ctxV01, contains('## §05 Playtest Gate'));
+        expect(ctxV01, contains('- [x] Tap Space -> Mech crosses 4 m'));
+        expect(
+          ctxV01,
+          contains('- [ ] Collide with cracked shell -> Enemy staggers 1.5 m'),
+        );
+
+        // v0.2 delta & delta check
+        final ctxV02 = GodotContextBuilder.buildFeatureContext(
+          rootSpec: spec3d,
+          epic: e01,
+          feature: f02,
+          releaseVersion: 'v0.2',
+        );
+        expect(ctxV02, contains('## v0.2 Upgrade Delta'));
+        expect(ctxV02, contains('Reset dash cooldown when breaking cracked shell'));
+        expect(
+          ctxV02,
+          contains('Break shell then tap Space -> Second dash chains cleanly'),
+        );
+
+        // [FIX] revision mode switch
+        f02.fixes.add(
+          EpicPieFix(id: 'fx_dash', text: 'Dash clips pillar edge'),
+        );
+        final ctxFix = GodotContextBuilder.buildFeatureContext(
+          rootSpec: spec3d,
+          epic: e01,
+          feature: f02,
+          releaseVersion: 'v0.1',
+        );
+        expect(ctxFix, contains('FOCUSED [FIX] PASS (1 OPEN [FIX])'));
+        expect(ctxFix, contains('## Open Playtest Revisions ([FIX])'));
+        expect(ctxFix, contains('Dash clips pillar edge'));
+
+        // Epic domain architecture brief (v0.1 vs v0.2 rollups)
+        final archV02 = GodotContextBuilder.buildEpicArchitectureContext(
+          rootSpec: spec3d,
+          epic: e01,
+          releaseVersion: 'v0.2',
+        );
+        expect(
+          archV02,
+          contains('# GODOT 4 EPIC ARCHITECTURE BRIEF · E01 · Player Movement & Camera (v0.2)'),
+        );
+        expect(archV02, contains('Progress: 1/3 Features Passed | 1 Open [FIX]'));
+        expect(archV02, contains('[v0.1 ✓ BASELINE]'));
+        expect(archV02, contains('[+v0.2 NEW]'));
+
+        // 2D Feature context check
+        final spec2d = GodotSparkPresets.byId('emberkeep');
+        final f2d = FeatureSpec(
+          id: 'f2d',
+          code: 'F01',
+          title: 'Roll Dash',
+          goal: 'Move 128 px across spike floor.',
+          tuning: [EpicTuningParam(key: 'dash_speed_px', value: '480', unit: 'px/s')],
+        );
+        final ctx2d = GodotContextBuilder.buildFeatureContext(
+          rootSpec: spec2d,
+          epic: e01,
+          feature: f2d,
+          releaseVersion: 'v0.1',
+        );
+        expect(ctx2d, contains('2D (px, px/s)'));
+        expect(ctx2d, contains('@export var dash_speed_px: float = 480 # px/s'));
+
+        // buildFullProjectSpecMarkdown includes Feature slices when present
+        final fullMd = GodotContextBuilder.buildFullProjectSpecMarkdown(
+          rootSpec: spec3d,
+          epicsByReleaseLabel: {
+            'v0.1 · Arena Prototype': [e01],
+          },
+        );
+        expect(fullMd, contains('GODOT 4 EPIC ARCHITECTURE BRIEF'));
+        expect(fullMd, contains('ACTIVE FEATURE SPEC · F02 · Armored Claw Dash'));
+      },
+    );
+
+    test(
+      '15. GodotSpecGuard.sanitizeFeatureSpec & markdown_exporter filename helpers strip leakage cleanly',
+      () {
+        final dirtyFeat = FeatureSpec(
+          id: 'dirty_f01',
+          code: '',
+          title: 'Spawn BP_CrabDash in PIE',
+          goal: 'Leverage unified velocity at 1850 cm/s in L_Arena_Proto.',
+          inScope: ['Use IA_ClawDash via UMG HUD'],
+          doneWhen: ['Validate dash hits ACharacter within 450 cm'],
+          releaseDelta: '+ Seamlessly deliver 300 cm boost',
+          controls: [
+            EpicControlBinding(
+              action: 'IA_ClawDash',
+              trigger: 'Space',
+              rule: 'Uses UInputAction cooldown',
+            ),
+          ],
+          tuning: [
+            EpicTuningParam(key: 'bAllowAirDash', value: 'true', unit: 'boolean'),
+            EpicTuningParam(key: 'MaxDashDist', value: '450', unit: 'cm'),
+          ],
+          cues: ['Emit Niagara trail seamlessly'],
+          checks: [
+            EpicPieCheck(
+              id: 'c1',
+              text: 'Press IA_ClawDash -> Travel 450 cm in PIE',
+            ),
+          ],
+        );
+
+        final clean = GodotSpecGuard.sanitizeFeatureSpec(
+          dirtyFeat,
+          dimension: GodotProjectDimension.dim3d,
+          forceCode: 'F02',
+        );
+        expect(clean.code, equals('F02'));
+        expect(GodotSpecGuard.containsEngineLeakage(clean.title), isFalse);
+        expect(GodotSpecGuard.containsEngineLeakage(clean.goal), isFalse);
+        expect(clean.controls.single.action, equals('claw_dash'));
+        expect(clean.tuning[0].key, equals('allow_air_dash'));
+        expect(clean.tuning[0].unit, equals('bool'));
+        expect(clean.tuning[1].key, equals('max_dash_dist'));
+        expect(clean.tuning[1].value, equals('4.5'));
+        expect(clean.tuning[1].unit, equals('m'));
+        expect(clean.cues.single, contains('GPUParticles3D'));
+
+        final parentEpic = EpicSpec(
+          id: 'e_dirty',
+          code: 'E01',
+          title: 'Player Movement',
+          goal: 'Move CharacterBody3D',
+          sceneOwnership: [
+            EpicSceneOwnership(
+              path: 'res://scenes/BP_Player.tscn',
+              role: 'BP_CrabPlayer root',
+            ),
+          ],
+          features: [dirtyFeat],
+        );
+        final cleanEpic = GodotSpecGuard.sanitizeEpicSpec(
+          parentEpic,
+          dimension: GodotProjectDimension.dim3d,
+        );
+        expect(cleanEpic.features.single.code, equals('F01'));
+        expect(cleanEpic.features.single.tuning[1].unit, equals('m'));
+        expect(
+          GodotSpecGuard.containsEngineLeakage(
+            cleanEpic.sceneOwnership.single.role,
+          ),
+          isFalse,
+        );
+
+        expect(
+          buildFeaturePromptFilename(
+            'SHELLBREAKER!',
+            'E01',
+            'F02',
+            'Armored Claw Dash',
+          ),
+          equals('shellbreaker_e01_f02_armored_claw_dash_prompt.md'),
+        );
+        expect(
+          buildEpicArchitectureFilename(
+            'SHELLBREAKER!',
+            'E01',
+            'Player Movement & Camera',
+          ),
+          equals('shellbreaker_e01_player_movement_camera_architecture.md'),
+        );
+        expect(
+          buildProjectSpecFilename('EMBERKEEP 2D'),
+          equals('emberkeep_2d_project_spec.md'),
+        );
+      },
+    );
   });
 }
