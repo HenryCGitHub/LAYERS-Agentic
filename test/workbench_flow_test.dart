@@ -736,6 +736,226 @@ void main() {
       },
     );
   });
+
+  group('Round 5 — Stage 1 & Stage 2 4-Tier Workbench UI', () {
+    testWidgets(
+      'Expandable Epic->Feature outliner, Breadcrumbs, Epic Domain Sheet (+Add Slice), Feature Spec Sheet & AI Build Prompt tab',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // Stage 1 §05 displays seeded v0.1 Feature slices inside E01
+        expect(find.textContaining('F01 · 8-Way Walk'), findsOneWidget);
+        expect(find.textContaining('F02 · Armored Claw Dash'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey('approve_launch_workbench_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
+
+        final e01 = wb.activeReleaseEpics.first;
+        expect(
+          find.byKey(ValueKey('outliner_epic_${e01.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(ValueKey('outliner_epic_toggle_${e01.id}')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('outliner_feature_sb_f01')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('outliner_feature_sb_f02')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('outliner_release_summary')),
+          findsOneWidget,
+        );
+
+        // Clickable Breadcrumbs present in Stage 2
+        expect(find.byKey(const ValueKey('crumb_project')), findsOneWidget);
+        expect(find.byKey(const ValueKey('crumb_release')), findsOneWidget);
+        expect(find.byKey(const ValueKey('crumb_epic')), findsOneWidget);
+        expect(find.byKey(const ValueKey('crumb_feature')), findsOneWidget);
+
+        // Tap Epic Breadcrumb -> opens non-overlapping Epic Domain Sheet
+        await tester.tap(find.byKey(const ValueKey('crumb_epic')));
+        await tester.pumpAndSettle();
+        expect(wb.isInspectingEpicDomain, isTrue);
+        expect(
+          find.textContaining('Shared Scene & Script Ownership'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Shared State & Interrupt Rules'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('Domain Out-of-Scope'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Exposed Tuning'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('epic_feature_card_sb_f02')),
+          findsOneWidget,
+        );
+
+        // Add Feature Slice inline inside Epic Domain Sheet -> creates & selects F07
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('show_add_feature_btn')),
+        );
+        await tester.tap(find.byKey(const ValueKey('show_add_feature_btn')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('new_feature_title_input')),
+          'Wall Bounce Dash',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('new_feature_goal_input')),
+          'Ricochet gently off arena walls.',
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('submit_add_feature_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(wb.selectedFeatureSpec?.code, equals('F07'));
+        expect(wb.selectedFeatureSpec?.title, equals('Wall Bounce Dash'));
+
+        // Select F02 -> live tuning -> AI Build Prompt tab -> Copy
+        await tester.tap(find.byKey(const ValueKey('outliner_feature_sb_f02')));
+        await tester.pumpAndSettle();
+        expect(wb.selectedFeatureSpec?.code, equals('F02'));
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('tuning_input_sb_f02_0')),
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('tuning_input_sb_f02_0')),
+          '6.8',
+        );
+        await tester.pump(const Duration(milliseconds: 350));
+
+        await tester.tap(find.byKey(const ValueKey('stage2_tab_raw')));
+        await tester.pumpAndSettle();
+        final promptTextFinder = find.byKey(const ValueKey('ai_build_prompt_text'));
+        expect(promptTextFinder, findsOneWidget);
+        expect(
+          tester.widget<SelectableText>(promptTextFinder).data,
+          contains('@export var dash_distance: float = 6.8 # m'),
+        );
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('prompt_tab_copy_btn')),
+        );
+        await tester.tap(find.byKey(const ValueKey('prompt_tab_copy_btn')));
+        await tester.pumpAndSettle();
+
+        // Back to Spec Sheet -> log [FIX] -> Pass Feature blocked with hint -> resolve & check -> Pass advances to F07
+        await tester.tap(find.byKey(const ValueKey('stage2_tab_clean')));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('flag_fix_input')),
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('flag_fix_input')),
+          'Dash hitbox edge clip',
+        );
+        await tester.tap(find.byKey(const ValueKey('flag_fix_btn')));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('pass_feature_btn')),
+        );
+        await tester.tap(find.byKey(const ValueKey('pass_feature_btn')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('pass_gate_hint')), findsOneWidget);
+        expect(wb.selectedFeatureSpec?.code, equals('F02'));
+
+        final fxId = wb.selectedFeatureSpec!.fixes.first.id;
+        await tester.ensureVisible(find.byKey(ValueKey('resolve_fix_$fxId')));
+        await tester.tap(find.byKey(ValueKey('resolve_fix_$fxId')));
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('feature_check_sb_f02_c1')),
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('feature_check_sb_f02_c1')),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('pass_feature_btn')),
+        );
+        await tester.tap(find.byKey(const ValueKey('pass_feature_btn')));
+        await tester.pumpAndSettle();
+        expect(wb.selectedFeatureSpec?.code, equals('F07'));
+      },
+    );
+
+    testWidgets(
+      'Progressive Co-Pilot v0.2+ [+NEW] Feature checkboxes & locked [v0.1] baseline banner jump',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+        for (final ep in wb.epicsForRelease(v01Id)) {
+          wb.passActiveEpic(ep.id);
+        }
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(const ValueKey('plan_next_release_btn')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('copilot_new_feat_sb_f07_chain')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('copilot_commit_btn')));
+        await tester.pumpAndSettle();
+
+        expect(wb.activeReleaseVersionTag, equals('v0.2'));
+
+        await tester.tap(find.byKey(const ValueKey('outliner_feature_sb_f01')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('locked_baseline_banner')),
+          findsOneWidget,
+        );
+        expect(find.byKey(const ValueKey('pass_feature_btn')), findsNothing);
+
+        await tester.tap(find.byKey(const ValueKey('open_in_baseline_btn')));
+        await tester.pumpAndSettle();
+        expect(wb.activeReleaseVersionTag, equals('v0.1'));
+        expect(
+          find.byKey(const ValueKey('locked_baseline_banner')),
+          findsNothing,
+        );
+      },
+    );
+  });
 }
 
 class _MemoryVaultStorageBackend implements VaultStorageBackend {

@@ -165,82 +165,167 @@ Future<void> showProgressiveReleaseCopilotDialog(
                               ),
                               const SizedBox(height: 8),
                               for (final base in baseEpics) ...[
-                                Container(
-                                  margin: const EdgeInsets.only(bottom: 10),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.bgSurfaceFor(isDark),
-                                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                                    border: Border.all(color: border),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              '${base.code} · ${base.title}',
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: TextStyle(
-                                                fontSize: 13.5,
-                                                fontWeight: FontWeight.w600,
-                                                color: textPrimary,
-                                              ),
-                                            ),
+                                Builder(
+                                  builder: (_) {
+                                    final keyLower = base.lineageKey.toLowerCase();
+                                    final upgrades =
+                                        draft.upgradesByLineageKey[keyLower] ??
+                                            const <EpicUpgradeOption>[];
+                                    final newFeatures =
+                                        draft.candidateNewFeaturesByLineageKey[
+                                                keyLower] ??
+                                            const <FeatureSpec>[];
+                                    final hasSelectedChange =
+                                        upgrades.any((u) => u.chosen) ||
+                                        newFeatures.any(
+                                          (nf) => workbench
+                                              .isProgressiveNewFeatureChosen(
+                                            nf.id,
                                           ),
-                                          if ((draft.upgradesByLineageKey[base.lineageKey.toLowerCase()] ??
-                                                  const [])
-                                              .every((u) => !u.chosen)) ...[
-                                            const SizedBox(width: 8),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(
-                                                horizontal: 8,
-                                                vertical: 2,
-                                              ),
-                                              decoration: BoxDecoration(
-                                                color: green.withValues(alpha: 0.14),
-                                                borderRadius:
-                                                    BorderRadius.circular(AppTheme.radiusXs),
-                                              ),
-                                              child: Text(
-                                                'Keep Baseline ✓',
-                                                style: GoogleFonts.jetBrainsMono(
-                                                  fontSize: 11,
-                                                  color: green,
+                                        );
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.bgSurfaceFor(isDark),
+                                        borderRadius: BorderRadius.circular(
+                                          AppTheme.radiusSm,
+                                        ),
+                                        border: Border.all(
+                                          color: hasSelectedChange
+                                              ? cyan.withValues(alpha: 0.4)
+                                              : border,
+                                        ),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  '${base.code} · ${base.title}',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                    fontSize: 13.5,
+                                                    fontWeight: FontWeight.w600,
+                                                    color: textPrimary,
+                                                  ),
                                                 ),
                                               ),
-                                            ),
+                                              if (!hasSelectedChange) ...[
+                                                const SizedBox(width: 8),
+                                                Container(
+                                                  padding: const EdgeInsets
+                                                      .symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 2,
+                                                  ),
+                                                  decoration: BoxDecoration(
+                                                    color: green.withValues(
+                                                      alpha: 0.14,
+                                                    ),
+                                                    borderRadius:
+                                                        BorderRadius.circular(
+                                                      AppTheme.radiusXs,
+                                                    ),
+                                                  ),
+                                                  child: Text(
+                                                    'Keep Baseline ✓',
+                                                    style: GoogleFonts
+                                                        .jetBrainsMono(
+                                                      fontSize: 11,
+                                                      color: green,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                          if (upgrades.isNotEmpty) ...[
+                                            const SizedBox(height: 6),
+                                            for (final up in upgrades)
+                                              Material(
+                                                type: MaterialType.transparency,
+                                                child: CheckboxListTile(
+                                                  key: ValueKey(
+                                                    'copilot_up_${up.id}',
+                                                  ),
+                                                  dense: true,
+                                                  contentPadding:
+                                                      EdgeInsets.zero,
+                                                  value: up.chosen,
+                                                  onChanged: (_) => workbench
+                                                      .toggleProgressiveUpgrade(
+                                                    base.lineageKey,
+                                                    up.id,
+                                                  ),
+                                                  title: Text(
+                                                    up.targetFeatureCode !=
+                                                                null &&
+                                                            up
+                                                                .targetFeatureCode!
+                                                                .trim()
+                                                                .isNotEmpty
+                                                        ? '[+DELTA ${up.targetFeatureCode!.trim()}] ${up.text}'
+                                                        : '[UPGRADE] ${up.text}',
+                                                    style: TextStyle(
+                                                      fontSize: 12.5,
+                                                      color: textSecondary,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                          if (newFeatures.isNotEmpty) ...[
+                                            const SizedBox(height: 4),
+                                            for (final nf in newFeatures)
+                                              Material(
+                                                type: MaterialType.transparency,
+                                                child: CheckboxListTile(
+                                                  key: ValueKey(
+                                                    'copilot_new_feat_${nf.id}',
+                                                  ),
+                                                  dense: true,
+                                                  contentPadding:
+                                                      EdgeInsets.zero,
+                                                  value: workbench
+                                                      .isProgressiveNewFeatureChosen(
+                                                    nf.id,
+                                                  ),
+                                                  onChanged: (_) => workbench
+                                                      .toggleProgressiveNewFeature(
+                                                    base.lineageKey,
+                                                    nf.id,
+                                                  ),
+                                                  title: Text(
+                                                    '[+${draft.targetVersion} NEW ${nf.code}] ${nf.title} (${nf.sliceTime})',
+                                                    style: TextStyle(
+                                                      fontSize: 12.5,
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                      color: cyan,
+                                                    ),
+                                                  ),
+                                                  subtitle: nf.goal.isNotEmpty
+                                                      ? Text(
+                                                          nf.goal,
+                                                          style: TextStyle(
+                                                            fontSize: 11.5,
+                                                            color: textMuted,
+                                                          ),
+                                                        )
+                                                      : null,
+                                                ),
+                                              ),
                                           ],
                                         ],
                                       ),
-                                      if ((draft.upgradesByLineageKey[base.lineageKey.toLowerCase()] ??
-                                              const [])
-                                          .isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        for (final up
-                                            in draft.upgradesByLineageKey[base.lineageKey.toLowerCase()]!)
-                                          Material(
-                                            type: MaterialType.transparency,
-                                            child: CheckboxListTile(
-                                              key: ValueKey('copilot_up_${up.id}'),
-                                              dense: true,
-                                              contentPadding: EdgeInsets.zero,
-                                              value: up.chosen,
-                                              onChanged: (_) => workbench.toggleProgressiveUpgrade(
-                                                base.lineageKey,
-                                                up.id,
-                                              ),
-                                              title: Text(
-                                                '[UPGRADE] ${up.text}',
-                                                style: TextStyle(fontSize: 12.5, color: textSecondary),
-                                              ),
-                                            ),
-                                          ),
-                                      ],
-                                    ],
-                                  ),
+                                    );
+                                  },
                                 ),
                               ],
 
@@ -287,7 +372,9 @@ Future<void> showProgressiveReleaseCopilotDialog(
                                           ),
                                         ),
                                         subtitle: Text(
-                                          cand.goal,
+                                          cand.features.isNotEmpty
+                                              ? '${cand.goal} · ${cand.features.length} Feature slices'
+                                              : cand.goal,
                                           style: TextStyle(fontSize: 12, color: textMuted),
                                         ),
                                       ),

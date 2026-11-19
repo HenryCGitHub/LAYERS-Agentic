@@ -381,12 +381,12 @@ console.log(JSON.stringify({
         await tester.pumpAndSettle();
 
         expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
-        expect(find.textContaining('Exact Godot Build Context'), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_tab_raw')), findsOneWidget);
       },
     );
 
     testWidgets(
-      '6. Stage 2 UI: Live @export tuning edit, Flag [FIX] revision switch, and Pass Epic advance',
+      '6. Stage 2 UI: Live Feature @export tuning edit, Flag [FIX] revision switch, and Pass Feature advance',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 1000);
         tester.view.devicePixelRatio = 1.0;
@@ -404,22 +404,23 @@ console.log(JSON.stringify({
 
         final e01 = wb.selectedEpicSpec!;
         expect(e01.code, equals('E01'));
+        expect(wb.selectedFeatureSpec?.code, equals('F02'));
 
-        // Live tuning edit updates Godot context immediately
+        // Live Feature @export tuning edit updates Build Prompt immediately
         await tester.ensureVisible(
-          find.byKey(ValueKey('tuning_input_${e01.id}_0')),
+          find.byKey(const ValueKey('tuning_input_sb_f02_0')),
         );
         await tester.enterText(
-          find.byKey(ValueKey('tuning_input_${e01.id}_0')),
+          find.byKey(const ValueKey('tuning_input_sb_f02_0')),
           '8.5',
         );
         await tester.pump(const Duration(milliseconds: 350));
         expect(
-          wb.activeEpicGodotContext(wb.selectedEpicSpec!),
-          contains('- move_speed: 8.5 m/s [float]'),
+          wb.selectedBuildPrompt,
+          contains('@export var dash_distance: float = 8.5 # m'),
         );
 
-        // Flag [FIX] switches mode to FOCUSED PLAYTEST REVISION PASS
+        // Flag [FIX] switches Feature Build Prompt to FOCUSED [FIX] PASS
         final flagInput = find.byKey(const ValueKey('flag_fix_input'));
         await tester.ensureVisible(flagInput);
         await tester.enterText(
@@ -431,18 +432,29 @@ console.log(JSON.stringify({
         await tester.tap(flagBtn);
         await tester.pumpAndSettle();
 
-        expect(wb.selectedEpicSpec!.openFixesCount, equals(1));
+        expect(wb.selectedFeatureSpec!.openFixesCount, equals(1));
         expect(
-          wb.activeEpicGodotContext(wb.selectedEpicSpec!),
-          contains('FOCUSED PLAYTEST REVISION PASS (1 OPEN [FIX])'),
+          wb.selectedBuildPrompt,
+          contains('FOCUSED [FIX] PASS (1 OPEN [FIX])'),
         );
 
-        // Pass Epic resolves fixes, marks all checks passed, and advances to E02
-        final passBtn = find.byKey(const ValueKey('pass_epic_btn'));
+        // Resolve [FIX], check Playtest Gate, and Pass Feature -> advances to E02 / F03
+        final fxId = wb.selectedFeatureSpec!.fixes.first.id;
+        await tester.ensureVisible(find.byKey(ValueKey('resolve_fix_$fxId')));
+        await tester.tap(find.byKey(ValueKey('resolve_fix_$fxId')));
+        await tester.pumpAndSettle();
+
+        final chkFinder = find.byKey(const ValueKey('feature_check_sb_f02_c1'));
+        await tester.ensureVisible(chkFinder);
+        await tester.tap(chkFinder);
+        await tester.pumpAndSettle();
+
+        final passBtn = find.byKey(const ValueKey('pass_feature_btn'));
         await tester.ensureVisible(passBtn);
         await tester.tap(passBtn);
         await tester.pumpAndSettle();
         expect(wb.selectedEpicSpec!.code, equals('E02'));
+        expect(wb.selectedFeatureSpec?.code, equals('F03'));
       },
     );
 

@@ -222,9 +222,16 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   ),
                   icon: const Icon(Icons.check_circle_outline, size: 16),
                   label: Text(
-                    wb.projectReleases.isNotEmpty
-                        ? 'Sync & Open Godot Workbench →'
-                        : 'Approve & Launch Godot Workbench →',
+                    () {
+                      if (wb.projectReleases.isNotEmpty) {
+                        return 'Sync & Open Workbench →';
+                      }
+                      final sliceCount = spec.initialEpics.fold<int>(
+                        0,
+                        (sum, e) => sum + e.featuresForRelease('v0.1').length,
+                      );
+                      return 'Approve & Launch (${spec.initialEpics.length} Epics · $sliceCount Features) →';
+                    }(),
                   ),
                 ),
               ],
@@ -514,8 +521,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
       ),
       (
         '§05',
-        'Initial Release (v0.1 Prototype Epics Only)',
-        'Dependency-ordered E01–E0N Epics ready to build in 1 click inside Godot 4.',
+        'Seeded Epics & Initial v0.1 Feature Slices',
+        'Large-Domain E01–E0N Epics holding playable 30–90 min v0.1 Feature slices.',
       ),
     ];
 
@@ -869,11 +876,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         ),
         const SizedBox(height: 16),
 
-        // §05 Initial Release (v0.1 Prototype Epics Only)
+        // §05 Seeded Epics & Initial v0.1 Feature Slices
         _SectionCard(
           isDark: isDark,
           code: '§05',
-          title: 'Initial Release (v0.1 Prototype Epics Only)',
+          title: 'Seeded Epics & Initial v0.1 Feature Slices',
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -938,6 +945,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     required Color cyan,
     required Color green,
   }) {
+    final v01Features = epic.featuresForRelease('v0.1');
     final beatText = epic.coreLoopBeat.trim().isNotEmpty
         ? epic.coreLoopBeat.trim()
         : (index < spec.coreLoop.length
@@ -1025,6 +1033,38 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   epic.goal,
                   style: TextStyle(fontSize: 12.5, color: textSecondary),
                 ),
+                if (v01Features.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Divider(height: 1, color: border),
+                  const SizedBox(height: 6),
+                  for (final feat in v01Features)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${feat.code} · ${feat.title}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11.5,
+                                color: textPrimary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            feat.sliceTime,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              color: textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ],
             ),
           ),
@@ -1033,7 +1073,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
               Text(
-                '${epic.checks.length} Checks · ${epic.tuning.length} Tuning',
+                v01Features.isNotEmpty
+                    ? '${v01Features.length} Feature slices'
+                    : '${epic.checks.length} Checks · ${epic.tuning.length} Tuning',
                 textAlign: TextAlign.right,
                 style: GoogleFonts.jetBrainsMono(fontSize: 11, color: textMuted),
               ),
