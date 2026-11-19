@@ -7,17 +7,23 @@ class LayersTextStyleGuide {
   /// Shared compact style rules injected into Gemini system/user prompts by `GeminiAgentClient`.
   static const String compactStyleRules = '''
 LAYERS CANONICAL GODOT 4 SPEC STYLE RULES:
-1. HIGH-LEVEL GODOT 4 DESIGN ONLY: Never emit implementation step checklists or Unreal/Unity terms (Blueprint, .uasset, ACharacter, AActor, UMG, GameObject, Prefab). Emit complete cohesive gameplay Epics (`Project -> Release -> Epic`).
+1. 4-TIER GODOT 4 ARCHITECTURE (`Project -> Release -> Epic -> Feature`, ZERO Tasks/Steps): Never emit implementation step checklists or Unreal/Unity terms (Blueprint, .uasset, ACharacter, AActor, UMG, GameObject, Prefab). Epics own large domain architecture (shared `.tscn`/`.gd` files, state & interrupt rules, domain cuts); Features own sittable 30-90 min playable slices (inputs, `@export` tuning, cues, Playtest Gate).
 2. BLUF FORMAT: "[2-4 Word Payoff] — [Scope]" for Project Vision / Pitch and Epic summaries.
 3. CAUSAL PLAYTEST GATES (<= 14 words): "[Player Action] -> [Observable Playtest Screen Result]" for checks & Done When gates.
-4. CHANGELOG DELTAS (+Delta, 5-10 words): Progressive release upgrades describe "+mechanic delta" atop locked v0.1 baselines.
+4. CHANGELOG DELTAS (+Delta, 5-10 words): Progressive release upgrades describe "+mechanic delta" atop locked v0.1 baselines inside permanent Epics without duplicating cards.
 5. GODOT 4 SCALE: Use 1 unit = 1 m (`m`, `m/s`) for 3D projects, or pixels (`px`, `px/s`) for 2D projects, plus `deg`, `s`, `hp`, `count`. Never use `cm` or `cm/s`.
 6. LITERAL GAME-DEV LANGUAGE: Plain everyday gameplay terms. Ban corporate filler ("seamlessly", "leverage", "synergy", "unified", "validate").
 7. PURE GDSCRIPT 2.0 + SCENE TREE POLICY: Reference Godot 4 `res://scenes/*.tscn`, `res://scripts/*.gd`, `snake_case` `@export` variables, and `project.godot` `InputMap` actions.
 ''';
 
   static const String epicTitleSchemaDesc =
-      '2-5 word plain Godot gameplay system title (e.g. "Player Mech Movement & Claw Dash"). Never use corporate buzzwords or implementation steps.';
+      '2-5 word plain Godot domain title covering multiple child Features (e.g. "Player Movement & Camera", "Claw Combat & Hitstop"). Never use corporate buzzwords or implementation steps.';
+
+  static const String featureTitleSchemaDesc =
+      '2-5 word plain playable Feature slice title (30-90 min scope, e.g. "Armored Claw Dash", "8-Way Walk & Iso Camera").';
+
+  static const String sceneOwnershipSchemaDesc =
+      'Concrete Godot `.tscn` or `.gd` asset owned by this Epic domain (`path` + concise `role`).';
 
   static const String blufVisionSchemaDesc =
       'BLUF 1-line pitch: "[2-4 Word Payoff] — [Compact Godot 4 scope]". Literal game-dev phrasing.';

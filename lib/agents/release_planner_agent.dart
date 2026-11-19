@@ -46,10 +46,87 @@ class ReleasePlannerAgent {
     return 0;
   }
 
+  static Map<String, dynamic> get _featureSliceSchema => <String, dynamic>{
+        'type': 'OBJECT',
+        'required': ['title', 'goal', 'tuning', 'checks'],
+        'properties': <String, dynamic>{
+          'id': {'type': 'STRING'},
+          'code': {'type': 'STRING'},
+          'title': {
+            'type': 'STRING',
+            'description': LayersTextStyleGuide.featureTitleSchemaDesc,
+          },
+          'sliceTime': {'type': 'STRING'},
+          'goal': {'type': 'STRING'},
+          'inScope': {
+            'type': 'ARRAY',
+            'items': {'type': 'STRING'},
+          },
+          'doneWhen': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.causalPlaytestCheckSchemaDesc,
+            },
+          },
+          'controls': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'OBJECT',
+              'required': ['action', 'trigger', 'rule'],
+              'properties': {
+                'action': {'type': 'STRING'},
+                'trigger': {'type': 'STRING'},
+                'rule': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.godotControlRuleSchemaDesc,
+                },
+              },
+            },
+          },
+          'tuning': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'OBJECT',
+              'required': ['key', 'value', 'unit'],
+              'properties': {
+                'key': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.godotTuningKeySchemaDesc,
+                },
+                'value': {'type': 'STRING'},
+                'unit': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.godotTuningUnitSchemaDesc,
+                },
+              },
+            },
+          },
+          'cues': {
+            'type': 'ARRAY',
+            'items': {'type': 'STRING'},
+          },
+          'checks': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'OBJECT',
+              'required': ['text'],
+              'properties': {
+                'text': {
+                  'type': 'STRING',
+                  'description':
+                      LayersTextStyleGuide.causalPlaytestCheckSchemaDesc,
+                },
+              },
+            },
+          },
+        },
+      };
+
   static Map<String, dynamic> get _progressiveReleaseSchema => <String, dynamic>{
         'name': 'propose_progressive_godot_release',
         'description':
-            'Propose next Godot 4 release presets, baseline Epic [UPGRADE] deltas, and candidate [NEW] 6-section Epics.',
+            'Propose next Godot 4 release presets, baseline [UPGRADE] deltas, [NEW] Feature slices inside existing Epics, and candidate [NEW] domain Epics.',
         'parameters': <String, dynamic>{
           'type': 'OBJECT',
           'required': ['presets', 'upgrades', 'newEpics'],
@@ -90,6 +167,7 @@ class ReleasePlannerAgent {
                       'required': ['id', 'text'],
                       'properties': {
                         'id': {'type': 'STRING'},
+                        'targetFeatureCode': {'type': 'STRING'},
                         'text': {
                           'type': 'STRING',
                           'description':
@@ -98,6 +176,22 @@ class ReleasePlannerAgent {
                         'chosen': {'type': 'BOOLEAN'},
                       },
                     },
+                  },
+                },
+              },
+            },
+            'newFeatures': {
+              'type': 'ARRAY',
+              'description':
+                  'Additive [+NEW] 30-90 min Feature slices placed inside existing permanent Epics by lineageKey.',
+              'items': {
+                'type': 'OBJECT',
+                'required': ['lineageKey', 'features'],
+                'properties': {
+                  'lineageKey': {'type': 'STRING'},
+                  'features': {
+                    'type': 'ARRAY',
+                    'items': _featureSliceSchema,
                   },
                 },
               },
@@ -219,6 +313,10 @@ class ReleasePlannerAgent {
                       },
                     },
                   },
+                  'features': {
+                    'type': 'ARRAY',
+                    'items': _featureSliceSchema,
+                  },
                 },
               },
             },
@@ -241,7 +339,8 @@ class ReleasePlannerAgent {
         directionPrompt.trim().isEmpty &&
         rootSpec.v02Presets.isNotEmpty &&
         (rootSpec.v02NewPool.isNotEmpty ||
-            rootSpec.v02UpgradesByLineageKey.isNotEmpty) &&
+            rootSpec.v02UpgradesByLineageKey.isNotEmpty ||
+            rootSpec.v02NewFeaturesByLineageKey.isNotEmpty) &&
         !GeminiAgentClient.hasKey(apiKey)) {
       return _draftFromRootCache(rootSpec, currentEpics, targetVersion);
     }
@@ -296,11 +395,12 @@ ${jsonEncode(existingSummary)}
 
 Generate:
 1. 2 distinct Release Direction Presets (`presets`) matching IDs of upgrades/newEpics.
-2. Small additive `[UPGRADE]` delta options for relevant baseline Epics (`lineageKey`).
-3. 1-2 complete `[NEW]` 6-section Godot 4 Epics with codes `${EpicSpec.formatCode(currentEpics.length + 1)}` onward using $unitHint and snake_case `@export` vars.
+2. Small additive `[UPGRADE]` delta options for relevant baseline Epics/Features (`lineageKey` + optional `targetFeatureCode`).
+3. Additive `[+NEW]` 30-90 min Feature slices in `newFeatures` attached inside existing permanent Epics (`lineageKey`) whenever a mechanic extends an existing domain.
+4. 0-2 candidate `[NEW]` large-domain Godot 4 Epics with codes `${EpicSpec.formatCode(currentEpics.length + 1)}` onward (with `sceneOwnership` and child `features`) using $unitHint and snake_case `@export` vars.
 CRITICAL RULES:
-- Every `[UPGRADE]` delta and `[NEW]` Epic MUST obey §02 Camera/Scale/InputMap contracts, reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.
-- Never recreate existing baseline Epics or add Feature sub-tickets.
+- Every `[UPGRADE]` delta, `[+NEW]` Feature, and `[NEW]` Epic MUST obey §02 Camera/Scale/InputMap contracts, reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.
+- Never duplicate existing baseline Epic cards, and NEVER emit Task/Step micro-checklists.
 ''';
 
     final res = await GeminiAgentClient.generateJson(
@@ -343,23 +443,11 @@ CRITICAL RULES:
       for (final entry in rawUpgrades) {
         if (entry is! Map) continue;
         final m = Map<String, dynamic>.from(entry);
-        final rawKeyOriginal = (m['lineageKey'] ?? '').toString().trim();
-        final rawKey = rawKeyOriginal.toLowerCase();
-        if (rawKey.isEmpty) continue;
-        EpicSpec? matchedEpic = currentEpics
-            .where((ep) => ep.lineageKey.trim() == rawKeyOriginal)
-            .firstOrNull;
-        matchedEpic ??= currentEpics
-            .where((ep) => ep.code.trim() == rawKeyOriginal)
-            .firstOrNull;
-        matchedEpic ??= currentEpics
-            .where((ep) => ep.lineageKey.trim().toLowerCase() == rawKey)
-            .firstOrNull;
-        matchedEpic ??= currentEpics
-            .where((ep) => ep.code.trim().toLowerCase() == rawKey)
-            .firstOrNull;
-        final resolvedKey =
-            matchedEpic?.lineageKey.trim().toLowerCase() ?? rawKey;
+        final resolvedKey = _resolveEpicLineageKey(
+          (m['lineageKey'] ?? '').toString().trim(),
+          currentEpics,
+        );
+        if (resolvedKey.isEmpty) continue;
         final opts = m['options'] as List? ?? const [];
         final parsedOpts = <EpicUpgradeOption>[];
         for (int i = 0; i < opts.length; i++) {
@@ -383,6 +471,48 @@ CRITICAL RULES:
         ];
       }
 
+      final newFeaturesByKey = <String, List<FeatureSpec>>{};
+      final rawNewFeatures = res['newFeatures'] as List? ?? const [];
+      int nextFeatureOrdinal = currentEpics.fold<int>(
+        1,
+        (sum, ep) => sum + ep.features.length,
+      );
+      for (final entry in rawNewFeatures) {
+        if (entry is! Map) continue;
+        final m = Map<String, dynamic>.from(entry);
+        final resolvedKey = _resolveEpicLineageKey(
+          (m['lineageKey'] ?? '').toString().trim(),
+          currentEpics,
+        );
+        if (resolvedKey.isEmpty) continue;
+        final rawList = m['features'] as List? ?? const [];
+        final parsedList = <FeatureSpec>[];
+        for (int i = 0; i < rawList.length; i++) {
+          if (rawList[i] is! Map) continue;
+          final feat = FeatureSpec.fromJson(
+            Map<String, dynamic>.from(rawList[i] as Map),
+            indexHint: nextFeatureOrdinal - 1,
+          );
+          feat.introducedIn = targetVersion;
+          if (feat.code.trim().isEmpty) {
+            feat.code = FeatureSpec.formatCode(nextFeatureOrdinal);
+          }
+          nextFeatureOrdinal++;
+          parsedList.add(
+            GodotSpecGuard.sanitizeFeatureSpec(
+              feat,
+              dimension: rootSpec.dimension,
+            ),
+          );
+        }
+        if (parsedList.isNotEmpty) {
+          newFeaturesByKey[resolvedKey] = [
+            ...?newFeaturesByKey[resolvedKey],
+            ...parsedList,
+          ];
+        }
+      }
+
       final rawNewEpics = res['newEpics'] as List? ?? const [];
       final candidateNew = <EpicSpec>[];
       for (int i = 0; i < rawNewEpics.length; i++) {
@@ -397,6 +527,9 @@ CRITICAL RULES:
         parsed.lineageKey = code.toLowerCase();
         parsed.releaseVersion = targetVersion;
         parsed.lifecycle = EpicLifecycle.newEpic;
+        for (final feat in parsed.features) {
+          feat.introducedIn = targetVersion;
+        }
         if (parsed.coreLoopBeat.trim().isEmpty) {
           parsed.coreLoopBeat = rootSpec.coreLoop.isNotEmpty
               ? 'Beat ${rootSpec.coreLoop.length} · ${rootSpec.coreLoop.last}'
@@ -413,13 +546,16 @@ CRITICAL RULES:
         );
       }
 
-      if (candidateNew.isNotEmpty || upgradesByKey.isNotEmpty) {
+      if (candidateNew.isNotEmpty ||
+          upgradesByKey.isNotEmpty ||
+          newFeaturesByKey.isNotEmpty) {
         return ProgressiveReleaseDraft(
           targetVersion: targetVersion,
           presets: presets.isNotEmpty
               ? presets
               : _defaultPresets(upgradesByKey, candidateNew),
           upgradesByLineageKey: upgradesByKey,
+          candidateNewFeaturesByLineageKey: newFeaturesByKey,
           candidateNewEpics: candidateNew,
           activePresetId: presets.isNotEmpty ? presets.first.id : null,
         );
@@ -434,31 +570,65 @@ CRITICAL RULES:
     );
   }
 
+  static String _resolveEpicLineageKey(
+    String rawKeyOriginal,
+    List<EpicSpec> currentEpics,
+  ) {
+    final rawKey = rawKeyOriginal.toLowerCase();
+    if (rawKey.isEmpty) return '';
+    EpicSpec? matched = currentEpics
+        .where((ep) => ep.lineageKey.trim() == rawKeyOriginal)
+        .firstOrNull;
+    matched ??=
+        currentEpics.where((ep) => ep.code.trim() == rawKeyOriginal).firstOrNull;
+    matched ??= currentEpics
+        .where((ep) => ep.lineageKey.trim().toLowerCase() == rawKey)
+        .firstOrNull;
+    matched ??= currentEpics
+        .where((ep) => ep.code.trim().toLowerCase() == rawKey)
+        .firstOrNull;
+    return matched?.lineageKey.trim().toLowerCase() ?? rawKey;
+  }
+
   static ProgressiveReleaseDraft _draftFromRootCache(
     ProjectConceptBlueprint rootSpec,
     List<EpicSpec> currentEpics,
     String targetVersion,
   ) {
     final upgrades = <String, List<EpicUpgradeOption>>{};
+    final newFeatures = <String, List<FeatureSpec>>{};
     for (final ep in currentEpics) {
-      final cached = rootSpec.v02UpgradesByLineageKey[ep.lineageKey.toLowerCase()];
+      final key = ep.lineageKey.toLowerCase();
+      final cached = rootSpec.v02UpgradesByLineageKey[key];
       if (cached != null && cached.isNotEmpty) {
-        upgrades[ep.lineageKey.toLowerCase()] = [
-          for (final u in cached) u.copyWith(),
+        upgrades[key] = [for (final u in cached) u.copyWith()];
+      }
+      final cachedNewFeats = rootSpec.v02NewFeaturesByLineageKey[key];
+      if (cachedNewFeats != null && cachedNewFeats.isNotEmpty) {
+        newFeatures[key] = [
+          for (final f in cachedNewFeats)
+            f.deepCopy()..introducedIn = targetVersion,
         ];
       }
     }
     final newPool = [
       for (final ep in rootSpec.v02NewPool)
-        ep.deepCopy(
-          releaseVersionOverride: targetVersion,
-          lifecycleOverride: EpicLifecycle.newEpic,
-        ),
+        () {
+          final copy = ep.deepCopy(
+            releaseVersionOverride: targetVersion,
+            lifecycleOverride: EpicLifecycle.newEpic,
+          );
+          for (final feat in copy.features) {
+            feat.introducedIn = targetVersion;
+          }
+          return copy;
+        }(),
     ];
     return ProgressiveReleaseDraft(
       targetVersion: targetVersion,
       presets: List<ReleaseDirectionPreset>.from(rootSpec.v02Presets),
       upgradesByLineageKey: upgrades,
+      candidateNewFeaturesByLineageKey: newFeatures,
       candidateNewEpics: newPool,
       activePresetId: rootSpec.v02Presets.isNotEmpty
           ? rootSpec.v02Presets.first.id
@@ -479,17 +649,64 @@ CRITICAL RULES:
     }
 
     final upgradesByKey = <String, List<EpicUpgradeOption>>{};
+    final newFeaturesByKey = <String, List<FeatureSpec>>{};
+    final is2d = rootSpec.dimension == GodotProjectDimension.dim2d;
+    final distUnit = rootSpec.dimension.distanceUnit;
+    final speedUnit = rootSpec.dimension.speedUnit;
+
     if (currentEpics.isNotEmpty) {
-      final firstKey = currentEpics.first.lineageKey.toLowerCase();
+      final firstEpic = currentEpics.first;
+      final firstKey = firstEpic.lineageKey.toLowerCase();
+      final firstFeatCode = firstEpic.features.isNotEmpty
+          ? firstEpic.features.last.code
+          : 'F01';
       upgradesByKey[firstKey] = [
         EpicUpgradeOption(
           id: 'up_${firstKey}_juice',
+          targetFeatureCode: firstFeatCode,
           text: '+45ms Hit-Stop impact freeze & camera lag snap',
           chosen: true,
         ),
         EpicUpgradeOption(
           id: 'up_${firstKey}_vfx',
+          targetFeatureCode: firstFeatCode,
           text: '+Emissive trail burst during primary movement action',
+        ),
+      ];
+      newFeaturesByKey[firstKey] = [
+        GodotSpecGuard.sanitizeFeatureSpec(
+          FeatureSpec(
+            id: '${firstKey}_${targetVersion}_chain',
+            code: FeatureSpec.formatCode(
+              currentEpics.fold<int>(1, (sum, ep) => sum + ep.features.length),
+            ),
+            title: 'Counter Impulse & Quick Recover',
+            introducedIn: targetVersion,
+            sliceTime: '45 min',
+            status: FeatureStatus.active,
+            goal:
+                'Grant a brief $targetVersion follow-up dash refund inside ${firstEpic.code} when landing clean counters.',
+            tuning: [
+              EpicTuningParam(key: 'chain_window_s', value: '0.35', unit: 's'),
+              EpicTuningParam(
+                key: 'counter_burst_speed',
+                value: is2d ? '380' : '9.5',
+                unit: speedUnit,
+              ),
+              EpicTuningParam(
+                key: 'shockwave_radius',
+                value: is2d ? '96' : '2.4',
+                unit: distUnit,
+              ),
+            ],
+            checks: [
+              EpicPieCheck(
+                id: 'off_feat_c1',
+                text: 'Trigger counter -> Follow-up movement bursts cleanly with 0 cooldown wait',
+              ),
+            ],
+          ),
+          dimension: rootSpec.dimension,
         ),
       ];
     }
@@ -511,6 +728,19 @@ CRITICAL RULES:
       chosenForNextRelease: true,
       goal:
           'Expand $targetVersion loop continuity with wave escalation, Control HUD counter readout, and instant quick-restart.',
+      inScope: const [
+        '3-wave perimeter spawn director',
+        'Top-center HUD wave counter & R quick reset',
+      ],
+      doneWhen: const [
+        'Clear wave 1 enemies -> HUD updates and wave 2 spawns cleanly after 2.0 s',
+      ],
+      sceneOwnership: [
+        EpicSceneOwnership(
+          path: 'res://scripts/wave_director.gd',
+          role: 'SpawnWave timer, counter HUD signal & R quick reset',
+        ),
+      ],
       links: [
         if (currentEpics.isNotEmpty)
           'Instantiates / resets ${currentEpics.last.code} (${currentEpics.last.title}) scenes',
@@ -547,6 +777,27 @@ CRITICAL RULES:
           text: 'Clear wave 1 enemies -> HUD updates and wave 2 spawns cleanly after 2.0s',
         ),
       ],
+      features: [
+        FeatureSpec(
+          id: 'ep_${targetVersion}_f01',
+          code: 'F01',
+          title: 'Multi-Wave Spawner & Counter',
+          introducedIn: targetVersion,
+          sliceTime: '45 min',
+          status: FeatureStatus.queued,
+          goal: 'Spawn 3 timed enemy waves and update top-center Control HUD banner.',
+          tuning: [
+            EpicTuningParam(key: 'round_wave_count', value: '3', unit: 'count'),
+            EpicTuningParam(key: 'wave_delay', value: '2.0', unit: 's'),
+          ],
+          checks: [
+            EpicPieCheck(
+              id: 'ep_${targetVersion}_f01_c1',
+              text: 'Defeat Wave 1 -> Banner updates and Wave 2 spawns after 2.0 s',
+            ),
+          ],
+        ),
+      ],
     );
 
     final candidateList = [
@@ -562,6 +813,7 @@ CRITICAL RULES:
       targetVersion: targetVersion,
       presets: presets,
       upgradesByLineageKey: upgradesByKey,
+      candidateNewFeaturesByLineageKey: newFeaturesByKey,
       candidateNewEpics: candidateList,
       activePresetId: presets.first.id,
     );

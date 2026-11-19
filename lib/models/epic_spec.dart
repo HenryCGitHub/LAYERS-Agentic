@@ -257,22 +257,26 @@ class EpicPieFix {
 class EpicUpgradeOption {
   String id;
   String text;
+  String? targetFeatureCode;
   bool chosen;
 
   EpicUpgradeOption({
     required this.id,
     required this.text,
+    this.targetFeatureCode,
     this.chosen = false,
   });
 
   EpicUpgradeOption copyWith({
     String? id,
     String? text,
+    String? targetFeatureCode,
     bool? chosen,
   }) {
     return EpicUpgradeOption(
       id: id ?? this.id,
       text: text ?? this.text,
+      targetFeatureCode: targetFeatureCode ?? this.targetFeatureCode,
       chosen: chosen ?? this.chosen,
     );
   }
@@ -280,13 +284,17 @@ class EpicUpgradeOption {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'text': text,
+        if (targetFeatureCode != null && targetFeatureCode!.trim().isNotEmpty)
+          'targetFeatureCode': targetFeatureCode,
         'chosen': chosen,
       };
 
   factory EpicUpgradeOption.fromJson(Map<String, dynamic> json, [int idx = 0]) {
+    final rawTarget = (json['targetFeatureCode'] ?? '').toString().trim();
     return EpicUpgradeOption(
       id: (json['id'] ?? 'up_${idx + 1}').toString(),
       text: (json['text'] ?? '').toString().trim(),
+      targetFeatureCode: rawTarget.isEmpty ? null : rawTarget,
       chosen: json['chosen'] == true,
     );
   }
@@ -330,6 +338,7 @@ class ProgressiveReleaseDraft {
   final String targetVersion;
   List<ReleaseDirectionPreset> presets;
   Map<String, List<EpicUpgradeOption>> upgradesByLineageKey;
+  Map<String, List<FeatureSpec>> candidateNewFeaturesByLineageKey;
   List<EpicSpec> candidateNewEpics;
   String? activePresetId;
 
@@ -337,9 +346,11 @@ class ProgressiveReleaseDraft {
     required this.targetVersion,
     required this.presets,
     required this.upgradesByLineageKey,
+    Map<String, List<FeatureSpec>>? candidateNewFeaturesByLineageKey,
     required this.candidateNewEpics,
     this.activePresetId,
-  });
+  }) : candidateNewFeaturesByLineageKey =
+            candidateNewFeaturesByLineageKey ?? <String, List<FeatureSpec>>{};
 
   ProgressiveReleaseDraft deepCopy() {
     return ProgressiveReleaseDraft(
@@ -348,6 +359,10 @@ class ProgressiveReleaseDraft {
       upgradesByLineageKey: {
         for (final e in upgradesByLineageKey.entries)
           e.key: [for (final u in e.value) u.copyWith()],
+      },
+      candidateNewFeaturesByLineageKey: {
+        for (final e in candidateNewFeaturesByLineageKey.entries)
+          e.key: [for (final f in e.value) f.deepCopy()],
       },
       candidateNewEpics: [
         for (final ep in candidateNewEpics) ep.deepCopy(),
@@ -833,14 +848,15 @@ class EpicSpec {
       checks.isNotEmpty && checks.every((c) => c.passed);
 
   bool get isPassed {
-    if (features.isNotEmpty) {
-      return openFixes.isEmpty &&
-          totalOpenFeatureFixes() == 0 &&
-          features.every((f) => f.isPassed);
+    if (openFixes.isNotEmpty || totalOpenFeatureFixes() > 0) return false;
+    if (lifecycle == EpicLifecycle.stable &&
+        (checks.isEmpty || checks.every((c) => c.passed))) {
+      return true;
     }
-    return openFixes.isEmpty &&
-        lifecycle == EpicLifecycle.stable &&
-        (checks.isEmpty || checks.every((c) => c.passed));
+    if (features.isNotEmpty) {
+      return features.every((f) => f.isPassed);
+    }
+    return false;
   }
 
   int get progressPercent {

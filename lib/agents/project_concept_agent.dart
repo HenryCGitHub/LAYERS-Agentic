@@ -137,6 +137,102 @@ class ProjectConceptAgent {
         },
       };
 
+  static Map<String, dynamic> get _featureJsonSchema => <String, dynamic>{
+        'type': 'OBJECT',
+        'required': [
+          'code',
+          'title',
+          'sliceTime',
+          'goal',
+          'inScope',
+          'doneWhen',
+          'controls',
+          'tuning',
+          'cues',
+          'checks',
+        ],
+        'properties': <String, dynamic>{
+          'code': {
+            'type': 'STRING',
+            'description': 'Sequential Feature slice code F01, F02, F03...',
+          },
+          'title': {
+            'type': 'STRING',
+            'description': LayersTextStyleGuide.featureTitleSchemaDesc,
+          },
+          'sliceTime': {
+            'type': 'STRING',
+            'description': 'Playable build slice target such as "45 min" or "60 min".',
+          },
+          'goal': {
+            'type': 'STRING',
+            'description': '1 plain sentence stating what this playable slice delivers.',
+          },
+          'inScope': {
+            'type': 'ARRAY',
+            'items': {'type': 'STRING'},
+          },
+          'doneWhen': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.causalPlaytestCheckSchemaDesc,
+            },
+          },
+          'controls': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'OBJECT',
+              'required': ['action', 'trigger', 'rule'],
+              'properties': {
+                'action': {'type': 'STRING'},
+                'trigger': {'type': 'STRING'},
+                'rule': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.godotControlRuleSchemaDesc,
+                },
+              },
+            },
+          },
+          'tuning': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'OBJECT',
+              'required': ['key', 'value', 'unit'],
+              'properties': {
+                'key': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.godotTuningKeySchemaDesc,
+                },
+                'value': {'type': 'STRING'},
+                'unit': {
+                  'type': 'STRING',
+                  'description': LayersTextStyleGuide.godotTuningUnitSchemaDesc,
+                },
+              },
+            },
+          },
+          'cues': {
+            'type': 'ARRAY',
+            'items': {'type': 'STRING'},
+          },
+          'checks': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'OBJECT',
+              'required': ['text'],
+              'properties': {
+                'text': {
+                  'type': 'STRING',
+                  'description':
+                      LayersTextStyleGuide.causalPlaytestCheckSchemaDesc,
+                },
+              },
+            },
+          },
+        },
+      };
+
   static Map<String, dynamic> get _epicJsonSchema => <String, dynamic>{
         'type': 'OBJECT',
         'required': [
@@ -144,6 +240,9 @@ class ProjectConceptAgent {
           'title',
           'coreLoopBeat',
           'goal',
+          'inScope',
+          'doneWhen',
+          'sceneOwnership',
           'links',
           'outOfScope',
           'controls',
@@ -153,6 +252,7 @@ class ProjectConceptAgent {
           'feedback',
           'levelStaging',
           'checks',
+          'features',
         ],
         'properties': <String, dynamic>{
           'code': {
@@ -171,11 +271,34 @@ class ProjectConceptAgent {
           'coreLoopBeat': {
             'type': 'STRING',
             'description':
-                'Which §01 Core Loop beat(s) this Epic proves in Playtest (e.g. "Beat 1: Move & Aim").',
+                'Which §01 Core Loop beat(s) this Epic domain proves in Playtest (e.g. "Beat 1: Move & Aim").',
           },
           'goal': {
             'type': 'STRING',
-            'description': '1 plain sentence describing the playable Epic system.',
+            'description': '1 plain sentence describing the large-domain Epic architecture.',
+          },
+          'inScope': {
+            'type': 'ARRAY',
+            'items': {'type': 'STRING'},
+          },
+          'doneWhen': {
+            'type': 'ARRAY',
+            'items': {
+              'type': 'STRING',
+              'description': LayersTextStyleGuide.causalPlaytestCheckSchemaDesc,
+            },
+          },
+          'sceneOwnership': {
+            'type': 'ARRAY',
+            'description': LayersTextStyleGuide.sceneOwnershipSchemaDesc,
+            'items': {
+              'type': 'OBJECT',
+              'required': ['path', 'role'],
+              'properties': {
+                'path': {'type': 'STRING'},
+                'role': {'type': 'STRING'},
+              },
+            },
           },
           'links': {
             'type': 'ARRAY',
@@ -254,6 +377,12 @@ class ProjectConceptAgent {
               },
             },
           },
+          'features': {
+            'type': 'ARRAY',
+            'description':
+                '2-3 sittable 30-90 min playable v0.1 Feature slices inside this domain Epic (zero Tasks, zero Steps).',
+            'items': _featureJsonSchema,
+          },
         },
       };
 
@@ -264,8 +393,38 @@ class ProjectConceptAgent {
     return v.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
+  static void _convertTuningListDimension(
+    List<EpicTuningParam> tuning,
+    GodotProjectDimension prevDim,
+    GodotProjectDimension targetDim,
+  ) {
+    const pxPerMeter = 40.0;
+    final is2d = targetDim == GodotProjectDimension.dim2d;
+    for (final param in tuning) {
+      final rawUnit = param.unit.trim().toLowerCase();
+      final parsed = double.tryParse(param.value.trim());
+      if (prevDim == GodotProjectDimension.dim3d && is2d) {
+        if (rawUnit == 'm') {
+          if (parsed != null) param.value = _fmtScaleNum(parsed * pxPerMeter);
+          param.unit = 'px';
+        } else if (rawUnit == 'm/s') {
+          if (parsed != null) param.value = _fmtScaleNum(parsed * pxPerMeter);
+          param.unit = 'px/s';
+        }
+      } else if (prevDim == GodotProjectDimension.dim2d && !is2d) {
+        if (rawUnit == 'px') {
+          if (parsed != null) param.value = _fmtScaleNum(parsed / pxPerMeter);
+          param.unit = 'm';
+        } else if (rawUnit == 'px/s') {
+          if (parsed != null) param.value = _fmtScaleNum(parsed / pxPerMeter);
+          param.unit = 'm/s';
+        }
+      }
+    }
+  }
+
   /// Converts an active [ProjectConceptBlueprint] between Godot 4 `3D` (`m`, `m/s`)
-  /// and `2D` (`px`, `px/s`), updating §02 camera/scale contracts and `E01..E04` tuning cleanly.
+  /// and `2D` (`px`, `px/s`), updating §02 camera/scale contracts, Epics, and Features cleanly.
   static ProjectConceptBlueprint convertBlueprintDimension(
     ProjectConceptBlueprint current,
     GodotProjectDimension targetDim,
@@ -298,28 +457,15 @@ class ProjectConceptAgent {
           'CSGBox3D / PrimitiveMesh Greybox + StandardMaterial3D Tints; @export vars & Resource (.tres)';
     }
 
-    const pxPerMeter = 40.0;
-    for (final ep in next.initialEpics) {
-      for (final param in ep.tuning) {
-        final rawUnit = param.unit.trim().toLowerCase();
-        final parsed = double.tryParse(param.value.trim());
-        if (prevDim == GodotProjectDimension.dim3d && is2d) {
-          if (rawUnit == 'm') {
-            if (parsed != null) param.value = _fmtScaleNum(parsed * pxPerMeter);
-            param.unit = 'px';
-          } else if (rawUnit == 'm/s') {
-            if (parsed != null) param.value = _fmtScaleNum(parsed * pxPerMeter);
-            param.unit = 'px/s';
-          }
-        } else if (prevDim == GodotProjectDimension.dim2d && !is2d) {
-          if (rawUnit == 'px') {
-            if (parsed != null) param.value = _fmtScaleNum(parsed / pxPerMeter);
-            param.unit = 'm';
-          } else if (rawUnit == 'px/s') {
-            if (parsed != null) param.value = _fmtScaleNum(parsed / pxPerMeter);
-            param.unit = 'm/s';
-          }
-        }
+    for (final ep in [...next.initialEpics, ...next.v02NewPool]) {
+      _convertTuningListDimension(ep.tuning, prevDim, targetDim);
+      for (final feat in ep.features) {
+        _convertTuningListDimension(feat.tuning, prevDim, targetDim);
+      }
+    }
+    for (final list in next.v02NewFeaturesByLineageKey.values) {
+      for (final feat in list) {
+        _convertTuningListDimension(feat.tuning, prevDim, targetDim);
       }
     }
 
@@ -382,11 +528,10 @@ TARGET ARCHITECTURE: ${effectiveDim.fullLabel} (${effectiveDim.architectureContr
 CODE POLICY: ${effectiveDim.codePolicyContract}
 
 CRITICAL CONSTRAINTS:
-- Produce `2–4` strictly `v0.1` Prototype Epics in `initialEpics` derived directly from §01 `coreLoop` beats and §02 Camera/Scale/InputMap contracts.
-- Order `initialEpics` strictly by playable dependency: `E01` Player Node/Camera/Movement Foundation -> Core Mechanic/Verb Epic(s) -> `v0.1` Loop Target/Closure.
-- Populate `coreLoopBeat` on every Epic naming which §01 Core Loop beat(s) it proves, and strictly exclude everything listed in §04 `outOfScope` (defer waves, menus, save slots, meta to `v0.2+`).
-- Use $unitGuide everywhere in §02 and every Epic's §04 tuning variables with `snake_case` `@export` keys and `snake_case` `InputMap` action names.
-- Each Epic in `initialEpics` MUST include full §01–§06 sections so Godot 4 builds immediately with zero missing fields.
+- Produce `2–4` Large-Domain `v0.1` Prototype Epics in `initialEpics` (`E01` Player Movement & Camera -> Core Action/Combat Domain -> Loop Target Domain) derived directly from §01 `coreLoop` beats and §02 Camera/Scale/InputMap contracts.
+- Each Epic owns shared `sceneOwnership` (`.tscn`/`.gd` files), `inScope`, `doneWhen`, `states`, `interrupts`, `outOfScope`, AND `2–3` sittable 30-90 min `v0.1` Feature slices inside `features` (`F01`, `F02`, ... with zero `Task`/`Step` micro-lists).
+- Populate `coreLoopBeat` on every Epic naming which §01 Core Loop beat(s) it proves, and defer waves, menus, save slots, and meta progression to `v0.2+`.
+- Use $unitGuide everywhere in §02 and in every Feature/Epic `@export` tuning parameter with `snake_case` keys and `snake_case` `InputMap` action names.
 ''';
 
     final res = await GeminiAgentClient.generateJson(
@@ -404,6 +549,7 @@ CRITICAL CONSTRAINTS:
           trimmedSpark.isEmpty ? parsed.sparkPrompt : trimmedSpark;
       parsed.dimension = effectiveDim;
       if (parsed.initialEpics.isNotEmpty) {
+        int nextFeatureNum = 1;
         for (int i = 0; i < parsed.initialEpics.length; i++) {
           final ep = parsed.initialEpics[i];
           ep.code = 'E${(i + 1).toString().padLeft(2, '0')}';
@@ -413,6 +559,13 @@ CRITICAL CONSTRAINTS:
           ep.releaseVersion = 'v0.1';
           ep.lifecycle =
               i == 0 ? EpicLifecycle.active : EpicLifecycle.queued;
+          for (final feat in ep.features) {
+            feat.introducedIn = 'v0.1';
+            if (feat.code.trim().isEmpty) {
+              feat.code = FeatureSpec.formatCode(nextFeatureNum);
+            }
+            nextFeatureNum++;
+          }
         }
         return GodotSpecGuard.sanitizeConceptBlueprint(parsed);
       }
@@ -439,6 +592,24 @@ CRITICAL CONSTRAINTS:
     return GodotSpecGuard.sanitizeConceptBlueprint(fallback);
   }
 
+  static void _upsertTuningParam(
+    List<EpicTuningParam> tuning,
+    String key,
+    String value,
+    String unit,
+  ) {
+    final idx = tuning.indexWhere(
+      (t) => t.key.trim().toLowerCase() == key.toLowerCase(),
+    );
+    if (idx >= 0) {
+      tuning[idx].key = key;
+      tuning[idx].value = value;
+      tuning[idx].unit = unit;
+    } else {
+      tuning.add(EpicTuningParam(key: key, value: value, unit: unit));
+    }
+  }
+
   /// Synchronizes `E01`'s aim/look controls, SpringArm3D/Camera2D tail tuning, and playtest check
   /// whenever the Stage 1 Camera Decision (`§02`) changes, without shifting `tuning[0]`.
   static void syncEpicCameraFraming(
@@ -461,14 +632,9 @@ CRITICAL CONSTRAINTS:
     final isFps = !is2d && (lowerId.contains('fps') || lowerId.contains('first'));
 
     void upsertTailTuning(String key, String value, String unit) {
-      final idx = e01.tuning.indexWhere(
-        (t) => t.key.trim().toLowerCase() == key.toLowerCase(),
-      );
-      if (idx >= 0) {
-        e01.tuning[idx].value = value;
-        e01.tuning[idx].unit = unit;
-      } else {
-        e01.tuning.add(EpicTuningParam(key: key, value: value, unit: unit));
+      _upsertTuningParam(e01.tuning, key, value, unit);
+      if (e01.features.isNotEmpty) {
+        _upsertTuningParam(e01.features.first.tuning, key, value, unit);
       }
     }
 
@@ -476,6 +642,11 @@ CRITICAL CONSTRAINTS:
       e01.tuning.removeWhere(
         (t) => t.key.trim().toLowerCase() == key.toLowerCase(),
       );
+      for (final f in e01.features) {
+        f.tuning.removeWhere(
+          (t) => t.key.trim().toLowerCase() == key.toLowerCase(),
+        );
+      }
     }
 
     if (is2d) {
@@ -611,22 +782,13 @@ CRITICAL CONSTRAINTS:
     final e01 = draft.initialEpics.first;
     final decelVal = opt.decelFor(draft.dimension);
     final speedUnit = draft.dimension.speedUnit;
-    final decelIdx = e01.tuning.indexWhere(
-      (t) =>
-          t.key.trim().toLowerCase() == 'braking_decel' ||
-          t.key.trim().toLowerCase() == 'brakingdecel',
-    );
-    if (decelIdx >= 0) {
-      e01.tuning[decelIdx].key = 'braking_decel';
-      e01.tuning[decelIdx].value = decelVal;
-      e01.tuning[decelIdx].unit = speedUnit;
-    } else {
-      e01.tuning.add(
-        EpicTuningParam(
-          key: 'braking_decel',
-          value: decelVal,
-          unit: speedUnit,
-        ),
+    _upsertTuningParam(e01.tuning, 'braking_decel', decelVal, speedUnit);
+    if (e01.features.isNotEmpty) {
+      _upsertTuningParam(
+        e01.features.first.tuning,
+        'braking_decel',
+        decelVal,
+        speedUnit,
       );
     }
   }
@@ -691,6 +853,12 @@ USER CO-DESIGN INSTRUCTION:
         parsed.v02UpgradesByLineageKey = {
           for (final entry in currentSpec.v02UpgradesByLineageKey.entries)
             entry.key: [for (final u in entry.value) u.copyWith()],
+        };
+      }
+      if (parsed.v02NewFeaturesByLineageKey.isEmpty) {
+        parsed.v02NewFeaturesByLineageKey = {
+          for (final entry in currentSpec.v02NewFeaturesByLineageKey.entries)
+            entry.key: [for (final f in entry.value) f.deepCopy()],
         };
       }
       parsed.lastCoDesignNote =
@@ -994,12 +1162,33 @@ USER CO-DESIGN INSTRUCTION:
         id: 'ep_01',
         code: 'E01',
         lineageKey: 'e01',
-        title: 'Player Movement & Camera Rig',
+        title: 'Player Movement & Camera',
         releaseVersion: 'v0.1',
         lifecycle: EpicLifecycle.active,
         coreLoopBeat: 'Beat 1 · ${loop[0]}',
         goal:
-            'Control the player $bodyCls at fixed speed with smooth directional facing and locked $camNote framing.',
+            'Own player $bodyCls locomotion, dash evasion impulse, and locked $camNote framing.',
+        inScope: [
+          'WASD movement at $moveVal $speedUnit inside $arenaExtent playtest room',
+          'Forward $dodgeDist $distUnit dodge dash on 1.0 s cooldown',
+        ],
+        doneWhen: [
+          'Move and dodge cleanly inside $arenaExtent -> Zero snagging against walls',
+        ],
+        sceneOwnership: [
+          EpicSceneOwnership(
+            path: 'res://scenes/arena_proto.tscn',
+            role: '$arenaExtent greybox test room + SpawnPoint',
+          ),
+          EpicSceneOwnership(
+            path: 'res://scenes/player.tscn',
+            role: '$bodyCls + $camNote follow rig',
+          ),
+          EpicSceneOwnership(
+            path: 'res://scripts/player.gd',
+            role: 'Movement state machine & @export physics',
+          ),
+        ],
         links: const [
           'Scene res://scenes/player.tscn + res://scripts/player.gd',
           'Emits player velocity & aim vector to E02',
@@ -1049,17 +1238,88 @@ USER CO-DESIGN INSTRUCTION:
                 'Press Space -> executes crisp $dodgeDist $distUnit forward dash and obeys 1.0s cooldown',
           ),
         ],
+        features: [
+          FeatureSpec(
+            id: 'ep_01_f01',
+            code: 'F01',
+            title: 'Planar Walk & Camera Tracking',
+            introducedIn: 'v0.1',
+            sliceTime: '45 min',
+            status: FeatureStatus.passed,
+            goal: 'Control player movement at $moveVal $speedUnit with smooth $camNote follow.',
+            controls: [
+              EpicControlBinding(
+                action: 'move_8way',
+                trigger: 'Held (WASD)',
+                rule: 'Moves smoothly at $moveVal $speedUnit across floor',
+              ),
+            ],
+            tuning: [
+              EpicTuningParam(key: 'move_speed', value: moveVal, unit: speedUnit),
+            ],
+            checks: [
+              EpicPieCheck(
+                id: 'ep_01_f01_c1',
+                text: 'Hold WASD -> Player moves at $moveVal $speedUnit cleanly',
+                passed: true,
+              ),
+            ],
+          ),
+          FeatureSpec(
+            id: 'ep_01_f02',
+            code: 'F02',
+            title: 'Impulse Dodge Dash',
+            introducedIn: 'v0.1',
+            sliceTime: '45 min',
+            status: FeatureStatus.active,
+            goal: 'Execute $dodgeDist $distUnit forward dodge impulse on 1.0 s cooldown.',
+            controls: [
+              EpicControlBinding(
+                action: 'dodge',
+                trigger: 'Just Pressed (Space)',
+                rule: 'Dashes $dodgeDist $distUnit forward over 0.16 s',
+              ),
+            ],
+            tuning: [
+              EpicTuningParam(
+                key: 'dodge_distance',
+                value: dodgeDist,
+                unit: distUnit,
+              ),
+              EpicTuningParam(key: 'dodge_cooldown', value: '1.0', unit: 's'),
+            ],
+            checks: [
+              EpicPieCheck(
+                id: 'ep_01_f02_c1',
+                text: 'Press Space -> Travels $dodgeDist $distUnit cleanly with cooldown ring',
+              ),
+            ],
+          ),
+        ],
       ),
       EpicSpec(
         id: 'ep_02',
         code: 'E02',
         lineageKey: 'e02',
-        title: 'Primary Player Action & Feedback',
+        title: 'Primary Combat & Action',
         releaseVersion: 'v0.1',
         lifecycle: EpicLifecycle.queued,
         coreLoopBeat: 'Beat 2 · ${loop[1]}',
         goal:
-            'Execute the primary combat or interaction action cleanly along aim direction with crisp hit reaction.',
+            'Own primary offensive actions along aim direction, impact damage, and cooldown cadence.',
+        inScope: [
+          '$actionRange $distUnit aimed strike with 25 hp base hit damage',
+          'Brief screen impulse and impact flash on hit',
+        ],
+        doneWhen: [
+          'Click LMB toward target -> Hit registers out to $actionRange $distUnit cleanly',
+        ],
+        sceneOwnership: [
+          EpicSceneOwnership(
+            path: 'res://scripts/primary_action.gd',
+            role: 'Input trace / projectile spawn & 0.25 s cooldown lock',
+          ),
+        ],
         links: const [
           'Reads player transform from E01 and calls take_damage(amount) on target nodes',
         ],
@@ -1097,18 +1357,78 @@ USER CO-DESIGN INSTRUCTION:
                 'Click LMB -> primary action triggers immediately with visible impact cue on hit',
           ),
         ],
+        features: [
+          FeatureSpec(
+            id: 'ep_02_f01',
+            code: 'F03',
+            title: 'Aimed Primary Strike',
+            introducedIn: 'v0.1',
+            sliceTime: '45 min',
+            status: FeatureStatus.queued,
+            goal: 'Execute $actionRange $distUnit strike toward aim vector dealing 25 hp.',
+            tuning: [
+              EpicTuningParam(
+                key: 'action_range',
+                value: actionRange,
+                unit: distUnit,
+              ),
+              EpicTuningParam(key: 'action_damage', value: '25', unit: 'hp'),
+            ],
+            checks: [
+              EpicPieCheck(
+                id: 'ep_02_f01_c1',
+                text: 'Click LMB -> Strikes cleanly out to $actionRange $distUnit',
+              ),
+            ],
+          ),
+          FeatureSpec(
+            id: 'ep_02_f02',
+            code: 'F04',
+            title: 'Action Cooldown & Hit Flash',
+            introducedIn: 'v0.1',
+            sliceTime: '30 min',
+            status: FeatureStatus.queued,
+            goal: 'Enforce 0.25 s strike cadence and emit white impact flash plus camera pulse.',
+            tuning: [
+              EpicTuningParam(key: 'action_cooldown', value: '0.25', unit: 's'),
+            ],
+            checks: [
+              EpicPieCheck(
+                id: 'ep_02_f02_c1',
+                text: 'Spam LMB -> Respects 0.25 s fire rate with surface flash on hit',
+              ),
+            ],
+          ),
+        ],
       ),
       if (hasDeployVerb)
         EpicSpec(
           id: 'ep_03_util',
           code: 'E03',
           lineageKey: 'e03_util',
-          title: 'Deployable Field Utility Node',
+          title: 'Field Utility & Nodes',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.queued,
           coreLoopBeat: 'Beat 3 · ${loop[2]}',
           goal:
-              'Place a single greybox utility scene ahead of the player to extend arena traversal or tactical control.',
+              'Own deployable utility instances placed ahead of the player to shape arena space.',
+          inScope: [
+            'Spawn utility $deployDist $distUnit ahead on 3.0 s cooldown',
+            'Cap max 2 concurrent deployed instances cleanly',
+          ],
+          doneWhen: [
+            'Press E -> Utility node deploys $deployDist $distUnit ahead and activates on overlap',
+          ],
+          sceneOwnership: [
+            EpicSceneOwnership(
+              path: 'res://scenes/field_utility.tscn',
+              role: 'Deployed utility node + trigger area',
+            ),
+            EpicSceneOwnership(
+              path: 'res://scripts/field_utility.gd',
+              role: 'Placement distance, cooldown & max count queue',
+            ),
+          ],
           links: const [
             'Spawns res://scenes/field_utility.tscn along E01 forward aim direction',
           ],
@@ -1146,17 +1466,77 @@ USER CO-DESIGN INSTRUCTION:
                   'Press E -> deploys utility $deployDist $distUnit ahead and triggers cleanly on overlap',
             ),
           ],
+          features: [
+            FeatureSpec(
+              id: 'ep_03_util_f01',
+              code: 'F05',
+              title: 'Forward Utility Deploy',
+              introducedIn: 'v0.1',
+              sliceTime: '45 min',
+              status: FeatureStatus.queued,
+              goal: 'Place utility $deployDist $distUnit ahead on E with cyan ring indicator.',
+              tuning: [
+                EpicTuningParam(
+                  key: 'deploy_distance',
+                  value: deployDist,
+                  unit: distUnit,
+                ),
+                EpicTuningParam(key: 'deploy_cooldown', value: '3.0', unit: 's'),
+              ],
+              checks: [
+                EpicPieCheck(
+                  id: 'ep_03_util_f01_c1',
+                  text: 'Press E -> Utility appears $deployDist $distUnit ahead',
+                ),
+              ],
+            ),
+            FeatureSpec(
+              id: 'ep_03_util_f02',
+              code: 'F06',
+              title: 'Instance Cap Recycling',
+              introducedIn: 'v0.1',
+              sliceTime: '30 min',
+              status: FeatureStatus.queued,
+              goal: 'Keep at most 2 active utilities by freeing oldest instance on third deploy.',
+              tuning: [
+                EpicTuningParam(key: 'max_deployed', value: '2', unit: 'count'),
+              ],
+              checks: [
+                EpicPieCheck(
+                  id: 'ep_03_util_f02_c1',
+                  text: 'Deploy third utility -> Oldest node despawns cleanly',
+                ),
+              ],
+            ),
+          ],
         ),
       EpicSpec(
         id: 'ep_loop_close',
         code: hasDeployVerb ? 'E04' : 'E03',
         lineageKey: hasDeployVerb ? 'e04' : 'e03',
-        title: 'Target Entity & Arena Loop Closure',
+        title: 'Enemy Encounters & Loop Reset',
         releaseVersion: 'v0.1',
         lifecycle: EpicLifecycle.queued,
         coreLoopBeat: 'Beat ${loop.length} · ${loop.last}',
         goal:
-            'Place interactive enemy/target nodes with readable threat telegraph, HP tracking, and quick arena reset.',
+            'Own interactive target enemies, readable threat telegraphs, HP tracking, and arena quick reset.',
+        inScope: [
+          '100 hp target entities stationed $targetDist from SpawnPoint',
+          '0.50 s telegraph warning before strike + R arena reset',
+        ],
+        doneWhen: [
+          'Defeat targets and press R -> HUD updates cleanly and arena resets in < 0.2 s',
+        ],
+        sceneOwnership: [
+          EpicSceneOwnership(
+            path: 'res://scenes/target_enemy.tscn',
+            role: 'Target body + floating HP bar + telegraph indicator',
+          ),
+          EpicSceneOwnership(
+            path: 'res://scripts/target_enemy.gd',
+            role: 'Patrol / 0.50 s telegraph / Stagger loop',
+          ),
+        ],
         links: const [
           'Scene res://scenes/target_enemy.tscn receives E02 damage & updates HUD counter',
         ],
@@ -1178,6 +1558,8 @@ USER CO-DESIGN INSTRUCTION:
         ],
         tuning: [
           EpicTuningParam(key: 'target_hp', value: '100', unit: 'hp'),
+          EpicTuningParam(
+              key: 'aggro_range', value: is2d ? '320' : '12.0', unit: distUnit),
           EpicTuningParam(key: 'telegraph_duration', value: '0.50', unit: 's'),
         ],
         feedback: const [
@@ -1190,6 +1572,54 @@ USER CO-DESIGN INSTRUCTION:
             id: 'ep_03_c1',
             text:
                 'Defeat both targets -> HUD status updates cleanly and pressing R resets arena',
+          ),
+        ],
+        features: [
+          FeatureSpec(
+            id: 'ep_loop_f01',
+            code: 'F07',
+            title: 'Telegraphed Target AI & HP',
+            introducedIn: 'v0.1',
+            sliceTime: '45 min',
+            status: FeatureStatus.queued,
+            goal: 'Broadcast 0.50 s crimson telegraph before strike and track 100 hp.',
+            tuning: [
+              EpicTuningParam(key: 'target_hp', value: '100', unit: 'hp'),
+              EpicTuningParam(
+                key: 'aggro_range',
+                value: is2d ? '320' : '12.0',
+                unit: distUnit,
+              ),
+              EpicTuningParam(
+                key: 'telegraph_duration',
+                value: '0.50',
+                unit: 's',
+              ),
+            ],
+            checks: [
+              EpicPieCheck(
+                id: 'ep_loop_f01_c1',
+                text: 'Approach target -> 0.50 s telegraph warns before attack',
+              ),
+            ],
+          ),
+          FeatureSpec(
+            id: 'ep_loop_f02',
+            code: 'F08',
+            title: 'Arena Defeat & Quick Reset',
+            introducedIn: 'v0.1',
+            sliceTime: '30 min',
+            status: FeatureStatus.queued,
+            goal: 'Update remaining target counter on defeat and reset arena in < 0.2 s on R.',
+            tuning: [
+              EpicTuningParam(key: 'reset_fade_s', value: '0.15', unit: 's'),
+            ],
+            checks: [
+              EpicPieCheck(
+                id: 'ep_loop_f02_c1',
+                text: 'Press R after clearing room -> Arena & HP reset cleanly',
+              ),
+            ],
           ),
         ],
       ),

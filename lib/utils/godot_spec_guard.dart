@@ -621,8 +621,16 @@ class GodotSpecGuard {
             EpicUpgradeOption(
               id: u.id,
               text: sanitizeLine(u.text, dimension: dim),
+              targetFeatureCode: u.targetFeatureCode,
               chosen: u.chosen,
             ),
+        ],
+    };
+    out.v02NewFeaturesByLineageKey = {
+      for (final entry in out.v02NewFeaturesByLineageKey.entries)
+        entry.key.toLowerCase(): [
+          for (final f in entry.value)
+            sanitizeFeatureSpec(f, dimension: dim),
         ],
     };
     return out;

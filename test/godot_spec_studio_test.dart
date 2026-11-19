@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
+import 'package:layers_agentic/agents/release_planner_agent.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
@@ -1183,6 +1184,173 @@ console.log(JSON.stringify({
           buildProjectSpecFilename('EMBERKEEP 2D'),
           equals('emberkeep_2d_project_spec.md'),
         );
+      },
+    );
+
+    test(
+      '16. Starter presets (shellbreaker, railjack, emberkeep), 3D/2D Feature conversion & offline Spark synthesis seed Large-Domain Epics with v0.1 Features',
+      () async {
+        for (final presetId in ['shellbreaker', 'railjack', 'emberkeep']) {
+          final bp = GodotSparkPresets.byId(presetId);
+          expect(bp.initialEpics, isNotEmpty, reason: presetId);
+          for (final epic in bp.initialEpics) {
+            expect(epic.sceneOwnership, isNotEmpty, reason: '$presetId ${epic.code}');
+            expect(epic.inScope, isNotEmpty, reason: '$presetId ${epic.code}');
+            expect(epic.doneWhen, isNotEmpty, reason: '$presetId ${epic.code}');
+            expect(
+              epic.features.length,
+              inInclusiveRange(2, 3),
+              reason: '$presetId ${epic.code}',
+            );
+            for (final feat in epic.features) {
+              expect(feat.introducedIn, equals('v0.1'));
+              expect(feat.title.trim(), isNotEmpty);
+              expect(feat.goal.trim(), isNotEmpty);
+              expect(feat.tuning, isNotEmpty);
+              expect(feat.checks, isNotEmpty);
+            }
+          }
+        }
+
+        final sb = GodotSparkPresets.byId('shellbreaker');
+        expect(
+          sb.initialEpics.first.features.first.tuning.first.unit,
+          equals('m/s'),
+        );
+        expect(sb.v02NewFeaturesByLineageKey['e01'], isNotEmpty);
+        expect(
+          sb.v02NewFeaturesByLineageKey['e01']!.first.introducedIn,
+          equals('v0.2'),
+        );
+
+        final ek = GodotSparkPresets.byId('emberkeep');
+        expect(
+          ek.initialEpics.first.features.first.tuning.first.unit,
+          equals('px/s'),
+        );
+        expect(ek.v02NewFeaturesByLineageKey['e01'], isNotEmpty);
+
+        final sbAs2d = ProjectConceptAgent.convertBlueprintDimension(
+          sb,
+          GodotProjectDimension.dim2d,
+        );
+        expect(
+          sbAs2d.initialEpics.first.features.first.tuning.first.unit,
+          equals('px/s'),
+        );
+        expect(
+          sbAs2d.v02NewFeaturesByLineageKey['e01']!.first.tuning
+              .any((t) => t.unit == 'px' || t.unit == 'px/s'),
+          isTrue,
+        );
+
+        final off2d = await ProjectConceptAgent.draftSpecFromSpark(
+          sparkPrompt: '2D grapple dungeon crawler with lantern dashes',
+          apiKey: '',
+        );
+        expect(off2d.dimension, equals(GodotProjectDimension.dim2d));
+        for (final epic in off2d.initialEpics) {
+          expect(epic.sceneOwnership, isNotEmpty);
+          expect(epic.features.length, greaterThanOrEqualTo(2));
+          expect(
+            epic.features.first.tuning.any((t) => t.unit == 'px/s' || t.unit == 'px'),
+            isTrue,
+          );
+        }
+      },
+    );
+
+    test(
+      '17. ReleasePlannerAgent proposes v0.2+ [+NEW] Features and [+DELTA] upgrades inside existing Epics (offline & mocked Gemini)',
+      () async {
+        final sb = GodotSparkPresets.byId('shellbreaker');
+        final offlineDraft = await ReleasePlannerAgent.proposeNextReleaseCopilot(
+          rootSpec: sb,
+          currentEpics: sb.initialEpics,
+          targetVersion: 'v0.2',
+          apiKey: '',
+        );
+        expect(offlineDraft.candidateNewFeaturesByLineageKey['e01'], isNotEmpty);
+        expect(
+          offlineDraft.candidateNewFeaturesByLineageKey['e01']!.first.introducedIn,
+          equals('v0.2'),
+        );
+        expect(offlineDraft.upgradesByLineageKey['e01'], isNotEmpty);
+        expect(
+          offlineDraft.upgradesByLineageKey['e01']!.first.targetFeatureCode,
+          isNotNull,
+        );
+        expect(offlineDraft.candidateNewEpics.first.features, isNotEmpty);
+
+        final prevMock = GeminiAgentClient.testMockResponder;
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          return <String, dynamic>{
+            'presets': [
+              {
+                'id': 'focused',
+                'label': 'Dash Chain Focus',
+                'desc': 'Add chain dash inside E01 without duplicating E01.',
+                'upgrades': ['up_f02'],
+                'newEpics': <String>[],
+              },
+            ],
+            'upgrades': [
+              {
+                'lineageKey': 'e01',
+                'options': [
+                  {
+                    'id': 'up_f02',
+                    'targetFeatureCode': 'F02',
+                    'text': '+Emit shockwave ring on dash stop',
+                    'chosen': true,
+                  },
+                ],
+              },
+            ],
+            'newFeatures': [
+              {
+                'lineageKey': 'e01',
+                'features': [
+                  {
+                    'id': 'f03_chain',
+                    'code': 'F03',
+                    'title': 'Chain Dash on Break',
+                    'sliceTime': '45 min',
+                    'goal': 'Refund dash cooldown after breaking shell armor.',
+                    'tuning': [
+                      {'key': 'chain_window_s', 'value': '0.35', 'unit': 's'},
+                    ],
+                    'checks': [
+                      {'text': 'Break shell -> dash resets cleanly'},
+                    ],
+                  },
+                ],
+              },
+            ],
+            'newEpics': <dynamic>[],
+          };
+        };
+
+        try {
+          final aiDraft = await ReleasePlannerAgent.proposeNextReleaseCopilot(
+            rootSpec: sb,
+            currentEpics: sb.initialEpics,
+            targetVersion: 'v0.2',
+            apiKey: 'test-key-1234',
+          );
+          expect(aiDraft.candidateNewEpics, isEmpty);
+          expect(aiDraft.candidateNewFeaturesByLineageKey['e01'], hasLength(1));
+          final addedFeat =
+              aiDraft.candidateNewFeaturesByLineageKey['e01']!.single;
+          expect(addedFeat.introducedIn, equals('v0.2'));
+          expect(addedFeat.title, equals('Chain Dash on Break'));
+          expect(
+            aiDraft.upgradesByLineageKey['e01']!.single.targetFeatureCode,
+            equals('F02'),
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
       },
     );
   });
