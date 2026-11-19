@@ -365,8 +365,329 @@ List<String> _strList(dynamic raw) {
       .toList();
 }
 
-/// Canonical 6-Section Godot 4 Epic Spec (`Project -> Release -> Epic`).
-/// Single-pass Epic contract: "What You Read Is What Godot 4 Builds".
+int _parseReleaseOrdinal(String version) {
+  final clean = version.trim().toLowerCase().replaceFirst(RegExp(r'^v'), '');
+  final parts = clean.split('.');
+  final major = parts.isNotEmpty ? (int.tryParse(parts[0]) ?? 0) : 0;
+  final minor = parts.length > 1
+      ? (int.tryParse(RegExp(r'^\d+').firstMatch(parts[1])?.group(0) ?? '') ??
+          0)
+      : 0;
+  return major * 1000 + minor;
+}
+
+int _compareReleaseVersions(
+  String a,
+  String b,
+  List<String> releaseOrder,
+) {
+  final normA = a.trim().toLowerCase();
+  final normB = b.trim().toLowerCase();
+  if (releaseOrder.isNotEmpty) {
+    final normalizedOrder =
+        releaseOrder.map((r) => r.trim().toLowerCase()).toList();
+    final idxA = normalizedOrder.indexOf(normA);
+    final idxB = normalizedOrder.indexOf(normB);
+    if (idxA != -1 && idxB != -1) {
+      return idxA.compareTo(idxB);
+    }
+  }
+  return _parseReleaseOrdinal(normA).compareTo(_parseReleaseOrdinal(normB));
+}
+
+List<EpicSceneOwnership> _extractLegacySceneOwnership(
+  List<String> links,
+  String levelStaging,
+) {
+  final resPattern = RegExp(r'res://[^\s,)\];"]+');
+  final seen = <String>{};
+  final result = <EpicSceneOwnership>[];
+
+  void scanText(String source, String fallbackRole) {
+    final trimmed = source.trim();
+    if (trimmed.isEmpty) return;
+    for (final m in resPattern.allMatches(trimmed)) {
+      final path = m.group(0)!.trim();
+      if (path.isEmpty || !seen.add(path)) continue;
+      String role = fallbackRole;
+      final split = trimmed.split(RegExp(r'\s+[—-]\s+'));
+      if (split.length > 1 && split.first.contains(path)) {
+        role = split.sublist(1).join(' - ').trim();
+      }
+      result.add(EpicSceneOwnership(path: path, role: role));
+    }
+  }
+
+  for (final link in links) {
+    scanText(link, 'Shared scene or script');
+  }
+  scanText(levelStaging, 'Playtest room scene');
+  return result;
+}
+
+enum FeatureStatus {
+  queued,
+  active,
+  passed;
+
+  static FeatureStatus fromString(String? raw) {
+    final lower = (raw ?? '').trim().toLowerCase();
+    return switch (lower) {
+      'active' || 'in_progress' || 'inprogress' => FeatureStatus.active,
+      'passed' || 'stable' || 'done' => FeatureStatus.passed,
+      _ => FeatureStatus.queued,
+    };
+  }
+}
+
+/// Shared Godot 4 `.tscn` scene or `.gd` script owned by an [EpicSpec] domain.
+class EpicSceneOwnership {
+  String path;
+  String role;
+
+  EpicSceneOwnership({
+    required this.path,
+    this.role = '',
+  });
+
+  EpicSceneOwnership copyWith({
+    String? path,
+    String? role,
+  }) {
+    return EpicSceneOwnership(
+      path: path ?? this.path,
+      role: role ?? this.role,
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'path': path,
+        'role': role,
+      };
+
+  factory EpicSceneOwnership.fromJson(dynamic raw) {
+    if (raw is Map) {
+      return EpicSceneOwnership(
+        path: (raw['path'] ?? '').toString().trim(),
+        role: (raw['role'] ?? '').toString().trim(),
+      );
+    }
+    final text = raw.toString().trim();
+    final parts = text.split(RegExp(r'\s+[—-]\s+'));
+    if (parts.length > 1) {
+      return EpicSceneOwnership(
+        path: parts.first.trim(),
+        role: parts.sublist(1).join(' - ').trim(),
+      );
+    }
+    return EpicSceneOwnership(path: text);
+  }
+}
+
+/// Playable 30-90 min vertical Feature slice living inside a domain [EpicSpec].
+class FeatureSpec {
+  static String formatCode(int oneBasedIndex) =>
+      'F${oneBasedIndex.toString().padLeft(2, '0')}';
+
+  final String id;
+  String code;
+  String title;
+  String introducedIn;
+  String sliceTime;
+  FeatureStatus status;
+  String goal;
+  List<String> inScope;
+  List<String> doneWhen;
+  String releaseDelta;
+  List<EpicControlBinding> controls;
+  List<EpicTuningParam> tuning;
+  List<String> cues;
+  List<EpicPieCheck> checks;
+  List<EpicPieCheck> releaseDeltaChecks;
+  List<EpicPieFix> fixes;
+
+  FeatureSpec({
+    required this.id,
+    required this.code,
+    required this.title,
+    this.introducedIn = 'v0.1',
+    this.sliceTime = '45 min',
+    this.status = FeatureStatus.queued,
+    required this.goal,
+    List<String>? inScope,
+    List<String>? doneWhen,
+    this.releaseDelta = '',
+    List<EpicControlBinding>? controls,
+    List<EpicTuningParam>? tuning,
+    List<String>? cues,
+    List<EpicPieCheck>? checks,
+    List<EpicPieCheck>? releaseDeltaChecks,
+    List<EpicPieFix>? fixes,
+  })  : inScope = inScope ?? <String>[],
+        doneWhen = doneWhen ?? <String>[],
+        controls = controls ?? <EpicControlBinding>[],
+        tuning = tuning ?? <EpicTuningParam>[],
+        cues = cues ?? <String>[],
+        checks = checks ?? <EpicPieCheck>[],
+        releaseDeltaChecks = releaseDeltaChecks ?? <EpicPieCheck>[],
+        fixes = fixes ?? <EpicPieFix>[];
+
+  List<EpicPieFix> get openFixes => fixes.where((f) => !f.resolved).toList();
+
+  int get openFixesCount => fixes.where((f) => !f.resolved).length;
+
+  List<EpicPieCheck> effectiveChecksForRelease(String releaseVersion) {
+    if (releaseVersion.trim() != 'v0.1' && releaseDeltaChecks.isNotEmpty) {
+      return <EpicPieCheck>[...checks, ...releaseDeltaChecks];
+    }
+    return checks;
+  }
+
+  int passedChecksCountForRelease(String releaseVersion) =>
+      effectiveChecksForRelease(releaseVersion).where((c) => c.passed).length;
+
+  bool isLockedBaselineInRelease(String releaseVersion) =>
+      releaseVersion.trim() != 'v0.1' &&
+      introducedIn.trim() == 'v0.1' &&
+      releaseDelta.trim().isEmpty;
+
+  bool get allChecksPassed =>
+      checks.isNotEmpty && checks.every((c) => c.passed);
+
+  bool allEffectiveChecksPassedForRelease(String releaseVersion) {
+    final list = effectiveChecksForRelease(releaseVersion);
+    return list.isNotEmpty && list.every((c) => c.passed);
+  }
+
+  bool get isPassed =>
+      status == FeatureStatus.passed && openFixes.isEmpty;
+
+  bool isPassedForRelease(String releaseVersion) =>
+      isLockedBaselineInRelease(releaseVersion) || isPassed;
+
+  String get executionModeLabel => openFixesCount > 0
+      ? 'FOCUSED [FIX] PASS ($openFixesCount Open)'
+      : 'FULL FEATURE BUILD';
+
+  FeatureSpec deepCopy({
+    String? idOverride,
+    String? codeOverride,
+    FeatureStatus? statusOverride,
+  }) {
+    return FeatureSpec(
+      id: idOverride ?? id,
+      code: codeOverride ?? code,
+      title: title,
+      introducedIn: introducedIn,
+      sliceTime: sliceTime,
+      status: statusOverride ?? status,
+      goal: goal,
+      inScope: List<String>.from(inScope),
+      doneWhen: List<String>.from(doneWhen),
+      releaseDelta: releaseDelta,
+      controls: [for (final c in controls) c.copyWith()],
+      tuning: [for (final t in tuning) t.copyWith()],
+      cues: List<String>.from(cues),
+      checks: [for (final c in checks) c.copyWith()],
+      releaseDeltaChecks: [for (final c in releaseDeltaChecks) c.copyWith()],
+      fixes: [for (final f in fixes) f.copyWith()],
+    );
+  }
+
+  Map<String, dynamic> toJson() => <String, dynamic>{
+        'id': id,
+        'code': code,
+        'title': title,
+        'introducedIn': introducedIn,
+        'sliceTime': sliceTime,
+        'status': status.name,
+        'goal': goal,
+        'inScope': inScope,
+        'doneWhen': doneWhen,
+        'releaseDelta': releaseDelta,
+        'controls': [for (final c in controls) c.toJson()],
+        'tuning': [for (final t in tuning) t.toJson()],
+        'cues': cues,
+        'checks': [for (final c in checks) c.toJson()],
+        'releaseDeltaChecks': [for (final c in releaseDeltaChecks) c.toJson()],
+        'fixes': [for (final f in fixes) f.toJson()],
+      };
+
+  factory FeatureSpec.fromJson(
+    Map<String, dynamic> json, {
+    int indexHint = 0,
+  }) {
+    final fallbackCode = formatCode(indexHint + 1);
+    final rawCode = (json['code'] ?? fallbackCode).toString().trim();
+    final rawControls = json['controls'] as List? ?? const [];
+    final rawTuning = json['tuning'] as List? ?? const [];
+    final rawChecks = json['checks'] as List? ?? const [];
+    final rawDeltaChecks =
+        (json['releaseDeltaChecks'] ?? json['v02Checks']) as List? ?? const [];
+    final rawFixes = json['fixes'] as List? ?? const [];
+
+    List<EpicPieCheck> parseCheckList(List<dynamic> raw, String idPrefix) {
+      return [
+        for (int i = 0; i < raw.length; i++)
+          if (raw[i] is Map)
+            EpicPieCheck.fromJson(
+              Map<String, dynamic>.from(raw[i] as Map),
+              i,
+            )
+          else if (raw[i] is String && raw[i].toString().trim().isNotEmpty)
+            EpicPieCheck(
+              id: '${idPrefix}_${i + 1}',
+              text: raw[i].toString().trim(),
+            ),
+      ];
+    }
+
+    return FeatureSpec(
+      id: (json['id'] ?? 'feat_${indexHint + 1}').toString().trim(),
+      code: rawCode.isEmpty ? fallbackCode : rawCode,
+      title: (json['title'] ?? 'Untitled Feature').toString().trim(),
+      introducedIn: (json['introducedIn'] ?? 'v0.1').toString().trim(),
+      sliceTime: (json['sliceTime'] ?? '45 min').toString().trim(),
+      status: FeatureStatus.fromString(json['status']?.toString()),
+      goal: (json['goal'] ?? '').toString().trim(),
+      inScope: _strList(json['inScope']),
+      doneWhen: _strList(json['doneWhen']),
+      releaseDelta:
+          (json['releaseDelta'] ?? json['v02Delta'] ?? '').toString().trim(),
+      controls: [
+        for (final item in rawControls)
+          if (item is Map)
+            EpicControlBinding.fromJson(Map<String, dynamic>.from(item)),
+      ],
+      tuning: [
+        for (final item in rawTuning)
+          if (item is Map)
+            EpicTuningParam.fromJson(Map<String, dynamic>.from(item)),
+      ],
+      cues: _strList(json['cues'] ?? json['feedback']),
+      checks: parseCheckList(rawChecks, 'fchk'),
+      releaseDeltaChecks: parseCheckList(rawDeltaChecks, 'fdchk'),
+      fixes: [
+        for (int i = 0; i < rawFixes.length; i++)
+          if (rawFixes[i] is Map)
+            EpicPieFix.fromJson(
+              Map<String, dynamic>.from(rawFixes[i] as Map),
+              i,
+            )
+          else if (rawFixes[i] is String &&
+              rawFixes[i].toString().trim().isNotEmpty)
+            EpicPieFix(
+              id: 'ffix_${i + 1}',
+              text: rawFixes[i].toString().trim(),
+            ),
+      ],
+    );
+  }
+}
+
+/// Canonical Godot 4 Domain Epic Spec (`Project -> Release -> Epic -> Feature`).
+/// Owns domain architecture (`sceneOwnership`, `stateFlow`, `interruptRules`, `outOfScope`)
+/// and contains playable 30-90 min [FeatureSpec] slices in [features].
 class EpicSpec {
   static String formatCode(int oneBasedIndex) =>
       'E${oneBasedIndex.toString().padLeft(2, '0')}';
@@ -381,29 +702,27 @@ class EpicSpec {
   String releaseVersion;
   EpicLifecycle lifecycle;
 
-  // §01 System Intent & Actor Links
+  // Domain architecture fields
   String coreLoopBeat;
   String goal;
+  List<String> inScope;
+  List<String> doneWhen;
+  List<EpicSceneOwnership> sceneOwnership;
   List<String> links;
   List<String> outOfScope;
 
-  // §02 Controls
+  // Shared domain controls/state/tuning/cues (legacy fields retained for Cloud Functions parity)
   List<EpicControlBinding> controls;
-
-  // §03 State Flow & Interrupt Rules
   List<String> states;
   List<String> interrupts;
-
-  // §04 Spatial & Exposed Tuning (@export GDScript Vars)
   List<EpicTuningParam> tuning;
-
-  // §05 Viewport, UI & Audio Cues
   List<String> feedback;
-
-  // §06 Test Scene Staging & Playtest Acceptance Gate
   String levelStaging;
   List<EpicPieCheck> checks;
   List<EpicPieFix> fixes;
+
+  // Child 30-90 min playable slices
+  List<FeatureSpec> features;
 
   // Progressive Release Co-Pilot deltas & baseline lock metadata
   List<String> baselineSummary;
@@ -420,16 +739,22 @@ class EpicSpec {
     this.lifecycle = EpicLifecycle.queued,
     this.coreLoopBeat = '',
     required this.goal,
+    List<String>? inScope,
+    List<String>? doneWhen,
+    List<EpicSceneOwnership>? sceneOwnership,
     List<String>? links,
     List<String>? outOfScope,
     List<EpicControlBinding>? controls,
     List<String>? states,
+    List<String>? stateFlow,
     List<String>? interrupts,
+    List<String>? interruptRules,
     List<EpicTuningParam>? tuning,
     List<String>? feedback,
     this.levelStaging = '',
     List<EpicPieCheck>? checks,
     List<EpicPieFix>? fixes,
+    List<FeatureSpec>? features,
     List<String>? baselineSummary,
     List<String>? upgradeDeltas,
     List<EpicUpgradeOption>? copilotUpgrades,
@@ -437,18 +762,66 @@ class EpicSpec {
   })  : lineageKey = (lineageKey != null && lineageKey.trim().isNotEmpty)
             ? lineageKey.trim()
             : code.toLowerCase(),
+        inScope = inScope ?? <String>[],
+        doneWhen = doneWhen ?? <String>[],
+        sceneOwnership = sceneOwnership ?? <EpicSceneOwnership>[],
         links = links ?? <String>[],
         outOfScope = outOfScope ?? <String>[],
         controls = controls ?? <EpicControlBinding>[],
-        states = states ?? <String>[],
-        interrupts = interrupts ?? <String>[],
+        states = stateFlow ?? states ?? <String>[],
+        interrupts = interruptRules ?? interrupts ?? <String>[],
         tuning = tuning ?? <EpicTuningParam>[],
         feedback = feedback ?? <String>[],
         checks = checks ?? <EpicPieCheck>[],
         fixes = fixes ?? <EpicPieFix>[],
+        features = features ?? <FeatureSpec>[],
         baselineSummary = baselineSummary ?? <String>[],
         upgradeDeltas = upgradeDeltas ?? <String>[],
         copilotUpgrades = copilotUpgrades ?? <EpicUpgradeOption>[];
+
+  List<String> get stateFlow => states;
+  set stateFlow(List<String> value) => states = value;
+
+  List<String> get interruptRules => interrupts;
+  set interruptRules(List<String> value) => interrupts = value;
+
+  bool get hasFeatures => features.isNotEmpty;
+
+  List<FeatureSpec> featuresForRelease(
+    String targetReleaseVersion, [
+    List<String> releaseOrder = const ['v0.1', 'v0.2'],
+  ]) {
+    return features
+        .where(
+          (f) =>
+              _compareReleaseVersions(
+                f.introducedIn,
+                targetReleaseVersion,
+                releaseOrder,
+              ) <=
+              0,
+        )
+        .toList();
+  }
+
+  int passedFeaturesCountForRelease(
+    String targetReleaseVersion, [
+    List<String> releaseOrder = const ['v0.1', 'v0.2'],
+  ]) {
+    return featuresForRelease(targetReleaseVersion, releaseOrder)
+        .where((f) => f.isPassedForRelease(targetReleaseVersion))
+        .length;
+  }
+
+  int totalOpenFeatureFixes([
+    String? targetReleaseVersion,
+    List<String> releaseOrder = const ['v0.1', 'v0.2'],
+  ]) {
+    final targetList = targetReleaseVersion == null
+        ? features
+        : featuresForRelease(targetReleaseVersion, releaseOrder);
+    return targetList.fold<int>(0, (sum, f) => sum + f.openFixesCount);
+  }
 
   List<EpicPieFix> get openFixes => fixes.where((f) => !f.resolved).toList();
 
@@ -459,19 +832,37 @@ class EpicSpec {
   bool get allChecksPassed =>
       checks.isNotEmpty && checks.every((c) => c.passed);
 
-  bool get isPassed =>
-      openFixes.isEmpty &&
-      lifecycle == EpicLifecycle.stable &&
-      (checks.isEmpty || checks.every((c) => c.passed));
+  bool get isPassed {
+    if (features.isNotEmpty) {
+      return openFixes.isEmpty &&
+          totalOpenFeatureFixes() == 0 &&
+          features.every((f) => f.isPassed);
+    }
+    return openFixes.isEmpty &&
+        lifecycle == EpicLifecycle.stable &&
+        (checks.isEmpty || checks.every((c) => c.passed));
+  }
 
   int get progressPercent {
+    if (features.isNotEmpty) {
+      final list = featuresForRelease(releaseVersion);
+      if (list.isEmpty) return isPassed ? 100 : 0;
+      final passed = passedFeaturesCountForRelease(releaseVersion);
+      if (passed == list.length && totalOpenFeatureFixes(releaseVersion) == 0) {
+        return 100;
+      }
+      return ((passed / list.length) * 90).round();
+    }
     if (isPassed) return 100;
     if (checks.isEmpty) return 0;
     return ((passedChecksCount / checks.length) * 90).round();
   }
 
   String get statusLabel {
-    if (openFixesCount > 0) return '$openFixesCount [FIX] Open';
+    if (openFixesCount > 0 || totalOpenFeatureFixes() > 0) {
+      final count = openFixesCount + totalOpenFeatureFixes();
+      return '$count [FIX] Open';
+    }
     if (isPassed) return 'Baseline ✓';
     if (allChecksPassed) return 'Ready to Pass';
     if (lifecycle == EpicLifecycle.upgrading) return 'Upgrading $releaseVersion';
@@ -496,6 +887,9 @@ class EpicSpec {
       lifecycle: lifecycleOverride ?? lifecycle,
       coreLoopBeat: coreLoopBeat,
       goal: goal,
+      inScope: List<String>.from(inScope),
+      doneWhen: List<String>.from(doneWhen),
+      sceneOwnership: [for (final s in sceneOwnership) s.copyWith()],
       links: List<String>.from(links),
       outOfScope: List<String>.from(outOfScope),
       controls: [for (final c in controls) c.copyWith()],
@@ -506,6 +900,7 @@ class EpicSpec {
       levelStaging: levelStaging,
       checks: [for (final c in checks) c.copyWith()],
       fixes: [for (final f in fixes) f.copyWith()],
+      features: [for (final feat in features) feat.deepCopy()],
       baselineSummary: List<String>.from(baselineSummary),
       upgradeDeltas: List<String>.from(upgradeDeltas),
       copilotUpgrades: [for (final u in copilotUpgrades) u.copyWith()],
@@ -522,6 +917,9 @@ class EpicSpec {
         'lifecycle': lifecycle.name,
         'coreLoopBeat': coreLoopBeat,
         'goal': goal,
+        'inScope': inScope,
+        'doneWhen': doneWhen,
+        'sceneOwnership': [for (final s in sceneOwnership) s.toJson()],
         'links': links,
         'outOfScope': outOfScope,
         'controls': [for (final c in controls) c.toJson()],
@@ -532,6 +930,7 @@ class EpicSpec {
         'levelStaging': levelStaging,
         'checks': [for (final c in checks) c.toJson()],
         'fixes': [for (final f in fixes) f.toJson()],
+        'features': [for (final f in features) f.toJson()],
         'baselineSummary': baselineSummary,
         'upgradeDeltas': upgradeDeltas,
         'copilotUpgrades': [for (final u in copilotUpgrades) u.toJson()],
@@ -541,68 +940,155 @@ class EpicSpec {
   factory EpicSpec.fromJson(Map<String, dynamic> json, {int indexHint = 0}) {
     final fallbackCode = formatCode(indexHint + 1);
     final rawCode = (json['code'] ?? fallbackCode).toString().trim();
+    final epicId =
+        (json['id'] ?? json['chosenId'] ?? 'epic_${indexHint + 1}').toString();
+    final epicTitle = (json['title'] ?? 'Untitled System').toString().trim();
+    final parsedRelease =
+        (json['releaseVersion'] ?? 'v0.1').toString().trim();
+    final parsedLifecycle =
+        EpicLifecycle.fromString(json['lifecycle']?.toString());
+    final parsedGoal = (json['goal'] ?? '').toString().trim();
+    final parsedInScope = _strList(json['inScope']);
+    final parsedDoneWhen = _strList(json['doneWhen']);
+    final parsedLinks = _strList(json['links'] ?? json['plugsInto']);
+    final parsedLevelStaging = (json['levelStaging'] ?? '').toString().trim();
+
     final rawChecks = json['checks'] as List? ?? const [];
     final rawFixes = json['fixes'] as List? ?? const [];
     final rawControls = json['controls'] as List? ?? const [];
     final rawTuning = json['tuning'] as List? ?? const [];
     final rawUps = json['copilotUpgrades'] as List? ?? const [];
 
+    final parsedControls = [
+      for (final item in rawControls)
+        if (item is Map)
+          EpicControlBinding.fromJson(Map<String, dynamic>.from(item)),
+    ];
+    final parsedTuning = [
+      for (final item in rawTuning)
+        if (item is Map)
+          EpicTuningParam.fromJson(Map<String, dynamic>.from(item)),
+    ];
+    final parsedFeedback = _strList(json['feedback']);
+    final parsedChecks = [
+      for (int i = 0; i < rawChecks.length; i++)
+        if (rawChecks[i] is Map)
+          EpicPieCheck.fromJson(
+            Map<String, dynamic>.from(rawChecks[i] as Map),
+            i,
+          )
+        else if (rawChecks[i] is String &&
+            rawChecks[i].toString().trim().isNotEmpty)
+          EpicPieCheck(
+            id: 'chk_${i + 1}',
+            text: rawChecks[i].toString().trim(),
+          ),
+    ];
+    final parsedFixes = [
+      for (int i = 0; i < rawFixes.length; i++)
+        if (rawFixes[i] is Map)
+          EpicPieFix.fromJson(
+            Map<String, dynamic>.from(rawFixes[i] as Map),
+            i,
+          )
+        else if (rawFixes[i] is String &&
+            rawFixes[i].toString().trim().isNotEmpty)
+          EpicPieFix(
+            id: 'fix_${i + 1}',
+            text: rawFixes[i].toString().trim(),
+          ),
+    ];
+    final parsedUpgradeDeltas = _strList(json['upgradeDeltas']);
+
+    final List<EpicSceneOwnership> parsedOwnership;
+    if (json.containsKey('sceneOwnership') && json['sceneOwnership'] is List) {
+      parsedOwnership = [
+        for (final item in (json['sceneOwnership'] as List))
+          EpicSceneOwnership.fromJson(item),
+      ].where((o) => o.path.isNotEmpty).toList();
+    } else {
+      parsedOwnership = _extractLegacySceneOwnership(
+        parsedLinks,
+        parsedLevelStaging,
+      );
+    }
+
+    final List<FeatureSpec> parsedFeatures;
+    if (json.containsKey('features') && json['features'] is List) {
+      final rawFeatures = json['features'] as List;
+      parsedFeatures = [
+        for (int i = 0; i < rawFeatures.length; i++)
+          if (rawFeatures[i] is Map)
+            FeatureSpec.fromJson(
+              Map<String, dynamic>.from(rawFeatures[i] as Map),
+              indexHint: i,
+            ),
+      ];
+    } else if (parsedControls.isNotEmpty ||
+        parsedTuning.isNotEmpty ||
+        parsedChecks.isNotEmpty ||
+        parsedFixes.isNotEmpty ||
+        parsedFeedback.isNotEmpty) {
+      // Backwards-compatible migration: wrap pre-4-tier Epic fields into F01.
+      final hasOpenFixes = parsedFixes.any((f) => !f.resolved);
+      final FeatureStatus migratedStatus;
+      if (parsedLifecycle == EpicLifecycle.stable && !hasOpenFixes) {
+        migratedStatus = FeatureStatus.passed;
+      } else if (parsedLifecycle == EpicLifecycle.active ||
+          hasOpenFixes ||
+          parsedChecks.any((c) => c.passed)) {
+        migratedStatus = FeatureStatus.active;
+      } else {
+        migratedStatus = FeatureStatus.queued;
+      }
+      parsedFeatures = [
+        FeatureSpec(
+          id: '${epicId}_f01',
+          code: 'F01',
+          title: epicTitle,
+          introducedIn: parsedRelease.isEmpty ? 'v0.1' : parsedRelease,
+          sliceTime: '60 min',
+          status: migratedStatus,
+          goal: parsedGoal,
+          inScope: List<String>.from(parsedInScope),
+          doneWhen: List<String>.from(parsedDoneWhen),
+          releaseDelta: parsedUpgradeDeltas.join(' ; '),
+          controls: [for (final c in parsedControls) c.copyWith()],
+          tuning: [for (final t in parsedTuning) t.copyWith()],
+          cues: List<String>.from(parsedFeedback),
+          checks: [for (final c in parsedChecks) c.copyWith()],
+          fixes: [for (final f in parsedFixes) f.copyWith()],
+        ),
+      ];
+    } else {
+      parsedFeatures = <FeatureSpec>[];
+    }
+
     return EpicSpec(
-      id: (json['id'] ?? json['chosenId'] ?? 'epic_${indexHint + 1}')
-          .toString(),
+      id: epicId,
       code: rawCode.isEmpty ? fallbackCode : rawCode,
       lineageKey: (json['lineageKey'] ?? rawCode.toLowerCase()).toString(),
-      title: (json['title'] ?? 'Untitled System').toString().trim(),
-      releaseVersion: (json['releaseVersion'] ?? 'v0.1').toString().trim(),
-      lifecycle: EpicLifecycle.fromString(json['lifecycle']?.toString()),
+      title: epicTitle,
+      releaseVersion: parsedRelease,
+      lifecycle: parsedLifecycle,
       coreLoopBeat: (json['coreLoopBeat'] ?? '').toString().trim(),
-      goal: (json['goal'] ?? '').toString().trim(),
-      links: _strList(json['links'] ?? json['plugsInto']),
+      goal: parsedGoal,
+      inScope: parsedInScope,
+      doneWhen: parsedDoneWhen,
+      sceneOwnership: parsedOwnership,
+      links: parsedLinks,
       outOfScope: _strList(json['outOfScope']),
-      controls: [
-        for (final item in rawControls)
-          if (item is Map)
-            EpicControlBinding.fromJson(Map<String, dynamic>.from(item)),
-      ],
-      states: _strList(json['states']),
-      interrupts: _strList(json['interrupts']),
-      tuning: [
-        for (final item in rawTuning)
-          if (item is Map)
-            EpicTuningParam.fromJson(Map<String, dynamic>.from(item)),
-      ],
-      feedback: _strList(json['feedback']),
-      levelStaging: (json['levelStaging'] ?? '').toString().trim(),
-      checks: [
-        for (int i = 0; i < rawChecks.length; i++)
-          if (rawChecks[i] is Map)
-            EpicPieCheck.fromJson(
-              Map<String, dynamic>.from(rawChecks[i] as Map),
-              i,
-            )
-          else if (rawChecks[i] is String &&
-              rawChecks[i].toString().trim().isNotEmpty)
-            EpicPieCheck(
-              id: 'chk_${i + 1}',
-              text: rawChecks[i].toString().trim(),
-            ),
-      ],
-      fixes: [
-        for (int i = 0; i < rawFixes.length; i++)
-          if (rawFixes[i] is Map)
-            EpicPieFix.fromJson(
-              Map<String, dynamic>.from(rawFixes[i] as Map),
-              i,
-            )
-          else if (rawFixes[i] is String &&
-              rawFixes[i].toString().trim().isNotEmpty)
-            EpicPieFix(
-              id: 'fix_${i + 1}',
-              text: rawFixes[i].toString().trim(),
-            ),
-      ],
+      controls: parsedControls,
+      states: _strList(json['stateFlow'] ?? json['states']),
+      interrupts: _strList(json['interruptRules'] ?? json['interrupts']),
+      tuning: parsedTuning,
+      feedback: parsedFeedback,
+      levelStaging: parsedLevelStaging,
+      checks: parsedChecks,
+      fixes: parsedFixes,
+      features: parsedFeatures,
       baselineSummary: _strList(json['baselineSummary']),
-      upgradeDeltas: _strList(json['upgradeDeltas']),
+      upgradeDeltas: parsedUpgradeDeltas,
       copilotUpgrades: [
         for (int i = 0; i < rawUps.length; i++)
           if (rawUps[i] is Map)
@@ -656,6 +1142,9 @@ class EpicSpec {
             goal: parsed.goal.isNotEmpty
                 ? parsed.goal
                 : (doc.sections['goal'] ?? ''),
+            inScope: parsed.inScope,
+            doneWhen: parsed.doneWhen,
+            sceneOwnership: parsed.sceneOwnership,
             links: parsed.links,
             outOfScope: parsed.outOfScope,
             controls: parsed.controls,
@@ -666,6 +1155,7 @@ class EpicSpec {
             levelStaging: parsed.levelStaging,
             checks: syncedChecks,
             fixes: parsed.fixes,
+            features: parsed.features,
             baselineSummary: parsed.baselineSummary,
             upgradeDeltas: parsed.upgradeDeltas,
             copilotUpgrades: parsed.copilotUpgrades,
@@ -710,6 +1200,9 @@ class EpicSpec {
       lifecycle: lifecycle,
       coreLoopBeat: coreLoopBeat,
       goal: goal,
+      inScope: inScope,
+      doneWhen: doneWhen,
+      sceneOwnership: sceneOwnership,
       links: links,
       outOfScope: outOfScope,
       controls: controls,
@@ -720,6 +1213,7 @@ class EpicSpec {
       levelStaging: levelStaging,
       checks: checks,
       fixes: fixes,
+      features: features,
       baselineSummary: baselineSummary,
       upgradeDeltas: upgradeDeltas,
       copilotUpgrades: copilotUpgrades,

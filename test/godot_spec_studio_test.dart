@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
+import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
@@ -657,6 +658,240 @@ console.log(JSON.stringify({
           GeminiAgentClient.authTokenProvider = prevAuth;
           LocalVaultService.testBackendOverride = prevBackend;
         }
+      },
+    );
+
+    test(
+      '11. TierType.feature enforces 4-tier hierarchy (Project -> Release -> Epic -> Feature, zero Tasks/Steps)',
+      () {
+        expect(
+          TierType.values,
+          equals([
+            TierType.project,
+            TierType.release,
+            TierType.epic,
+            TierType.feature,
+          ]),
+        );
+        expect(TierType.feature.level, equals(4));
+        expect(TierType.feature.shortTag, equals('FEAT'));
+        expect(TierType.feature.letterBadge, equals('F'));
+        expect(TierType.feature.displayName, equals('Feature'));
+        expect(TierType.feature.pluralDisplayName, equals('Features'));
+        expect(TierType.feature.parentTier, equals(TierType.epic));
+        expect(TierType.feature.nextChildTier, isNull);
+        expect(TierType.epic.nextChildTier, equals(TierType.feature));
+        expect(TierType.fromString('feature'), equals(TierType.feature));
+        expect(TierType.fromString('FEAT'), equals(TierType.feature));
+        expect(
+          TierDocument.isLegacyIgnoredTier({'tier': 'feature'}),
+          isTrue,
+        );
+      },
+    );
+
+    test(
+      '12. FeatureSpec & EpicSpec 4-tier domain fields round-trip cleanly with release-aware rollups',
+      () {
+        final f01 = FeatureSpec(
+          id: 'f01',
+          code: 'F01',
+          title: '8-Way Walk & Iso Camera',
+          introducedIn: 'v0.1',
+          sliceTime: '45 min',
+          status: FeatureStatus.passed,
+          goal: 'Implement 8-way camera-relative walk and smooth Camera3D follow.',
+          inScope: ['WASD planar locomotion', '55 deg camera follow lead'],
+          doneWhen: ['Hold W+D against angled wall -> Mech glides cleanly'],
+          controls: [
+            EpicControlBinding(
+              action: 'move_8way',
+              trigger: 'W A S D',
+              rule: 'Continuous planar XZ vector',
+            ),
+          ],
+          tuning: [
+            EpicTuningParam(key: 'move_speed', value: '9.5', unit: 'm/s'),
+          ],
+          cues: ['Hydraulic step thump every 0.32 s'],
+          checks: [
+            EpicPieCheck(
+              id: 'c1',
+              text: 'Hold W+D -> Mech glides smoothly',
+              passed: true,
+            ),
+          ],
+        );
+
+        final f02 = FeatureSpec(
+          id: 'f02',
+          code: 'F02',
+          title: 'Armored Claw Dash',
+          introducedIn: 'v0.1',
+          sliceTime: '60 min',
+          status: FeatureStatus.active,
+          goal: 'Forward 4 m commitment dash with i-frames and cyan ribbon.',
+          releaseDelta: '+ Reset dash cooldown when cracking enemy shell',
+          releaseDeltaChecks: [
+            EpicPieCheck(
+              id: 'dc1',
+              text: 'Crack shell then tap Space -> Dash chains cleanly',
+            ),
+          ],
+          fixes: [
+            EpicPieFix(
+              id: 'fx1',
+              text: 'Dash clips southeast pillar bevel',
+              resolved: false,
+            ),
+          ],
+          checks: [
+            EpicPieCheck(
+              id: 'c2',
+              text: 'Tap Space -> Mech lunges 4.0 m',
+              passed: true,
+            ),
+          ],
+        );
+
+        final f03 = FeatureSpec(
+          id: 'f03',
+          code: 'F03',
+          title: 'Chain Dash on Shell Break',
+          introducedIn: 'v0.2',
+          sliceTime: '45 min',
+          status: FeatureStatus.queued,
+          goal: 'Refund cooldown on shell break for up to 3 consecutive dashes.',
+        );
+
+        final epic = EpicSpec(
+          id: 'epic_e01',
+          code: 'E01',
+          title: 'Player Movement & Camera',
+          goal: 'Own mech locomotion, dash commitments, and follow camera rig.',
+          inScope: ['8-way walk', 'Horizontal claw dash'],
+          doneWhen: ['All E01 Features pass Playtest Gate'],
+          sceneOwnership: [
+            EpicSceneOwnership(
+              path: 'res://scenes/player_mech.tscn',
+              role: 'CharacterBody3D root & hitbox',
+            ),
+            EpicSceneOwnership(
+              path: 'res://scripts/player_mech.gd',
+              role: 'Movement state loop & @export vars',
+            ),
+          ],
+          stateFlow: ['Idle', 'Walk', 'ClawDash', 'Recovery'],
+          interruptRules: ['ClawDash locks normal walk accel for 0.18 s'],
+          outOfScope: ['No stamina bar in v0.1'],
+          features: [f01, f02, f03],
+        );
+
+        expect(epic.sceneOwnership.length, equals(2));
+        expect(epic.stateFlow, equals(['Idle', 'Walk', 'ClawDash', 'Recovery']));
+        expect(epic.interruptRules, hasLength(1));
+        expect(epic.featuresForRelease('v0.1', ['v0.1', 'v0.2']), hasLength(2));
+        expect(epic.featuresForRelease('v0.2', ['v0.1', 'v0.2']), hasLength(3));
+        expect(
+          epic.passedFeaturesCountForRelease('v0.1', ['v0.1', 'v0.2']),
+          equals(1),
+        );
+        expect(f01.isLockedBaselineInRelease('v0.2'), isTrue);
+        expect(f02.isLockedBaselineInRelease('v0.2'), isFalse);
+        expect(epic.totalOpenFeatureFixes(), equals(1));
+        expect(f01.executionModeLabel, equals('FULL FEATURE BUILD'));
+        expect(f02.executionModeLabel, equals('FOCUSED [FIX] PASS (1 Open)'));
+        expect(
+          f02.effectiveChecksForRelease('v0.2'),
+          hasLength(2),
+        );
+
+        final copied = epic.deepCopy();
+        copied.features.first.tuning.first.value = '12.0';
+        expect(epic.features.first.tuning.first.value, equals('9.5'));
+
+        final roundTripDoc = epic.toTierDocument(
+          docId: epic.id,
+          parentReleaseId: 'rel_v01',
+        );
+        final restored = EpicSpec.fromDocument(roundTripDoc);
+        expect(restored.sceneOwnership.first.path, equals('res://scenes/player_mech.tscn'));
+        expect(restored.inScope, equals(['8-way walk', 'Horizontal claw dash']));
+        expect(restored.doneWhen, equals(['All E01 Features pass Playtest Gate']));
+        expect(restored.features, hasLength(3));
+        expect(restored.features[1].releaseDelta, contains('Reset dash cooldown'));
+        expect(restored.features[1].fixes.single.text, contains('pillar bevel'));
+        expect(restored.features[2].introducedIn, equals('v0.2'));
+      },
+    );
+
+    test(
+      '13. Legacy EpicSpec JSON without features key migrates into 1 F01 slice and preserves explicit empty features list',
+      () {
+        final legacyJson = <String, dynamic>{
+          'id': 'legacy_e01',
+          'code': 'E01',
+          'title': 'Claw Dash Movement',
+          'releaseVersion': 'v0.1',
+          'lifecycle': 'active',
+          'goal': 'Dash 4 m with cyan trail and hit cooldown.',
+          'links': ['res://scenes/player_mech.tscn', 'HUD cooldown indicator'],
+          'outOfScope': ['No air dash'],
+          'controls': [
+            {'action': 'claw_dash', 'trigger': 'Space', 'rule': '0.65 s cooldown'},
+          ],
+          'states': ['Idle', 'ClawDash'],
+          'interrupts': ['Wall impact ends dash'],
+          'tuning': [
+            {'key': 'dash_speed', 'value': '22.0', 'unit': 'm/s'},
+          ],
+          'feedback': ['Cyan ribbon trail emits for 0.2 s'],
+          'levelStaging': 'res://scenes/arena_proto.tscn — 24 m test pit',
+          'checks': [
+            {'id': 'chk_1', 'text': 'Press Space -> Mech dashes 4 m', 'passed': true},
+          ],
+          'fixes': [
+            {'id': 'fix_1', 'text': 'Dash misses corner trigger', 'resolved': false},
+          ],
+        };
+
+        final legacyDoc = TierDocument(
+          id: 'legacy_e01',
+          title: 'Claw Dash Movement',
+          tier: TierType.epic,
+          sections: {
+            'code': 'E01',
+            'epic_spec_json': jsonEncode(legacyJson),
+          },
+        );
+
+        final migrated = EpicSpec.fromDocument(legacyDoc);
+        expect(migrated.features, hasLength(1));
+        final f01 = migrated.features.single;
+        expect(f01.code, equals('F01'));
+        expect(f01.title, equals('Claw Dash Movement'));
+        expect(f01.introducedIn, equals('v0.1'));
+        expect(f01.status, equals(FeatureStatus.active));
+        expect(f01.controls.single.action, equals('claw_dash'));
+        expect(f01.tuning.single.key, equals('dash_speed'));
+        expect(f01.cues, equals(['Cyan ribbon trail emits for 0.2 s']));
+        expect(f01.checks.single.passed, isTrue);
+        expect(f01.fixes.single.text, equals('Dash misses corner trigger'));
+        expect(
+          migrated.sceneOwnership.map((o) => o.path),
+          containsAll([
+            'res://scenes/player_mech.tscn',
+            'res://scenes/arena_proto.tscn',
+          ]),
+        );
+        expect(migrated.stateFlow, equals(['Idle', 'ClawDash']));
+        expect(migrated.interruptRules, equals(['Wall impact ends dash']));
+
+        // Explicit empty features list must NOT auto-synthesize F01
+        final emptyFeatJson = Map<String, dynamic>.from(legacyJson)
+          ..['features'] = <dynamic>[];
+        final emptyParsed = EpicSpec.fromJson(emptyFeatJson);
+        expect(emptyParsed.features, isEmpty);
       },
     );
   });
