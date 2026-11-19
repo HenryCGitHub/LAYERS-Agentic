@@ -4,7 +4,7 @@
 >
 > **Strict Zero-Overlap Boundary**:
 > - **Epics (Large Domains)** own cross-slice `Goal` / `In Scope` / `Done When`, `sceneOwnership` (`res://` paths + roles), `stateFlow`, `interruptRules`, `outOfScope` cuts, and child Feature slices (`F01–F0N`).
-> - **Features (30–90 min Playable Slices)** own `InputMap` bindings, live GDScript `@export` tuning variables (`m`/`px`), viewport/UI/audio cues, Playtest Gate checkboxes, `[FIX]` revisions, and 1-click **AI Build Prompt** export (`GodotContextBuilder.buildFeatureContext`).
+> - **Features (30–90 min Playable Slices)** own `InputMap` bindings, live GDScript `@export` tuning variables (`m`/`px`), viewport/UI/audio cues, Playtest Gate checkboxes, `[FIX]` revisions, and 1-click **Godot 4 Cloud AI** builds (`build_feature` / `fix_feature` with targeted `.gd` patches and sibling preservation).
 > - Never emit implementation micro-steps, `Task`/`Step` tickets, file trees, or non-Godot engine terms (`.uasset`, `.uproject`, `Blueprint`, `ACharacter`, `UMG`, `GameObject`, `Prefab`, `cm/s`).
 
 ---
@@ -23,7 +23,7 @@
 ## 2. Surface-by-Surface Mapping (Stage 1 & Stage 2)
 
 ### A. Stage 1 — Project Spec (`1. Project Spec` in [`lib/screens/project_pitch_screen.dart`](lib/screens/project_pitch_screen.dart) & [`lib/agents/project_concept_agent.dart`](lib/agents/project_concept_agent.dart))
-Toggleable between **Clean Spec Document** (`PROJECT_SPEC.md`) and **Raw `ROOT_GODOT_CONTEXT.md`** (rendered by [`GodotContextBuilder.buildRootGodotContext`](lib/utils/godot_context_builder.dart)), plus a `3D (m, m/s)` / `2D (px, px/s)` dimension toggle:
+Displays the Clean Spec Document (`PROJECT_SPEC.md`) with a `3D (m, m/s)` / `2D (px, px/s)` dimension toggle and full `.md` export in the top `Export ▾` menu:
 
 | Section | Fields | Assigned Style | Exact Format Rule | Example |
 | :--- | :--- | :--- | :--- | :--- |
@@ -58,11 +58,11 @@ Toggleable between **Clean Spec Document** (`PROJECT_SPEC.md`) and **Raw `ROOT_G
 | **`§04` Domain Out-of-Scope Cuts** | `outOfScope[]` | **4. Micro-Label Cut** | Explicit `"No ..."` boundaries for the Epic domain | `No wall jumping or ledge vaulting` |
 | **`§05` Child Features** | `features[]`, `+ Add Feature Slice` | **Rollup Cards** | Live `passed/total` Feature rollups + inline creation of new slices | `F02 · Armored Claw Dash (60 min)` |
 
-#### Feature Slice Spec Sheet (`selectedFeatureId != null` -> `GodotContextBuilder.buildFeatureContext`)
+#### Feature Slice Spec Sheet (`selectedFeatureId != null` -> synced to Godot 4 Cloud AI via `functions/index.js`)
 | Section | Fields | Assigned Style | Exact Format Rule | Example |
 | :--- | :--- | :--- | :--- | :--- |
 | **`§01` Feature Scope** | `goal`, `inScope[]`, `doneWhen[]`, `releaseDelta` | **1. BLUF** + Delta Banner | Playable `30–90 min` slice scope + link to parent Epic | `Goal: Launch a 5.5 m forward dash on 1.1 s cooldown.` |
 | **`§02` Input Actions (`InputMap`)** | `controls[]` (`action`, `trigger`, `rule`) | **4. Godot Control Rule** | `snake_case` `project.godot` InputMap action + binding + unit-bound rule | `claw_dash \| Just Pressed (Space) \| Launch 5.5 m over 0.16s` |
 | **`§03` Exposed Tuning (`@export`)** | `tuning[]` (`key`, `value`, `unit`) | **4. Live Tuning Input** | `snake_case` `@export` var + canonical Godot unit (`m`, `m/s`, `px`, `px/s`, `deg`, `s`, `hp`, `x`, `%`, `count`, `bool`) | `dash_distance: 5.5 m` |
 | **`§04` Viewport, UI & Audio Cues** | `cues[]` | **1. Observable Cue** | Camera punch, GPUParticles/StandardMaterial3D flash, Control HUD arc, or audio cue | `Orange emissive thruster ribbon fires for 0.16 s` |
-| **`§05` Playtest Gate & `[FIX]` Notes** | `checks[]`, `releaseDeltaChecks[]`, `fixes[]`, `status` | **2. Causal Playtest Gate** + **`[FIX]`** | Interactive Playtest checks + live `Flag [FIX]` switching `AI Build Prompt` between `FULL FEATURE BUILD` and `FOCUSED [FIX] PASS` | `Press Space -> Mech crosses 5.5 m cleanly` |
+| **`§05` Playtest Gate & `[FIX]` Notes** | `checks[]`, `releaseDeltaChecks[]`, `fixes[]`, `status` | **2. Causal Playtest Gate** + **`[FIX]`** | Interactive Playtest checks + live `Flag [FIX]` switching Godot 4 Dock & Cloud AI between `⚡ Build F0#` and `🔧 Fix F0#` | `Press Space -> Mech crosses 5.5 m cleanly` |

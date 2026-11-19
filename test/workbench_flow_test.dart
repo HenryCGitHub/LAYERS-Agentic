@@ -1152,6 +1152,56 @@ void main() {
         expect(ekExport.content, isNot(contains('m/s')));
       },
     );
+
+    test(
+      '4-tier deep-link (?project=&epic=&feature=) & remote selected_feature_id Cloud sync',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final p1 = wb.activeProjectId!;
+        final e01 = wb.activeReleaseEpics.first;
+        final f02 = e01.features.firstWhere((f) => f.code == 'F02');
+        final f01 = e01.features.firstWhere((f) => f.code == 'F01');
+
+        // Navigate away, then jump directly to E01/F02 via deep-link params
+        wb.createNewProject();
+        wb.applyDeepLinkParams({
+          'project': p1,
+          'epic': e01.id,
+          'feature': f02.id,
+        });
+        expect(wb.activeProjectId, equals(p1));
+        expect(wb.selectedEpicId, equals(e01.id));
+        expect(wb.selectedFeatureId, equals(f02.id));
+
+        // Incoming Cloud Firestore snapshot updates Feature tuning/checks + selected_feature_id
+        final mutatedE01 = EpicSpec.fromDocument(wb.documents[e01.id]!);
+        final mutatedF01 = mutatedE01.features.firstWhere((f) => f.id == f01.id);
+        mutatedF01.tuning.first.value = '8.8';
+        mutatedF01.checks.first.passed = true;
+
+        final remoteDocs = <String, TierDocument>{
+          for (final entry in wb.documents.entries) entry.key: entry.value,
+        };
+        remoteDocs[e01.id] = mutatedE01.applyToDocument(wb.documents[e01.id]!);
+        remoteDocs[p1] = wb.documents[p1]!.copyWith(
+          sections: {
+            ...wb.documents[p1]!.sections,
+            'selected_epic_id': e01.id,
+            'selected_feature_id': f01.id,
+          },
+        );
+
+        expect(wb.applyRemoteDocumentSnapshot(remoteDocs), isTrue);
+        expect(wb.selectedEpicId, equals(e01.id));
+        expect(wb.selectedFeatureId, equals(f01.id));
+        expect(
+          wb.selectedFeatureSpec?.tuning.first.value,
+          equals('8.8'),
+        );
+      },
+    );
   });
 }
 

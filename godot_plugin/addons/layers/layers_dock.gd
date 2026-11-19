@@ -116,14 +116,19 @@ var _linked_scroll: ScrollContainer
 var _linked_box: VBoxContainer
 var _project_meta_label: Label
 var _epic_selector: OptionButton
+var _feature_selector: OptionButton
+var _locked_baseline_label: Label
 
 var _primary_cta_btn: Button
 var _play_btn: Button
 var _undo_btn: Button
 
+var _goal_hdr: Label
 var _goal_label: Label
 var _deltas_box: VBoxContainer
+var _tuning_hdr: Label
 var _tuning_box: VBoxContainer
+var _checks_hdr: Label
 var _checks_box: VBoxContainer
 var _pass_reopen_btn: Button
 
@@ -334,6 +339,18 @@ func _build_ui() -> void:
 	_epic_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_linked_box.add_child(_epic_selector)
 
+	_feature_selector = OptionButton.new()
+	_feature_selector.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_feature_selector.visible = false
+	_linked_box.add_child(_feature_selector)
+
+	_locked_baseline_label = Label.new()
+	_locked_baseline_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_locked_baseline_label.add_theme_font_size_override("font_size", 11)
+	_locked_baseline_label.add_theme_color_override("font_color", Color(0.96, 0.75, 0.35))
+	_locked_baseline_label.visible = false
+	_linked_box.add_child(_locked_baseline_label)
+
 	# Action Row: Build/Fix/Pass + Play + Undo
 	var action_row := HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 6)
@@ -362,10 +379,10 @@ func _build_ui() -> void:
 	goal_vbox.add_theme_constant_override("separation", 6)
 	goal_card.add_child(goal_vbox)
 
-	var goal_hdr := Label.new()
-	goal_hdr.text = "§01 EPIC INTENT"
-	goal_hdr.add_theme_font_size_override("font_size", 10)
-	goal_vbox.add_child(goal_hdr)
+	_goal_hdr = Label.new()
+	_goal_hdr.text = "§01 FEATURE SCOPE"
+	_goal_hdr.add_theme_font_size_override("font_size", 10)
+	goal_vbox.add_child(_goal_hdr)
 
 	_goal_label = Label.new()
 	_goal_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -414,26 +431,26 @@ func _build_ui() -> void:
 	tuning_vbox.add_theme_constant_override("separation", 6)
 	tuning_card.add_child(tuning_vbox)
 
-	var tuning_hdr := Label.new()
-	tuning_hdr.text = "§04 @export TUNING"
-	tuning_hdr.add_theme_font_size_override("font_size", 10)
-	tuning_vbox.add_child(tuning_hdr)
+	_tuning_hdr = Label.new()
+	_tuning_hdr.text = "§03 @export TUNING"
+	_tuning_hdr.add_theme_font_size_override("font_size", 10)
+	tuning_vbox.add_child(_tuning_hdr)
 
 	_tuning_box = VBoxContainer.new()
 	_tuning_box.add_theme_constant_override("separation", 4)
 	tuning_vbox.add_child(_tuning_box)
 
-	# §06 Playtest Acceptance Gate Card
+	# Playtest Acceptance Gate Card
 	var checks_card := PanelContainer.new()
 	_linked_box.add_child(checks_card)
 	var checks_vbox := VBoxContainer.new()
 	checks_vbox.add_theme_constant_override("separation", 6)
 	checks_card.add_child(checks_vbox)
 
-	var checks_hdr := Label.new()
-	checks_hdr.text = "§06 PLAYTEST GATE"
-	checks_hdr.add_theme_font_size_override("font_size", 10)
-	checks_vbox.add_child(checks_hdr)
+	_checks_hdr = Label.new()
+	_checks_hdr.text = "§05 PLAYTEST GATE"
+	_checks_hdr.add_theme_font_size_override("font_size", 10)
+	checks_vbox.add_child(_checks_hdr)
 
 	_checks_box = VBoxContainer.new()
 	_checks_box.add_theme_constant_override("separation", 4)
@@ -489,6 +506,7 @@ func _wire_signals() -> void:
 	_token_input.text_submitted.connect(func(_t: String) -> void: _on_save_token_pressed())
 
 	_epic_selector.item_selected.connect(_on_epic_selected)
+	_feature_selector.item_selected.connect(_on_feature_selected)
 	_primary_cta_btn.pressed.connect(_on_primary_cta_pressed)
 	_play_btn.pressed.connect(_on_play_pressed)
 	_undo_btn.pressed.connect(_on_undo_pressed)
@@ -496,7 +514,8 @@ func _wire_signals() -> void:
 	_clear_errors_btn.pressed.connect(clear_captured_errors)
 	_auto_fix_errors_btn.pressed.connect(func() -> void:
 		_auto_heal_attempted = false
-		_trigger_epic_agent("fix_epic")
+		var fix_action: String = "fix_feature" if not _get_active_feature().is_empty() else "fix_epic"
+		_trigger_epic_agent(fix_action)
 	)
 	_flag_fix_btn.pressed.connect(_on_flag_fix_pressed)
 	_fix_input.text_submitted.connect(func(_t: String) -> void: _on_flag_fix_pressed())
@@ -561,6 +580,9 @@ func _resolve_play_scene_path() -> String:
 		candidates.append(arena_scene)
 	var epic: Dictionary = _get_active_epic()
 	if not epic.is_empty():
+		for own_path in _collect_epic_ownership_paths(epic):
+			if str(own_path).ends_with(".tscn"):
+				candidates.append(str(own_path))
 		for sp in _extract_tscn_paths_from_text(str(epic.get("levelStaging", ""))):
 			candidates.append(sp)
 		var links_v: Variant = epic.get("links", [])
@@ -659,12 +681,12 @@ func _collect_live_context() -> Dictionary:
 	return {"recent_errors": errs}
 
 
-func _sync_with_cloud(preferred_epic_id: String = "") -> void:
+func _sync_with_cloud(preferred_epic_id: String = "", preferred_feature_id: String = "") -> void:
 	if _sync_client == null or not bool(_sync_client.call("has_link_token")):
 		_refresh_ui()
 		return
 	var live_ctx: Dictionary = _collect_live_context()
-	_sync_client.call("fetch_active_epic", live_ctx, preferred_epic_id)
+	_sync_client.call("fetch_active_epic", live_ctx, preferred_epic_id, preferred_feature_id)
 
 
 func _open_web_studio() -> void:
@@ -755,11 +777,14 @@ func _on_busy_changed(busy: bool) -> void:
 
 
 func _on_agent_busy_changed(agent_busy: bool) -> void:
-	_primary_cta_btn.disabled = agent_busy
-	_auto_fix_errors_btn.disabled = agent_busy
-	_pass_reopen_btn.disabled = agent_busy
+	var locked: bool = _is_active_feature_locked()
+	_primary_cta_btn.disabled = agent_busy or locked
+	_auto_fix_errors_btn.disabled = agent_busy or locked
+	_pass_reopen_btn.disabled = agent_busy or locked
 	_epic_selector.disabled = agent_busy
-	_flag_fix_btn.disabled = agent_busy
+	if _feature_selector != null:
+		_feature_selector.disabled = agent_busy
+	_flag_fix_btn.disabled = agent_busy or locked
 
 
 func _on_epic_selected(idx: int) -> void:
@@ -771,6 +796,17 @@ func _on_epic_selected(idx: int) -> void:
 		_sync_with_cloud(eid)
 
 
+func _on_feature_selected(idx: int) -> void:
+	if idx < 0 or _feature_selector == null:
+		return
+	var meta_v: Variant = _feature_selector.get_item_metadata(idx)
+	var fid: String = str(meta_v).strip_edges()
+	var epic: Dictionary = _get_active_epic()
+	var eid: String = str(epic.get("id", "")).strip_edges()
+	if not eid.is_empty() and not fid.is_empty():
+		_sync_with_cloud(eid, fid)
+
+
 func _get_active_epic() -> Dictionary:
 	var ep_v: Variant = _payload.get("activeEpic", {})
 	if typeof(ep_v) == TYPE_DICTIONARY:
@@ -778,7 +814,104 @@ func _get_active_epic() -> Dictionary:
 	return {}
 
 
+func _get_active_feature() -> Dictionary:
+	var feat_v: Variant = _payload.get("activeFeature", null)
+	if typeof(feat_v) == TYPE_DICTIONARY:
+		return feat_v as Dictionary
+	return {}
+
+
+func _is_active_feature_locked() -> bool:
+	var feat: Dictionary = _get_active_feature()
+	if feat.is_empty():
+		return false
+	if bool(feat.get("isLockedBaseline", false)):
+		return true
+	var fid: String = str(feat.get("id", ""))
+	var feats_v: Variant = _payload.get("activeEpicFeatures", [])
+	if typeof(feats_v) == TYPE_ARRAY:
+		for fv in (feats_v as Array):
+			if typeof(fv) == TYPE_DICTIONARY and str((fv as Dictionary).get("id", "")) == fid:
+				return bool((fv as Dictionary).get("isLockedBaseline", false))
+	return false
+
+
+func _get_active_target() -> Dictionary:
+	var feat: Dictionary = _get_active_feature()
+	return feat if not feat.is_empty() else _get_active_epic()
+
+
+func _get_active_target_code() -> String:
+	var feat: Dictionary = _get_active_feature()
+	if not feat.is_empty():
+		return str(feat.get("code", "F01"))
+	var epic: Dictionary = _get_active_epic()
+	return str(epic.get("code", "E01"))
+
+
+func _get_active_target_checks() -> Array:
+	var feat: Dictionary = _get_active_feature()
+	if not feat.is_empty():
+		var eff_v: Variant = feat.get("effectiveChecks", null)
+		if typeof(eff_v) == TYPE_ARRAY and not (eff_v as Array).is_empty():
+			return eff_v as Array
+		var fchk_v: Variant = feat.get("checks", [])
+		return fchk_v as Array if typeof(fchk_v) == TYPE_ARRAY else []
+	var epic: Dictionary = _get_active_epic()
+	var echk_v: Variant = epic.get("checks", [])
+	return echk_v as Array if typeof(echk_v) == TYPE_ARRAY else []
+
+
+func _get_active_target_open_fixes_count() -> int:
+	var target: Dictionary = _get_active_target()
+	var raw_open: Variant = target.get("openFixes", null)
+	if typeof(raw_open) == TYPE_ARRAY:
+		return (raw_open as Array).size()
+	return int(target.get("openFixesCount", 0))
+
+
+func _get_active_target_is_passed() -> bool:
+	var feat: Dictionary = _get_active_feature()
+	if not feat.is_empty():
+		if _is_active_feature_locked():
+			return true
+		if feat.has("isPassed"):
+			return bool(feat.get("isPassed", false))
+		return str(feat.get("status", "")).strip_edges().to_lower() == "passed" and _get_active_target_open_fixes_count() == 0
+	var epic: Dictionary = _get_active_epic()
+	return bool(epic.get("isPassed", false))
+
+
+func _collect_epic_ownership_paths(epic: Dictionary) -> Array:
+	var paths := []
+	var add_res := func(raw_p: String) -> void:
+		var clean: String = raw_p.strip_edges()
+		if not clean.is_empty() and not paths.has(clean):
+			paths.append(clean)
+	var own_v: Variant = epic.get("sceneOwnership", [])
+	if typeof(own_v) == TYPE_ARRAY:
+		for ov in (own_v as Array):
+			if typeof(ov) == TYPE_DICTIONARY:
+				add_res.call(str((ov as Dictionary).get("path", "")))
+			else:
+				add_res.call(str(ov))
+	var res_rx := RegEx.new()
+	res_rx.compile("res://[A-Za-z0-9_./-]+")
+	for src in [str(epic.get("levelStaging", "")), str(_payload.get("arenaScenePath", ""))]:
+		for m in res_rx.search_all(src):
+			add_res.call(m.get_string())
+	var links_v: Variant = epic.get("links", [])
+	if typeof(links_v) == TYPE_ARRAY:
+		for lk in (links_v as Array):
+			for m2 in res_rx.search_all(str(lk)):
+				add_res.call(m2.get_string())
+	return paths
+
+
 func _get_active_epic_open_fixes_count(epic: Dictionary) -> int:
+	var feat: Dictionary = _get_active_feature()
+	if not feat.is_empty():
+		return _get_active_target_open_fixes_count()
 	var raw_open: Variant = epic.get("openFixes", null)
 	if typeof(raw_open) == TYPE_ARRAY:
 		return (raw_open as Array).size()
@@ -789,6 +922,27 @@ func _sync_active_epic_summary_counts() -> void:
 	var epic: Dictionary = _get_active_epic()
 	if epic.is_empty():
 		return
+	var feat: Dictionary = _get_active_feature()
+	if not feat.is_empty():
+		var fid: String = str(feat.get("id", ""))
+		var f_open: int = _get_active_target_open_fixes_count()
+		feat["openFixesCount"] = f_open
+		var f_checks: Array = _get_active_target_checks()
+		var f_passed: int = 0
+		for cv in f_checks:
+			if typeof(cv) == TYPE_DICTIONARY and bool((cv as Dictionary).get("passed", false)):
+				f_passed += 1
+		feat["passedChecksCount"] = f_passed
+		var feats_v: Variant = _payload.get("activeEpicFeatures", [])
+		if typeof(feats_v) == TYPE_ARRAY:
+			for fv in (feats_v as Array):
+				if typeof(fv) == TYPE_DICTIONARY and str((fv as Dictionary).get("id", "")) == fid:
+					var fsum: Dictionary = fv as Dictionary
+					fsum["openFixesCount"] = f_open
+					fsum["passedChecksCount"] = f_passed
+					fsum["isPassed"] = _get_active_target_is_passed()
+		return
+
 	var active_id: String = str(epic.get("id", ""))
 	var open_fixes: int = _get_active_epic_open_fixes_count(epic)
 	epic["openFixesCount"] = open_fixes
@@ -812,29 +966,32 @@ func _sync_active_epic_summary_counts() -> void:
 func compute_primary_cta_state() -> Dictionary:
 	var epic: Dictionary = _get_active_epic()
 	if epic.is_empty():
-		return {"mode": "sync", "text": "↻ Sync Epics", "issue_count": 0}
-	var ecode: String = str(epic.get("code", "E01"))
-	var open_fixes: int = _get_active_epic_open_fixes_count(epic)
+		return {"mode": "sync", "text": "↻ Sync Specs", "issue_count": 0}
+	var feat: Dictionary = _get_active_feature()
+	if not feat.is_empty() and _is_active_feature_locked():
+		var intro_ver: String = str(feat.get("introducedIn", "v0.1"))
+		return {"mode": "locked", "text": "🔒 Baseline Locked (%s)" % intro_ver, "issue_count": 0}
+	var tcode: String = _get_active_target_code()
+	var open_fixes: int = _get_active_target_open_fixes_count()
 	var errs: Array[String] = _collect_recent_errors()
 	var issue_count: int = open_fixes + errs.size()
-	var checks_raw: Variant = epic.get("checks", [])
-	var checks: Array = checks_raw as Array if typeof(checks_raw) == TYPE_ARRAY else []
+	var checks: Array = _get_active_target_checks()
 	var passed_count: int = 0
 	if not checks.is_empty():
 		for cv in checks:
 			if typeof(cv) == TYPE_DICTIONARY and bool((cv as Dictionary).get("passed", false)):
 				passed_count += 1
 	else:
-		passed_count = int(epic.get("passedChecksCount", 0))
-	var is_passed: bool = bool(epic.get("isPassed", false))
+		passed_count = int(_get_active_target().get("passedChecksCount", 0))
+	var is_passed: bool = _get_active_target_is_passed()
 
 	if issue_count > 0:
-		return {"mode": "fix", "text": "🔧 Fix %s (%d)" % [ecode, issue_count], "issue_count": issue_count}
+		return {"mode": "fix", "text": "🔧 Fix %s (%d)" % [tcode, issue_count], "issue_count": issue_count}
 	if not is_passed and not checks.is_empty() and passed_count >= checks.size():
-		return {"mode": "pass", "text": "✓ Pass %s →" % ecode, "issue_count": 0}
+		return {"mode": "pass", "text": "✓ Pass %s →" % tcode, "issue_count": 0}
 	return {
 		"mode": "build",
-		"text": ("⚡ Rebuild %s" % ecode) if is_passed else ("⚡ Build %s" % ecode),
+		"text": ("⚡ Rebuild %s" % tcode) if is_passed else ("⚡ Build %s" % tcode),
 		"issue_count": 0,
 	}
 
@@ -844,20 +1001,27 @@ func _on_primary_cta_pressed() -> void:
 	if epic.is_empty():
 		_sync_with_cloud()
 		return
+	var feat: Dictionary = _get_active_feature()
+	if _is_active_feature_locked():
+		_set_status("Baseline %s is locked in this release." % _get_active_target_code(), false)
+		return
 	var cta: Dictionary = compute_primary_cta_state()
 	var mode: String = str(cta.get("mode", "build"))
 	if mode == "pass":
 		if _sync_client != null:
-			_sync_client.call("push_epic_mutation", {
-				"action": "pass_epic",
+			var mut := {
+				"action": "pass_feature" if not feat.is_empty() else "pass_epic",
 				"epicId": str(epic.get("id", "")),
-			}, _collect_live_context())
+			}
+			if not feat.is_empty():
+				mut["featureId"] = str(feat.get("id", ""))
+			_sync_client.call("push_epic_mutation", mut, _collect_live_context())
 		return
 	_auto_heal_attempted = false
 	if mode == "fix":
-		_trigger_epic_agent("fix_epic")
+		_trigger_epic_agent("fix_feature" if not feat.is_empty() else "fix_epic")
 	else:
-		_trigger_epic_agent("build_epic")
+		_trigger_epic_agent("build_feature" if not feat.is_empty() else "build_epic")
 
 
 func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
@@ -866,6 +1030,8 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 	var epic: Dictionary = _get_active_epic()
 	if epic.is_empty():
 		return
+	var feat: Dictionary = _get_active_feature()
+	var feature_id: String = str(feat.get("id", ""))
 	var epic_id: String = str(epic.get("id", ""))
 	var dim_str: String = str(_payload.get("dimension", "dim3d")).strip_edges().to_lower()
 	var default_arena: String = "res://scenes/arena_2d.tscn" if dim_str == "dim2d" else "res://scenes/arena_3d.tscn"
@@ -877,27 +1043,25 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 	var live_ctx: Dictionary = _collect_live_context()
 
 	var ed_int: EditorInterface = _as_editor_interface()
-	var live_scripts_v: Variant = _executor.call("read_all_live_project_scripts", "res://", ed_int)
+	var ownership_paths: Array = _collect_epic_ownership_paths(epic)
+	var live_scripts_v: Variant = null
+	if _executor.has_method("read_scoped_project_scripts"):
+		live_scripts_v = _executor.call("read_scoped_project_scripts", ownership_paths, "res://", ed_int, 16)
+	else:
+		live_scripts_v = _executor.call("read_all_live_project_scripts", "res://", ed_int)
 	var live_scripts: Dictionary = live_scripts_v as Dictionary if typeof(live_scripts_v) == TYPE_DICTIONARY else {}
 
 	var diag_scenes: Array = []
 	var extra_scenes := PackedStringArray()
-	for cand in [arena_scene, _resolve_play_scene_path()]:
-		var cs: String = str(cand).strip_edges()
+	var add_scene_cand := func(raw_s: String) -> void:
+		var cs: String = raw_s.strip_edges()
 		if not cs.is_empty() and cs.ends_with(".tscn") and not (cs in extra_scenes):
 			extra_scenes.append(cs)
 			diag_scenes.append(cs)
-	for sp_lvl in _extract_tscn_paths_from_text(str(epic.get("levelStaging", ""))):
-		if not (sp_lvl in extra_scenes):
-			extra_scenes.append(sp_lvl)
-			diag_scenes.append(sp_lvl)
-	var links_v: Variant = epic.get("links", [])
-	if typeof(links_v) == TYPE_ARRAY:
-		for lk in (links_v as Array):
-			for sp_lk in _extract_tscn_paths_from_text(str(lk)):
-				if not (sp_lk in extra_scenes):
-					extra_scenes.append(sp_lk)
-					diag_scenes.append(sp_lk)
+	for cand in [arena_scene, _resolve_play_scene_path()]:
+		add_scene_cand.call(str(cand))
+	for own_p in ownership_paths:
+		add_scene_cand.call(str(own_p))
 
 	var snap_v: Variant = _executor.call("capture_rich_scene_snapshot", ed_int, extra_scenes)
 	var input_v: Variant = _executor.call("capture_input_map_snapshot")
@@ -908,7 +1072,8 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 	var errs: Array[String] = _collect_recent_errors()
 	if not extra_error_text.strip_edges().is_empty():
 		errs.append(extra_error_text.strip_edges())
-	var open_fixes_v: Variant = epic.get("openFixes", [])
+	var target: Dictionary = _get_active_target()
+	var open_fixes_v: Variant = target.get("openFixes", [])
 	var prompt_parts := PackedStringArray()
 	if typeof(open_fixes_v) == TYPE_ARRAY:
 		for fx_raw in (open_fixes_v as Array):
@@ -917,9 +1082,10 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 				if not fxt.is_empty():
 					prompt_parts.append("[FIX] " + fxt)
 
+	var is_fix: bool = action == "fix_epic" or action == "fix_feature"
 	_pending_build_preferred_scene = arena_scene
 	_set_status(
-		"%s %s via Cloud Gemini..." % ["🔧 Fixing" if action == "fix_epic" else "⚡ Building", str(epic.get("code", "Epic"))],
+		"%s %s via Cloud Gemini..." % ["🔧 Fixing" if is_fix else "⚡ Building", _get_active_target_code()],
 		false
 	)
 	_sync_client.call(
@@ -934,7 +1100,8 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 		"\n".join(prompt_parts),
 		"\n".join(errs),
 		input_snap,
-		diag_arr
+		diag_arr,
+		feature_id
 	)
 
 
@@ -979,8 +1146,9 @@ func _on_agent_bundle_received(agent_bundle: Dictionary, _payload_resp: Dictiona
 	if not compile_errs.is_empty() and not _auto_heal_attempted:
 		_auto_heal_attempted = true
 		var joined_err: String = "\n".join(compile_errs)
-		_set_status("Auto-healing GDScript compile error...", true)
-		_trigger_epic_agent("fix_epic", joined_err)
+		var heal_action: String = "fix_feature" if not _get_active_feature().is_empty() else "fix_epic"
+		_set_status("Auto-healing GDScript compile/patch error...", true)
+		_trigger_epic_agent(heal_action, joined_err)
 		return
 
 	_auto_heal_attempted = false
@@ -1034,21 +1202,36 @@ func toggle_epic_check_by_id(check_id: String, pressed: bool) -> void:
 	var epic: Dictionary = _get_active_epic()
 	if epic.is_empty():
 		return
-	var checks_v: Variant = epic.get("checks", [])
-	if typeof(checks_v) == TYPE_ARRAY:
-		for cv in (checks_v as Array):
-			if typeof(cv) == TYPE_DICTIONARY and str((cv as Dictionary).get("id", "")) == check_id:
-				(cv as Dictionary)["passed"] = pressed
-				break
+	if _is_active_feature_locked():
+		_set_status("Baseline %s is read-only in this release." % _get_active_target_code(), false)
+		return
+	var feat: Dictionary = _get_active_feature()
+	if not feat.is_empty():
+		for arr_key in ["effectiveChecks", "checks", "releaseDeltaChecks"]:
+			var arr_v: Variant = feat.get(arr_key, [])
+			if typeof(arr_v) == TYPE_ARRAY:
+				for cv in (arr_v as Array):
+					if typeof(cv) == TYPE_DICTIONARY and str((cv as Dictionary).get("id", "")) == check_id:
+						(cv as Dictionary)["passed"] = pressed
+	else:
+		var checks_v: Variant = epic.get("checks", [])
+		if typeof(checks_v) == TYPE_ARRAY:
+			for cv in (checks_v as Array):
+				if typeof(cv) == TYPE_DICTIONARY and str((cv as Dictionary).get("id", "")) == check_id:
+					(cv as Dictionary)["passed"] = pressed
+					break
 	_sync_active_epic_summary_counts()
 	_refresh_ui()
 	if _sync_client != null and bool(_sync_client.call("has_link_token")):
-		_sync_client.call("push_epic_mutation", {
+		var mut := {
 			"action": "toggle_check",
 			"epicId": str(epic.get("id", "")),
 			"checkId": check_id,
 			"passed": pressed,
-		}, _collect_live_context())
+		}
+		if not feat.is_empty():
+			mut["featureId"] = str(feat.get("id", ""))
+		_sync_client.call("push_epic_mutation", mut, _collect_live_context())
 
 
 func log_epic_fix_text(raw_text: String) -> String:
@@ -1056,11 +1239,16 @@ func log_epic_fix_text(raw_text: String) -> String:
 	var epic: Dictionary = _get_active_epic()
 	if txt.is_empty() or epic.is_empty():
 		return ""
+	if _is_active_feature_locked():
+		_set_status("Baseline %s is read-only in this release." % _get_active_target_code(), false)
+		return ""
+	var feat: Dictionary = _get_active_feature()
+	var target: Dictionary = feat if not feat.is_empty() else epic
 	var fix_id: String = "fix_%d_%04d" % [int(Time.get_unix_time_from_system() * 1000.0), randi() % 10000]
-	var open_v: Variant = epic.get("openFixes", null)
+	var open_v: Variant = target.get("openFixes", null)
 	if typeof(open_v) != TYPE_ARRAY:
 		open_v = []
-		epic["openFixes"] = open_v
+		target["openFixes"] = open_v
 	(open_v as Array).append({
 		"id": fix_id,
 		"text": txt,
@@ -1068,14 +1256,17 @@ func log_epic_fix_text(raw_text: String) -> String:
 	})
 	_sync_active_epic_summary_counts()
 	_refresh_ui()
-	_set_status("Logged [FIX] revision on %s." % str(epic.get("code", "Epic")), false)
+	_set_status("Logged [FIX] revision on %s." % _get_active_target_code(), false)
 	if _sync_client != null and bool(_sync_client.call("has_link_token")):
-		_sync_client.call("push_epic_mutation", {
+		var mut := {
 			"action": "log_fix",
 			"epicId": str(epic.get("id", "")),
 			"fixId": fix_id,
 			"fixText": txt,
-		}, _collect_live_context())
+		}
+		if not feat.is_empty():
+			mut["featureId"] = str(feat.get("id", ""))
+		_sync_client.call("push_epic_mutation", mut, _collect_live_context())
 	return fix_id
 
 
@@ -1083,7 +1274,12 @@ func resolve_epic_fix_by_id(fix_id: String) -> void:
 	var epic: Dictionary = _get_active_epic()
 	if epic.is_empty():
 		return
-	var open_v: Variant = epic.get("openFixes", [])
+	if _is_active_feature_locked():
+		_set_status("Baseline %s is read-only in this release." % _get_active_target_code(), false)
+		return
+	var feat: Dictionary = _get_active_feature()
+	var target: Dictionary = feat if not feat.is_empty() else epic
+	var open_v: Variant = target.get("openFixes", [])
 	if typeof(open_v) == TYPE_ARRAY:
 		var arr: Array = open_v as Array
 		for i in range(arr.size() - 1, -1, -1):
@@ -1093,12 +1289,15 @@ func resolve_epic_fix_by_id(fix_id: String) -> void:
 	_refresh_ui()
 	_set_status("Marked [FIX] resolved.", false)
 	if _sync_client != null and bool(_sync_client.call("has_link_token")):
-		_sync_client.call("push_epic_mutation", {
+		var mut := {
 			"action": "resolve_fix",
 			"epicId": str(epic.get("id", "")),
 			"fixId": fix_id,
 			"resolved": true,
-		}, _collect_live_context())
+		}
+		if not feat.is_empty():
+			mut["featureId"] = str(feat.get("id", ""))
+		_sync_client.call("push_epic_mutation", mut, _collect_live_context())
 
 
 func apply_epic_tuning_value(tkey: String, next_v: String, tunit: String = "") -> void:
@@ -1106,7 +1305,12 @@ func apply_epic_tuning_value(tkey: String, next_v: String, tunit: String = "") -
 	var epic: Dictionary = _get_active_epic()
 	if clean_val.is_empty() or epic.is_empty():
 		return
-	var tuning_v: Variant = epic.get("tuning", [])
+	if _is_active_feature_locked():
+		_set_status("Baseline %s is read-only in this release." % _get_active_target_code(), false)
+		return
+	var feat: Dictionary = _get_active_feature()
+	var target: Dictionary = feat if not feat.is_empty() else epic
+	var tuning_v: Variant = target.get("tuning", [])
 	if typeof(tuning_v) == TYPE_ARRAY:
 		for tv in (tuning_v as Array):
 			if typeof(tv) == TYPE_DICTIONARY and str((tv as Dictionary).get("key", "")) == tkey:
@@ -1125,13 +1329,16 @@ func apply_epic_tuning_value(tkey: String, next_v: String, tunit: String = "") -
 		if typeof(tune_res_v) == TYPE_DICTIONARY:
 			local_updated = bool((tune_res_v as Dictionary).get("ok", false))
 	if _sync_client != null and bool(_sync_client.call("has_link_token")):
-		_sync_client.call("push_epic_mutation", {
+		var mut := {
 			"action": "update_tuning",
 			"epicId": str(epic.get("id", "")),
 			"key": tkey,
 			"value": clean_val,
 			"unit": tunit,
-		}, _collect_live_context())
+		}
+		if not feat.is_empty():
+			mut["featureId"] = str(feat.get("id", ""))
+		_sync_client.call("push_epic_mutation", mut, _collect_live_context())
 	if local_updated:
 		_set_status("Updated %s = %s %s in local .gd/.tscn and Web Studio." % [tkey, clean_val, tunit], false)
 	else:
@@ -1141,6 +1348,17 @@ func apply_epic_tuning_value(tkey: String, next_v: String, tunit: String = "") -
 func _on_pass_reopen_pressed() -> void:
 	var epic: Dictionary = _get_active_epic()
 	if epic.is_empty() or _sync_client == null:
+		return
+	var feat: Dictionary = _get_active_feature()
+	if _is_active_feature_locked():
+		return
+	if not feat.is_empty():
+		var fact: String = "reopen_feature" if _get_active_target_is_passed() else "pass_feature"
+		_sync_client.call("push_epic_mutation", {
+			"action": fact,
+			"epicId": str(epic.get("id", "")),
+			"featureId": str(feat.get("id", "")),
+		}, _collect_live_context())
 		return
 	var action: String = "reopen_epic" if bool(epic.get("isPassed", false)) else "pass_epic"
 	_sync_client.call("push_epic_mutation", {
@@ -1247,6 +1465,9 @@ func _refresh_ui() -> void:
 
 	var epic: Dictionary = _get_active_epic()
 	var active_eid: String = str(epic.get("id", ""))
+	var feat: Dictionary = _get_active_feature()
+	var active_fid: String = str(feat.get("id", ""))
+	var locked: bool = _is_active_feature_locked()
 
 	# Populate Epic OptionButton
 	_epic_selector.clear()
@@ -1272,37 +1493,97 @@ func _refresh_ui() -> void:
 	if selected_dropdown_idx >= 0:
 		_epic_selector.select(selected_dropdown_idx)
 
+	# Populate Feature OptionButton when 4-tier activeEpicFeatures exist
+	if _feature_selector != null:
+		_feature_selector.clear()
+		var feats_v: Variant = _payload.get("activeEpicFeatures", [])
+		var feats_arr: Array = feats_v as Array if typeof(feats_v) == TYPE_ARRAY else []
+		_feature_selector.visible = not feats_arr.is_empty()
+		var sel_f_idx: int = -1
+		for i in range(feats_arr.size()):
+			if typeof(feats_arr[i]) != TYPE_DICTIONARY:
+				continue
+			var fdict: Dictionary = feats_arr[i] as Dictionary
+			var fid: String = str(fdict.get("id", ""))
+			var fcode: String = str(fdict.get("code", "F01"))
+			var ftitle: String = str(fdict.get("title", "Feature"))
+			var f_locked: bool = bool(fdict.get("isLockedBaseline", false))
+			var f_passed: bool = bool(fdict.get("isPassed", false))
+			var f_fixes: int = int(fdict.get("openFixesCount", 0))
+			var f_icon: String = "🔒" if f_locked else ("✓" if f_passed else ("!" if f_fixes > 0 else "→"))
+			_feature_selector.add_item("%s %s · %s" % [f_icon, fcode, ftitle])
+			var f_item_idx: int = _feature_selector.item_count - 1
+			_feature_selector.set_item_metadata(f_item_idx, fid)
+			if fid == active_fid:
+				sel_f_idx = f_item_idx
+		if sel_f_idx >= 0:
+			_feature_selector.select(sel_f_idx)
+
+	if _locked_baseline_label != null:
+		_locked_baseline_label.visible = locked
+		if locked:
+			_locked_baseline_label.text = "%s shipped in %s baseline (read-only in %s)." % [
+				_get_active_target_code(),
+				str(feat.get("introducedIn", "v0.1")),
+				rel_ver,
+			]
+
 	if epic.is_empty():
 		_goal_label.text = "No active Epic yet. Approve Epics in LAYERS Web Studio and click ↻ Sync."
-		_primary_cta_btn.text = "↻ Sync Epics"
+		_primary_cta_btn.text = "↻ Sync Specs"
 		return
 
-	var ecode: String = str(epic.get("code", "E01"))
-	var checks_v: Variant = epic.get("checks", [])
-	var checks: Array = checks_v as Array if typeof(checks_v) == TYPE_ARRAY else []
-	var is_passed: bool = bool(epic.get("isPassed", false))
-	var cta: Dictionary = compute_primary_cta_state()
-	_primary_cta_btn.text = str(cta.get("text", "⚡ Build %s" % ecode))
+	var has_feat: bool = not feat.is_empty()
+	if _goal_hdr != null:
+		_goal_hdr.text = "§01 FEATURE SCOPE" if has_feat else "§01 EPIC INTENT"
+	if _tuning_hdr != null:
+		_tuning_hdr.text = "§03 @export TUNING" if has_feat else "§04 @export TUNING"
+	if _checks_hdr != null:
+		_checks_hdr.text = "§05 PLAYTEST GATE" if has_feat else "§06 PLAYTEST GATE"
 
-	_goal_label.text = str(epic.get("goal", ""))
+	var target: Dictionary = _get_active_target()
+	var tcode: String = _get_active_target_code()
+	var checks: Array = _get_active_target_checks()
+	var is_passed: bool = _get_active_target_is_passed()
+	var cta: Dictionary = compute_primary_cta_state()
+	_primary_cta_btn.text = str(cta.get("text", "⚡ Build %s" % tcode))
+	var agent_busy_now: bool = _sync_client != null and bool(_sync_client.call("is_agent_busy"))
+	_primary_cta_btn.disabled = agent_busy_now or locked
+	_auto_fix_errors_btn.disabled = agent_busy_now or locked
+	_pass_reopen_btn.disabled = agent_busy_now or locked
+	_flag_fix_btn.disabled = agent_busy_now or locked
+	if _fix_input != null:
+		_fix_input.editable = not locked
+
+	_goal_label.text = str(target.get("goal", ""))
 
 	# Upgrade deltas
 	for ch in _deltas_box.get_children():
 		ch.queue_free()
-	var deltas_v: Variant = epic.get("upgradeDeltas", [])
-	if typeof(deltas_v) == TYPE_ARRAY:
-		for dv in (deltas_v as Array):
+	if has_feat:
+		var rdelta: String = str(feat.get("releaseDelta", "")).strip_edges().trim_prefix("+").strip_edges()
+		if not rdelta.is_empty():
 			var d_lbl := Label.new()
-			d_lbl.text = "• +%s" % str(dv).strip_edges().trim_prefix("+").strip_edges()
+			d_lbl.text = "• +%s" % rdelta
 			d_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			d_lbl.add_theme_font_size_override("font_size", 11)
 			d_lbl.add_theme_color_override("font_color", Color(0.49, 0.83, 0.99))
 			_deltas_box.add_child(d_lbl)
+	else:
+		var deltas_v: Variant = epic.get("upgradeDeltas", [])
+		if typeof(deltas_v) == TYPE_ARRAY:
+			for dv in (deltas_v as Array):
+				var d_lbl := Label.new()
+				d_lbl.text = "• +%s" % str(dv).strip_edges().trim_prefix("+").strip_edges()
+				d_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				d_lbl.add_theme_font_size_override("font_size", 11)
+				d_lbl.add_theme_color_override("font_color", Color(0.49, 0.83, 0.99))
+				_deltas_box.add_child(d_lbl)
 
-	# §04 Tuning rows
+	# @export Tuning rows
 	for ch in _tuning_box.get_children():
 		ch.queue_free()
-	var tuning_v: Variant = epic.get("tuning", [])
+	var tuning_v: Variant = target.get("tuning", [])
 	if typeof(tuning_v) == TYPE_ARRAY:
 		for tv in (tuning_v as Array):
 			if typeof(tv) != TYPE_DICTIONARY:
@@ -1324,6 +1605,7 @@ func _refresh_ui() -> void:
 
 			var v_edit := LineEdit.new()
 			v_edit.text = tval
+			v_edit.editable = not locked
 			v_edit.custom_minimum_size = Vector2(68, 0)
 			row.add_child(v_edit)
 
@@ -1335,6 +1617,7 @@ func _refresh_ui() -> void:
 
 			var set_btn := Button.new()
 			set_btn.text = "Set"
+			set_btn.disabled = locked
 			row.add_child(set_btn)
 
 			var commit_tuning := func() -> void:
@@ -1343,7 +1626,7 @@ func _refresh_ui() -> void:
 			set_btn.pressed.connect(commit_tuning)
 			v_edit.text_submitted.connect(func(_s: String) -> void: commit_tuning.call())
 
-	# §06 Playtest Gate checkboxes
+	# Playtest Gate checkboxes
 	for ch in _checks_box.get_children():
 		ch.queue_free()
 	for cv in checks:
@@ -1356,18 +1639,22 @@ func _refresh_ui() -> void:
 		var cb := CheckBox.new()
 		cb.text = ctext
 		cb.button_pressed = cpassed
+		cb.disabled = locked
 		cb.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cb.toggled.connect(func(pressed: bool) -> void:
 			toggle_epic_check_by_id(cid, pressed)
 		)
 		_checks_box.add_child(cb)
 
-	_pass_reopen_btn.text = "↺ Reopen %s" % ecode if is_passed else "✓ Pass %s Gate" % ecode
+	if locked:
+		_pass_reopen_btn.text = "🔒 Baseline Locked"
+	else:
+		_pass_reopen_btn.text = "↺ Reopen %s" % tcode if is_passed else "✓ Pass %s Gate" % tcode
 
 	# Open [FIX] items
 	for ch in _fixes_box.get_children():
 		ch.queue_free()
-	var open_fixes_v: Variant = epic.get("openFixes", [])
+	var open_fixes_v: Variant = target.get("openFixes", [])
 	if typeof(open_fixes_v) == TYPE_ARRAY and not (open_fixes_v as Array).is_empty():
 		for fv in (open_fixes_v as Array):
 			if typeof(fv) != TYPE_DICTIONARY:
@@ -1390,6 +1677,7 @@ func _refresh_ui() -> void:
 
 			var res_btn := Button.new()
 			res_btn.text = "✓"
+			res_btn.disabled = locked
 			res_btn.tooltip_text = "Mark [FIX] resolved"
 			res_btn.pressed.connect(func() -> void:
 				resolve_epic_fix_by_id(fid)

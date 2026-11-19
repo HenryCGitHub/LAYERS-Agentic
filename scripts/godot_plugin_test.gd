@@ -567,6 +567,156 @@ func _physics_process(_delta: float) -> void:
 		_fail("10e expected first scoped key to be res://scripts/scoped_player.gd, got: %s" % str(scoped_keys))
 		return
 
+	# 11. Test 4-tier Feature Dock Flow & locked [v0.1] baseline guard
+	var mock_ed_4t := _MockEditorInterface.new()
+	dock.editor_interface = mock_ed_4t
+	dock_sync.save_link_token("lyr_test_dock_4t_1234567890")
+	dock_sync.set("_is_busy", true)
+	dock_sync.call("clear_pending_requests")
+
+	var payload_4t := {
+		"ok": true,
+		"projectTitle": "Shellbreaker 4T",
+		"dimension": "dim3d",
+		"releaseVersion": "v0.2",
+		"epicPosition": 1,
+		"totalEpics": 2,
+		"arenaScenePath": "res://scenes/scoped_arena.tscn",
+		"releaseEpicsSummary": [
+			{"id": "epic_e01", "code": "E01", "title": "Player Movement", "isPassed": false, "openFixesCount": 0, "featuresCount": 2, "passedFeaturesCount": 1},
+		],
+		"activeEpicFeatures": [
+			{"id": "f01", "code": "F01", "title": "8-Way Walk", "introducedIn": "v0.1", "status": "passed", "isLockedBaseline": true, "isPassed": true, "openFixesCount": 0},
+			{"id": "f02", "code": "F02", "title": "Armored Claw Dash", "introducedIn": "v0.1", "status": "active", "isLockedBaseline": false, "isPassed": false, "openFixesCount": 0},
+		],
+		"activeEpic": {
+			"id": "epic_e01",
+			"code": "E01",
+			"title": "Player Movement",
+			"goal": "Own locomotion and dash.",
+			"isPassed": false,
+			"sceneOwnership": [
+				{"path": "res://scenes/scoped_arena.tscn", "role": "Arena room"},
+				{"path": "res://scripts/scoped_player.gd", "role": "Player movement"},
+			],
+			"openFixes": [],
+			"openFixesCount": 0,
+			"checks": [],
+			"tuning": [],
+		},
+		"activeFeature": {
+			"id": "f02",
+			"code": "F02",
+			"title": "Armored Claw Dash",
+			"introducedIn": "v0.1",
+			"sliceTime": "60 min",
+			"status": "active",
+			"isLockedBaseline": false,
+			"isPassed": false,
+			"goal": "Forward 4 m commitment dash.",
+			"releaseDelta": "+ Refund dash on armor break",
+			"tuning": [
+				{"key": "dash_distance", "value": "4.0", "unit": "m"},
+			],
+			"checks": [
+				{"id": "f02_c1", "text": "Tap Space -> Dashes 4 m", "passed": false},
+			],
+			"effectiveChecks": [
+				{"id": "f02_c1", "text": "Tap Space -> Dashes 4 m", "passed": false},
+			],
+			"openFixes": [],
+			"openFixesCount": 0,
+		},
+	}
+	dock.call("_on_epic_updated", payload_4t)
+
+	var feat_sel_v: Variant = dock.get("_feature_selector")
+	if not (feat_sel_v is OptionButton):
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected _feature_selector OptionButton on dock.")
+		return
+	var feat_sel := feat_sel_v as OptionButton
+	if not feat_sel.visible or feat_sel.item_count != 2:
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected visible _feature_selector with 2 items, visible=%s count=%d" % [str(feat_sel.visible), feat_sel.item_count])
+		return
+	var sel_fid: String = str(feat_sel.get_item_metadata(feat_sel.selected))
+	if sel_fid != "f02":
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected selected feature metadata 'f02', got '%s'" % sel_fid)
+		return
+
+	var cta_f02_v: Variant = dock.call("compute_primary_cta_state")
+	var cta_f02: Dictionary = cta_f02_v as Dictionary if typeof(cta_f02_v) == TYPE_DICTIONARY else {}
+	if str(cta_f02.get("mode", "")) != "build" or str(cta_f02.get("text", "")) != "⚡ Build F02":
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected Feature CTA '⚡ Build F02', got: %s" % str(cta_f02))
+		return
+
+	var f02_fix_id: String = str(dock.call("log_epic_fix_text", "Dash clips pillar"))
+	if f02_fix_id.is_empty():
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected non-empty f02_fix_id.")
+		return
+	var cta_f02_fix: Dictionary = dock.call("compute_primary_cta_state") as Dictionary
+	if str(cta_f02_fix.get("mode", "")) != "fix" or str(cta_f02_fix.get("text", "")) != "🔧 Fix F02 (1)":
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected Feature fix CTA '🔧 Fix F02 (1)', got: %s" % str(cta_f02_fix))
+		return
+	var pending_v: Variant = dock_sync.get("_pending_requests")
+	var pending_arr: Array = pending_v as Array if typeof(pending_v) == TYPE_ARRAY else []
+	if pending_arr.is_empty() or not ("\"featureId\":\"f02\"" in str((pending_arr[pending_arr.size() - 1] as Dictionary).get("body", ""))):
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected queued log_fix mutation to contain featureId f02: %s" % str(pending_arr))
+		return
+
+	dock.call("resolve_epic_fix_by_id", f02_fix_id)
+	var cta_f02_res: Dictionary = dock.call("compute_primary_cta_state") as Dictionary
+	if str(cta_f02_res.get("mode", "")) != "build" or str(cta_f02_res.get("text", "")) != "⚡ Build F02":
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected Feature CTA restored to '⚡ Build F02', got: %s" % str(cta_f02_res))
+		return
+
+	dock.call("toggle_epic_check_by_id", "f02_c1", true)
+	var cta_f02_pass: Dictionary = dock.call("compute_primary_cta_state") as Dictionary
+	if str(cta_f02_pass.get("mode", "")) != "pass" or str(cta_f02_pass.get("text", "")) != "✓ Pass F02 →":
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected Feature pass CTA '✓ Pass F02 →', got: %s" % str(cta_f02_pass))
+		return
+
+	# Locked [v0.1] baseline guard on f01
+	var locked_payload := payload_4t.duplicate(true)
+	locked_payload["activeFeature"] = {
+		"id": "f01",
+		"code": "F01",
+		"title": "8-Way Walk",
+		"introducedIn": "v0.1",
+		"status": "passed",
+		"isLockedBaseline": true,
+		"isPassed": true,
+		"goal": "Baseline walk.",
+		"tuning": [{"key": "move_speed", "value": "6.4", "unit": "m/s"}],
+		"checks": [{"id": "f01_c1", "text": "Walks smoothly", "passed": true}],
+		"effectiveChecks": [{"id": "f01_c1", "text": "Walks smoothly", "passed": true}],
+		"openFixes": [],
+		"openFixesCount": 0,
+	}
+	dock.call("_on_epic_updated", locked_payload)
+	var cta_locked: Dictionary = dock.call("compute_primary_cta_state") as Dictionary
+	if str(cta_locked.get("mode", "")) != "locked":
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected 'locked' CTA mode on baseline f01, got: %s" % str(cta_locked))
+		return
+	if not str(dock.call("log_epic_fix_text", "Blocked on baseline")).is_empty():
+		mock_ed_4t.base_ctrl.free()
+		_fail("11. Expected log_epic_fix_text to reject mutation on locked baseline f01.")
+		return
+
+	dock_sync.set("_is_busy", false)
+	dock_sync.call("clear_pending_requests")
+	dock_sync.call("clear_link_token")
+	mock_ed_4t.base_ctrl.free()
+
 	print("GODOT_PLUGIN_TEST_OK")
 	quit(0)
 

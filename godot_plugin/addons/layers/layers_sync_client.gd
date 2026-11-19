@@ -408,7 +408,7 @@ func _parse_query_string(qs: String) -> Dictionary:
 	return out
 
 
-func fetch_active_epic(live_context: Dictionary = {}, preferred_epic_id: String = "") -> void:
+func fetch_active_epic(live_context: Dictionary = {}, preferred_epic_id: String = "", preferred_feature_id: String = "") -> void:
 	if not has_link_token() or _agent_busy:
 		return
 	_ensure_http_nodes()
@@ -417,6 +417,8 @@ func fetch_active_epic(live_context: Dictionary = {}, preferred_epic_id: String 
 		body_dict["godotContext"] = live_context
 	if not preferred_epic_id.strip_edges().is_empty():
 		body_dict["epicId"] = preferred_epic_id.strip_edges()
+	if not preferred_feature_id.strip_edges().is_empty():
+		body_dict["featureId"] = preferred_feature_id.strip_edges()
 	_dispatch_or_queue({
 		"kind": "get_epic",
 		"method": HTTPClient.METHOD_POST,
@@ -451,7 +453,8 @@ func run_epic_agent(
 	prompt_text: String = "",
 	error_text: String = "",
 	input_map_snapshot: Dictionary = {},
-	project_diagnostics: Array = []
+	project_diagnostics: Array = [],
+	feature_id: String = ""
 ) -> void:
 	if not has_link_token():
 		sync_failed.emit("Connect Godot 4 to LAYERS first.")
@@ -469,6 +472,8 @@ func run_epic_agent(
 		"arenaScenePath": arena_scene_path,
 		"epicScenePath": epic_scene_path,
 	}
+	if not feature_id.strip_edges().is_empty():
+		payload["featureId"] = feature_id.strip_edges()
 	if not prompt_text.strip_edges().is_empty():
 		payload["prompt"] = prompt_text.strip_edges()
 	if not error_text.strip_edges().is_empty():
