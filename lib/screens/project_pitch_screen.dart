@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
@@ -98,15 +97,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                           border: border,
                           cyan: cyan,
                         )
-                      else if (wb.showRawRootContext)
-                        _buildRawContextView(
-                          context,
-                          wb,
-                          isDark,
-                          textPrimary,
-                          border,
-                          cyan,
-                        )
                       else
                         _buildCleanSpecDocument(context, wb, draft),
                     ],
@@ -195,15 +185,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   dimension: wb.projectDimension,
                   isDark: isDark,
                   onChanged: wb.isAgentBusy ? null : wb.setProjectDimension,
-                ),
-                _SegmentedTab(
-                  isDark: isDark,
-                  leftKey: const ValueKey('stage1_tab_clean'),
-                  rightKey: const ValueKey('stage1_tab_raw'),
-                  leftLabel: 'Clean Spec Document',
-                  rightLabel: 'Raw ROOT_GODOT_CONTEXT.md',
-                  isRightSelected: wb.showRawRootContext,
-                  onSelect: (isRaw) => wb.toggleRawRootContext(isRaw),
                 ),
                 ElevatedButton.icon(
                   key: const ValueKey('approve_launch_workbench_btn'),
@@ -601,66 +582,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     if (text.isEmpty || wb.isAgentBusy) return;
     _coDesignController.clear();
     await wb.applyStage1CoDesignInstruction(text);
-  }
-
-  Widget _buildRawContextView(
-    BuildContext context,
-    WorkbenchProvider wb,
-    bool isDark,
-    Color textPrimary,
-    Color border,
-    Color cyan,
-  ) {
-    final rawText = wb.activeRootGodotMarkdown;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppTheme.bgInsetFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Exact ROOT_GODOT_CONTEXT Wire Markdown',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: cyan,
-                ),
-              ),
-              const Spacer(),
-              OutlinedButton.icon(
-                onPressed: () {
-                  Clipboard.setData(ClipboardData(text: rawText));
-                  AppToast.show(
-                    context,
-                    'Copied ROOT_GODOT_CONTEXT Markdown',
-                    isDark: isDark,
-                  );
-                },
-                icon: const Icon(Icons.copy, size: 14),
-                label: const Text('Copy Context', style: TextStyle(fontSize: 12)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          SelectableText(
-            rawText,
-            key: const ValueKey('raw_root_godot_context_text'),
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 12.5,
-              color: textPrimary,
-              height: 1.55,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _buildCleanSpecDocument(
@@ -1211,86 +1132,6 @@ class _GodotDimensionToggle extends StatelessWidget {
           buildOption(
             key: const ValueKey('stage1_dim_2d'),
             target: GodotProjectDimension.dim2d,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SegmentedTab extends StatelessWidget {
-  final bool isDark;
-  final Key leftKey;
-  final Key rightKey;
-  final String leftLabel;
-  final String rightLabel;
-  final bool isRightSelected;
-  final ValueChanged<bool> onSelect;
-
-  const _SegmentedTab({
-    required this.isDark,
-    required this.leftKey,
-    required this.rightKey,
-    required this.leftLabel,
-    required this.rightLabel,
-    required this.isRightSelected,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final border = AppTheme.borderFor(isDark);
-    final raised = AppTheme.bgSurfaceRaisedFor(isDark);
-    final primary = AppTheme.textPrimaryFor(isDark);
-    final muted = AppTheme.textMutedFor(isDark);
-
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            key: leftKey,
-            onTap: () => onSelect(false),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: !isRightSelected ? raised : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-              ),
-              child: Text(
-                leftLabel,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: !isRightSelected ? FontWeight.w600 : FontWeight.w400,
-                  color: !isRightSelected ? primary : muted,
-                ),
-              ),
-            ),
-          ),
-          InkWell(
-            key: rightKey,
-            onTap: () => onSelect(true),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: isRightSelected ? raised : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-              ),
-              child: Text(
-                rightLabel,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isRightSelected ? FontWeight.w600 : FontWeight.w400,
-                  color: isRightSelected ? primary : muted,
-                ),
-              ),
-            ),
           ),
         ],
       ),

@@ -31,35 +31,6 @@ String sanitizeExportSlug(String raw, {String fallback = 'layers_project'}) {
   return slug.isEmpty ? fallback : slug;
 }
 
-/// Filename slug for copying or exporting a Feature build prompt (`*_prompt.md`).
-String buildFeaturePromptFilename(
-  String projectTitle,
-  String epicCode,
-  String featureCode,
-  String featureTitle,
-) {
-  final projSlug = sanitizeExportSlug(projectTitle);
-  final featSlug = sanitizeExportSlug(
-    '${epicCode}_${featureCode}_$featureTitle',
-    fallback: 'feature',
-  );
-  return '${projSlug}_${featSlug}_prompt.md';
-}
-
-/// Filename slug for exporting an Epic domain architecture brief (`*_architecture.md`).
-String buildEpicArchitectureFilename(
-  String projectTitle,
-  String epicCode,
-  String epicTitle,
-) {
-  final projSlug = sanitizeExportSlug(projectTitle);
-  final epicSlug = sanitizeExportSlug(
-    '${epicCode}_$epicTitle',
-    fallback: 'epic',
-  );
-  return '${projSlug}_${epicSlug}_architecture.md';
-}
-
 /// Filename slug for exporting a Project's full structured spec (`*_project_spec.md`).
 String buildProjectSpecFilename(String projectTitle) =>
     '${sanitizeExportSlug(projectTitle)}_project_spec.md';

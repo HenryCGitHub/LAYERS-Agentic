@@ -60,7 +60,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _userPinnedDimension = false;
     _conceptDraft = preset;
     _showingSparkPicker = false;
-    _showRawRootContext = false;
     _currentStage = WorkbenchStage.projectPitch;
     _ensureActiveProjectDocument(preset);
     notifyListeners();
@@ -88,7 +87,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _conceptDraft = drafted;
       _userPinnedDimension = false;
       _showingSparkPicker = false;
-      _showRawRootContext = false;
       _currentStage = WorkbenchStage.projectPitch;
       _ensureActiveProjectDocument(drafted);
       return drafted;
@@ -218,8 +216,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _userPinnedDimension = false;
     _conceptDraft = ProjectConceptBlueprint(dimension: dim);
     _showingSparkPicker = true;
-    _showRawRootContext = false;
-    _showRawEpicPayload = false;
     _offlineErrorMessage = null;
     _currentStage = WorkbenchStage.projectPitch;
     _persistSettings();
@@ -577,7 +573,6 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _expandedEpicIds.add(_selectedEpicId!);
     }
     _currentStage = WorkbenchStage.releaseWorkbench;
-    _showRawEpicPayload = false;
     _syncActiveProjectMetadata();
     notifyListeners();
     return relId;

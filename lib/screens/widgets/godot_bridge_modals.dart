@@ -8,7 +8,7 @@ import '../../utils/markdown_exporter.dart';
 /// Opens the Godot 4 (`addons/layers`) Editor Plugin setup modal:
 /// 1) 1-Click `layers_godot_plugin.zip` download
 /// 2) 1-Click Google Sign-In Handoff or copy/rotate `lyr_...` fallback token
-/// 3) 1-Click In-Dock `⚡ Build E01` & Playtest self-heal guide
+/// 3) 1-Click In-Dock Cloud Gemini Feature build & Playtest repair guide
 Future<void> showConnectGodotPluginDialog(
   BuildContext context,
   WorkbenchProvider workbench,
@@ -42,10 +42,10 @@ Future<void> showConnectGodotPluginDialog(
           final green = AppTheme.accentGreenFor(isDark);
 
           const dockGuideText =
-              '1) Open the LAYERS Dock in Godot 4.7+ and click ⚡ Build E01.\n'
-              '2) Godot Cloud Gemini builds .tscn scenes, @export GDScript, InputMap & camera nodes automatically.\n'
-              '3) Press F5 / ▶ Play to test. Any script errors or [FIX] items switch the Dock button to 🔧 Fix E01.\n'
-              '4) Check §06 Playtest Gates and click ✓ Pass E01 → to advance.';
+              '1) Open the LAYERS Dock in Godot 4.7+ and click ⚡ Build F01.\n'
+              '2) Godot Cloud Gemini builds .tscn scenes, @export GDScript, InputMap & camera nodes directly.\n'
+              '3) Press F5 / ▶ Play to test. Any script errors or [FIX] items switch the Dock button to 🔧 Fix F01.\n'
+              '4) Check §05 Playtest Gate and click ✓ Pass F01 → to advance.';
 
           return Dialog(
             backgroundColor: AppTheme.bgSurfaceRaisedFor(isDark),
@@ -84,7 +84,7 @@ Future<void> showConnectGodotPluginDialog(
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Pure-GDScript Godot 4 plugin (`addons/layers`). Streams your active Epic spec directly into Godot 4 with 1-click Cloud Gemini scene/script synthesis and Playtest error self-heal.',
+                        'Pure-GDScript Godot 4 plugin (`addons/layers`). Streams your active Epic and Feature specs directly into Godot 4 for 1-click Cloud Gemini scene/script generation and Playtest error repair.',
                         style: TextStyle(
                           fontSize: 12.5,
                           color: secondary,
@@ -117,7 +117,7 @@ Future<void> showConnectGodotPluginDialog(
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
-                                    'Unzip into `<YourGodotProject>/addons/layers` and enable Project Settings → Plugins → LAYERS. Adds `[ ⚡ Build E01 ] [ ▶ Play ] [ ↶ Undo ]`, `@export` tuning, and Playtest Gate checks directly inside the Godot Dock.',
+                                    'Unzip into `<YourGodotProject>/addons/layers` and enable Project Settings → Plugins → LAYERS. Adds `[ ⚡ Build F01 ] [ ▶ Play ] [ ↶ Undo ]`, `@export` tuning, and Playtest Gate checks directly inside the Godot Dock.',
                                     style: TextStyle(fontSize: 12, color: muted),
                                   ),
                                 ],

@@ -218,12 +218,6 @@ class WorkbenchProvider extends ChangeNotifier {
   bool _showingSparkPicker = true;
   bool get showingSparkPicker => _showingSparkPicker;
 
-  bool _showRawRootContext = false;
-  bool get showRawRootContext => _showRawRootContext;
-
-  bool _showRawEpicPayload = false;
-  bool get showRawEpicPayload => _showRawEpicPayload;
-
   ProjectConceptBlueprint? _conceptDraft;
   ProjectConceptBlueprint? get conceptDraft => _conceptDraft;
 
@@ -355,16 +349,6 @@ class WorkbenchProvider extends ChangeNotifier {
   void toggleTheme() {
     _isDark = !_isDark;
     _persistSettings();
-    notifyListeners();
-  }
-
-  void toggleRawRootContext([bool? value]) {
-    _showRawRootContext = value ?? !_showRawRootContext;
-    notifyListeners();
-  }
-
-  void toggleRawEpicPayload([bool? value]) {
-    _showRawEpicPayload = value ?? !_showRawEpicPayload;
     notifyListeners();
   }
 

@@ -1,27 +1,6 @@
 part of '../main.dart';
 
 extension _WorkbenchShellExporters on WorkbenchShell {
-  /// Exports the active Feature Build Prompt or Epic Architecture Brief (`*_prompt.md` / `*_architecture.md`).
-  Future<void> _exportActiveSelectionPrompt(BuildContext context) async {
-    final wb = workbench;
-    final isDark = wb.isDark;
-    final bundle = wb.buildActiveSelectionMarkdownExport();
-
-    await Clipboard.setData(ClipboardData(text: bundle.content));
-    final downloaded = triggerMarkdownFileDownload(
-      filename: bundle.filename,
-      content: bundle.content,
-    );
-    if (!context.mounted) return;
-    AppToast.show(
-      context,
-      downloaded
-          ? 'Downloaded ${bundle.filename} & copied to clipboard'
-          : 'Copied active build prompt (${bundle.filename})',
-      isDark: isDark,
-    );
-  }
-
   /// Exports the complete Stage 1 + Stage 2 project markdown (`*_project_spec.md`).
   Future<void> _exportFullProjectSpec(BuildContext context) async {
     final wb = workbench;
@@ -49,37 +28,6 @@ extension _WorkbenchShellExporters on WorkbenchShell {
       downloaded
           ? 'Downloaded ${bundle.filename} & copied to clipboard'
           : 'Copied full PROJECT_SPEC.md to clipboard',
-      isDark: isDark,
-    );
-  }
-
-  /// Exports the active Release (`ROOT_GODOT_CONTEXT` + all active Epics & Features).
-  Future<void> _exportActiveReleaseAgentsMd(BuildContext context) async {
-    final wb = workbench;
-    final isDark = wb.isDark;
-    final rootSpec = wb.conceptDraft;
-    if (rootSpec == null) {
-      AppToast.show(
-        context,
-        'Create a Project Spec first.',
-        isDark: isDark,
-        accentColor: AppTheme.accentRedFor(isDark),
-      );
-      return;
-    }
-
-    final bundle = wb.buildActiveReleaseMarkdownExport();
-    await Clipboard.setData(ClipboardData(text: bundle.content));
-    final downloaded = triggerMarkdownFileDownload(
-      filename: bundle.filename,
-      content: bundle.content,
-    );
-    if (!context.mounted) return;
-    AppToast.show(
-      context,
-      downloaded
-          ? 'Downloaded ${bundle.filename} & copied to clipboard'
-          : 'Copied active Release Godot bundle to clipboard',
       isDark: isDark,
     );
   }

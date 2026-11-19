@@ -581,8 +581,7 @@ class WorkbenchShell extends StatelessWidget {
                         const SizedBox(width: 4),
                         PopupMenuButton<String>(
                           key: const ValueKey('global_export_spec_btn'),
-                          tooltip:
-                              'Export Project Spec or AI Coding Agent Context (AGENTS.md)',
+                          tooltip: 'Export Project Spec or Backup (.md / .layers.json)',
                           constraints: const BoxConstraints(
                             minWidth: 280,
                             maxWidth: 340,
@@ -595,12 +594,8 @@ class WorkbenchShell extends StatelessWidget {
                           onSelected: (val) {
                             if (val == 'connect_godot') {
                               showConnectGodotPluginDialog(context, workbench);
-                            } else if (val == 'active_prompt') {
-                              _exportActiveSelectionPrompt(context);
                             } else if (val == 'spec') {
                               _exportFullProjectSpec(context);
-                            } else if (val == 'agents_md') {
-                              _exportActiveReleaseAgentsMd(context);
                             } else if (val == 'json_export') {
                               _exportActiveProjectJson(context);
                             } else if (val == 'json_import') {
@@ -615,27 +610,11 @@ class WorkbenchShell extends StatelessWidget {
                               label: 'Connect Godot 4 Editor Plugin',
                               textColor: textPrimary,
                             ),
-                            if (workbench.selectedEpicSpec != null)
-                              _buildExportMenuItem(
-                                key: const ValueKey('export_active_prompt_item'),
-                                value: 'active_prompt',
-                                icon: Icons.bolt_rounded,
-                                iconColor: AppTheme.accentCyanFor(isDark),
-                                label: 'Export Active Build Prompt (.md)',
-                                textColor: textPrimary,
-                              ),
                             _buildExportMenuItem(
                               value: 'spec',
                               icon: Icons.copy_rounded,
                               iconColor: textSecondary,
                               label: 'Copy Full Project Spec (.md)',
-                              textColor: textPrimary,
-                            ),
-                            _buildExportMenuItem(
-                              value: 'agents_md',
-                              icon: Icons.terminal_rounded,
-                              iconColor: textSecondary,
-                              label: 'Export AI Agent Context (AGENTS.md)',
                               textColor: textPrimary,
                             ),
                             _buildExportMenuItem(

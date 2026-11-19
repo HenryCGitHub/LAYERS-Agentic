@@ -87,41 +87,6 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
     return activeEpicGodotContext(epic);
   }
 
-  /// Builds filename + Markdown payload for the currently active selection
-  /// (`Feature Build Prompt` | `Epic Architecture Brief` | `PROJECT_SPEC.md`).
-  ({String filename, String content}) buildActiveSelectionMarkdownExport() {
-    final projTitle = _conceptDraft?.normalizedTitle ??
-        activeProject?.title ??
-        'layers_project';
-    final epic = selectedEpicSpec;
-    final feat = selectedFeatureSpec;
-    if (epic != null && feat != null) {
-      return (
-        filename: buildFeaturePromptFilename(
-          projTitle,
-          epic.code,
-          feat.code,
-          feat.title,
-        ),
-        content: activeFeatureBuildPrompt(epic, feat),
-      );
-    }
-    if (epic != null) {
-      return (
-        filename: buildEpicArchitectureFilename(
-          projTitle,
-          epic.code,
-          epic.title,
-        ),
-        content: activeEpicArchitecturePrompt(epic),
-      );
-    }
-    return (
-      filename: buildProjectSpecFilename(projTitle),
-      content: activeRootGodotMarkdown,
-    );
-  }
-
   /// Builds filename + full structured project Markdown across all releases, Epics, and Features.
   ({String filename, String content}) buildFullProjectMarkdownExport() {
     final rootSpec = _conceptDraft ??
@@ -137,28 +102,6 @@ extension WorkbenchGodotMixin on WorkbenchProvider {
       content: GodotContextBuilder.buildFullProjectSpecMarkdown(
         rootSpec: rootSpec,
         epicsByReleaseLabel: epicsByRelease,
-        liveGodotContext: latestLiveGodotContext,
-      ),
-    );
-  }
-
-  /// Builds filename + active release Markdown context bundle (`ROOT_GODOT_CONTEXT` + Release Epics/Features).
-  ({String filename, String content}) buildActiveReleaseMarkdownExport() {
-    final rootSpec = _conceptDraft ??
-        ProjectConceptBlueprint(
-          gameTitle: activeProject?.title ?? 'layers_project',
-        );
-    final rel = activeRelease;
-    final releaseLabel =
-        rel != null ? releaseDisplayName(rel) : 'v0.1 · Prototype';
-    return (
-      filename:
-          'godot_release_${activeReleaseVersionTag.replaceAll('.', '_')}.md',
-      content: GodotContextBuilder.buildReleaseContextBundle(
-        rootSpec: rootSpec,
-        releaseLabel: releaseLabel,
-        releaseEpics: activeReleaseEpics,
-        releaseOrder: projectReleaseOrder,
         liveGodotContext: latestLiveGodotContext,
       ),
     );

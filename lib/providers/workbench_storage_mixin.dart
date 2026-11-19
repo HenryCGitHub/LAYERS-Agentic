@@ -834,8 +834,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _conceptDraft = null;
     _progressiveDraft = null;
     _showingSparkPicker = true;
-    _showRawRootContext = false;
-    _showRawEpicPayload = false;
     _offlineErrorMessage = null;
     _executionLog.clear();
     _currentStage = WorkbenchStage.projectPitch;

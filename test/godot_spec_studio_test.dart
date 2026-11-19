@@ -333,7 +333,7 @@ console.log(JSON.stringify({
     );
 
     testWidgets(
-      '5. Stage 1 UI: Dimension 3D/2D toggle, 2D auto-detect on Spark, Raw ROOT_GODOT_CONTEXT.md & Approve -> Stage 2',
+      '5. Stage 1 UI: Dimension 3D/2D toggle, 2D auto-detect on Spark, Clean Spec Only & Approve -> Stage 2',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 1000);
         tester.view.devicePixelRatio = 1.0;
@@ -349,6 +349,8 @@ console.log(JSON.stringify({
         expect(find.byType(ProjectPitchScreen), findsOneWidget);
         expect(find.byKey(const ValueKey('stage1_dim_3d')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage1_dim_2d')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_tab_raw')), findsNothing);
+        expect(find.text('Copy Context'), findsNothing);
 
         await tester.enterText(
           find.byKey(const ValueKey('spark_prompt_input')),
@@ -358,13 +360,10 @@ console.log(JSON.stringify({
         await tester.pumpAndSettle();
 
         expect(wb.projectDimension, equals(GodotProjectDimension.dim2d));
-
-        await tester.tap(find.byKey(const ValueKey('stage1_tab_raw')));
-        await tester.pumpAndSettle();
-        final rawFinder = find.byKey(const ValueKey('raw_root_godot_context_text'));
-        expect(rawFinder, findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_tab_raw')), findsNothing);
+        expect(find.text('Copy Context'), findsNothing);
         expect(
-          tester.widget<SelectableText>(rawFinder).data,
+          wb.activeRootGodotMarkdown,
           contains('Godot 4 2D (.tscn + GDScript .gd)'),
         );
 
@@ -373,7 +372,7 @@ console.log(JSON.stringify({
         await tester.pumpAndSettle();
         expect(wb.projectDimension, equals(GodotProjectDimension.dim3d));
         expect(
-          tester.widget<SelectableText>(rawFinder).data,
+          wb.activeRootGodotMarkdown,
           contains('Godot 4 3D (.tscn + GDScript .gd)'),
         );
 
@@ -381,7 +380,8 @@ console.log(JSON.stringify({
         await tester.pumpAndSettle();
 
         expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage2_tab_raw')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_tab_raw')), findsNothing);
+        expect(find.byKey(const ValueKey('copy_build_prompt_btn')), findsNothing);
       },
     );
 
@@ -1175,23 +1175,6 @@ console.log(JSON.stringify({
           isFalse,
         );
 
-        expect(
-          buildFeaturePromptFilename(
-            'SHELLBREAKER!',
-            'E01',
-            'F02',
-            'Armored Claw Dash',
-          ),
-          equals('shellbreaker_e01_f02_armored_claw_dash_prompt.md'),
-        );
-        expect(
-          buildEpicArchitectureFilename(
-            'SHELLBREAKER!',
-            'E01',
-            'Player Movement & Camera',
-          ),
-          equals('shellbreaker_e01_player_movement_camera_architecture.md'),
-        );
         expect(
           buildProjectSpecFilename('EMBERKEEP 2D'),
           equals('emberkeep_2d_project_spec.md'),

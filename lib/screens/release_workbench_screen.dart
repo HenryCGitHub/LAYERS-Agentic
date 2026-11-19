@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/epic_spec.dart';
 import '../../providers/workbench_provider.dart';
@@ -9,7 +8,7 @@ import 'widgets/godot_bridge_modals.dart';
 part 'workbench_progressive_planner_part.dart';
 
 /// Stage 2: 4-tier `Project -> Release -> Epic -> Feature` Pure Structured Game Planner.
-/// Expandable Epic -> Feature Outliner Rail + Centered Domain / Feature Spec Sheet + AI Build Prompt tab.
+/// Expandable Epic -> Feature Outliner Rail + Centered Domain / Feature Spec Sheet.
 class ReleaseWorkbenchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
 
@@ -33,7 +32,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
   bool _showAddFeatureForm = false;
   String? _passGateHint;
   String? _lastSelectionKey;
-  bool? _lastRawMode;
 
   @override
   void dispose() {
@@ -54,15 +52,10 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     final selectionKey =
         '${wb.activeReleaseId}:${selectedEpic?.id}:${selectedFeature?.id}';
     final selectionChanged = _lastSelectionKey != selectionKey;
-    final rawModeChanged =
-        _lastRawMode != null && _lastRawMode != wb.showRawEpicPayload;
     if (selectionChanged) {
       _lastSelectionKey = selectionKey;
       _showAddFeatureForm = false;
       _passGateHint = null;
-    }
-    _lastRawMode = wb.showRawEpicPayload;
-    if (selectionChanged || rawModeChanged) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_specScrollController.hasClients) {
           _specScrollController.jumpTo(0);
@@ -694,7 +687,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
     final relVer = wb.activeReleaseVersionTag;
     final isLockedBaseline = wb.isSelectedFeatureLockedBaseline;
-    final promptText = wb.selectedBuildPrompt;
     final rollup = wb.epicFeatureRollup(epic);
     final projTitle = (wb.conceptDraft?.normalizedTitle ??
             wb.activeProject?.title ??
@@ -895,21 +887,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       spacing: 8,
                       runSpacing: 6,
                       children: [
-                        _SpecViewTabSwitch(
-                          isDark: isDark,
-                          isRaw: wb.showRawEpicPayload,
-                          onChanged: (isRaw) => wb.toggleRawEpicPayload(isRaw),
-                        ),
-                        OutlinedButton.icon(
-                          key: const ValueKey('copy_build_prompt_btn'),
-                          onPressed: () =>
-                              _copyBuildPrompt(context, wb, promptText, feature),
-                          icon: const Icon(Icons.copy, size: 14),
-                          label: const Text(
-                            'Copy Build Prompt',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ),
                         if (feature == null)
                           ElevatedButton(
                             key: const ValueKey(
@@ -1040,164 +1017,40 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 840),
-                child: wb.showRawEpicPayload
-                    ? _buildAiBuildPromptView(
+                child: feature == null
+                    ? _buildEpicDomainSheet(
+                        context,
+                        wb,
+                        epic,
+                        isDark,
+                        primary,
+                        secondary,
+                        muted,
+                        border,
+                        cyan,
+                        green,
+                        red,
+                      )
+                    : _buildFeatureSpecSheet(
                         context,
                         wb,
                         epic,
                         feature,
-                        promptText,
+                        isLockedBaseline,
                         isDark,
                         primary,
+                        secondary,
                         muted,
                         border,
                         cyan,
+                        green,
                         red,
-                      )
-                    : (feature == null
-                        ? _buildEpicDomainSheet(
-                            context,
-                            wb,
-                            epic,
-                            isDark,
-                            primary,
-                            secondary,
-                            muted,
-                            border,
-                            cyan,
-                            green,
-                            red,
-                          )
-                        : _buildFeatureSpecSheet(
-                            context,
-                            wb,
-                            epic,
-                            feature,
-                            isLockedBaseline,
-                            isDark,
-                            primary,
-                            secondary,
-                            muted,
-                            border,
-                            cyan,
-                            green,
-                            red,
-                            amber,
-                          )),
+                        amber,
+                      ),
               ),
             ),
           ),
         ),
-      ],
-    );
-  }
-
-  void _copyBuildPrompt(
-    BuildContext context,
-    WorkbenchProvider wb,
-    String promptText,
-    FeatureSpec? feature,
-  ) {
-    Clipboard.setData(ClipboardData(text: promptText));
-    final label = feature != null
-        ? (feature.openFixesCount > 0
-            ? 'Copied Focused Revision Prompt (${feature.code} · ${feature.openFixesCount} [FIX])'
-            : 'Copied Feature Build Prompt (${feature.code})')
-        : 'Copied Epic Architecture Brief (${wb.selectedEpicSpec?.code ?? ''})';
-    AppToast.show(context, label, isDark: wb.isDark);
-  }
-
-  Widget _buildAiBuildPromptView(
-    BuildContext context,
-    WorkbenchProvider wb,
-    EpicSpec epic,
-    FeatureSpec? feature,
-    String promptText,
-    bool isDark,
-    Color primary,
-    Color muted,
-    Color border,
-    Color cyan,
-    Color red,
-  ) {
-    final openFixesCount =
-        feature != null ? feature.openFixesCount : wb.epicFeatureRollup(epic).openFixes;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: AppTheme.bgSurfaceRaisedFor(isDark),
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            border: Border.all(
-              color: openFixesCount > 0 ? red.withValues(alpha: 0.45) : border,
-            ),
-          ),
-          child: Wrap(
-            alignment: WrapAlignment.spaceBetween,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    feature != null
-                        ? (openFixesCount > 0
-                            ? 'READY-TO-PASTE FOCUSED [FIX] PROMPT (${feature.code})'
-                            : 'READY-TO-PASTE GODOT 4 FEATURE BUILD PROMPT (${feature.code})')
-                        : 'GODOT 4 EPIC ARCHITECTURE BRIEF (${epic.code})',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: openFixesCount > 0 ? red : cyan,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    feature != null
-                        ? 'Bundles Project Contract + Parent ${epic.code} Architecture + Active ${feature.code} Spec & live @export vars.'
-                        : 'Domain overview summarizing ${epic.code} scenes/scripts, state rules, and owned Features.',
-                    style: TextStyle(fontSize: 12, color: muted),
-                  ),
-                ],
-              ),
-              ElevatedButton.icon(
-                key: const ValueKey('prompt_tab_copy_btn'),
-                onPressed: () =>
-                    _copyBuildPrompt(context, wb, promptText, feature),
-                icon: const Icon(Icons.copy, size: 14),
-                label: const Text(
-                  'Copy Build Prompt',
-                  style: TextStyle(fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: AppTheme.bgInsetFor(isDark),
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            border: Border.all(color: border),
-          ),
-          child: SelectableText(
-            promptText,
-            key: const ValueKey('ai_build_prompt_text'),
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 12.5,
-              color: primary,
-              height: 1.55,
-            ),
-          ),
-        ),
-        const SizedBox(height: 32),
       ],
     );
   }
@@ -1868,7 +1721,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           trailing: Text(
             isLockedBaseline
                 ? 'Locked baseline'
-                : 'Edits update AI Build Prompt live',
+                : 'Live-synced to Godot 4 Cloud AI',
             style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: muted),
           ),
           child: feat.tuning.isEmpty
@@ -2221,78 +2074,6 @@ class _HeaderPill extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: color,
         ),
-      ),
-    );
-  }
-}
-
-class _SpecViewTabSwitch extends StatelessWidget {
-  final bool isDark;
-  final bool isRaw;
-  final ValueChanged<bool> onChanged;
-
-  const _SpecViewTabSwitch({
-    required this.isDark,
-    required this.isRaw,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final border = AppTheme.borderFor(isDark);
-    final raised = AppTheme.bgSurfaceRaisedFor(isDark);
-    final primary = AppTheme.textPrimaryFor(isDark);
-    final muted = AppTheme.textMutedFor(isDark);
-
-    return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            key: const ValueKey('stage2_tab_clean'),
-            onTap: () => onChanged(false),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: !isRaw ? raised : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-              ),
-              child: Text(
-                'Spec Sheet',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: !isRaw ? FontWeight.w600 : FontWeight.w400,
-                  color: !isRaw ? primary : muted,
-                ),
-              ),
-            ),
-          ),
-          InkWell(
-            key: const ValueKey('stage2_tab_raw'),
-            onTap: () => onChanged(true),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: isRaw ? raised : Colors.transparent,
-                borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-              ),
-              child: Text(
-                'AI Build Prompt',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isRaw ? FontWeight.w600 : FontWeight.w400,
-                  color: isRaw ? primary : muted,
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

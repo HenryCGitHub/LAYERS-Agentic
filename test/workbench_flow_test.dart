@@ -740,7 +740,7 @@ void main() {
 
   group('Round 5 — Stage 1 & Stage 2 4-Tier Workbench UI', () {
     testWidgets(
-      'Expandable Epic->Feature outliner, Breadcrumbs, Epic Domain Sheet (+Add Slice), Feature Spec Sheet & AI Build Prompt tab',
+      'Expandable Epic->Feature outliner, Breadcrumbs, Epic Domain Sheet (+Add Slice) & Feature Spec Sheet (Cloud-only)',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 1000);
         tester.view.devicePixelRatio = 1.0;
@@ -836,7 +836,7 @@ void main() {
         expect(wb.selectedFeatureSpec?.code, equals('F07'));
         expect(wb.selectedFeatureSpec?.title, equals('Wall Bounce Dash'));
 
-        // Select F02 -> live tuning -> AI Build Prompt tab -> Copy
+        // Select F02 -> live tuning syncs to Cloud AI (zero local-AI prompt/copy UI)
         await tester.tap(find.byKey(const ValueKey('outliner_feature_sb_f02')));
         await tester.pumpAndSettle();
         expect(wb.selectedFeatureSpec?.code, equals('F02'));
@@ -850,23 +850,16 @@ void main() {
         );
         await tester.pump(const Duration(milliseconds: 350));
 
-        await tester.tap(find.byKey(const ValueKey('stage2_tab_raw')));
-        await tester.pumpAndSettle();
-        final promptTextFinder = find.byKey(const ValueKey('ai_build_prompt_text'));
-        expect(promptTextFinder, findsOneWidget);
         expect(
-          tester.widget<SelectableText>(promptTextFinder).data,
+          wb.activeGodotSyncContext(),
           contains('@export var dash_distance: float = 6.8 # m'),
         );
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('prompt_tab_copy_btn')),
-        );
-        await tester.tap(find.byKey(const ValueKey('prompt_tab_copy_btn')));
-        await tester.pumpAndSettle();
+        expect(find.text('Live-synced to Godot 4 Cloud AI'), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage2_tab_raw')), findsNothing);
+        expect(find.byKey(const ValueKey('copy_build_prompt_btn')), findsNothing);
+        expect(find.byKey(const ValueKey('ai_build_prompt_text')), findsNothing);
 
-        // Back to Spec Sheet -> log [FIX] -> Pass Feature blocked with hint -> resolve & check -> Pass advances to F07
-        await tester.tap(find.byKey(const ValueKey('stage2_tab_clean')));
-        await tester.pumpAndSettle();
+        // Log [FIX] -> Pass Feature blocked with hint -> resolve & check -> Pass advances to F07
         await tester.ensureVisible(
           find.byKey(const ValueKey('flag_fix_input')),
         );
@@ -1104,7 +1097,7 @@ void main() {
     );
 
     testWidgets(
-      '4-tier Markdown exports (3D/2D) & global Shell Export menu active prompt item',
+      '4-tier Markdown exports (3D/2D) & Cloud-only global Shell Export menu',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 1000);
         tester.view.devicePixelRatio = 1.0;
@@ -1122,25 +1115,7 @@ void main() {
         await wb.openProgressiveReleaseCopilot();
         wb.commitProgressiveReleaseDraft();
 
-        // Active Feature selection export
-        final featExport = wb.buildActiveSelectionMarkdownExport();
-        expect(
-          featExport.filename,
-          endsWith('_f02_armored_claw_dash_prompt.md'),
-        );
-        expect(featExport.content, contains('# ACTIVE FEATURE SPEC · F02'));
-
-        // Epic Domain Sheet export
-        wb.selectEpic(wb.activeReleaseEpics.first.id);
-        final epicExport = wb.buildActiveSelectionMarkdownExport();
-        expect(epicExport.filename, contains('_e01_'));
-        expect(epicExport.filename, endsWith('_architecture.md'));
-        expect(
-          epicExport.content,
-          contains('# GODOT 4 EPIC ARCHITECTURE BRIEF · E01'),
-        );
-
-        // Full project & active v0.2 release bundles (0 Task/Step noise)
+        // Full project Markdown export (0 Task/Step noise)
         final fullExport = wb.buildFullProjectMarkdownExport();
         expect(fullExport.filename, equals('shellbreaker_project_spec.md'));
         expect(fullExport.content, contains('v0.1'));
@@ -1148,22 +1123,23 @@ void main() {
         expect(fullExport.content, isNot(contains('## Tasks')));
         expect(fullExport.content, isNot(contains('## Steps')));
 
-        final relExport = wb.buildActiveReleaseMarkdownExport();
-        expect(relExport.filename, equals('godot_release_v0_2.md'));
-        expect(relExport.content, contains('F07'));
-        expect(relExport.content, contains('Delta'));
-
-        // Global Export menu renders and triggers Export Active Build Prompt (.md)
+        // Global Export menu keeps Godot Dock + Spec + Backup and excludes local-AI prompt items
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('global_export_spec_btn')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('export_active_prompt_item')),
-          findsOneWidget,
+          findsNothing,
         );
-        await tester.tap(find.byKey(const ValueKey('export_active_prompt_item')));
-        await tester.pumpAndSettle();
+        expect(
+          find.text('Export AI Agent Context (AGENTS.md)'),
+          findsNothing,
+        );
+        expect(find.text('Connect Godot 4 Editor Plugin'), findsOneWidget);
+        expect(find.text('Copy Full Project Spec (.md)'), findsOneWidget);
+        expect(find.text('Export Project Vault (.layers.json)'), findsOneWidget);
+        expect(find.text('Import Project Backup (.layers.json)'), findsOneWidget);
         expect(tester.takeException(), isNull);
 
         // 2D preset (emberkeep) exports px/px/s with zero 3D m/s leakage
