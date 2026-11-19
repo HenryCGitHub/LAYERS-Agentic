@@ -430,6 +430,143 @@ func _physics_process(_delta: float) -> void:
 		return
 	reloaded_inst.free()
 
+	# 10. Test targeted .gd patches, whitespace fallback, sibling @export guard & scoped liveScripts
+	var base_scoped_code := "extends CharacterBody3D\n\n@export var move_speed: float = 6.4\n\nfunc _physics_process(_delta: float) -> void:\n\tmove_and_slide()\n"
+	if not _write_text("res://scripts/scoped_player.gd", base_scoped_code):
+		_fail("Could not write res://scripts/scoped_player.gd.")
+		return
+	var scoped_tscn := "[gd_scene load_steps=2 format=3]\n\n[ext_resource type=\"Script\" path=\"res://scripts/scoped_player.gd\" id=\"1_sp\"]\n\n[node name=\"ScopedArena\" type=\"Node3D\"]\nscript = ExtResource(\"1_sp\")\n"
+	if not _write_text("res://scenes/scoped_arena.tscn", scoped_tscn):
+		_fail("Could not write res://scenes/scoped_arena.tscn.")
+		return
+	_write_text("res://scripts/aaa_filler_1.gd", "extends Node\n")
+	_write_text("res://scripts/aaa_filler_2.gd", "extends Node\n")
+	_write_text("res://scripts/aaa_filler_3.gd", "extends Node\n")
+
+	# 10a. Exact patch match in apply_agent_bundle + compile verification
+	var patch_bundle := {
+		"mode": "build_feature",
+		"dimension": "dim3d",
+		"preserveExports": ["move_speed"],
+		"scriptUpdates": [
+			{
+				"resPath": "res://scripts/scoped_player.gd",
+				"patches": [
+					{
+						"find": "@export var move_speed: float = 6.4",
+						"replace": "@export var move_speed: float = 6.4\n@export var dash_distance: float = 4.0",
+					},
+					{
+						"find": "func _physics_process(_delta: float) -> void:\n\tmove_and_slide()",
+						"replace": "func _physics_process(_delta: float) -> void:\n\tif Input.is_action_just_pressed(\"ui_accept\"):\n\t\tvelocity.x = dash_distance\n\tmove_and_slide()",
+					},
+				],
+			},
+		],
+		"sceneOps": [],
+		"inputOps": [],
+	}
+	var patch_res_v: Variant = exec.call("apply_agent_bundle", null, null, patch_bundle, "res://scenes/scoped_arena.tscn")
+	var patch_res: Dictionary = patch_res_v as Dictionary if typeof(patch_res_v) == TYPE_DICTIONARY else {}
+	if not bool(patch_res.get("ok", false)):
+		_fail("10a targeted patch apply_agent_bundle failed: %s" % str(patch_res))
+		return
+	var applied_list: Variant = patch_res.get("applied_scripts", [])
+	if typeof(applied_list) != TYPE_PACKED_STRING_ARRAY and typeof(applied_list) != TYPE_ARRAY:
+		_fail("10a invalid applied_scripts: %s" % str(patch_res))
+		return
+	if not ("res://scripts/scoped_player.gd" in applied_list):
+		_fail("10a expected res://scripts/scoped_player.gd in applied_scripts: %s" % str(applied_list))
+		return
+	var patched_disk: String = FileAccess.get_file_as_string("res://scripts/scoped_player.gd")
+	if not ("@export var move_speed: float = 6.4" in patched_disk) or not ("@export var dash_distance: float = 4.0" in patched_disk):
+		_fail("10a missing preserved/added @export vars on disk: %s" % patched_disk)
+		return
+	var compile_patched: Dictionary = exec.call("check_gdscript_compiles", patched_disk) as Dictionary
+	if not bool(compile_patched.get("ok", false)):
+		_fail("10a patched script did not compile: %s" % str(compile_patched))
+		return
+
+	# 10b. Whitespace/indentation-tolerant patch fallback (spaces in find -> tab-indented script)
+	var ws_res_v: Variant = exec.call("apply_script_patches", patched_disk, [
+		{
+			"find": "    if Input.is_action_just_pressed(\"ui_accept\"):\n        velocity.x = dash_distance\n    move_and_slide()",
+			"replace": "    if Input.is_action_just_pressed(\"ui_accept\"):\n        velocity.x = dash_distance * 1.2\n    move_and_slide()",
+		},
+	])
+	var ws_res: Dictionary = ws_res_v as Dictionary if typeof(ws_res_v) == TYPE_DICTIONARY else {}
+	if not bool(ws_res.get("ok", false)):
+		_fail("10b whitespace fallback apply_script_patches failed: %s" % str(ws_res))
+		return
+	var ws_content: String = str(ws_res.get("content", ""))
+	if not ("\tvelocity.x = dash_distance * 1.2" in ws_content):
+		_fail("10b expected re-indented tab block, got: %s" % ws_content)
+		return
+	var compile_ws: Dictionary = exec.call("check_gdscript_compiles", ws_content) as Dictionary
+	if not bool(compile_ws.get("ok", false)):
+		_fail("10b whitespace-fallback output failed compile: %s" % str(compile_ws))
+		return
+
+	# 10c. Missing patch anchor fails cleanly without touching disk
+	var miss_bundle := {
+		"mode": "build_feature",
+		"dimension": "dim3d",
+		"scriptUpdates": [
+			{
+				"resPath": "res://scripts/scoped_player.gd",
+				"patches": [{ "find": "func nonexistent_anchor():", "replace": "pass" }],
+			},
+		],
+	}
+	var miss_res_v: Variant = exec.call("apply_agent_bundle", null, null, miss_bundle, "res://scenes/scoped_arena.tscn")
+	var miss_res: Dictionary = miss_res_v as Dictionary if typeof(miss_res_v) == TYPE_DICTIONARY else {}
+	if bool(miss_res.get("ok", true)):
+		_fail("10c expected ok == false on PATCH MISMATCH: %s" % str(miss_res))
+		return
+	var miss_errs_str: String = " ".join(miss_res.get("compile_errors", PackedStringArray()))
+	if not ("PATCH MISMATCH" in miss_errs_str):
+		_fail("10c expected PATCH MISMATCH in compile_errors, got: %s" % str(miss_res))
+		return
+	if FileAccess.get_file_as_string("res://scripts/scoped_player.gd") != patched_disk:
+		_fail("10c file on disk should be unchanged after PATCH MISMATCH.")
+		return
+
+	# 10d. Sibling @export preservation guard blocks destructive content replacement
+	var reg_bundle := {
+		"mode": "build_feature",
+		"dimension": "dim3d",
+		"preserveExports": ["move_speed"],
+		"scriptUpdates": [
+			{
+				"resPath": "res://scripts/scoped_player.gd",
+				"content": "extends CharacterBody3D\n@export var dash_distance: float = 4.0\nfunc _ready() -> void:\n\tpass\n",
+			},
+		],
+	}
+	var reg_res_v: Variant = exec.call("apply_agent_bundle", null, null, reg_bundle, "res://scenes/scoped_arena.tscn")
+	var reg_res: Dictionary = reg_res_v as Dictionary if typeof(reg_res_v) == TYPE_DICTIONARY else {}
+	if bool(reg_res.get("ok", true)):
+		_fail("10d expected ok == false on SIBLING REGRESSION: %s" % str(reg_res))
+		return
+	var reg_errs_str: String = " ".join(reg_res.get("compile_errors", PackedStringArray()))
+	if not ("SIBLING REGRESSION" in reg_errs_str) or not ("move_speed" in reg_errs_str):
+		_fail("10d expected SIBLING REGRESSION + move_speed in compile_errors: %s" % str(reg_res))
+		return
+	if FileAccess.get_file_as_string("res://scripts/scoped_player.gd") != patched_disk:
+		_fail("10d file on disk must be unchanged after SIBLING REGRESSION.")
+		return
+
+	# 10e. read_scoped_project_scripts prioritizes sceneOwnership scripts ahead of aaa_filler_* scripts
+	var scoped_v: Variant = exec.call("read_scoped_project_scripts", ["res://scenes/scoped_arena.tscn"], "res://", null, 2)
+	var scoped_dict: Dictionary = scoped_v as Dictionary if typeof(scoped_v) == TYPE_DICTIONARY else {}
+	if scoped_dict.size() > 2 or not scoped_dict.has("res://scripts/scoped_player.gd"):
+		_fail("10e expected <= 2 scripts prioritizing res://scripts/scoped_player.gd, got keys: %s" % str(scoped_dict.keys()))
+		return
+	var scoped_keys: Array = scoped_dict.keys()
+	if scoped_keys.is_empty() or str(scoped_keys[0]) != "res://scripts/scoped_player.gd":
+		_fail("10e expected first scoped key to be res://scripts/scoped_player.gd, got: %s" % str(scoped_keys))
+		return
+
 	print("GODOT_PLUGIN_TEST_OK")
 	quit(0)
 

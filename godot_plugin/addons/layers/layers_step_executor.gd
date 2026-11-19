@@ -2169,6 +2169,152 @@ func restore_bundle_snapshot(
 	return {"ok": true, "restored_count": restored_count, "restored_scripts": restored_scripts, "removed_scripts": removed_scripts}
 
 
+func _leading_indent(line: String) -> String:
+	var idx: int = 0
+	var line_len: int = line.length()
+	while idx < line_len:
+		var ch: String = line.substr(idx, 1)
+		if ch != "\t" and ch != " ":
+			break
+		idx += 1
+	return line.substr(0, idx)
+
+
+func _reindent_patch_line(line: String, find_base: String, target_base: String, space_unit: int) -> String:
+	if line.strip_edges().is_empty():
+		return ""
+	var rel: String = line
+	if not find_base.is_empty() and line.begins_with(find_base):
+		rel = line.substr(find_base.length())
+	elif not target_base.is_empty() and target_base != find_base:
+		var line_ws: String = _leading_indent(line)
+		var common_len: int = mini(line_ws.length(), find_base.length())
+		rel = line.substr(common_len)
+	if not target_base.is_empty() and target_base.begins_with("\t"):
+		var rel_ws: String = _leading_indent(rel)
+		if rel_ws.begins_with(" "):
+			var unit: int = maxi(space_unit, 2)
+			var tab_cnt: int = int(ceil(float(rel_ws.length()) / float(unit)))
+			rel = "\t".repeat(tab_cnt) + rel.substr(rel_ws.length())
+	return target_base + rel
+
+
+func apply_script_patches(existing_text: String, patches: Array) -> Dictionary:
+	var current: String = existing_text.replace("\r\n", "\n")
+	var applied_count: int = 0
+	for patch_idx in range(patches.size()):
+		var p_raw: Variant = patches[patch_idx]
+		if typeof(p_raw) != TYPE_DICTIONARY:
+			continue
+		var p: Dictionary = p_raw as Dictionary
+		var find_str: String = String(p.get("find", p.get("search", p.get("old", "")))).replace("\r\n", "\n")
+		var replace_str: String = String(p.get("replace", p.get("replacement", p.get("new", "")))).replace("\r\n", "\n")
+		if find_str.is_empty():
+			continue
+
+		# Pass 1: exact substring match
+		var exact_idx: int = current.find(find_str)
+		if exact_idx >= 0:
+			current = current.substr(0, exact_idx) + replace_str + current.substr(exact_idx + find_str.length())
+			applied_count += 1
+			continue
+
+		# Pass 2: indentation-tolerant line-block fallback
+		var find_trimmed_nl: String = find_str.trim_suffix("\n")
+		var replace_trimmed_nl: String = replace_str.trim_suffix("\n")
+		var cur_lines: PackedStringArray = current.split("\n")
+		var find_lines: PackedStringArray = find_trimmed_nl.split("\n")
+		if find_lines.is_empty():
+			continue
+		var match_start: int = -1
+		var max_start: int = cur_lines.size() - find_lines.size()
+		for start in range(max_start + 1):
+			var all_match: bool = true
+			for j in range(find_lines.size()):
+				if cur_lines[start + j].strip_edges() != find_lines[j].strip_edges():
+					all_match = false
+					break
+			if all_match:
+				match_start = start
+				break
+
+		if match_start < 0:
+			var preview: String = find_lines[0].strip_edges().left(80)
+			return {
+				"ok": false,
+				"content": existing_text,
+				"applied": applied_count,
+				"error": "PATCH MISMATCH at patch #%d: could not locate '%s'" % [patch_idx + 1, preview],
+			}
+
+		var find_base: String = _leading_indent(find_lines[0])
+		var target_base: String = _leading_indent(cur_lines[match_start])
+		var space_unit: int = 4
+		if find_base.begins_with(" "):
+			space_unit = find_base.length()
+		var replace_lines: PackedStringArray = replace_trimmed_nl.split("\n")
+		var adjusted := PackedStringArray()
+		for rl in replace_lines:
+			if find_base == target_base:
+				adjusted.append(rl)
+			else:
+				adjusted.append(_reindent_patch_line(rl, find_base, target_base, space_unit))
+
+		var rebuilt := PackedStringArray()
+		for i in range(match_start):
+			rebuilt.append(cur_lines[i])
+		for adj in adjusted:
+			rebuilt.append(adj)
+		for i in range(match_start + find_lines.size(), cur_lines.size()):
+			rebuilt.append(cur_lines[i])
+		current = "\n".join(rebuilt)
+		applied_count += 1
+
+	return {
+		"ok": true,
+		"content": current,
+		"applied": applied_count,
+		"error": "",
+	}
+
+
+func _escape_regex_literal(raw: String) -> String:
+	var escaped := ""
+	var specials := "\\.^$*+?()[]{}|"
+	for i in range(raw.length()):
+		var ch: String = raw.substr(i, 1)
+		if ch in specials:
+			escaped += "\\" + ch
+		else:
+			escaped += ch
+	return escaped
+
+
+func _script_declares_export_var(script_text: String, var_name: String) -> bool:
+	var clean: String = var_name.strip_edges()
+	if clean.is_empty():
+		return false
+	var rx := RegEx.new()
+	var pat: String = "(?m)^[ \\t]*@export(?:_[a-z_]+)?(?:\\([^)]*\\))?[ \\t]+var[ \\t]+%s(?![A-Za-z0-9_])" % _escape_regex_literal(clean)
+	if rx.compile(pat) != OK:
+		return false
+	return rx.search(script_text) != null
+
+
+func find_dropped_preserved_exports(existing_text: String, next_text: String, preserve_exports: Array) -> PackedStringArray:
+	var dropped := PackedStringArray()
+	if existing_text.is_empty() or preserve_exports.is_empty():
+		return dropped
+	for raw_key in preserve_exports:
+		var key: String = String(raw_key).strip_edges()
+		if key.is_empty():
+			continue
+		if _script_declares_export_var(existing_text, key) and not _script_declares_export_var(next_text, key):
+			if not dropped.has(key):
+				dropped.append(key)
+	return dropped
+
+
 func apply_agent_bundle(
 	editor_interface: EditorInterface,
 	undo_redo: EditorUndoRedoManager,
@@ -2186,15 +2332,56 @@ func apply_agent_bundle(
 	if editor_interface != null and editor_interface.get_edited_scene_root() != null:
 		initial_open_scene = editor_interface.get_edited_scene_root().scene_file_path
 
-	# 1. Compile-verify & save all scriptUpdates first.
+	var preserve_exports_raw: Variant = bundle.get("preserveExports", [])
+	var preserve_exports: Array = preserve_exports_raw as Array if typeof(preserve_exports_raw) == TYPE_ARRAY else []
+
+	# 1. Compile-verify, patch-apply & guard preserved @export vars before writing scripts.
 	for raw_u in bundle.get("scriptUpdates", []):
 		if typeof(raw_u) != TYPE_DICTIONARY:
 			continue
-		var u: Dictionary = raw_u
+		var u: Dictionary = raw_u as Dictionary
 		var rpath := String(u.get("resPath", "")).strip_edges()
-		var content := strip_diff_prefixes(String(u.get("content", "")))
-		if rpath.is_empty() or content.is_empty():
+		if rpath.is_empty():
 			continue
+		var patches_raw: Variant = u.get("patches", [])
+		var patches: Array = patches_raw as Array if typeof(patches_raw) == TYPE_ARRAY else []
+		var existing_text: String = read_live_script_text(rpath, editor_interface)
+		var content := ""
+		if not patches.is_empty():
+			if existing_text.strip_edges().is_empty():
+				var fallback_content := strip_diff_prefixes(String(u.get("content", "")))
+				if not fallback_content.is_empty():
+					content = fallback_content
+				else:
+					var missing_err: String = "%s: PATCH MISMATCH — target file does not exist on disk" % rpath
+					warnings.append(missing_err)
+					compile_errors.append(missing_err)
+					failed_script_updates[rpath] = ""
+					continue
+			else:
+				var patch_res: Dictionary = apply_script_patches(existing_text, patches)
+				if not bool(patch_res.get("ok", false)):
+					var pm_err: String = "%s: %s" % [rpath, String(patch_res.get("error", "PATCH MISMATCH"))]
+					warnings.append(pm_err)
+					compile_errors.append(pm_err)
+					failed_script_updates[rpath] = existing_text
+					continue
+				content = String(patch_res.get("content", "")).strip_edges(false, true)
+		else:
+			content = strip_diff_prefixes(String(u.get("content", "")))
+
+		if content.is_empty():
+			continue
+
+		if not existing_text.is_empty() and not preserve_exports.is_empty():
+			var dropped: PackedStringArray = find_dropped_preserved_exports(existing_text, content, preserve_exports)
+			if not dropped.is_empty():
+				var reg_err: String = "SIBLING REGRESSION in %s: removed preserved @export var(s): %s" % [rpath, ", ".join(dropped)]
+				warnings.append(reg_err)
+				compile_errors.append(reg_err)
+				failed_script_updates[rpath] = content
+				continue
+
 		var chk := check_gdscript_compiles(content)
 		if not bool(chk.get("ok", false)):
 			var err_msg: String = String(chk.get("error", "compile error"))
@@ -2353,8 +2540,9 @@ func apply_agent_bundle(
 	var summary := String(bundle.get("summary", "")).strip_edges()
 	if summary.is_empty():
 		summary = "Updated %d script(s), %d scene op(s)." % [applied_scripts.size(), applied_ops]
+	var has_hard_failure: bool = (not compile_errors.is_empty()) and applied_scripts.is_empty() and applied_ops == 0
 	return {
-		"ok": warnings.is_empty() or applied_scripts.size() > 0 or applied_ops > 0,
+		"ok": (not has_hard_failure) and (warnings.is_empty() or applied_scripts.size() > 0 or applied_ops > 0),
 		"summary": summary,
 		"applied_scripts": applied_scripts,
 		"applied_ops": applied_ops,
@@ -2807,6 +2995,61 @@ func read_all_live_project_scripts(root_dir: String = "res://", editor_interface
 			if not txt.strip_edges().is_empty():
 				out[sp] = txt.left(65536)
 	return merge_script_buffer_overrides(out, collect_open_script_editor_buffers(editor_interface))
+
+
+func read_scoped_project_scripts(
+	priority_paths: Array = [],
+	root_dir: String = "res://",
+	editor_interface: EditorInterface = null,
+	max_scripts: int = 16
+) -> Dictionary:
+	var cap: int = maxi(max_scripts, 1)
+	var open_buffers: Dictionary = collect_open_script_editor_buffers(editor_interface)
+	var ordered_paths: Array[String] = []
+	var seen: Dictionary = {}
+
+	var enqueue_gd := func(raw_p: String) -> void:
+		var sp: String = raw_p.strip_edges()
+		if not sp.begins_with("res://") or not sp.ends_with(".gd"):
+			return
+		if sp.begins_with("res://addons/") or ("/addons/" in sp):
+			return
+		if not seen.has(sp):
+			seen[sp] = true
+			ordered_paths.append(sp)
+
+	var gd_in_tscn_rx := RegEx.new()
+	gd_in_tscn_rx.compile("res://[^\\s\"']+\\.gd")
+
+	for raw_pri in priority_paths:
+		var p_str: String = String(raw_pri).strip_edges()
+		if p_str.is_empty():
+			continue
+		if p_str.ends_with(".gd"):
+			enqueue_gd.call(p_str)
+		elif p_str.ends_with(".tscn") and FileAccess.file_exists(p_str):
+			var tscn_txt: String = FileAccess.get_file_as_string(p_str)
+			for m in gd_in_tscn_rx.search_all(tscn_txt):
+				enqueue_gd.call(m.get_string())
+
+	for open_k in open_buffers.keys():
+		enqueue_gd.call(String(open_k))
+
+	for scanned_raw in _scan_project_files_by_ext(root_dir, ".gd", maxi(cap * 3, 40)):
+		enqueue_gd.call(String(scanned_raw))
+
+	var out := {}
+	for sp in ordered_paths:
+		if out.size() >= cap:
+			break
+		if open_buffers.has(sp):
+			out[sp] = String(open_buffers[sp]).left(65536)
+			continue
+		if FileAccess.file_exists(sp):
+			var txt: String = FileAccess.get_file_as_string(sp)
+			if not txt.strip_edges().is_empty():
+				out[sp] = txt.left(65536)
+	return out
 
 
 func _get_open_scene_roots_by_path(editor_interface: EditorInterface) -> Dictionary:
