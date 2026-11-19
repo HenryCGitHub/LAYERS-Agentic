@@ -40,6 +40,27 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     notifyListeners();
   }
 
+  bool isProgressiveNewFeatureChosen(String featureId) {
+    final draft = _progressiveDraft;
+    return draft != null && draft.chosenNewFeatureIds.contains(featureId);
+  }
+
+  void toggleProgressiveNewFeature(String lineageKey, String featureId) {
+    final draft = _progressiveDraft;
+    if (draft == null) return;
+    final list = draft.candidateNewFeaturesByLineageKey[lineageKey.toLowerCase()];
+    final exists = (list != null && list.any((f) => f.id == featureId)) ||
+        draft.candidateNewFeaturesByLineageKey.values.any(
+          (items) => items.any((f) => f.id == featureId),
+        );
+    if (!exists) return;
+    if (!draft.chosenNewFeatureIds.remove(featureId)) {
+      draft.chosenNewFeatureIds.add(featureId);
+    }
+    draft.activePresetId = null;
+    notifyListeners();
+  }
+
   void applyProgressivePreset(String presetId) {
     final draft = _progressiveDraft;
     if (draft == null) return;
@@ -57,6 +78,27 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         opt.chosen = upIdsLower.contains(opt.id.trim().toLowerCase());
       }
     }
+    final chosenLineageKeys = <String>{
+      for (final entry in draft.upgradesByLineageKey.entries)
+        if (entry.value.any((opt) => opt.chosen)) entry.key.trim().toLowerCase(),
+    };
+    final nextChosenFeatureIds = <String>{};
+    for (final entry in draft.candidateNewFeaturesByLineageKey.entries) {
+      final keyLower = entry.key.trim().toLowerCase();
+      for (final feat in entry.value) {
+        final fIdLower = feat.id.trim().toLowerCase();
+        final fCodeLower = feat.code.trim().toLowerCase();
+        final matchesPreset = upIdsLower.contains(fIdLower) ||
+            upIdsLower.contains(fCodeLower) ||
+            newIdsLower.contains(fIdLower) ||
+            newIdsLower.contains(fCodeLower);
+        if (matchesPreset || chosenLineageKeys.contains(keyLower)) {
+          nextChosenFeatureIds.add(feat.id);
+        }
+      }
+    }
+    draft.chosenNewFeatureIds = nextChosenFeatureIds;
+
     for (final cand in draft.candidateNewEpics) {
       final candIdLower = cand.id.trim().toLowerCase();
       final candCodeLower = cand.code.trim().toLowerCase();
@@ -102,7 +144,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
 
   /// Materializes the progressive release (`v0.2+`) non-destructively:
   /// - Existing Epics without upgrades stay `Baseline ✓` (`EpicLifecycle.stable`)
-  /// - Existing Epics with checked upgrades become `Upgrading` (`EpicLifecycle.upgrading`) with additive deltas + PIE checks
+  /// - Existing Epics with checked upgrades/new Features become `Upgrading` (`EpicLifecycle.upgrading`) with additive deltas + `[+NEW]` Features attached cleanly inside the permanent parent Epic
   /// - Checked `[NEW]` Epics are added cleanly (`EpicLifecycle.newEpic`)
   String? commitProgressiveReleaseDraft() {
     final draft = _progressiveDraft;
@@ -114,15 +156,58 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         '${proj.id}_rel_${nextVer.replaceAll('.', '')}_${DateTime.now().millisecondsSinceEpoch}';
     final nextEpicDocIds = <String>[];
     String? firstFocusEpicId;
+    String? firstFocusFeatureId;
 
     final existingEpics = latestReleaseEpics;
+    final usedFeatureCodesLower = <String>{};
+    int maxFeatureNum = 0;
+    final featCodeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
+    for (final ep in existingEpics) {
+      for (final f in ep.features) {
+        final codeLower = f.code.trim().toLowerCase();
+        if (codeLower.isNotEmpty) {
+          usedFeatureCodesLower.add(codeLower);
+          final m = featCodeRx.firstMatch(f.code.trim());
+          if (m != null) {
+            final numVal = int.tryParse(m.group(1) ?? '') ?? 0;
+            if (numVal > maxFeatureNum) maxFeatureNum = numVal;
+          }
+        }
+      }
+    }
+
+    String allocateFeatureCode(String preferred) {
+      final cleanPref = preferred.trim();
+      final prefLower = cleanPref.toLowerCase();
+      if (cleanPref.isNotEmpty && !usedFeatureCodesLower.contains(prefLower)) {
+        usedFeatureCodesLower.add(prefLower);
+        final m = featCodeRx.firstMatch(cleanPref);
+        if (m != null) {
+          final numVal = int.tryParse(m.group(1) ?? '') ?? 0;
+          if (numVal > maxFeatureNum) maxFeatureNum = numVal;
+        }
+        return cleanPref;
+      }
+      do {
+        maxFeatureNum++;
+      } while (usedFeatureCodesLower
+          .contains(FeatureSpec.formatCode(maxFeatureNum).toLowerCase()));
+      final nextCode = FeatureSpec.formatCode(maxFeatureNum);
+      usedFeatureCodesLower.add(nextCode.toLowerCase());
+      return nextCode;
+    }
+
     for (int i = 0; i < existingEpics.length; i++) {
       final base = existingEpics[i];
       final key = base.lineageKey.toLowerCase();
-      final chosenUps = (draft.upgradesByLineageKey[key] ?? const [])
+      final chosenUpgradeOpts = (draft.upgradesByLineageKey[key] ?? const [])
           .where((u) => u.chosen)
-          .map((u) => u.text)
           .toList();
+      final chosenUps = [for (final u in chosenUpgradeOpts) u.text];
+      final chosenNewFeats =
+          (draft.candidateNewFeaturesByLineageKey[key] ?? const [])
+              .where((f) => draft.chosenNewFeatureIds.contains(f.id))
+              .toList();
 
       final clonedId = '${relId}_epic_${nextEpicDocIds.length + 1}';
       final nextEpic = base.deepCopy(idOverride: clonedId);
@@ -138,6 +223,100 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         }
       }
 
+      // Lock carried-over baseline features clean before applying v0.2+ deltas
+      final baseRelVer = base.releaseVersion.trim().isEmpty
+          ? 'v0.1'
+          : base.releaseVersion.trim();
+      final baseFeatureById = <String, FeatureSpec>{
+        for (final bf in base.features) bf.id: bf,
+      };
+      for (final feat in nextEpic.features) {
+        final seenCheckIds = <String>{};
+        final foldedChecks = <EpicPieCheck>[];
+        for (final c in feat.effectiveChecksForRelease(baseRelVer)) {
+          if (seenCheckIds.add(c.id)) {
+            foldedChecks.add(c.copyWith(passed: true));
+          }
+        }
+        feat.checks = foldedChecks;
+        feat.releaseDeltaChecks = <EpicPieCheck>[];
+        feat.releaseDelta = '';
+        feat.fixes = <EpicPieFix>[];
+        feat.status = FeatureStatus.passed;
+      }
+
+      for (final upOpt in chosenUpgradeOpts) {
+        if (nextEpic.features.isEmpty) break;
+        final targetCodeLower = (upOpt.targetFeatureCode ?? '').trim().toLowerCase();
+        FeatureSpec? targetFeat;
+        if (targetCodeLower.isNotEmpty) {
+          for (final f in nextEpic.features) {
+            if (f.code.trim().toLowerCase() == targetCodeLower ||
+                f.id.trim().toLowerCase() == targetCodeLower) {
+              targetFeat = f;
+              break;
+            }
+          }
+        }
+        targetFeat ??= nextEpic.features.last;
+
+        final rawText = upOpt.text.trim();
+        final cleanNoPlus = rawText.replaceFirst(RegExp(r'^\+\s*'), '').trim();
+        final formattedDelta =
+            rawText.startsWith('+') ? rawText : '+$cleanNoPlus';
+        targetFeat.releaseDelta = targetFeat.releaseDelta.isEmpty
+            ? formattedDelta
+            : '${targetFeat.releaseDelta} ; $formattedDelta';
+        targetFeat.status = FeatureStatus.active;
+
+        final origBase = baseFeatureById[targetFeat.id];
+        final matchesSeededDelta = origBase != null &&
+            origBase.releaseDelta
+                    .replaceFirst(RegExp(r'^\+\s*'), '')
+                    .trim()
+                    .toLowerCase() ==
+                cleanNoPlus.toLowerCase() &&
+            origBase.releaseDeltaChecks.isNotEmpty;
+        if (matchesSeededDelta && targetFeat.releaseDeltaChecks.isEmpty) {
+          targetFeat.releaseDeltaChecks = [
+            for (final dc in origBase.releaseDeltaChecks)
+              dc.copyWith(passed: false),
+          ];
+        } else {
+          targetFeat.releaseDeltaChecks.add(
+            EpicPieCheck(
+              id: '${clonedId}_${targetFeat.code.toLowerCase()}_delta_${targetFeat.releaseDeltaChecks.length + 1}',
+              text: 'Verify $nextVer delta: $cleanNoPlus',
+              passed: false,
+            ),
+          );
+        }
+        firstFocusEpicId ??= clonedId;
+        firstFocusFeatureId ??= targetFeat.id;
+      }
+
+      for (final newFeat in chosenNewFeats) {
+        final dupExists = nextEpic.features.any(
+          (f) =>
+              f.id == newFeat.id ||
+              f.title.trim().toLowerCase() == newFeat.title.trim().toLowerCase(),
+        );
+        if (dupExists) continue;
+        final attached = newFeat.deepCopy();
+        attached.code = allocateFeatureCode(attached.code);
+        attached.introducedIn = nextVer;
+        attached.status = FeatureStatus.active;
+        attached.releaseDelta = '';
+        attached.releaseDeltaChecks = <EpicPieCheck>[];
+        attached.fixes = <EpicPieFix>[];
+        for (final c in attached.checks) {
+          c.passed = false;
+        }
+        nextEpic.features.add(attached);
+        firstFocusEpicId ??= clonedId;
+        firstFocusFeatureId ??= attached.id;
+      }
+
       final lockedBaseChecks = [
         for (int cIdx = 0; cIdx < nextEpic.checks.length; cIdx++)
           EpicPieCheck(
@@ -149,17 +328,22 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
           ),
       ];
 
-      if (chosenUps.isNotEmpty) {
+      final hasEpicWorkInNext =
+          chosenUps.isNotEmpty || chosenNewFeats.isNotEmpty;
+      if (hasEpicWorkInNext) {
         nextEpic.lifecycle = EpicLifecycle.upgrading;
         nextEpic.releaseVersion = nextVer;
-        nextEpic.upgradeDeltas = chosenUps;
+        final epicDeltaTexts = chosenUps.isNotEmpty
+            ? chosenUps
+            : [for (final nf in chosenNewFeats) '+${nf.code} ${nf.title}'];
+        nextEpic.upgradeDeltas = epicDeltaTexts;
         final baseCount = lockedBaseChecks.length;
-        for (int uIdx = 0; uIdx < chosenUps.length; uIdx++) {
+        for (int uIdx = 0; uIdx < epicDeltaTexts.length; uIdx++) {
           lockedBaseChecks.add(
             EpicPieCheck(
               id: '${clonedId}_delta_${uIdx + 1}',
               text:
-                  'Verify $nextVer delta: ${chosenUps[uIdx].replaceFirst(RegExp(r'^\+\s*'), '')}',
+                  'Verify $nextVer delta: ${epicDeltaTexts[uIdx].replaceFirst(RegExp(r'^\+\s*'), '')}',
               passed: false,
             ),
           );
@@ -198,6 +382,15 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       clonedNew.code = newCode;
       clonedNew.lineageKey = newCode.toLowerCase();
       clonedNew.upgradeDeltas = <String>[];
+      for (final feat in clonedNew.features) {
+        feat.code = allocateFeatureCode(feat.code);
+        feat.introducedIn = nextVer;
+        feat.status = FeatureStatus.active;
+        feat.fixes = <EpicPieFix>[];
+        for (final c in [...feat.checks, ...feat.releaseDeltaChecks]) {
+          c.passed = false;
+        }
+      }
 
       final doc = clonedNew.toTierDocument(
         docId: newId,
@@ -207,6 +400,9 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       _persistDocument(doc);
       nextEpicDocIds.add(newId);
       firstFocusEpicId ??= newId;
+      if (firstFocusFeatureId == null && clonedNew.features.isNotEmpty) {
+        firstFocusFeatureId = clonedNew.features.first.id;
+      }
     }
 
     final presetLabel = draft.activePresetId != null
@@ -237,6 +433,11 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     _activeReleaseId = relId;
     _selectedEpicId = firstFocusEpicId ??
         (nextEpicDocIds.isNotEmpty ? nextEpicDocIds.first : null);
+    if (_selectedEpicId != null) {
+      _expandedEpicIds.add(_selectedEpicId!);
+    }
+    _selectedFeatureId = firstFocusFeatureId ??
+        _defaultFeatureIdForEpicDoc(_selectedEpicId, releaseVersion: nextVer);
     _progressiveDraft = null;
     _currentStage = WorkbenchStage.releaseWorkbench;
     _syncActiveProjectMetadata();

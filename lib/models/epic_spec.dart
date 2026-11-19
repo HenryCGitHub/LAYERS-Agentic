@@ -339,6 +339,7 @@ class ProgressiveReleaseDraft {
   List<ReleaseDirectionPreset> presets;
   Map<String, List<EpicUpgradeOption>> upgradesByLineageKey;
   Map<String, List<FeatureSpec>> candidateNewFeaturesByLineageKey;
+  Set<String> chosenNewFeatureIds;
   List<EpicSpec> candidateNewEpics;
   String? activePresetId;
 
@@ -347,10 +348,17 @@ class ProgressiveReleaseDraft {
     required this.presets,
     required this.upgradesByLineageKey,
     Map<String, List<FeatureSpec>>? candidateNewFeaturesByLineageKey,
+    Set<String>? chosenNewFeatureIds,
     required this.candidateNewEpics,
     this.activePresetId,
-  }) : candidateNewFeaturesByLineageKey =
-            candidateNewFeaturesByLineageKey ?? <String, List<FeatureSpec>>{};
+  })  : candidateNewFeaturesByLineageKey =
+            candidateNewFeaturesByLineageKey ?? <String, List<FeatureSpec>>{},
+        chosenNewFeatureIds = chosenNewFeatureIds ??
+            <String>{
+              for (final list
+                  in (candidateNewFeaturesByLineageKey ?? const {}).values)
+                for (final f in list) f.id,
+            };
 
   ProgressiveReleaseDraft deepCopy() {
     return ProgressiveReleaseDraft(
@@ -364,6 +372,7 @@ class ProgressiveReleaseDraft {
         for (final e in candidateNewFeaturesByLineageKey.entries)
           e.key: [for (final f in e.value) f.deepCopy()],
       },
+      chosenNewFeatureIds: Set<String>.from(chosenNewFeatureIds),
       candidateNewEpics: [
         for (final ep in candidateNewEpics) ep.deepCopy(),
       ],
@@ -561,10 +570,12 @@ class FeatureSpec {
   int passedChecksCountForRelease(String releaseVersion) =>
       effectiveChecksForRelease(releaseVersion).where((c) => c.passed).length;
 
-  bool isLockedBaselineInRelease(String releaseVersion) =>
-      releaseVersion.trim() != 'v0.1' &&
-      introducedIn.trim() == 'v0.1' &&
-      releaseDelta.trim().isEmpty;
+  bool isLockedBaselineInRelease(String releaseVersion) {
+    final target = releaseVersion.trim();
+    if (target.isEmpty) return false;
+    return _compareReleaseVersions(introducedIn, target, const []) < 0 &&
+        releaseDelta.trim().isEmpty;
+  }
 
   bool get allChecksPassed =>
       checks.isNotEmpty && checks.every((c) => c.passed);

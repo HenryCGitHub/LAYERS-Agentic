@@ -1,34 +1,181 @@
 part of 'workbench_provider.dart';
 
-/// Stage 2 actions: Release switching, Epic selection, live `§04` tuning,
-/// `§06` PIE Acceptance Checkboxes, Flag `[FIX]` / Resolve, and `Pass Epic ✓`.
+/// Stage 2 actions: Release switching, 4-tier Epic -> Feature selection & expansion,
+/// live `@export` tuning, Playtest Gate checkboxes, Flag `[FIX]` / Resolve,
+/// `addFeatureSlice`, and `passFeature` / `reopenFeature` rollups.
 extension WorkbenchReleaseMixin on WorkbenchProvider {
+  FeatureSpec? _findFeatureByIdOrCode(EpicSpec spec, String featureIdOrCode) {
+    final clean = featureIdOrCode.trim();
+    if (clean.isEmpty) return null;
+    for (final f in spec.features) {
+      if (f.id == clean) return f;
+    }
+    final lower = clean.toLowerCase();
+    for (final f in spec.features) {
+      if (f.code.trim().toLowerCase() == lower) return f;
+    }
+    return null;
+  }
+
+  String? _defaultFeatureIdForEpicDoc(
+    String? epicId, {
+    String? releaseVersion,
+    String? preferredId,
+    String? preferredCode,
+  }) {
+    if (epicId == null) return null;
+    final doc = documents[epicId];
+    if (doc == null || doc.tier != TierType.epic) return null;
+    final spec = EpicSpec.fromDocument(doc);
+    final ver = releaseVersion ?? activeReleaseVersionTag;
+    final visible = visibleFeaturesForEpic(spec, releaseVersion: ver);
+    if (visible.isEmpty) return null;
+    if (preferredId != null && preferredId.trim().isNotEmpty) {
+      for (final f in visible) {
+        if (f.id == preferredId.trim()) return f.id;
+      }
+    }
+    if (preferredCode != null && preferredCode.trim().isNotEmpty) {
+      final lower = preferredCode.trim().toLowerCase();
+      for (final f in visible) {
+        if (f.code.trim().toLowerCase() == lower) return f.id;
+      }
+    }
+    for (final f in visible) {
+      if (!f.isPassedForRelease(ver)) return f.id;
+    }
+    return visible.first.id;
+  }
+
+  void _syncEpicLifecycleFromFeatures(EpicSpec spec, String releaseVersion) {
+    final visible = visibleFeaturesForEpic(spec, releaseVersion: releaseVersion);
+    if (visible.isEmpty) return;
+    final hasAnyOpenFixes = spec.openFixes.isNotEmpty ||
+        visible.any((f) => f.openFixesCount > 0);
+    final allFeaturesPassed = visible.every(
+      (f) => f.isPassedForRelease(releaseVersion),
+    );
+    if (!hasAnyOpenFixes && allFeaturesPassed) {
+      spec.lifecycle = EpicLifecycle.stable;
+      for (final c in spec.checks) {
+        c.passed = true;
+      }
+    } else if (spec.lifecycle == EpicLifecycle.stable ||
+        spec.lifecycle == EpicLifecycle.queued) {
+      final hasDelta = spec.upgradeDeltas.isNotEmpty ||
+          visible.any((f) => f.releaseDelta.trim().isNotEmpty);
+      spec.lifecycle =
+          hasDelta ? EpicLifecycle.upgrading : EpicLifecycle.active;
+    }
+  }
+
+  bool _canEditFeature(FeatureSpec feature, {String? releaseVersion}) =>
+      !feature.isLockedBaselineInRelease(
+        releaseVersion ?? activeReleaseVersionTag,
+      );
+
   void selectActiveRelease(String releaseId) {
     final rel = documents[releaseId];
     if (rel == null || rel.tier != TierType.release) return;
+    final prevEpic = selectedEpicSpec;
+    final prevFeat = selectedFeatureSpec;
+    final wasDomainSheet = selectedEpicDoc != null && _selectedFeatureId == null;
+
     _activeReleaseId = rel.id;
+    final relVer = releaseVersionTagFor(rel);
     final epics = epicDocsForRelease(rel.id);
     if (epics.isEmpty) {
       _selectedEpicId = null;
+      _selectedFeatureId = null;
     } else {
-      final firstUnpassed = epics.firstWhere(
+      TierDocument? matchedEpicDoc;
+      if (prevEpic != null) {
+        final prevLineage = prevEpic.lineageKey.trim().toLowerCase();
+        final prevCode = prevEpic.code.trim().toLowerCase();
+        for (int i = 0; i < epics.length; i++) {
+          final cand = EpicSpec.fromDocument(epics[i], indexHint: i);
+          if ((prevLineage.isNotEmpty &&
+                  cand.lineageKey.trim().toLowerCase() == prevLineage) ||
+              (prevCode.isNotEmpty &&
+                  cand.code.trim().toLowerCase() == prevCode)) {
+            matchedEpicDoc = epics[i];
+            break;
+          }
+        }
+      }
+      matchedEpicDoc ??= epics.firstWhere(
         (d) => !EpicSpec.fromDocument(d).isPassed,
         orElse: () => epics.first,
       );
-      _selectedEpicId = firstUnpassed.id;
+      _selectedEpicId = matchedEpicDoc.id;
+      _expandedEpicIds.add(_selectedEpicId!);
+      if (wasDomainSheet && prevEpic != null) {
+        _selectedFeatureId = null;
+      } else {
+        _selectedFeatureId = _defaultFeatureIdForEpicDoc(
+          _selectedEpicId,
+          releaseVersion: relVer,
+          preferredId: prevFeat?.id,
+          preferredCode: prevFeat?.code,
+        );
+      }
     }
     _syncActiveProjectMetadata();
     notifyListeners();
   }
 
-  void selectEpic(String epicId) {
+  void openSelectedFeatureInBaselineRelease() {
+    final baseline = v01BaselineRelease;
+    if (baseline == null) return;
+    selectActiveRelease(baseline.id);
+  }
+
+  void selectEpic(String epicId, {bool openDomainSheet = true}) {
     final doc = documents[epicId];
     if (doc == null || doc.tier != TierType.epic) return;
     if (doc.parentId != null && doc.parentId != _activeReleaseId) {
       _activeReleaseId = doc.parentId;
     }
     _selectedEpicId = epicId;
+    _expandedEpicIds.add(epicId);
+    if (openDomainSheet) {
+      _selectedFeatureId = null;
+    }
     _syncActiveProjectMetadata();
+    notifyListeners();
+  }
+
+  void selectFeature(String epicId, String featureId) {
+    final doc = documents[epicId];
+    if (doc == null || doc.tier != TierType.epic) return;
+    if (doc.parentId != null && doc.parentId != _activeReleaseId) {
+      _activeReleaseId = doc.parentId;
+    }
+    _selectedEpicId = epicId;
+    _expandedEpicIds.add(epicId);
+    final spec = EpicSpec.fromDocument(doc);
+    final visible = visibleFeaturesForEpic(spec);
+    FeatureSpec? match;
+    for (final f in visible) {
+      if (f.id == featureId ||
+          f.code.trim().toLowerCase() == featureId.trim().toLowerCase()) {
+        match = f;
+        break;
+      }
+    }
+    match ??= _findFeatureByIdOrCode(spec, featureId);
+    _selectedFeatureId = match?.id;
+    _syncActiveProjectMetadata();
+    notifyListeners();
+  }
+
+  void toggleEpicExpanded(String epicId, [bool? expanded]) {
+    final next = expanded ?? !_expandedEpicIds.contains(epicId);
+    if (next) {
+      _expandedEpicIds.add(epicId);
+    } else {
+      _expandedEpicIds.remove(epicId);
+    }
     notifyListeners();
   }
 
@@ -46,6 +193,381 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     documents[epicId] = updatedDoc;
     _persistDocument(updatedDoc, debounce: debounce);
     notifyListeners();
+  }
+
+  bool _updateAndPersistFeature(
+    String epicId,
+    String featureId,
+    void Function(EpicSpec spec, FeatureSpec feat) mutate, {
+    bool debounce = false,
+    bool requireUnlocked = true,
+  }) {
+    final doc = documents[epicId];
+    if (doc == null || doc.tier != TierType.epic) return false;
+    final idx = activeReleaseEpicDocs.indexWhere((d) => d.id == epicId);
+    final spec = EpicSpec.fromDocument(doc, indexHint: idx >= 0 ? idx : 0);
+    final feat = _findFeatureByIdOrCode(spec, featureId);
+    if (feat == null) return false;
+    if (requireUnlocked && !_canEditFeature(feat)) return false;
+    mutate(spec, feat);
+    final updatedDoc = spec.applyToDocument(doc);
+    documents[epicId] = updatedDoc;
+    _persistDocument(updatedDoc, debounce: debounce);
+    notifyListeners();
+    return true;
+  }
+
+  void updateFeatureTuningParam(
+    String epicId,
+    String featureId,
+    int paramIndex,
+    String newValue,
+  ) {
+    final cleanVal = newValue.trim();
+    _updateAndPersistFeature(
+      epicId,
+      featureId,
+      (spec, feat) {
+        if (paramIndex < 0 || paramIndex >= feat.tuning.length) return;
+        final param = feat.tuning[paramIndex];
+        param.value = cleanVal;
+        for (final parentParam in spec.tuning) {
+          if (parentParam.key.trim().toLowerCase() ==
+              param.key.trim().toLowerCase()) {
+            parentParam.value = cleanVal;
+          }
+        }
+      },
+      debounce: true,
+    );
+  }
+
+  void addFeatureTuningParam(
+    String epicId,
+    String featureId, {
+    required String key,
+    required String value,
+    required String unit,
+  }) {
+    final cleanKey = GodotSpecGuard.sanitizeTuningKey(key, fallback: '');
+    if (cleanKey.isEmpty) return;
+    final dim = projectDimension;
+    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+      final nextVal = value.trim().isEmpty ? '0' : value.trim();
+      final nextUnit = GodotSpecGuard.normalizeGodotUnit(
+        cleanKey,
+        unit,
+        dimension: dim,
+      );
+      final existingIdx = feat.tuning.indexWhere(
+        (t) => t.key.trim().toLowerCase() == cleanKey.toLowerCase(),
+      );
+      if (existingIdx >= 0) {
+        final existing = feat.tuning[existingIdx];
+        existing.value = nextVal;
+        existing.unit = unit.trim().isEmpty ? existing.unit : nextUnit;
+      } else {
+        feat.tuning.add(
+          EpicTuningParam(
+            key: cleanKey,
+            value: nextVal,
+            unit: nextUnit,
+          ),
+        );
+      }
+      for (final parentParam in spec.tuning) {
+        if (parentParam.key.trim().toLowerCase() == cleanKey.toLowerCase()) {
+          parentParam.value = nextVal;
+          parentParam.unit = nextUnit;
+        }
+      }
+    });
+  }
+
+  void updateFeatureSections(
+    String epicId,
+    String featureId, {
+    String? title,
+    String? goal,
+    String? sliceTime,
+  }) {
+    final dim = projectDimension;
+    _updateAndPersistFeature(
+      epicId,
+      featureId,
+      (_, feat) {
+        if (title != null && title.trim().isNotEmpty) {
+          feat.title = GodotSpecGuard.sanitizeLine(title, dimension: dim);
+        }
+        if (goal != null) {
+          feat.goal = GodotSpecGuard.sanitizeLine(goal, dimension: dim);
+        }
+        if (sliceTime != null && sliceTime.trim().isNotEmpty) {
+          feat.sliceTime = sliceTime.trim();
+        }
+      },
+      debounce: true,
+    );
+  }
+
+  void toggleFeatureCheck(
+    String epicId,
+    String featureId,
+    String checkId, [
+    bool? value,
+  ]) {
+    final relVer = activeReleaseVersionTag;
+    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+      bool matched = false;
+      for (final c in [...feat.checks, ...feat.releaseDeltaChecks]) {
+        if (c.id == checkId) {
+          c.passed = value ?? !c.passed;
+          matched = true;
+          if (value == null) break;
+        }
+      }
+      if (!matched) return;
+      final allEffPassed = feat.allEffectiveChecksPassedForRelease(relVer);
+      if (feat.status == FeatureStatus.queued) {
+        feat.status = FeatureStatus.active;
+      } else if (feat.status == FeatureStatus.passed && !allEffPassed) {
+        feat.status = FeatureStatus.active;
+      }
+      _syncEpicLifecycleFromFeatures(spec, relVer);
+    });
+  }
+
+  void flagFeatureFix(String epicId, String featureId, String fixText) {
+    final clean = fixText.trim();
+    if (clean.isEmpty) return;
+    final dim = projectDimension;
+    final relVer = activeReleaseVersionTag;
+    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+      feat.fixes.add(
+        EpicPieFix(
+          id: 'fix_${DateTime.now().microsecondsSinceEpoch}',
+          text: GodotSpecGuard.sanitizeLine(clean, dimension: dim),
+          resolved: false,
+        ),
+      );
+      feat.status = FeatureStatus.active;
+      _syncEpicLifecycleFromFeatures(spec, relVer);
+    });
+  }
+
+  void resolveFeatureFix(
+    String epicId,
+    String featureId,
+    String fixId, {
+    bool resolved = true,
+  }) {
+    final relVer = activeReleaseVersionTag;
+    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+      for (final f in feat.fixes) {
+        if (f.id == fixId) {
+          f.resolved = resolved;
+          break;
+        }
+      }
+      if (!resolved) {
+        feat.status = FeatureStatus.active;
+      }
+      _syncEpicLifecycleFromFeatures(spec, relVer);
+    });
+  }
+
+  void deleteFeatureFix(String epicId, String featureId, String fixId) {
+    final relVer = activeReleaseVersionTag;
+    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+      feat.fixes.removeWhere((f) => f.id == fixId);
+      _syncEpicLifecycleFromFeatures(spec, relVer);
+    });
+  }
+
+  FeatureSpec? addFeatureSlice(
+    String epicId, {
+    required String title,
+    required String goal,
+    String sliceTime = '45 min',
+    bool selectCreated = true,
+  }) {
+    final doc = documents[epicId];
+    if (doc == null || doc.tier != TierType.epic) return null;
+    final dim = projectDimension;
+    final cleanTitle = GodotSpecGuard.sanitizeLine(title, dimension: dim);
+    final cleanGoal = GodotSpecGuard.sanitizeLine(goal, dimension: dim);
+    if (cleanTitle.isEmpty || cleanGoal.isEmpty) return null;
+
+    int maxNum = 0;
+    int totalCount = 0;
+    final codeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
+    for (final ep in activeReleaseEpics) {
+      for (final f in ep.features) {
+        totalCount++;
+        final m = codeRx.firstMatch(f.code.trim());
+        if (m != null) {
+          final parsed = int.tryParse(m.group(1) ?? '') ?? 0;
+          if (parsed > maxNum) maxNum = parsed;
+        }
+      }
+    }
+    final nextNum = (maxNum > 0 ? maxNum : totalCount) + 1;
+    final nextCode = FeatureSpec.formatCode(nextNum);
+    final relVer = activeReleaseVersionTag;
+    final featId = '${epicId}_f_${DateTime.now().microsecondsSinceEpoch}';
+    final is2d = dim == GodotProjectDimension.dim2d;
+    final rawCreated = FeatureSpec(
+      id: featId,
+      code: nextCode,
+      title: cleanTitle,
+      introducedIn: relVer,
+      sliceTime: sliceTime.trim().isEmpty ? '45 min' : sliceTime.trim(),
+      status: FeatureStatus.active,
+      goal: cleanGoal,
+      inScope: [cleanTitle],
+      doneWhen: [
+        'Trigger $cleanTitle in playtest -> Expected scene response runs cleanly',
+      ],
+      controls: [
+        EpicControlBinding(
+          action: 'primary_action',
+          trigger: 'Just Pressed (Space / LMB)',
+          rule: 'Triggers $cleanTitle cleanly',
+        ),
+      ],
+      tuning: [
+        EpicTuningParam(
+          key: 'slice_magnitude',
+          value: is2d ? '80' : '2.5',
+          unit: dim.distanceUnit,
+        ),
+      ],
+      cues: ['Visual feedback pulse + crisp activation audio cue'],
+      checks: [
+        EpicPieCheck(
+          id: '${featId}_c1',
+          text:
+              'Activate $cleanTitle -> Observable response behaves cleanly in playtest',
+        ),
+      ],
+    );
+    final sanitized = GodotSpecGuard.sanitizeFeatureSpec(
+      rawCreated,
+      dimension: dim,
+      forceCode: nextCode,
+    );
+    sanitized.code = nextCode;
+    sanitized.introducedIn = relVer;
+    sanitized.status = FeatureStatus.active;
+
+    _updateAndPersistEpic(epicId, (spec) {
+      spec.features.add(sanitized);
+      _syncEpicLifecycleFromFeatures(spec, relVer);
+    });
+    if (selectCreated) {
+      _selectedEpicId = epicId;
+      _expandedEpicIds.add(epicId);
+      _selectedFeatureId = sanitized.id;
+      _syncActiveProjectMetadata();
+      notifyListeners();
+    }
+    return sanitized;
+  }
+
+  bool canPassFeature(FeatureSpec feature, {String? releaseVersion}) {
+    final ver = releaseVersion ?? activeReleaseVersionTag;
+    if (feature.isLockedBaselineInRelease(ver)) return false;
+    if (feature.openFixes.isNotEmpty) return false;
+    final eff = feature.effectiveChecksForRelease(ver);
+    if (eff.isNotEmpty && eff.any((c) => !c.passed)) return false;
+    return true;
+  }
+
+  bool passFeature(
+    String epicId,
+    String featureId, {
+    bool forceResolve = false,
+  }) {
+    final doc = documents[epicId];
+    if (doc == null || doc.tier != TierType.epic) return false;
+    final spec = EpicSpec.fromDocument(doc);
+    final target = _findFeatureByIdOrCode(spec, featureId);
+    final relVer = activeReleaseVersionTag;
+    if (target == null || !_canEditFeature(target, releaseVersion: relVer)) {
+      return false;
+    }
+    if (!forceResolve && !canPassFeature(target, releaseVersion: relVer)) {
+      return false;
+    }
+
+    final saved = _updateAndPersistFeature(epicId, target.id, (epSpec, feat) {
+      if (forceResolve) {
+        for (final fx in feat.fixes) {
+          fx.resolved = true;
+        }
+        for (final c in [...feat.checks, ...feat.releaseDeltaChecks]) {
+          c.passed = true;
+        }
+      }
+      feat.status = FeatureStatus.passed;
+      _syncEpicLifecycleFromFeatures(epSpec, relVer);
+    });
+    if (!saved) return false;
+
+    selectNextOpenFeature(
+      startingAfterEpicId: epicId,
+      startingAfterFeatureId: target.id,
+    );
+    return true;
+  }
+
+  void reopenFeature(String epicId, String featureId) {
+    final relVer = activeReleaseVersionTag;
+    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+      feat.status = FeatureStatus.active;
+      _syncEpicLifecycleFromFeatures(spec, relVer);
+    });
+  }
+
+  bool selectNextOpenFeature({
+    String? startingAfterEpicId,
+    String? startingAfterFeatureId,
+  }) {
+    final epics = activeReleaseEpics;
+    if (epics.isEmpty) return false;
+    final relVer = activeReleaseVersionTag;
+    final flat = <({String epicId, FeatureSpec feat})>[];
+    for (final ep in epics) {
+      for (final f in visibleFeaturesForEpic(ep, releaseVersion: relVer)) {
+        flat.add((epicId: ep.id, feat: f));
+      }
+    }
+    if (flat.isEmpty) return false;
+
+    int startIdx = 0;
+    if (startingAfterEpicId != null && startingAfterFeatureId != null) {
+      final foundIdx = flat.indexWhere(
+        (pair) =>
+            pair.epicId == startingAfterEpicId &&
+            pair.feat.id == startingAfterFeatureId,
+      );
+      if (foundIdx >= 0) {
+        startIdx = (foundIdx + 1) % flat.length;
+      }
+    }
+
+    for (int offset = 0; offset < flat.length; offset++) {
+      final pair = flat[(startIdx + offset) % flat.length];
+      if (!pair.feat.isPassedForRelease(relVer)) {
+        _selectedEpicId = pair.epicId;
+        _expandedEpicIds.add(pair.epicId);
+        _selectedFeatureId = pair.feat.id;
+        _syncActiveProjectMetadata();
+        notifyListeners();
+        return true;
+      }
+    }
+    return false;
   }
 
   void togglePieCheck(String epicId, String checkId, [bool? value]) {
@@ -190,6 +712,15 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       for (final c in spec.checks) {
         c.passed = true;
       }
+      for (final feat in spec.features) {
+        for (final fx in feat.fixes) {
+          fx.resolved = true;
+        }
+        for (final c in [...feat.checks, ...feat.releaseDeltaChecks]) {
+          c.passed = true;
+        }
+        feat.status = FeatureStatus.passed;
+      }
       spec.lifecycle = EpicLifecycle.stable;
     });
     selectNextUnfinishedEpic();
@@ -197,9 +728,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
   void reopenEpic(String epicId) {
     _updateAndPersistEpic(epicId, (spec) {
+      final relVer = spec.releaseVersion.trim();
       if (spec.upgradeDeltas.isNotEmpty) {
         spec.lifecycle = EpicLifecycle.upgrading;
-        final verLower = spec.releaseVersion.trim().toLowerCase();
+        final verLower = relVer.toLowerCase();
         final deltaChecks = spec.checks.where((c) {
           final t = c.text.trim().toLowerCase();
           return c.id.contains('_delta_') ||
@@ -211,13 +743,36 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
           for (final c in deltaChecks) {
             c.passed = false;
           }
-          return;
+        } else {
+          for (final c in spec.checks) {
+            c.passed = false;
+          }
+        }
+        for (final feat in spec.features) {
+          if (feat.isLockedBaselineInRelease(relVer)) continue;
+          feat.status = FeatureStatus.active;
+          if (feat.releaseDeltaChecks.isNotEmpty) {
+            for (final c in feat.releaseDeltaChecks) {
+              c.passed = false;
+            }
+          } else if (feat.introducedIn.trim() == relVer) {
+            for (final c in feat.checks) {
+              c.passed = false;
+            }
+          }
         }
       } else {
         spec.lifecycle = EpicLifecycle.active;
-      }
-      for (final c in spec.checks) {
-        c.passed = false;
+        for (final c in spec.checks) {
+          c.passed = false;
+        }
+        for (final feat in spec.features) {
+          if (feat.isLockedBaselineInRelease(relVer)) continue;
+          feat.status = FeatureStatus.active;
+          for (final c in feat.checks) {
+            c.passed = false;
+          }
+        }
       }
     });
   }
@@ -228,6 +783,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     for (final ep in epics) {
       if (!ep.isPassed) {
         _selectedEpicId = ep.id;
+        _expandedEpicIds.add(ep.id);
+        _selectedFeatureId = _defaultFeatureIdForEpicDoc(ep.id);
         _syncActiveProjectMetadata();
         notifyListeners();
         return;

@@ -211,6 +211,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedEpicId = null;
+    _selectedFeatureId = null;
+    _expandedEpicIds.clear();
     _progressiveDraft = null;
     _executionLog.clear();
     _userPinnedDimension = false;
@@ -424,6 +426,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
               );
               if (wasPassed) check.passed = true;
             }
+            merged.features = _reconcileFeatureSlices(
+              incoming: merged.features,
+              existing: existingSpec.features,
+            );
             reconciledSpecs.add(merged);
             reconciledBaseDocs.add(existingDoc);
           }
@@ -449,7 +455,11 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         final existingSpec = existingSpecs[j];
         if (existingSpec.isPassed ||
             existingSpec.openFixes.isNotEmpty ||
-            existingSpec.passedChecksCount > 0) {
+            existingSpec.totalOpenFeatureFixes() > 0 ||
+            existingSpec.passedChecksCount > 0 ||
+            existingSpec.features.any(
+              (f) => f.isPassed || f.checks.any((c) => c.passed),
+            )) {
           reconciledSpecs.add(existingSpec.deepCopy(idOverride: existingDoc.id));
           reconciledBaseDocs.add(existingDoc);
         } else {
@@ -538,6 +548,15 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
                 ),
         );
         _selectedEpicId = fallback.id.isNotEmpty ? fallback.id : null;
+        _selectedFeatureId = _defaultFeatureIdForEpicDoc(_selectedEpicId);
+      } else if (_selectedFeatureId != null && _selectedEpicId != null) {
+        final epDoc = documents[_selectedEpicId!];
+        final epSpec = epDoc != null ? EpicSpec.fromDocument(epDoc) : null;
+        final hasSelectedFeat = epSpec != null &&
+            visibleFeaturesForEpic(epSpec).any((f) => f.id == _selectedFeatureId);
+        if (!hasSelectedFeat) {
+          _selectedFeatureId = _defaultFeatureIdForEpicDoc(_selectedEpicId);
+        }
       }
     } else {
       _activeReleaseId = relId;
@@ -549,11 +568,90 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         orElse: () => epicIds.isNotEmpty ? epicIds.first : '',
       );
       _selectedEpicId = firstUnpassedId.isNotEmpty ? firstUnpassedId : null;
+      _selectedFeatureId = _defaultFeatureIdForEpicDoc(
+        _selectedEpicId,
+        releaseVersion: 'v0.1',
+      );
+    }
+    if (_selectedEpicId != null) {
+      _expandedEpicIds.add(_selectedEpicId!);
     }
     _currentStage = WorkbenchStage.releaseWorkbench;
     _showRawEpicPayload = false;
     _syncActiveProjectMetadata();
     notifyListeners();
     return relId;
+  }
+
+  List<FeatureSpec> _reconcileFeatureSlices({
+    required List<FeatureSpec> incoming,
+    required List<FeatureSpec> existing,
+  }) {
+    if (existing.isEmpty) return [for (final f in incoming) f.deepCopy()];
+    final matched = List<bool>.filled(existing.length, false);
+    int? findMatch(FeatureSpec inc) {
+      for (int i = 0; i < existing.length; i++) {
+        if (!matched[i] && existing[i].id == inc.id) return i;
+      }
+      final incCode = inc.code.trim().toLowerCase();
+      if (incCode.isNotEmpty) {
+        for (int i = 0; i < existing.length; i++) {
+          if (!matched[i] &&
+              existing[i].code.trim().toLowerCase() == incCode) {
+            return i;
+          }
+        }
+      }
+      final incTitle = inc.title.trim().toLowerCase();
+      if (incTitle.isNotEmpty) {
+        for (int i = 0; i < existing.length; i++) {
+          if (!matched[i] &&
+              existing[i].title.trim().toLowerCase() == incTitle) {
+            return i;
+          }
+        }
+      }
+      return null;
+    }
+
+    final result = <FeatureSpec>[];
+    for (final inc in incoming) {
+      final mIdx = findMatch(inc);
+      if (mIdx == null) {
+        result.add(inc.deepCopy());
+        continue;
+      }
+      matched[mIdx] = true;
+      final oldFeat = existing[mIdx];
+      if (oldFeat.isPassed) {
+        result.add(oldFeat.deepCopy());
+        continue;
+      }
+      final mergedFeat = inc.deepCopy(
+        idOverride: oldFeat.id,
+        codeOverride: oldFeat.code,
+        statusOverride: oldFeat.status,
+      );
+      mergedFeat.fixes = [for (final fx in oldFeat.fixes) fx.copyWith()];
+      for (final chk in [...mergedFeat.checks, ...mergedFeat.releaseDeltaChecks]) {
+        final wasPassed = [...oldFeat.checks, ...oldFeat.releaseDeltaChecks].any(
+          (old) =>
+              old.passed &&
+              (old.id == chk.id ||
+                  old.text.trim().toLowerCase() ==
+                      chk.text.trim().toLowerCase()),
+        );
+        if (wasPassed) chk.passed = true;
+      }
+      result.add(mergedFeat);
+    }
+
+    // Preserve user-added custom slices created in Stage 2
+    for (int i = 0; i < existing.length; i++) {
+      if (!matched[i]) {
+        result.add(existing[i].deepCopy());
+      }
+    }
+    return result;
   }
 }

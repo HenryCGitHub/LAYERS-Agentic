@@ -77,6 +77,7 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _pendingUrlInvitedEmail;
   String? _pendingUrlProjectId;
   String? _pendingUrlEpicId;
+  String? _pendingUrlFeatureId;
   String? _inviteFeedbackMessage;
 
   int? _pendingGodotAuthPort;
@@ -206,6 +207,13 @@ class WorkbenchProvider extends ChangeNotifier {
 
   String? _selectedEpicId;
   String? get selectedEpicId => _selectedEpicId;
+
+  String? _selectedFeatureId;
+  String? get selectedFeatureId => _selectedFeatureId;
+
+  final Set<String> _expandedEpicIds = <String>{};
+  Set<String> get expandedEpicIds => Set.unmodifiable(_expandedEpicIds);
+  bool isEpicExpanded(String epicId) => _expandedEpicIds.contains(epicId);
 
   bool _showingSparkPicker = true;
   bool get showingSparkPicker => _showingSparkPicker;
@@ -380,6 +388,129 @@ class WorkbenchProvider extends ChangeNotifier {
     return EpicSpec.fromDocument(doc, indexHint: idx >= 0 ? idx : 0);
   }
 
+  List<String> get projectReleaseOrder {
+    final tags = <String>{};
+    for (final rel in projectReleases) {
+      tags.add(releaseVersionTagFor(rel));
+    }
+    if (tags.isEmpty) return const ['v0.1'];
+    final ordered = tags.toList()..sort(ReleasePlannerAgent.compareVersionTags);
+    return List.unmodifiable(ordered);
+  }
+
+  List<FeatureSpec> visibleFeaturesForEpic(
+    EpicSpec epic, {
+    String? releaseVersion,
+  }) {
+    final ver = releaseVersion ?? activeReleaseVersionTag;
+    return epic.featuresForRelease(ver, projectReleaseOrder);
+  }
+
+  FeatureSpec? get selectedFeatureSpec {
+    final fid = _selectedFeatureId;
+    final epic = selectedEpicSpec;
+    if (fid == null || epic == null) return null;
+    for (final feat in visibleFeaturesForEpic(epic)) {
+      if (feat.id == fid) return feat;
+    }
+    return null;
+  }
+
+  bool get isInspectingFeature => selectedFeatureSpec != null;
+
+  bool get isInspectingEpicDomain =>
+      selectedEpicSpec != null && selectedFeatureSpec == null;
+
+  bool isFeatureLockedBaseline(
+    FeatureSpec feature, {
+    String? releaseVersion,
+  }) {
+    return feature.isLockedBaselineInRelease(
+      releaseVersion ?? activeReleaseVersionTag,
+    );
+  }
+
+  bool get isSelectedFeatureLockedBaseline {
+    final feat = selectedFeatureSpec;
+    return feat != null && isFeatureLockedBaseline(feat);
+  }
+
+  TierDocument? get v01BaselineRelease {
+    for (final rel in projectReleases) {
+      if (releaseVersionTagFor(rel) == 'v0.1') {
+        return rel;
+      }
+    }
+    return null;
+  }
+
+  ({int passed, int total, int openFixes}) epicFeatureRollup(
+    EpicSpec epic, {
+    String? releaseVersion,
+  }) {
+    final ver = releaseVersion ?? activeReleaseVersionTag;
+    final visible = visibleFeaturesForEpic(epic, releaseVersion: ver);
+    final passed = visible.where((f) => f.isPassedForRelease(ver)).length;
+    final openFixes =
+        visible.fold<int>(0, (sum, f) => sum + f.openFixesCount) +
+        epic.openFixesCount;
+    return (passed: passed, total: visible.length, openFixes: openFixes);
+  }
+
+  ({int passed, int total, int openFixes}) get activeReleaseFeatureRollup {
+    int passed = 0;
+    int total = 0;
+    int openFixes = 0;
+    for (final ep in activeReleaseEpics) {
+      final r = epicFeatureRollup(ep);
+      passed += r.passed;
+      total += r.total;
+      openFixes += r.openFixes;
+    }
+    return (passed: passed, total: total, openFixes: openFixes);
+  }
+
+  String activeFeatureBuildPrompt(EpicSpec epic, FeatureSpec feature) {
+    final spec = _conceptDraft ??
+        ProjectConceptBlueprint(
+          gameTitle: activeProject?.title ?? 'GODOT PROJECT',
+        );
+    return GodotContextBuilder.buildFeatureContext(
+      rootSpec: spec,
+      epic: epic,
+      feature: feature,
+      releaseVersion: activeReleaseVersionTag,
+      releaseOrder: projectReleaseOrder,
+      liveGodotContext: latestLiveGodotContext,
+    );
+  }
+
+  String activeEpicArchitecturePrompt(EpicSpec epic) {
+    final spec = _conceptDraft ??
+        ProjectConceptBlueprint(
+          gameTitle: activeProject?.title ?? 'GODOT PROJECT',
+        );
+    return GodotContextBuilder.buildEpicArchitectureContext(
+      rootSpec: spec,
+      epic: epic,
+      releaseVersion: activeReleaseVersionTag,
+      releaseOrder: projectReleaseOrder,
+      liveGodotContext: latestLiveGodotContext,
+    );
+  }
+
+  String get selectedBuildPrompt {
+    final epic = selectedEpicSpec;
+    final feat = selectedFeatureSpec;
+    if (epic != null && feat != null) {
+      return activeFeatureBuildPrompt(epic, feat);
+    }
+    if (epic != null) {
+      return activeEpicArchitecturePrompt(epic);
+    }
+    return activeRootGodotMarkdown;
+  }
+
   List<TierDocument> get savedProjects {
     final projs = documents.values
         .where((d) => d.tier == TierType.project)
@@ -552,6 +683,8 @@ class WorkbenchProvider extends ChangeNotifier {
       final docs = activeReleaseEpicDocs;
       if (docs.isNotEmpty) {
         _selectedEpicId = docs.first.id;
+        _expandedEpicIds.add(_selectedEpicId!);
+        _selectedFeatureId = _defaultFeatureIdForEpicDoc(_selectedEpicId);
       }
     }
     _syncActiveProjectMetadata();

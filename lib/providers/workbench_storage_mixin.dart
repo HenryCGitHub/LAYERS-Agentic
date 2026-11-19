@@ -51,9 +51,30 @@ bool shouldPreferRemoteDocumentOnSync(
     if (doc.tier != TierType.epic) return 0;
     final spec = EpicSpec.fromDocument(doc);
     final resolvedFixes = spec.fixes.where((f) => f.resolved).length;
+    final passedFeatures = spec.features.where((f) => f.isPassed).length;
+    final featureChecksPassed = spec.features.fold<int>(
+      0,
+      (sum, f) =>
+          sum +
+          [...f.checks, ...f.releaseDeltaChecks]
+              .where((c) => c.passed)
+              .length,
+    );
+    final featureFixes = spec.features.fold<int>(
+      0,
+      (sum, f) => sum + f.fixes.length,
+    );
+    final resolvedFeatureFixes = spec.features.fold<int>(
+      0,
+      (sum, f) => sum + f.fixes.where((fx) => fx.resolved).length,
+    );
     return spec.passedChecksCount +
         spec.fixes.length +
         resolvedFixes +
+        passedFeatures +
+        featureChecksPassed +
+        featureFixes +
+        resolvedFeatureFixes +
         (doc.isCompleted ? 1 : 0);
   }
 
@@ -579,15 +600,23 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
 
     final projParam = (queryParams['project'] ?? '').trim();
-    final epicParam =
-        (queryParams['epic'] ?? queryParams['feature'] ?? '').trim();
+    final rawEpicParam = (queryParams['epic'] ?? '').trim();
+    final rawFeatureParam = (queryParams['feature'] ?? '').trim();
+    final epicParam = rawEpicParam.isNotEmpty ? rawEpicParam : rawFeatureParam;
+    final explicitFeatureParam =
+        rawEpicParam.isNotEmpty ? rawFeatureParam : '';
     if (projParam.isNotEmpty) {
       _pendingUrlProjectId = projParam;
     }
     if (epicParam.isNotEmpty) {
       _pendingUrlEpicId = epicParam;
     }
-    if ((projParam.isNotEmpty || epicParam.isNotEmpty) &&
+    if (explicitFeatureParam.isNotEmpty) {
+      _pendingUrlFeatureId = explicitFeatureParam;
+    }
+    if ((projParam.isNotEmpty ||
+            epicParam.isNotEmpty ||
+            explicitFeatureParam.isNotEmpty) &&
         _tryResolvePendingDeepLink()) {
       didUpdate = true;
     }
@@ -674,6 +703,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       proj.sections['current_stage'] = WorkbenchStage.releaseWorkbench.name;
     }
 
+    final reqFeatureId = _pendingUrlFeatureId;
     bool resolvedEpic = reqEpicId == null || reqEpicId.isEmpty;
     if (!resolvedEpic && matchedEpicDoc != null) {
       final parentRelId = matchedEpicDoc.parentId;
@@ -681,7 +711,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _activeReleaseId = parentRelId;
         proj?.sections['active_release_id'] = parentRelId;
       }
-      selectEpic(matchedEpicDoc.id);
+      if (reqFeatureId != null && reqFeatureId.isNotEmpty) {
+        selectFeature(matchedEpicDoc.id, reqFeatureId);
+        _pendingUrlFeatureId = null;
+      } else {
+        selectEpic(matchedEpicDoc.id);
+      }
       resolvedEpic = true;
     }
 
@@ -793,6 +828,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _activeReleaseId = null;
     _selectedEpicId = null;
+    _selectedFeatureId = null;
+    _expandedEpicIds.clear();
     _userPinnedDimension = false;
     _conceptDraft = null;
     _progressiveDraft = null;
@@ -1244,6 +1281,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
 
     final epicDocs = activeReleaseEpicDocs;
+    _expandedEpicIds.clear();
     if (epicDocs.isNotEmpty) {
       final savedEpicId = proj.sections['selected_epic_id'];
       if (savedEpicId != null && epicDocs.any((d) => d.id == savedEpicId)) {
@@ -1255,8 +1293,26 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         );
         _selectedEpicId = firstUnpassed.id;
       }
+      if (_selectedEpicId != null) {
+        _expandedEpicIds.add(_selectedEpicId!);
+      }
+      if (proj.sections.containsKey('selected_feature_id')) {
+        final savedFeatureId =
+            (proj.sections['selected_feature_id'] ?? '').trim();
+        if (savedFeatureId.isEmpty) {
+          _selectedFeatureId = null;
+        } else {
+          _selectedFeatureId = _defaultFeatureIdForEpicDoc(
+            _selectedEpicId,
+            preferredId: savedFeatureId,
+          );
+        }
+      } else {
+        _selectedFeatureId = _defaultFeatureIdForEpicDoc(_selectedEpicId);
+      }
     } else {
       _selectedEpicId = null;
+      _selectedFeatureId = null;
     }
 
     final savedStage = proj.sections['current_stage'];
@@ -1328,6 +1384,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     if (_selectedEpicId != null) {
       proj.sections['selected_epic_id'] = _selectedEpicId!;
     }
+    proj.sections['selected_feature_id'] = _selectedFeatureId ?? '';
     if (_conceptDraft != null) {
       proj.sections['concept_blueprint_json'] =
           jsonEncode(_conceptDraft!.toJson());

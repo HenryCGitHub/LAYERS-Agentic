@@ -522,6 +522,220 @@ void main() {
       },
     );
   });
+
+  group('Round 4 — 4-Tier Provider State, Rollups & Progressive Baseline Lock', () {
+    test(
+      'Feature selection, Epic Domain Sheet, live @export tuning, [FIX] blocking, passFeature rollups & addFeatureSlice (3D + 2D)',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final epics = wb.activeReleaseEpics;
+        expect(epics.length, equals(3));
+        final e01 = epics[0];
+        final e02 = epics[1];
+
+        // Launches onto first open Feature inside expanded E01 (F01 is already passed in preset -> F02)
+        expect(wb.selectedEpicId, equals(e01.id));
+        expect(wb.isEpicExpanded(e01.id), isTrue);
+        expect(wb.isInspectingFeature, isTrue);
+        expect(wb.selectedFeatureSpec?.code, equals('F02'));
+        expect(
+          wb.selectedBuildPrompt,
+          contains('# ACTIVE FEATURE SPEC · F02 · Armored Claw Dash'),
+        );
+
+        // Toggle outliner expansion & open Epic Domain Sheet (selectedFeatureId == null)
+        wb.toggleEpicExpanded(e01.id);
+        expect(wb.isEpicExpanded(e01.id), isFalse);
+        wb.selectEpic(e01.id);
+        expect(wb.isEpicExpanded(e01.id), isTrue);
+        expect(wb.selectedFeatureId, isNull);
+        expect(wb.isInspectingEpicDomain, isTrue);
+        expect(
+          wb.selectedBuildPrompt,
+          contains('# GODOT 4 EPIC ARCHITECTURE BRIEF · E01'),
+        );
+
+        // Select F02, mutate live @export tuning & add parameter
+        wb.selectFeature(e01.id, 'sb_f02');
+        expect(wb.selectedFeatureSpec?.code, equals('F02'));
+        wb.updateFeatureTuningParam(e01.id, 'sb_f02', 0, '7.25');
+        wb.addFeatureTuningParam(
+          e01.id,
+          'sb_f02',
+          key: 'dash_trail_fade_s',
+          value: '0.22',
+          unit: 's',
+        );
+        expect(
+          wb.selectedBuildPrompt,
+          contains('@export var dash_distance: float = 7.25 # m'),
+        );
+        expect(
+          wb.selectedBuildPrompt,
+          contains('@export var dash_trail_fade_s: float = 0.22 # s'),
+        );
+
+        // Log [FIX] -> switches prompt mode & blocks passFeature even after checking Playtest Gate
+        wb.flagFeatureFix(e01.id, 'sb_f02', 'Dash hitbox misses small crab edge');
+        expect(wb.selectedFeatureSpec!.openFixesCount, equals(1));
+        expect(
+          wb.selectedBuildPrompt,
+          contains('FOCUSED [FIX] PASS (1 OPEN [FIX])'),
+        );
+        final f02CheckId = wb.selectedFeatureSpec!.checks.first.id;
+        wb.toggleFeatureCheck(e01.id, 'sb_f02', f02CheckId, true);
+        expect(wb.passFeature(e01.id, 'sb_f02'), isFalse);
+
+        // Resolve [FIX] -> passFeature passes F02, rolls up E01 (2/2 passed -> stable), and advances to E02 F03
+        final f02FixId = wb.selectedFeatureSpec!.fixes.first.id;
+        wb.resolveFeatureFix(e01.id, 'sb_f02', f02FixId);
+        expect(wb.canPassFeature(wb.selectedFeatureSpec!), isTrue);
+        expect(wb.passFeature(e01.id, 'sb_f02'), isTrue);
+
+        final updatedE01 = wb.activeReleaseEpics[0];
+        expect(updatedE01.isPassed, isTrue);
+        expect(updatedE01.lifecycle, equals(EpicLifecycle.stable));
+        final e01Rollup = wb.epicFeatureRollup(updatedE01);
+        expect(e01Rollup.passed, equals(2));
+        expect(e01Rollup.total, equals(2));
+
+        expect(wb.selectedEpicId, equals(e02.id));
+        expect(wb.isEpicExpanded(e02.id), isTrue);
+        expect(wb.selectedFeatureSpec?.code, equals('F03'));
+
+        // Reopen F02 -> E01 rolls back to active and rollup drops to 1/2
+        wb.reopenFeature(e01.id, 'sb_f02');
+        final reopenedE01 = wb.activeReleaseEpics[0];
+        expect(reopenedE01.isPassed, isFalse);
+        expect(wb.epicFeatureRollup(reopenedE01).passed, equals(1));
+
+        // Add Feature slice on E01 -> gets sequential next code F07 & 3D m default unit
+        final added3d = wb.addFeatureSlice(
+          e01.id,
+          title: 'Dash Wall Bounce',
+          goal: 'Ricochet gently when dashing diagonally into stone walls.',
+        );
+        expect(added3d, isNotNull);
+        expect(added3d!.code, equals('F07'));
+        expect(added3d.tuning.first.unit, equals('m'));
+        expect(wb.selectedFeatureId, equals(added3d.id));
+        expect(wb.epicFeatureRollup(wb.activeReleaseEpics[0]).total, equals(3));
+
+        // 2D preset (emberkeep) addFeatureSlice seeds px unit
+        wb.createNewProject();
+        wb.loadPresetSpark('emberkeep');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final ekE01 = wb.activeReleaseEpics.first;
+        final added2d = wb.addFeatureSlice(
+          ekE01.id,
+          title: 'Torch Dash Burst',
+          goal: 'Spark bright ember ring along 2D dash vector.',
+        );
+        expect(added2d, isNotNull);
+        expect(added2d!.tuning.first.unit, equals('px'));
+      },
+    );
+
+    test(
+      'Progressive v0.2 attachment, locked [v0.1] baseline guard, Stage 1 reconciliation & selectedFeatureId persistence',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+
+        // Complete v0.1 release cleanly
+        for (final ep in wb.epicsForRelease(v01Id)) {
+          wb.passActiveEpic(ep.id);
+        }
+        expect(wb.isActiveReleaseComplete, isTrue);
+
+        // Open v0.2 Progressive Planner, confirm F07 candidate is toggleable & committed into existing E01
+        final draft = await wb.openProgressiveReleaseCopilot();
+        expect(draft, isNotNull);
+        final v02F07 = draft!.candidateNewFeaturesByLineageKey['e01']!.first;
+        expect(wb.isProgressiveNewFeatureChosen(v02F07.id), isTrue);
+        wb.toggleProgressiveNewFeature('e01', v02F07.id);
+        expect(wb.isProgressiveNewFeatureChosen(v02F07.id), isFalse);
+        wb.toggleProgressiveNewFeature('e01', v02F07.id);
+        expect(wb.isProgressiveNewFeatureChosen(v02F07.id), isTrue);
+
+        final v02Id = wb.commitProgressiveReleaseDraft()!;
+        final v02Epics = wb.epicsForRelease(v02Id);
+        // Zero duplicated Epic cards: E01 stays single, holding F01 (locked baseline), F02 (+DELTA), F07 (+NEW)
+        expect(v02Epics.where((e) => e.lineageKey == 'e01').length, equals(1));
+        final v02E01 = v02Epics.firstWhere((e) => e.lineageKey == 'e01');
+        expect(v02E01.lifecycle, equals(EpicLifecycle.upgrading));
+        final v02Features = wb.visibleFeaturesForEpic(v02E01);
+        expect(v02Features.map((f) => f.code), containsAll(['F01', 'F02', 'F07']));
+
+        final f01 = v02Features.firstWhere((f) => f.code == 'F01');
+        final f02 = v02Features.firstWhere((f) => f.code == 'F02');
+        final f07 = v02Features.firstWhere((f) => f.code == 'F07');
+
+        // Locked [v0.1] baseline guard on F01 in v0.2 rejects mutations
+        wb.selectFeature(v02E01.id, f01.id);
+        expect(wb.isSelectedFeatureLockedBaseline, isTrue);
+        final beforeMoveSpeed = f01.tuning.first.value;
+        wb.updateFeatureTuningParam(v02E01.id, f01.id, 0, '99.0');
+        wb.toggleFeatureCheck(v02E01.id, f01.id, f01.checks.first.id, false);
+        wb.flagFeatureFix(v02E01.id, f01.id, 'Should be blocked in v0.2');
+        wb.reopenFeature(v02E01.id, f01.id);
+        final f01After = wb
+            .visibleFeaturesForEpic(wb.activeReleaseEpics.first)
+            .firstWhere((f) => f.code == 'F01');
+        expect(f01After.tuning.first.value, equals(beforeMoveSpeed));
+        expect(f01After.checks.first.passed, isTrue);
+        expect(f01After.openFixes, isEmpty);
+        expect(f01After.status, equals(FeatureStatus.passed));
+
+        // Open in v0.1 baseline jump unlocks editing for F01
+        wb.openSelectedFeatureInBaselineRelease();
+        expect(wb.activeReleaseVersionTag, equals('v0.1'));
+        expect(wb.selectedFeatureSpec?.code, equals('F01'));
+        expect(wb.isSelectedFeatureLockedBaseline, isFalse);
+
+        // Return to v0.2, verify F02 (+DELTA) & F07 (+NEW) are editable, pass F02 -> advances to F07
+        wb.selectActiveRelease(v02Id);
+        wb.selectFeature(v02E01.id, f02.id);
+        expect(wb.isSelectedFeatureLockedBaseline, isFalse);
+        expect(f02.releaseDelta, isNotEmpty);
+        for (final chk in f02.effectiveChecksForRelease('v0.2')) {
+          wb.toggleFeatureCheck(v02E01.id, f02.id, chk.id, true);
+        }
+        expect(wb.passFeature(v02E01.id, f02.id), isTrue);
+        expect(wb.selectedFeatureSpec?.id, equals(f07.id));
+
+        // Verify selectedFeatureId persists across switchProject & export/import
+        final p1 = wb.activeProjectId!;
+        final exported = wb.exportProjectToJson(p1);
+        final impId = wb.importProjectFromJson(exported)!;
+        expect(wb.activeProjectId, equals(impId));
+        expect(wb.activeReleaseVersionTag, equals('v0.2'));
+        expect(wb.selectedFeatureSpec?.code, equals('F07'));
+
+        wb.switchProject(p1);
+        expect(wb.selectedFeatureSpec?.code, equals('F07'));
+
+        // Stage 1 re-sync preserves existing Feature state & custom slices in v0.1
+        wb.selectActiveRelease(v01Id);
+        final v01E01 = wb.epicsForRelease(v01Id).first;
+        wb.addFeatureSlice(
+          v01E01.id,
+          title: 'Custom Dash Cancels',
+          goal: 'Preserve user slice across Stage 1 updates.',
+        );
+        wb.approveRootSpecAndLaunchWorkbench();
+        final afterSyncE01 = wb.epicsForRelease(v01Id).first;
+        expect(
+          afterSyncE01.features.any((f) => f.title == 'Custom Dash Cancels'),
+          isTrue,
+        );
+      },
+    );
+  });
 }
 
 class _MemoryVaultStorageBackend implements VaultStorageBackend {
