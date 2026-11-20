@@ -4,7 +4,7 @@
 >
 > **Strict Zero-Overlap Boundary**:
 > - **Epics (Large Domains)** own cross-slice `Goal` / `In Scope` / `Done When`, `sceneOwnership` (`res://` paths + roles), `stateFlow`, `interruptRules`, `outOfScope` cuts, and child Feature slices (`F01–F0N`).
-> - **Features (30–90 min Playable Slices)** own `InputMap` bindings, live GDScript `@export` tuning variables (`m`/`px`), viewport/UI/audio cues, Playtest Gate checkboxes, `[FIX]` revisions, and 1-click **Godot 4 Cloud AI** builds (`build_feature` / `fix_feature` with targeted `.gd` patches and sibling preservation).
+> - **Features (30–90 min Playable Slices)** own `InputMap` bindings, live GDScript `@export` tuning variables (`m`/`px`), viewport/UI/audio cues, Playtest Gate checkboxes, `[FIX]` revisions, and 1-click **Godot 4 Cloud AI** builds (`v4.2.0` `multi_turn_v1` 6-turn read-only discovery, targeted `.gd` patches, automatic instanced-scene/custom-asset/collision protection on build, and up to `3x` auto-repair).
 > - Never emit implementation micro-steps, `Task`/`Step` tickets, file trees, or non-Godot engine terms (`.uasset`, `.uproject`, `Blueprint`, `ACharacter`, `UMG`, `GameObject`, `Prefab`, `cm/s`).
 
 ---
@@ -58,7 +58,7 @@ Displays the Clean Spec Document (`PROJECT_SPEC.md`) with a `3D (m, m/s)` / `2D 
 | **`§04` Domain Out-of-Scope Cuts** | `outOfScope[]` | **4. Micro-Label Cut** | Explicit `"No ..."` boundaries for the Epic domain | `No wall jumping or ledge vaulting` |
 | **`§05` Child Features** | `features[]`, `+ Add Feature Slice` | **Rollup Cards** | Live `passed/total` Feature rollups + inline creation of new slices | `F02 · Armored Claw Dash (60 min)` |
 
-#### Feature Slice Spec Sheet (`selectedFeatureId != null` -> synced to Godot 4 Cloud AI via `functions/index.js`)
+#### Feature Slice Spec Sheet (`selectedFeatureId != null` -> synced to Godot 4 Cloud AI `v4.2.0` `multi_turn_v1` via `functions/index.js`)
 | Section | Fields | Assigned Style | Exact Format Rule | Example |
 | :--- | :--- | :--- | :--- | :--- |
 | **`§01` Feature Scope** | `goal`, `inScope[]`, `doneWhen[]`, `releaseDelta` | **1. BLUF** + Delta Banner | Playable `30–90 min` slice scope + link to parent Epic | `Goal: Launch a 5.5 m forward dash on 1.1 s cooldown.` |

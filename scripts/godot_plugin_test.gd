@@ -1091,6 +1091,17 @@ func _physics_process(_delta: float) -> void:
 			mock_ed_4t.base_ctrl.free()
 			_fail("Test13: expected cancel hidden & CTA re-enabled after final_bundle")
 			return
+		var t13_status_msg: String = str(dock.get("_status_message"))
+		if t13_status_msg != "Built F02 in 2 steps (1 read, 1 patch)":
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected 1-line completion trace 'Built F02 in 2 steps (1 read, 1 patch)', got: %s" % t13_status_msg)
+			return
+		if str(dock_sync.call("get_local_plugin_version")) != "4.2.0":
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected plugin version 4.2.0, got: %s" % str(dock_sync.call("get_local_plugin_version")))
+			return
 
 		# Cancel mid-discovery ignores late final_bundle responses
 		var t13_before_cancel: String = FileAccess.get_file_as_string("res://scripts/scoped_player.gd")

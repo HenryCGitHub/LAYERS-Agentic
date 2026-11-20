@@ -1302,6 +1302,44 @@ func _on_agent_bundle_received(agent_bundle: Dictionary, payload_resp: Dictionar
 	_apply_final_agent_bundle(agent_bundle, payload_resp)
 
 
+func _format_agent_completion_summary(agent_bundle: Dictionary, res: Dictionary) -> String:
+	var action: String = str(_agent_session.get("action", agent_bundle.get("mode", "build_feature"))).strip_edges().to_lower()
+	var verb: String = "Fixed" if (action == "fix_feature" or action == "fix_epic") else "Built"
+	var target_code: String = str(_agent_session.get("target_code", "")).strip_edges()
+	if target_code.is_empty():
+		target_code = _get_active_target_code()
+	var steps_used: int = maxi(1, int(_agent_session.get("steps_used", 0)))
+	var step_lbl: String = "1 step" if steps_used == 1 else "%d steps" % steps_used
+	var reads_count: int = maxi(0, int(_agent_session.get("tool_reads_count", 0)))
+
+	var patch_count: int = 0
+	var su_v: Variant = agent_bundle.get("scriptUpdates", [])
+	if typeof(su_v) == TYPE_ARRAY:
+		for raw_su: Variant in (su_v as Array):
+			if typeof(raw_su) == TYPE_DICTIONARY:
+				var p_v: Variant = (raw_su as Dictionary).get("patches", [])
+				if typeof(p_v) == TYPE_ARRAY:
+					patch_count += (p_v as Array).size()
+
+	var applied_scripts_v: Variant = res.get("applied_scripts", [])
+	var applied_scripts_count: int = (applied_scripts_v as Array).size() if (typeof(applied_scripts_v) == TYPE_ARRAY or typeof(applied_scripts_v) == TYPE_PACKED_STRING_ARRAY) else 0
+	var applied_ops: int = maxi(0, int(res.get("applied_ops", 0)))
+
+	var details: PackedStringArray = PackedStringArray()
+	if reads_count > 0:
+		details.append("1 read" if reads_count == 1 else "%d reads" % reads_count)
+	if patch_count > 0:
+		details.append("1 patch" if patch_count == 1 else "%d patches" % patch_count)
+	elif applied_scripts_count > 0:
+		details.append("1 script" if applied_scripts_count == 1 else "%d scripts" % applied_scripts_count)
+	if applied_ops > 0:
+		details.append("1 scene op" if applied_ops == 1 else "%d scene ops" % applied_ops)
+
+	if details.is_empty():
+		return str(res.get("summary", agent_bundle.get("summary", "%s %s in %s" % [verb, target_code, step_lbl])))
+	return "%s %s in %s (%s)" % [verb, target_code, step_lbl, ", ".join(details)]
+
+
 func _apply_final_agent_bundle(agent_bundle: Dictionary, _payload_resp: Dictionary) -> void:
 	if _executor == null or agent_bundle.is_empty():
 		_auto_heal_count = 0
@@ -1351,7 +1389,7 @@ func _apply_final_agent_bundle(agent_bundle: Dictionary, _payload_resp: Dictiona
 		return
 
 	_auto_heal_count = 0
-	var summary: String = str(res.get("summary", agent_bundle.get("summary", "Applied Epic build.")))
+	var summary: String = _format_agent_completion_summary(agent_bundle, res)
 	if not compile_errs.is_empty():
 		_set_status("Applied with compile warning: %s" % compile_errs[0], true)
 	else:

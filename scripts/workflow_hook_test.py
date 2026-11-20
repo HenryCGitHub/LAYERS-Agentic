@@ -87,7 +87,7 @@ def _verify_skills_and_discovery() -> None:
   assert isinstance(report.get("focusMatches"), list) and len(report["focusMatches"]) > 0, (
       "Expected non-empty focusMatches for 'godot'"
   )
-  assert report.get("pluginVersion") == "4.1.0", f"Unexpected pluginVersion: {report.get('pluginVersion')}"
+  assert report.get("pluginVersion") == "4.2.0", f"Unexpected pluginVersion: {report.get('pluginVersion')}"
   assert report.get("zipParityOk") is True, "Expected zipParityOk is True"
   assert isinstance(report.get("monolithHotspots"), list), "Expected monolithHotspots list"
   assert isinstance(report.get("untestedModules"), list), "Expected untestedModules list"
