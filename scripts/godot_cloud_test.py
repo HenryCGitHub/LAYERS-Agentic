@@ -35,6 +35,10 @@ const {
   applyGodotEpicMutationJs,
   normalizeAgentBundle,
   buildGodotAgentPrompts,
+  GODOT_READONLY_TOOL_NAMES,
+  sanitizeToolHistoryJs,
+  buildGodotMultiTurnPrompt,
+  normalizeAgentStepResponse,
 } = _testHelpers;
 
 assert(GODOT_UPDATE_VALID_ACTIONS.has("build_epic"));
@@ -588,6 +592,174 @@ const fixPromptRes = buildGodotAgentPrompts({
   errorText: "SCRIPT ERROR: Nil base",
 });
 assert.strictEqual(fixPromptRes.thinkingLevel, "MEDIUM");
+
+// Multi-turn v1 Cloud tool-calling protocol helpers (Round 2/5)
+assert(GODOT_READONLY_TOOL_NAMES instanceof Set);
+assert.strictEqual(GODOT_READONLY_TOOL_NAMES.size, 6);
+for (const toolName of [
+  "list_project_files",
+  "grep_project_text",
+  "read_script_slice",
+  "inspect_scene_tree",
+  "read_autoloads_and_layers",
+  "inspect_tres_resource",
+]) {
+  assert(GODOT_READONLY_TOOL_NAMES.has(toolName), `Missing read-only tool ${toolName}`);
+}
+assert(!GODOT_READONLY_TOOL_NAMES.has("delete_file"));
+
+const sanitizedHistory = sanitizeToolHistoryJs([
+  { turn: 1, tool: "delete_file", args: { path: "res://scripts/player.gd" }, result: { ok: true } },
+  {
+    turn: 1,
+    tool: "read_script_slice",
+    args: { path: "res://scripts/player.gd", startLine: 1, endLine: 20 },
+    result: "x".repeat(15050),
+  },
+]);
+assert.strictEqual(sanitizedHistory.length, 1);
+assert.strictEqual(sanitizedHistory[0].tool, "read_script_slice");
+assert.strictEqual(typeof sanitizedHistory[0].result, "string");
+assert(sanitizedHistory[0].result.length <= 12000, "Expected oversized tool result truncated <= 12000 chars");
+
+const mtPromptT1 = buildGodotMultiTurnPrompt({
+  mode: "build_feature",
+  rootSpec: payload4t.rootSpec,
+  epicSpec: payload4t.activeEpic,
+  featureSpec: payload4t.activeFeature,
+  siblingFeaturesSummary: payload4t.siblingFeaturesSummary,
+  godotContextMarkdown: payload4t.activeFeatureContextMarkdown,
+  turnIndex: 1,
+  maxTurns: 6,
+  projectManifest: {
+    sceneFiles: ["res://scenes/arena_proto.tscn"],
+    scriptFiles: ["res://scripts/player.gd"],
+    autoloads: { GameBus: "res://autoload/game_bus.gd" },
+    layerNames: { "3d_physics/layer_1": "World" },
+  },
+  arenaScenePath: payload4t.arenaScenePath,
+  epicScenePath: "res://scenes/player_mech.tscn",
+});
+assert.strictEqual(mtPromptT1.thinkingLevel, "LOW");
+assert.strictEqual(mtPromptT1.forceFinal, false);
+assert.strictEqual(mtPromptT1.turnIndex, 1);
+assert.strictEqual(mtPromptT1.maxTurns, 6);
+for (const toolName of GODOT_READONLY_TOOL_NAMES) {
+  assert(mtPromptT1.systemInstruction.includes(toolName), `Expected ${toolName} in systemInstruction`);
+}
+assert(mtPromptT1.systemInstruction.includes("tool_calls"));
+assert(mtPromptT1.systemInstruction.includes("final_bundle"));
+assert(mtPromptT1.systemInstruction.includes("4"));
+assert(mtPromptT1.systemInstruction.includes("patches"));
+assert(mtPromptT1.preserveExports.includes("move_speed"));
+assert(mtPromptT1.preserveInputActions.includes("move_left"));
+assert(mtPromptT1.userPrompt.includes("GameBus"));
+assert(mtPromptT1.userPrompt.includes("3d_physics/layer_1"));
+assert(mtPromptT1.userPrompt.includes('"turnIndex":1'));
+assert(mtPromptT1.userPrompt.includes('"maxTurns":6'));
+
+const mtPromptT6 = buildGodotMultiTurnPrompt({
+  mode: "fix_feature",
+  rootSpec: payload4t.rootSpec,
+  epicSpec: payload4t.activeEpic,
+  featureSpec: payload4t.activeFeature,
+  siblingFeaturesSummary: payload4t.siblingFeaturesSummary,
+  godotContextMarkdown: payload4t.activeFeatureContextMarkdown,
+  turnIndex: 6,
+  maxTurns: 6,
+  toolHistory: sanitizedHistory,
+  errorText: "SCRIPT ERROR: Parse Error at line 14",
+});
+assert.strictEqual(mtPromptT6.thinkingLevel, "MEDIUM");
+assert.strictEqual(mtPromptT6.forceFinal, true);
+assert(
+  mtPromptT6.systemInstruction.toLowerCase().includes("disabled") ||
+    mtPromptT6.systemInstruction.toLowerCase().includes("final"),
+  "Expected Turn 6 systemInstruction to disallow tool_calls and require final_bundle"
+);
+assert(mtPromptT6.userPrompt.includes("Parse Error at line 14"));
+assert(mtPromptT6.userPrompt.includes("read_script_slice"));
+
+// (a) tool_calls step: strips disallowed tool, normalizes name/arguments aliases, caps at 4
+const rawStepCandidates = {
+  type: "tool_calls",
+  thought: "Inspect scripts and scene tree first.",
+  toolCalls: [
+    { tool: "delete_file", args: { path: "res://scripts/player.gd" } },
+    { tool: "list_project_files", args: { dir: "res://" } },
+    { tool: "grep_project_text", args: { query: "dash" } },
+    { name: "inspect_scene_tree", arguments: { path: "res://scenes/arena_proto.tscn" } },
+    { tool: "read_script_slice", args: { path: "res://scripts/player.gd", startLine: 1, endLine: 40 } },
+    { tool: "read_autoloads_and_layers", args: {} },
+  ],
+};
+const stepToolCalls = normalizeAgentStepResponse(rawStepCandidates, "build_feature", {
+  dimension: "dim3d",
+  forceFinal: false,
+});
+assert.strictEqual(stepToolCalls.type, "tool_calls");
+assert.strictEqual(stepToolCalls.toolCalls.length, 4);
+assert(!stepToolCalls.toolCalls.some((c) => c.tool === "delete_file"));
+assert.strictEqual(stepToolCalls.toolCalls[2].tool, "inspect_scene_tree");
+assert.deepStrictEqual(stepToolCalls.toolCalls[2].args, { path: "res://scenes/arena_proto.tscn" });
+
+// (b) Same tool_calls payload under forceFinal=true coerces to final_bundle
+const stepForcedFinal = normalizeAgentStepResponse(rawStepCandidates, "build_feature", {
+  dimension: "dim3d",
+  forceFinal: true,
+});
+assert.strictEqual(stepForcedFinal.type, "final_bundle");
+assert(stepForcedFinal.bundle && Array.isArray(stepForcedFinal.bundle.scriptUpdates));
+
+// (c) final_bundle step preserves patches & sibling input protections
+const stepFinalBundle = normalizeAgentStepResponse({
+  type: "final_bundle",
+  thought: "Apply dash patch and action.",
+  bundle: {
+    summary: "Implemented F02 dash",
+    scriptUpdates: [
+      {
+        resPath: "scripts/player.gd",
+        patches: [{ find: "\tmove_and_slide()", replace: "\t_dash()\n\tmove_and_slide()" }],
+      },
+    ],
+    inputOps: [
+      { action: "claw_dash", keys: ["SPACE"], overwrite: true },
+      { action: "move_left", remove: true },
+    ],
+  },
+}, "build_feature", {
+  dimension: "dim3d",
+  featureId: "f02",
+  featureCode: "F02",
+  preserveExports: ["move_speed"],
+  preserveInputActions: ["move_left"],
+  forceFinal: false,
+});
+assert.strictEqual(stepFinalBundle.type, "final_bundle");
+assert.strictEqual(stepFinalBundle.bundle.scriptUpdates[0].resPath, "res://scripts/player.gd");
+assert.strictEqual(stepFinalBundle.bundle.scriptUpdates[0].patches.length, 1);
+assert.strictEqual(stepFinalBundle.bundle.inputOps.length, 1);
+assert.strictEqual(stepFinalBundle.bundle.inputOps[0].action, "claw_dash");
+assert.deepStrictEqual(stepFinalBundle.bundle.preserveExports, ["move_speed"]);
+
+// (d) Unwrapped bundle object coerces to final_bundle
+const stepUnwrapped = normalizeAgentStepResponse({
+  summary: "Unwrapped bundle recovery",
+  scriptUpdates: [
+    { resPath: "scripts/player.gd", patches: [{ find: "pass", replace: "return" }] },
+  ],
+}, "build_feature", { dimension: "dim3d", forceFinal: false });
+assert.strictEqual(stepUnwrapped.type, "final_bundle");
+assert.strictEqual(stepUnwrapped.bundle.scriptUpdates[0].resPath, "res://scripts/player.gd");
+
+// (e) tool_calls containing ONLY disallowed tools never returns empty tool_calls
+const stepOnlyDisallowed = normalizeAgentStepResponse({
+  type: "tool_calls",
+  toolCalls: [{ tool: "delete_file", args: {} }],
+}, "build_feature", { dimension: "dim3d", forceFinal: false });
+assert.strictEqual(stepOnlyDisallowed.type, "final_bundle");
+assert(stepOnlyDisallowed.bundle && Array.isArray(stepOnlyDisallowed.bundle.scriptUpdates));
 
 console.log("GODOT_CLOUD_TEST_OK");
 """
