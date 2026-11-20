@@ -1348,5 +1348,400 @@ console.log(JSON.stringify({
         }
       },
     );
+
+    test(
+      '18. Stage 1 Spark & Refiner core: dimension detection, strict preset match, vague-spark forks, real AI error surfacing, scoped 2D/3D patch conversion, locomotion sync & genre-aware fallback',
+      () async {
+        // 1. Live dimension detection
+        expect(
+          GodotProjectDimension.detectFromSpark(
+            '3D platformer with grappling hook',
+          ),
+          equals(GodotProjectDimension.dim3d),
+        );
+        expect(
+          GodotProjectDimension.detectFromSpark(
+            'side-scrolling platformer about a frog',
+          ),
+          equals(GodotProjectDimension.dim2d),
+        );
+        expect(
+          GodotProjectDimension.detectFromSpark('bullet-hell arcade shooter'),
+          equals(GodotProjectDimension.dim2d),
+        );
+
+        // 2. Strict preset matching (no false matches on generic words)
+        expect(
+          GodotSparkPresets.matchSparkPrompt('cozy crab cooking game'),
+          isNull,
+        );
+        expect(GodotSparkPresets.matchSparkPrompt('shellbreaker'), isNotNull);
+
+        // 3. Vague spark heuristic
+        expect(
+          SparkClarificationDraft.isSparkVague('cozy farming roguelike'),
+          isTrue,
+        );
+        expect(
+          SparkClarificationDraft.isSparkVague(
+            '2D pixel-art torch survival skirmisher with axe cleave',
+          ),
+          isFalse,
+        );
+
+        // 4 & 5. Real AI failure surfacing on draftSpecWithStatus & applyCoDesignEditWithStatus
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevStatus = GeminiAgentClient.lastErrorStatus;
+        GeminiAgentClient.testMockResponder = (_, __) async => null;
+        GeminiAgentClient.lastErrorStatus = 'HTTP 503: Service Unavailable';
+        try {
+          final draftErr = await ProjectConceptAgent.draftSpecWithStatus(
+            sparkPrompt: 'Top-down melee beetle brawler with dash',
+            apiKey: 'test-key-1234',
+          );
+          expect(draftErr.blueprint, isNull);
+          expect(draftErr.errorMessage, isNotEmpty);
+
+          final seedSpec = GodotSparkPresets.byId('shellbreaker');
+          final prevPillars = List<String>.from(seedSpec.pillars);
+          final refineErr = await ProjectConceptAgent.applyCoDesignEditWithStatus(
+            currentSpec: seedSpec,
+            instruction: 'Add parry shield',
+            apiKey: 'test-key-1234',
+          );
+          expect(refineErr.blueprint, isNull);
+          expect(refineErr.errorMessage, isNotEmpty);
+          expect(seedSpec.pillars, equals(prevPillars));
+
+          // 6. Scoped patch refine switching to dim2d converts m/s -> px/s scaled by 40,
+          // renumbers F01..FM sequentially, clears stale v0.2 preset data on title/pitch shift,
+          // and leaves untouched Epics intact.
+          GeminiAgentClient.testMockResponder = (_, __) async => <String, dynamic>{
+                'coDesignNote': 'Switched to 2D side-scroller and added turret cut',
+                'changedSections': ['s01', 's02', 's04'],
+                'gameTitle': 'TIDAL HOP',
+                'pitch': '2D side-scrolling claw dasher — leap across ruins',
+                'dimension': 'dim2d',
+                'cameraChoiceId': 'sidescroller2d',
+                'cameraContract': 'Camera2D Zoom 1.4x · Lookahead 64 px',
+                'outOfScope': [
+                  ...seedSpec.outOfScope,
+                  'No deployable sentry turrets',
+                ],
+              };
+          final patchOk = await ProjectConceptAgent.applyCoDesignEditWithStatus(
+            currentSpec: seedSpec,
+            instruction: 'Switch to a 2D side-scroller called Tidal Hop and cut sentry turrets',
+            apiKey: 'test-key-1234',
+          );
+          expect(patchOk.errorMessage, isNull);
+          final updated = patchOk.blueprint!;
+          expect(updated.dimension, equals(GodotProjectDimension.dim2d));
+          final f01Speed = updated.initialEpics.first.features.first.tuning
+              .firstWhere((t) => t.key == 'move_speed');
+          expect(f01Speed.unit, equals('px/s'));
+          expect(double.parse(f01Speed.value), greaterThan(100));
+          expect(updated.v02Presets, isEmpty);
+          expect(updated.v02NewPool, isEmpty);
+          expect(
+            patchOk.changedSections,
+            containsAll(<String>['s01', 's02', 's04']),
+          );
+          final allFeatureCodes = [
+            for (final ep in updated.initialEpics)
+              for (final f in ep.features) f.code,
+          ];
+          expect(
+            allFeatureCodes,
+            equals([
+              for (int i = 0; i < allFeatureCodes.length; i++)
+                FeatureSpec.formatCode(i + 1),
+            ]),
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.lastErrorStatus = prevStatus;
+        }
+
+        // 7. Reordering E01 to index 1 keeps syncEpicCameraFraming & syncEpicCoreFeel
+        // targeting the locomotion Epic (lineageKey == 'e01') and its first FeatureSpec.
+        final reordered = GodotSparkPresets.byId('shellbreaker').deepCopy();
+        final movedE01 = reordered.initialEpics.removeAt(0);
+        reordered.initialEpics.insert(1, movedE01);
+        reordered.initialEpics[0].code = 'E01';
+        reordered.initialEpics[1].code = 'E02';
+
+        ProjectConceptAgent.syncEpicCameraFraming(
+          reordered,
+          optionId: 'fps',
+          contractValue: 'Camera3D EyeHeight 1.65 m · 90 deg FOV · Captured mouse yaw/pitch',
+        );
+        ProjectConceptAgent.syncEpicCoreFeel(reordered, feelId: 'heavy');
+
+        final wrongFirstFeat = reordered.initialEpics[0].features.first;
+        final locoFeat = reordered.initialEpics[1].features.first;
+        expect(
+          wrongFirstFeat.tuning.any((t) => t.key == 'eye_height'),
+          isFalse,
+        );
+        expect(
+          locoFeat.tuning.any((t) => t.key == 'eye_height'),
+          isTrue,
+        );
+        expect(
+          locoFeat.tuning.firstWhere((t) => t.key == 'braking_decel').value,
+          equals('14.0'),
+        );
+        expect(
+          locoFeat.controls.any((c) => c.action == 'look_axis'),
+          isTrue,
+        );
+        expect(
+          locoFeat.checks.any((c) => c.text.toLowerCase().contains('first-person')),
+          isTrue,
+        );
+
+        // 8. Offline fallback fixes F01.passed, sequential codes, and non-combat genre templates.
+        final puzzleOff = await ProjectConceptAgent.draftSpecFromSpark(
+          sparkPrompt: 'Isometric puzzle box room where you slide mirror relays to open gates',
+          apiKey: '',
+        );
+        expect(
+          puzzleOff.initialEpics.first.features.first.status,
+          equals(FeatureStatus.active),
+        );
+        expect(
+          puzzleOff.initialEpics.first.features.first.checks.first.passed,
+          isFalse,
+        );
+        final puzzleCodes = [
+          for (final ep in puzzleOff.initialEpics)
+            for (final f in ep.features) f.code,
+        ];
+        expect(
+          puzzleCodes,
+          equals([
+            for (int i = 0; i < puzzleCodes.length; i++)
+              FeatureSpec.formatCode(i + 1),
+          ]),
+        );
+        expect(
+          puzzleOff.initialEpics.first.sceneOwnership
+              .any((s) => s.path.contains('room_proto.tscn')),
+          isTrue,
+        );
+        expect(
+          puzzleOff.initialEpics.any(
+            (e) => e.sceneOwnership.any((s) => s.path.contains('target_enemy')),
+          ),
+          isFalse,
+        );
+
+        final racerOff = await ProjectConceptAgent.draftSpecFromSpark(
+          sparkPrompt: '3D canyon hover racer with drift boost pads and lap timer',
+          apiKey: '',
+        );
+        expect(
+          racerOff.initialEpics.first.sceneOwnership
+              .any((s) => s.path.contains('track_proto.tscn')),
+          isTrue,
+        );
+      },
+    );
+
+    testWidgets(
+      '19. Stage 1 UI: Live 2D/3D preview, vague-spark clarification card, preserved error + Undo + Badges + Scope preview + lean inline edits',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevStatus = GeminiAgentClient.lastErrorStatus;
+        addTearDown(() {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.lastErrorStatus = prevStatus;
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // 1. Live 2D preview while typing before tapping Draft
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_prompt_input')),
+          '2D platformer frog',
+        );
+        await tester.pump();
+        expect(wb.projectDimension, equals(GodotProjectDimension.dim2d));
+
+        // 2. Vague spark shows 3-fork clarification card -> Confirm drafts spec + Scope preview
+        await tester.enterText(
+          find.byKey(const ValueKey('spark_prompt_input')),
+          'cozy farming roguelike',
+        );
+        await tester.pump();
+        await tester.tap(find.byKey(const ValueKey('draft_spark_btn')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('stage1_spark_clarify_card')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('clarify_archetype_puzzle')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('stage1_clarify_confirm_btn')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('stage1_scope_preview_card')),
+          findsOneWidget,
+        );
+        expect(wb.conceptDraft?.hasSpec, isTrue);
+        final prevPillarsCount = wb.conceptDraft!.pillars.length;
+
+        // 3. Failed AI Refine shows inline error banner, keeps user text intact, never mutates pillars
+        GeminiAgentClient.testMockResponder = (_, __) async => null;
+        GeminiAgentClient.lastErrorStatus = 'HTTP 503: Upstream Busy';
+        wb.updateAiConfig(apiKey: 'test-key-1234');
+
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_codesign_input')),
+          'Add parry shield',
+        );
+        await tester.tap(find.byKey(const ValueKey('stage1_codesign_apply_btn')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('stage1_inline_error_banner')),
+          findsOneWidget,
+        );
+        final tf = tester.widget<TextField>(
+          find.byKey(const ValueKey('stage1_codesign_input')),
+        );
+        expect(tf.controller?.text, equals('Add parry shield'));
+        expect(wb.conceptDraft!.pillars.length, equals(prevPillarsCount));
+        expect(wb.conceptDraft!.pillars.contains('Add parry shield'), isFalse);
+
+        // 4. Successful scoped patch shows Updated badge on §04, clears input, enables Undo
+        final beforeCuts = List<String>.from(wb.conceptDraft!.outOfScope);
+        GeminiAgentClient.testMockResponder = (_, __) async => <String, dynamic>{
+              'coDesignNote': 'Cut online co-op from v0.1',
+              'changedSections': ['s04'],
+              'outOfScope': [...beforeCuts, 'No online co-op lobbies'],
+            };
+        await tester.tap(find.byKey(const ValueKey('stage1_codesign_apply_btn')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('stage1_updated_badge_§04')),
+          findsOneWidget,
+        );
+        expect(tf.controller?.text, isEmpty);
+        expect(
+          wb.conceptDraft!.outOfScope,
+          contains('No online co-op lobbies'),
+        );
+
+        await tester.tap(find.byKey(const ValueKey('stage1_undo_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          wb.conceptDraft!.outOfScope,
+          equals(beforeCuts),
+        );
+
+        // 5. Lean inline edits without AI (Title, §01 Pitch, §04 Cuts, §05 Feature slice + Undo)
+        GeminiAgentClient.testMockResponder = null;
+
+        await tester.tap(find.byKey(const ValueKey('stage1_edit_title_btn')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_title_input')),
+          'CLOVER PATCH',
+        );
+        await tester.tap(find.byKey(const ValueKey('stage1_title_save_btn')));
+        await tester.pumpAndSettle();
+        expect(wb.conceptDraft!.gameTitle, equals('CLOVER PATCH'));
+
+        await tester.tap(find.byKey(const ValueKey('stage1_edit_pitch_btn')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_pitch_input')),
+          'Cozy Plot Loop — Tend lanterns and harvest moonroot before dusk',
+        );
+        await tester.tap(find.byKey(const ValueKey('stage1_pitch_save_btn')));
+        await tester.pumpAndSettle();
+        expect(wb.conceptDraft!.pitch, contains('Tend lanterns'));
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('stage1_cut_add_btn')),
+        );
+        await tester.tap(find.byKey(const ValueKey('stage1_cut_add_btn')));
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_cut_add_input')),
+          'Fishing minigame',
+        );
+        await tester.tap(find.byKey(const ValueKey('stage1_cut_add_save_btn')));
+        await tester.pumpAndSettle();
+        expect(wb.conceptDraft!.outOfScope, contains('No Fishing minigame'));
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('stage1_cut_remove_0')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('stage1_cut_remove_0')));
+        await tester.pumpAndSettle();
+        expect(wb.conceptDraft!.outOfScope.length, equals(beforeCuts.length));
+
+        final firstFeat = wb.conceptDraft!.initialEpics.first.features.first;
+        final secondFeat = wb.conceptDraft!.initialEpics.first.features[1];
+
+        await tester.ensureVisible(
+          find.byKey(ValueKey('stage1_feat_edit_${firstFeat.id}')),
+        );
+        await tester.tap(
+          find.byKey(ValueKey('stage1_feat_edit_${firstFeat.id}')),
+        );
+        await tester.pumpAndSettle();
+        await tester.enterText(
+          find.byKey(ValueKey('stage1_feat_input_${firstFeat.id}')),
+          'Garden Walk & Camera',
+        );
+        await tester.tap(
+          find.byKey(ValueKey('stage1_feat_save_${firstFeat.id}')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          wb.conceptDraft!.initialEpics.first.features.first.title,
+          equals('Garden Walk & Camera'),
+        );
+
+        final featCountBeforeRemove = wb.conceptDraft!.initialEpics
+            .fold<int>(0, (s, e) => s + e.features.length);
+        await tester.ensureVisible(
+          find.byKey(ValueKey('stage1_feat_remove_${secondFeat.id}')),
+        );
+        await tester.tap(
+          find.byKey(ValueKey('stage1_feat_remove_${secondFeat.id}')),
+        );
+        await tester.pumpAndSettle();
+        final featCountAfterRemove = wb.conceptDraft!.initialEpics
+            .fold<int>(0, (s, e) => s + e.features.length);
+        expect(featCountAfterRemove, equals(featCountBeforeRemove - 1));
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('stage1_undo_btn')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('stage1_undo_btn')));
+        await tester.pumpAndSettle();
+        final featCountAfterUndo = wb.conceptDraft!.initialEpics
+            .fold<int>(0, (s, e) => s + e.features.length);
+        expect(featCountAfterUndo, equals(featCountBeforeRemove));
+      },
+    );
   });
 }

@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 
 /// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`).
-/// Unified single-space canvas with one top prompt bar (Idea Intake -> Compact Refine Bar)
-/// paired directly with the 5-section Blueprint (`§01–§05`), Camera/Feel forks, and `v0.1` Epics.
+/// Single-space canvas with Idea Intake + vague-spark forks, scoped patch Refine + Undo,
+/// changed-section badges, `§05` Scope & First Playtest preview, and lean direct inline edits.
 class ProjectPitchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
   final VoidCallback? onOpenAiSettings;
@@ -25,11 +26,31 @@ class ProjectPitchScreen extends StatefulWidget {
 class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   final TextEditingController _sparkController = TextEditingController();
   final TextEditingController _coDesignController = TextEditingController();
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _pitchController = TextEditingController();
+  final TextEditingController _cutController = TextEditingController();
+  final TextEditingController _featureTitleController = TextEditingController();
+
+  bool _editingTitle = false;
+  bool _editingPitch = false;
+  bool _addingCut = false;
+  String? _editingFeatureId;
+
+  void _resetInlineEditFlags() {
+    _editingTitle = false;
+    _editingPitch = false;
+    _addingCut = false;
+    _editingFeatureId = null;
+  }
 
   @override
   void dispose() {
     _sparkController.dispose();
     _coDesignController.dispose();
+    _titleController.dispose();
+    _pitchController.dispose();
+    _cutController.dispose();
+    _featureTitleController.dispose();
     super.dispose();
   }
 
@@ -153,15 +174,90 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     ),
                   ),
                 ),
-                Text(
-                  spec.normalizedTitle,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTheme.displayFont(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: textPrimary,
+                if (_editingTitle)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 240,
+                        child: TextField(
+                          key: const ValueKey('stage1_title_input'),
+                          controller: _titleController,
+                          style: AppTheme.displayFont(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
+                          ),
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 6,
+                            ),
+                          ),
+                          onSubmitted: (val) {
+                            wb.updateRootSpecSections(gameTitle: val);
+                            setState(() => _editingTitle = false);
+                          },
+                        ),
+                      ),
+                      IconButton(
+                        key: const ValueKey('stage1_title_save_btn'),
+                        tooltip: 'Save title',
+                        visualDensity: VisualDensity.compact,
+                        icon: Icon(Icons.check_rounded, size: 17, color: green),
+                        onPressed: () {
+                          wb.updateRootSpecSections(
+                            gameTitle: _titleController.text,
+                          );
+                          setState(() => _editingTitle = false);
+                        },
+                      ),
+                      IconButton(
+                        key: const ValueKey('stage1_title_cancel_btn'),
+                        tooltip: 'Cancel title edit',
+                        visualDensity: VisualDensity.compact,
+                        icon: const Icon(Icons.close_rounded, size: 16),
+                        onPressed: () => setState(() => _editingTitle = false),
+                      ),
+                    ],
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        spec.normalizedTitle,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTheme.displayFont(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: textPrimary,
+                        ),
+                      ),
+                      IconButton(
+                        key: const ValueKey('stage1_edit_title_btn'),
+                        tooltip: 'Rename project',
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.only(left: 4),
+                        constraints: const BoxConstraints(
+                          minWidth: 26,
+                          minHeight: 26,
+                        ),
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          size: 14,
+                          color: textSecondary,
+                        ),
+                        onPressed: wb.isAgentBusy
+                            ? null
+                            : () {
+                                _titleController.text = spec.normalizedTitle;
+                                setState(() => _editingTitle = true);
+                              },
+                      ),
+                    ],
                   ),
-                ),
                 TextButton.icon(
                   key: const ValueKey('reset_spark_btn'),
                   onPressed: wb.isAgentBusy
@@ -169,6 +265,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       : () {
                           _sparkController.clear();
                           _coDesignController.clear();
+                          setState(_resetInlineEditFlags);
                           wb.resetStage1ToNewIdea();
                         },
                   icon: const Icon(Icons.add_rounded, size: 15),
@@ -297,9 +394,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   filled: false,
                   contentPadding: EdgeInsets.zero,
                 ),
+                onChanged: wb.previewDimensionFromSparkText,
                 onSubmitted: (val) async {
                   if (!wb.isAgentBusy && val.trim().isNotEmpty) {
-                    await wb.generateSpecFromSpark(val);
+                    await wb.handleStage1SparkSubmit(val);
                   }
                 },
               ),
@@ -330,7 +428,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                               );
                               return;
                             }
-                            await wb.generateSpecFromSpark(text);
+                            await wb.handleStage1SparkSubmit(text);
                           },
                     icon: wb.isAgentBusy
                         ? const SizedBox(
@@ -350,6 +448,28 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             ],
           ),
         ),
+        if (wb.stage1InlineError != null) ...[
+          const SizedBox(height: 12),
+          _buildStage1InlineErrorBanner(
+            wb: wb,
+            isDark: isDark,
+            textPrimary: textPrimary,
+            retryKey: const ValueKey('stage1_intake_retry_btn'),
+            onRetry: () => wb.handleStage1SparkSubmit(_sparkController.text),
+          ),
+        ],
+        if (wb.pendingSparkClarification != null) ...[
+          const SizedBox(height: 12),
+          _buildSparkClarifyCard(
+            wb: wb,
+            pending: wb.pendingSparkClarification!,
+            isDark: isDark,
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            textMuted: textMuted,
+            cyan: cyan,
+          ),
+        ],
         const SizedBox(height: 12),
         Wrap(
           spacing: 8,
@@ -378,6 +498,205 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     );
   }
 
+  Widget _buildStage1InlineErrorBanner({
+    required WorkbenchProvider wb,
+    required bool isDark,
+    required Color textPrimary,
+    required Key retryKey,
+    required VoidCallback onRetry,
+  }) {
+    final red = AppTheme.accentRedFor(isDark);
+    return Container(
+      key: const ValueKey('stage1_inline_error_banner'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: red.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.error_outline_rounded, size: 16, color: red),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              wb.stage1InlineError ?? 'Request failed.',
+              style: TextStyle(fontSize: 12.5, color: textPrimary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            key: retryKey,
+            onPressed: wb.isAgentBusy ? null : onRetry,
+            child: const Text('Retry'),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+            icon: const Icon(Icons.close_rounded, size: 15),
+            onPressed: wb.dismissStage1InlineError,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSparkClarifyCard({
+    required WorkbenchProvider wb,
+    required SparkClarificationDraft pending,
+    required bool isDark,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color textMuted,
+    required Color cyan,
+  }) {
+    final border = AppTheme.borderFor(isDark);
+    return Container(
+      key: const ValueKey('stage1_spark_clarify_card'),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.bgPanelFor(isDark),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: cyan.withValues(alpha: 0.45)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.tune_rounded, size: 16, color: cyan),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Quick Forks · Sharpen "${pending.rawSpark}"',
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Close quick forks',
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                icon: Icon(Icons.close_rounded, size: 15, color: textMuted),
+                onPressed: wb.dismissSparkClarification,
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Camera View:',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final opt in pending.viewOptions)
+                ChoiceChip(
+                  key: ValueKey('clarify_view_${opt.id}'),
+                  label: Text(opt.label),
+                  selected: pending.viewChoiceId == opt.id,
+                  onSelected: wb.isAgentBusy
+                      ? null
+                      : (_) => wb.updateSparkClarification(
+                            viewChoiceId: opt.id,
+                          ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Core Loop Focus:',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final opt in SparkClarificationDraft.archetypeOptions)
+                ChoiceChip(
+                  key: ValueKey('clarify_archetype_${opt.id}'),
+                  label: Text(opt.label),
+                  selected: pending.archetypeId == opt.id,
+                  onSelected: wb.isAgentBusy
+                      ? null
+                      : (_) => wb.updateSparkClarification(
+                            archetypeId: opt.id,
+                          ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'v0.1 Prototype Goal:',
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: textSecondary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (final opt in SparkClarificationDraft.prototypeHookOptions)
+                ChoiceChip(
+                  key: ValueKey('clarify_hook_${opt.id}'),
+                  label: Text(opt.label),
+                  selected: pending.prototypeHookId == opt.id,
+                  onSelected: wb.isAgentBusy
+                      ? null
+                      : (_) => wb.updateSparkClarification(
+                            prototypeHookId: opt.id,
+                          ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: border),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              TextButton(
+                key: const ValueKey('stage1_clarify_skip_btn'),
+                onPressed: wb.isAgentBusy
+                    ? null
+                    : () => wb.confirmSparkClarification(skipPicks: true),
+                child: const Text('Skip → Draft Now'),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                key: const ValueKey('stage1_clarify_confirm_btn'),
+                onPressed: wb.isAgentBusy
+                    ? null
+                    : () => wb.confirmSparkClarification(skipPicks: false),
+                icon: const Icon(Icons.auto_awesome, size: 15),
+                label: const Text('Draft with Picks'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCompactRefineTopCard({
     required WorkbenchProvider wb,
     required ProjectConceptBlueprint spec,
@@ -386,6 +705,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     required Color textMuted,
     required Color cyan,
   }) {
+    final quickChips = ProjectConceptAgent.suggestQuickRefines(spec);
     return Container(
       key: const ValueKey('stage1_unified_refine_bar'),
       padding: const EdgeInsets.all(14),
@@ -465,6 +785,54 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 onPressed: wb.isAgentBusy ? null : () => _submitCoDesign(wb),
                 child: Text(wb.isAgentBusy ? 'Applying...' : 'Apply'),
               ),
+              const SizedBox(width: 6),
+              OutlinedButton.icon(
+                key: const ValueKey('stage1_undo_btn'),
+                onPressed: (wb.isAgentBusy || !wb.canUndoStage1)
+                    ? null
+                    : wb.undoStage1Edit,
+                icon: const Icon(Icons.undo_rounded, size: 15),
+                label: const Text('Undo'),
+              ),
+            ],
+          ),
+          if (wb.stage1InlineError != null) ...[
+            const SizedBox(height: 10),
+            _buildStage1InlineErrorBanner(
+              wb: wb,
+              isDark: isDark,
+              textPrimary: textPrimary,
+              retryKey: const ValueKey('stage1_refine_retry_btn'),
+              onRetry: () => _submitCoDesign(wb),
+            ),
+          ],
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              for (int i = 0; i < quickChips.length; i++)
+                ActionChip(
+                  key: ValueKey('stage1_quick_refine_$i'),
+                  avatar: Icon(Icons.bolt_rounded, size: 13, color: cyan),
+                  label: Text(
+                    quickChips[i].label,
+                    style: TextStyle(fontSize: 11.5, color: textPrimary),
+                  ),
+                  onPressed: wb.isAgentBusy
+                      ? null
+                      : () async {
+                          final res = await wb.applyStage1CoDesignInstruction(
+                            quickChips[i].instruction,
+                          );
+                          if (!mounted) return;
+                          if (res == null &&
+                              _coDesignController.text.trim().isEmpty) {
+                            _coDesignController.text =
+                                quickChips[i].instruction;
+                          }
+                        },
+                ),
             ],
           ),
         ],
@@ -580,8 +948,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   Future<void> _submitCoDesign(WorkbenchProvider wb) async {
     final text = _coDesignController.text.trim();
     if (text.isEmpty || wb.isAgentBusy) return;
-    _coDesignController.clear();
-    await wb.applyStage1CoDesignInstruction(text);
+    final res = await wb.applyStage1CoDesignInstruction(text);
+    if (!mounted) return;
+    if (res != null) {
+      _coDesignController.clear();
+    }
   }
 
   Widget _buildCleanSpecDocument(
@@ -597,6 +968,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     final cyan = AppTheme.accentCyanFor(isDark);
     final green = AppTheme.accentGreenFor(isDark);
     final red = AppTheme.accentRedFor(isDark);
+    final amber = AppTheme.accentAmberFor(isDark);
+    final changed = wb.lastStage1ChangedSections;
+    final scope = Stage1ScopeSummary.fromBlueprint(spec);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -606,18 +980,92 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           isDark: isDark,
           code: '§01',
           title: 'Core Fantasy & 30s Loop',
+          isUpdated: changed.contains('s01'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                spec.pitch,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: textPrimary,
-                  height: 1.45,
+              if (_editingPitch)
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('stage1_pitch_input'),
+                        controller: _pitchController,
+                        minLines: 1,
+                        maxLines: 3,
+                        style: TextStyle(fontSize: 14.5, color: textPrimary),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 8,
+                          ),
+                        ),
+                        onSubmitted: (val) {
+                          wb.updateRootSpecSections(pitch: val);
+                          setState(() => _editingPitch = false);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      key: const ValueKey('stage1_pitch_save_btn'),
+                      tooltip: 'Save pitch',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(Icons.check_rounded, size: 17, color: green),
+                      onPressed: () {
+                        wb.updateRootSpecSections(pitch: _pitchController.text);
+                        setState(() => _editingPitch = false);
+                      },
+                    ),
+                    IconButton(
+                      key: const ValueKey('stage1_pitch_cancel_btn'),
+                      tooltip: 'Cancel pitch edit',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.close_rounded, size: 16),
+                      onPressed: () => setState(() => _editingPitch = false),
+                    ),
+                  ],
+                )
+              else
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        spec.pitch,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: textPrimary,
+                          height: 1.45,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('stage1_edit_pitch_btn'),
+                      tooltip: 'Edit pitch',
+                      visualDensity: VisualDensity.compact,
+                      padding: const EdgeInsets.only(left: 6),
+                      constraints: const BoxConstraints(
+                        minWidth: 26,
+                        minHeight: 26,
+                      ),
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        size: 15,
+                        color: textSecondary,
+                      ),
+                      onPressed: wb.isAgentBusy
+                          ? null
+                          : () {
+                              _pitchController.text = spec.pitch;
+                              setState(() => _editingPitch = true);
+                            },
+                    ),
+                  ],
                 ),
-              ),
               const SizedBox(height: 14),
               Wrap(
                 spacing: 8,
@@ -658,6 +1106,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           isDark: isDark,
           code: '§02',
           title: 'Global Godot 4 Scale & Architecture (${spec.dimension.pillLabel})',
+          isUpdated: changed.contains('s02'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -698,6 +1147,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           isDark: isDark,
           code: '§03',
           title: 'Core Feel, Design Pillars & Conflict Trade-Offs',
+          isUpdated: changed.contains('s03'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -775,22 +1225,109 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           isDark: isDark,
           code: '§04',
           title: 'Hard Scope Cuts (Do Not Build)',
+          isUpdated: changed.contains('s04'),
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              for (final cut in spec.outOfScope)
+              for (int i = 0; i < spec.outOfScope.length; i++)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.only(
+                    left: 10,
+                    right: 6,
+                    top: 6,
+                    bottom: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: red.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                     border: Border.all(color: red.withValues(alpha: 0.35)),
                   ),
-                  child: Text(
-                    cut,
-                    style: TextStyle(fontSize: 12.5, color: textPrimary),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        spec.outOfScope[i],
+                        style: TextStyle(fontSize: 12.5, color: textPrimary),
+                      ),
+                      const SizedBox(width: 6),
+                      InkWell(
+                        key: ValueKey('stage1_cut_remove_$i'),
+                        borderRadius: BorderRadius.circular(4),
+                        onTap: wb.isAgentBusy
+                            ? null
+                            : () => wb.removeStage1OutOfScopeCut(i),
+                        child: Padding(
+                          padding: const EdgeInsets.all(2),
+                          child: Icon(
+                            Icons.close_rounded,
+                            size: 13,
+                            color: red,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
+                ),
+              if (_addingCut)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 220,
+                      child: TextField(
+                        key: const ValueKey('stage1_cut_add_input'),
+                        controller: _cutController,
+                        style: TextStyle(fontSize: 12.5, color: textPrimary),
+                        decoration: InputDecoration(
+                          hintText: 'No ...',
+                          hintStyle: TextStyle(fontSize: 12, color: textMuted),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 7,
+                          ),
+                        ),
+                        onSubmitted: (val) {
+                          wb.addStage1OutOfScopeCut(val);
+                          setState(() => _addingCut = false);
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      key: const ValueKey('stage1_cut_add_save_btn'),
+                      tooltip: 'Add scope cut',
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(Icons.check_rounded, size: 16, color: green),
+                      onPressed: () {
+                        wb.addStage1OutOfScopeCut(_cutController.text);
+                        setState(() => _addingCut = false);
+                      },
+                    ),
+                    IconButton(
+                      key: const ValueKey('stage1_cut_add_cancel_btn'),
+                      tooltip: 'Cancel cut',
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.close_rounded, size: 15),
+                      onPressed: () => setState(() => _addingCut = false),
+                    ),
+                  ],
+                )
+              else
+                ActionChip(
+                  key: const ValueKey('stage1_cut_add_btn'),
+                  avatar: Icon(Icons.add_rounded, size: 14, color: cyan),
+                  label: Text(
+                    'Add cut',
+                    style: TextStyle(fontSize: 12, color: textPrimary),
+                  ),
+                  onPressed: wb.isAgentBusy
+                      ? null
+                      : () {
+                          _cutController.clear();
+                          setState(() => _addingCut = true);
+                        },
                 ),
             ],
           ),
@@ -802,6 +1339,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           isDark: isDark,
           code: '§05',
           title: 'Seeded Epics & Initial v0.1 Feature Slices',
+          isUpdated: changed.contains('s05'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -822,6 +1360,111 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                         style: TextStyle(fontSize: 12, color: textPrimary),
                       ),
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                key: const ValueKey('stage1_scope_preview_card'),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurfaceFor(isDark),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                  border: Border.all(
+                    color: scope.isLean
+                        ? border
+                        : amber.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 7,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: (scope.isLean ? green : amber)
+                                    .withValues(alpha: 0.14),
+                                borderRadius: BorderRadius.circular(
+                                  AppTheme.radiusXs,
+                                ),
+                              ),
+                              child: Text(
+                                scope.isLean ? 'Lean v0.1' : 'Scope Check',
+                                style: GoogleFonts.jetBrainsMono(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: scope.isLean ? green : amber,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              '${scope.epicCount} Epics · ${scope.featureCount} Features · ${scope.formattedDuration} · ${scope.inputActionCount} Inputs',
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 11.5,
+                                color: textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (scope.featureCount > 8 || scope.epicCount > 4)
+                          ActionChip(
+                            key: const ValueKey('stage1_trim_lean_btn'),
+                            label: Text(
+                              'Trim to Lean v0.1',
+                              style: TextStyle(fontSize: 11, color: textPrimary),
+                            ),
+                            onPressed: wb.isAgentBusy
+                                ? null
+                                : () => wb.applyStage1CoDesignInstruction(
+                                      'Trim v0.1 scope to 2-3 Epics (<= 6 Features total) and move extra systems into §04 Hard Scope Cuts.',
+                                    ),
+                          ),
+                      ],
+                    ),
+                    if (scope.warnings.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      for (final w in scope.warnings)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 2),
+                          child: Text(
+                            '• $w',
+                            style: TextStyle(fontSize: 11.5, color: amber),
+                          ),
+                        ),
+                    ],
+                    if (scope.firstFeatureLabel != null ||
+                        scope.firstPlaytestGate != null) ...[
+                      const SizedBox(height: 8),
+                      Divider(height: 1, color: border),
+                      const SizedBox(height: 8),
+                      Text(
+                        'First Playtest (${scope.firstFeatureLabel ?? 'F01'}) · ${scope.firstTestScenePath ?? 'res://scenes/arena_proto.tscn'}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 11,
+                          color: cyan,
+                        ),
+                      ),
+                      if (scope.firstPlaytestGate != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          scope.firstPlaytestGate!,
+                          style: TextStyle(fontSize: 12, color: textSecondary),
+                        ),
+                      ],
+                    ],
                   ],
                 ),
               ),
@@ -961,29 +1604,143 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   for (final feat in v01Features)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${feat.code} · ${feat.title}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 11.5,
-                                color: textPrimary,
-                              ),
+                      child: _editingFeatureId == feat.id
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    key: ValueKey('stage1_feat_input_${feat.id}'),
+                                    controller: _featureTitleController,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11.5,
+                                      color: textPrimary,
+                                    ),
+                                    decoration: const InputDecoration(
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 5,
+                                      ),
+                                    ),
+                                    onSubmitted: (val) {
+                                      wb.renameStage1FeatureSlice(
+                                        index,
+                                        feat.id,
+                                        val,
+                                      );
+                                      setState(() => _editingFeatureId = null);
+                                    },
+                                  ),
+                                ),
+                                IconButton(
+                                  key: ValueKey('stage1_feat_save_${feat.id}'),
+                                  tooltip: 'Save slice name',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 24,
+                                    minHeight: 24,
+                                  ),
+                                  icon: Icon(
+                                    Icons.check_rounded,
+                                    size: 15,
+                                    color: green,
+                                  ),
+                                  onPressed: () {
+                                    wb.renameStage1FeatureSlice(
+                                      index,
+                                      feat.id,
+                                      _featureTitleController.text,
+                                    );
+                                    setState(() => _editingFeatureId = null);
+                                  },
+                                ),
+                                IconButton(
+                                  key: ValueKey('stage1_feat_cancel_${feat.id}'),
+                                  tooltip: 'Cancel rename',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 24,
+                                    minHeight: 24,
+                                  ),
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 14,
+                                  ),
+                                  onPressed: () =>
+                                      setState(() => _editingFeatureId = null),
+                                ),
+                              ],
+                            )
+                          : Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    '${feat.code} · ${feat.title}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 11.5,
+                                      color: textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  feat.sliceTime,
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 11,
+                                    color: textMuted,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  key: ValueKey('stage1_feat_edit_${feat.id}'),
+                                  tooltip: 'Rename Feature slice',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 22,
+                                    minHeight: 22,
+                                  ),
+                                  iconSize: 13,
+                                  color: textSecondary,
+                                  onPressed: wb.isAgentBusy
+                                      ? null
+                                      : () {
+                                          _featureTitleController.text =
+                                              feat.title;
+                                          setState(
+                                            () => _editingFeatureId = feat.id,
+                                          );
+                                        },
+                                  icon: const Icon(Icons.edit_outlined),
+                                ),
+                                IconButton(
+                                  key: ValueKey('stage1_feat_remove_${feat.id}'),
+                                  tooltip: 'Remove Feature slice',
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 22,
+                                    minHeight: 22,
+                                  ),
+                                  iconSize: 13,
+                                  color: v01Features.length > 1
+                                      ? AppTheme.accentRedFor(isDark)
+                                      : textMuted.withValues(alpha: 0.3),
+                                  onPressed: (!wb.isAgentBusy &&
+                                          v01Features.length > 1)
+                                      ? () => wb.removeStage1FeatureSlice(
+                                            index,
+                                            feat.id,
+                                          )
+                                      : null,
+                                  icon: const Icon(Icons.close_rounded),
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            feat.sliceTime,
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11,
-                              color: textMuted,
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                 ],
               ],
@@ -1144,23 +1901,30 @@ class _SectionCard extends StatelessWidget {
   final String code;
   final String title;
   final Widget child;
+  final bool isUpdated;
 
   const _SectionCard({
     required this.isDark,
     required this.code,
     required this.title,
     required this.child,
+    this.isUpdated = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final cyan = AppTheme.accentCyanFor(isDark);
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppTheme.bgSurfaceRaisedFor(isDark),
         borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.borderFor(isDark)),
+        border: Border.all(
+          color: isUpdated
+              ? cyan.withValues(alpha: 0.55)
+              : AppTheme.borderFor(isDark),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1172,7 +1936,7 @@ class _SectionCard extends StatelessWidget {
                 style: GoogleFonts.jetBrainsMono(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.accentCyanFor(isDark),
+                  color: cyan,
                 ),
               ),
               const SizedBox(width: 8),
@@ -1186,6 +1950,27 @@ class _SectionCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (isUpdated)
+                Container(
+                  key: ValueKey('stage1_updated_badge_$code'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: cyan.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+                    border: Border.all(color: cyan.withValues(alpha: 0.45)),
+                  ),
+                  child: Text(
+                    'Updated',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: cyan,
+                    ),
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 14),

@@ -832,6 +832,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _expandedEpicIds.clear();
     _userPinnedDimension = false;
     _conceptDraft = null;
+    _clearStage1TransientState();
     _progressiveDraft = null;
     _showingSparkPicker = true;
     _offlineErrorMessage = null;
@@ -1266,6 +1267,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     } else {
       _conceptDraft = null;
     }
+    _clearStage1TransientState();
     _showingSparkPicker = _conceptDraft == null || !_conceptDraft!.hasSpec;
 
     // Restore active Release & Epic selection

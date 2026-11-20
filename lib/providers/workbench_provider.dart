@@ -221,6 +221,28 @@ class WorkbenchProvider extends ChangeNotifier {
   ProjectConceptBlueprint? _conceptDraft;
   ProjectConceptBlueprint? get conceptDraft => _conceptDraft;
 
+  final List<ProjectConceptBlueprint> _stage1UndoStack =
+      <ProjectConceptBlueprint>[];
+  bool get canUndoStage1 => _stage1UndoStack.isNotEmpty;
+
+  Set<String> _lastStage1ChangedSections = const <String>{};
+  Set<String> get lastStage1ChangedSections =>
+      Set.unmodifiable(_lastStage1ChangedSections);
+
+  SparkClarificationDraft? _pendingSparkClarification;
+  SparkClarificationDraft? get pendingSparkClarification =>
+      _pendingSparkClarification;
+
+  String? _stage1InlineError;
+  String? get stage1InlineError => _stage1InlineError;
+
+  void _clearStage1TransientState() {
+    _stage1UndoStack.clear();
+    _lastStage1ChangedSections = const <String>{};
+    _pendingSparkClarification = null;
+    _stage1InlineError = null;
+  }
+
   ProgressiveReleaseDraft? _progressiveDraft;
   ProgressiveReleaseDraft? get progressiveDraft => _progressiveDraft;
 

@@ -1,19 +1,61 @@
 part of 'workbench_provider.dart';
 
 /// Stage 1 actions: Spark Onboarding, Preset Packs, 3D | 2D Dimension toggle,
-/// Co-Designer live edits, and `Approve & Launch Godot Workbench`.
+/// vague-spark clarification forks, scoped Co-Designer edits, Undo stack,
+/// lean inline edits, and `Approve & Launch Godot Workbench`.
 extension WorkbenchConceptMixin on WorkbenchProvider {
-  void showSparkPicker() {
-    _showingSparkPicker = true;
-    _currentStage = WorkbenchStage.projectPitch;
+  void _pushStage1UndoSnapshot() {
+    final draft = _conceptDraft;
+    if (draft == null || !draft.hasSpec) return;
+    _stage1UndoStack.add(draft.deepCopy());
+    if (_stage1UndoStack.length > 12) {
+      _stage1UndoStack.removeAt(0);
+    }
+  }
+
+  bool undoStage1Edit() {
+    if (_stage1UndoStack.isEmpty || _isAgentBusy) return false;
+    final restored = _stage1UndoStack.removeLast();
+    restored.lastCoDesignNote = 'Reverted last Stage 1 change.';
+    _conceptDraft = restored;
+    _lastStage1ChangedSections = const <String>{};
+    _stage1InlineError = null;
+    _offlineErrorMessage = null;
+    _ensureActiveProjectDocument(restored);
+    notifyListeners();
+    return true;
+  }
+
+  void dismissStage1InlineError() {
+    if (_stage1InlineError == null) return;
+    _stage1InlineError = null;
     notifyListeners();
   }
 
-  void resumeActiveRootSpec() {
-    if (_conceptDraft == null) return;
-    _showingSparkPicker = false;
-    _currentStage = WorkbenchStage.projectPitch;
-    notifyListeners();
+  void previewDimensionFromSparkText(String rawText) {
+    var changed = false;
+    if (_pendingSparkClarification != null &&
+        _pendingSparkClarification!.rawSpark != rawText.trim()) {
+      _pendingSparkClarification = null;
+      changed = true;
+    }
+    if (_stage1InlineError != null) {
+      _stage1InlineError = null;
+      changed = true;
+    }
+    if (!_userPinnedDimension &&
+        (_conceptDraft == null || !_conceptDraft!.hasSpec)) {
+      final detected = GodotProjectDimension.detectFromSpark(rawText);
+      if (detected != projectDimension) {
+        _conceptDraft = ProjectConceptBlueprint(
+          sparkPrompt: rawText.trim(),
+          gameTitle: _conceptDraft?.gameTitle ?? 'UNTITLED GODOT PROJECT',
+          dimension: detected,
+        );
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
   }
 
   void _ensureActiveProjectDocument(ProjectConceptBlueprint bp) {
@@ -58,6 +100,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   void loadPresetSpark(String presetId) {
     final preset = GodotSparkPresets.byId(presetId);
     _userPinnedDimension = false;
+    _clearStage1TransientState();
+    _offlineErrorMessage = null;
     _conceptDraft = preset;
     _showingSparkPicker = false;
     _currentStage = WorkbenchStage.projectPitch;
@@ -65,33 +109,125 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  Future<ProjectConceptBlueprint?> generateSpecFromSpark(
+  Future<ProjectConceptBlueprint?> handleStage1SparkSubmit(
     String sparkPrompt,
   ) async {
+    final cleanPrompt = sparkPrompt.trim();
+    if (cleanPrompt.isEmpty || _isAgentBusy) return null;
+    _stage1InlineError = null;
+    _offlineErrorMessage = null;
+    if (SparkClarificationDraft.isSparkVague(cleanPrompt)) {
+      _pendingSparkClarification = SparkClarificationDraft.suggestFromSpark(
+        cleanPrompt,
+        pinnedDimension: _userPinnedDimension ? projectDimension : null,
+      );
+      notifyListeners();
+      return null;
+    }
+    _pendingSparkClarification = null;
+    return generateSpecFromSpark(cleanPrompt);
+  }
+
+  void updateSparkClarification({
+    GodotProjectDimension? dimension,
+    String? viewChoiceId,
+    String? archetypeId,
+    String? prototypeHookId,
+  }) {
+    final pending = _pendingSparkClarification;
+    if (pending == null) return;
+    if (dimension != null) {
+      _userPinnedDimension = true;
+      setProjectDimension(dimension);
+    }
+    _pendingSparkClarification = pending.copyWith(
+      dimension: dimension,
+      viewChoiceId: viewChoiceId,
+      archetypeId: archetypeId,
+      prototypeHookId: prototypeHookId,
+    );
+    notifyListeners();
+  }
+
+  void dismissSparkClarification() {
+    if (_pendingSparkClarification == null) return;
+    _pendingSparkClarification = null;
+    notifyListeners();
+  }
+
+  Future<ProjectConceptBlueprint?> confirmSparkClarification({
+    bool skipPicks = false,
+  }) async {
+    final pending = _pendingSparkClarification;
+    if (pending == null || _isAgentBusy) return null;
+    _pendingSparkClarification = null;
+    _stage1InlineError = null;
+    notifyListeners();
+    if (skipPicks) {
+      return generateSpecFromSpark(
+        pending.rawSpark,
+        explicitDimension: _userPinnedDimension ? projectDimension : null,
+      );
+    }
+    return generateSpecFromSpark(
+      pending.buildEnrichedSpark(),
+      explicitDimension: pending.dimension,
+      archetypeId: pending.archetypeId,
+      viewChoiceId: pending.viewChoiceId,
+      prototypeHookId: pending.prototypeHookId,
+    );
+  }
+
+  Future<ProjectConceptBlueprint?> generateSpecFromSpark(
+    String sparkPrompt, {
+    GodotProjectDimension? explicitDimension,
+    String? archetypeId,
+    String? viewChoiceId,
+    String? prototypeHookId,
+  }) async {
     final cleanPrompt = sparkPrompt.trim();
     if (cleanPrompt.isEmpty) return null;
 
     _isAgentBusy = true;
     _agentProgressStep = 'Drafting Godot 4 Root Spec (PROJECT_SPEC.md)...';
     _offlineErrorMessage = null;
+    _stage1InlineError = null;
     notifyListeners();
 
     try {
-      final drafted = await ProjectConceptAgent.draftSpecFromSpark(
+      final outcome = await ProjectConceptAgent.draftSpecWithStatus(
         sparkPrompt: cleanPrompt,
         apiKey: _apiKey,
-        dimensionOverride: _userPinnedDimension ? projectDimension : null,
+        dimensionOverride:
+            explicitDimension ?? (_userPinnedDimension ? projectDimension : null),
+        archetypeId: archetypeId,
+        viewChoiceId: viewChoiceId,
+        prototypeHookId: prototypeHookId,
         preferredModel: _planningModel,
         thinkingLevel: _thinkingLevel,
       );
-      _conceptDraft = drafted;
+      if (outcome.blueprint == null) {
+        final msg = outcome.errorMessage ??
+            'Cloud Gemini did not return a valid Project Spec. Please retry.';
+        _stage1InlineError = msg;
+        _offlineErrorMessage = msg;
+        return null;
+      }
+      _stage1UndoStack.clear();
+      _lastStage1ChangedSections = const <String>{};
+      _pendingSparkClarification = null;
+      _stage1InlineError = null;
+      _offlineErrorMessage = null;
+      _conceptDraft = outcome.blueprint;
       _userPinnedDimension = false;
       _showingSparkPicker = false;
       _currentStage = WorkbenchStage.projectPitch;
-      _ensureActiveProjectDocument(drafted);
-      return drafted;
+      _ensureActiveProjectDocument(outcome.blueprint!);
+      return outcome.blueprint;
     } catch (e) {
-      _offlineErrorMessage = 'Spec generation error: $e';
+      final msg = 'Spec generation error: $e';
+      _stage1InlineError = msg;
+      _offlineErrorMessage = msg;
       return null;
     } finally {
       _isAgentBusy = false;
@@ -110,21 +246,35 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _isAgentBusy = true;
     _agentProgressStep = 'Co-Designer updating ROOT_GODOT_CONTEXT...';
     _offlineErrorMessage = null;
+    _stage1InlineError = null;
     notifyListeners();
 
     try {
-      final updated = await ProjectConceptAgent.applyCoDesignEdit(
+      final outcome = await ProjectConceptAgent.applyCoDesignEditWithStatus(
         currentSpec: draft,
         instruction: clean,
         apiKey: _apiKey,
         preferredModel: _conversationModel,
         thinkingLevel: _thinkingLevel,
       );
-      _conceptDraft = updated;
-      _ensureActiveProjectDocument(updated);
-      return updated;
+      if (outcome.blueprint == null) {
+        final msg = outcome.errorMessage ??
+            'Co-Designer refine failed. Retry when ready.';
+        _stage1InlineError = msg;
+        _offlineErrorMessage = msg;
+        return null;
+      }
+      _pushStage1UndoSnapshot();
+      _stage1InlineError = null;
+      _offlineErrorMessage = null;
+      _lastStage1ChangedSections = outcome.changedSections;
+      _conceptDraft = outcome.blueprint;
+      _ensureActiveProjectDocument(outcome.blueprint!);
+      return outcome.blueprint;
     } catch (e) {
-      _offlineErrorMessage = 'Co-Designer edit error: $e';
+      final msg = 'Co-Designer edit error: $e';
+      _stage1InlineError = msg;
+      _offlineErrorMessage = msg;
       return null;
     } finally {
       _isAgentBusy = false;
@@ -139,13 +289,23 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (draft == null) {
       _conceptDraft = ProjectConceptBlueprint(dimension: dim);
     } else if (draft.hasSpec) {
-      _conceptDraft = ProjectConceptAgent.convertBlueprintDimension(draft, dim);
+      if (draft.dimension == dim) return;
+      _pushStage1UndoSnapshot();
+      final converted = ProjectConceptAgent.convertBlueprintDimension(draft, dim);
+      converted.lastCoDesignNote =
+          'Switched project dimension to ${dim.shortLabel}.';
+      _conceptDraft = converted;
+      _lastStage1ChangedSections = const <String>{'s02', 's05'};
     } else {
       _conceptDraft = ProjectConceptBlueprint(
         sparkPrompt: draft.sparkPrompt,
         gameTitle: draft.gameTitle,
         dimension: dim,
       );
+    }
+    if (_pendingSparkClarification != null) {
+      _pendingSparkClarification =
+          _pendingSparkClarification!.copyWith(dimension: dim);
     }
     if (activeProject != null && _conceptDraft != null) {
       _ensureActiveProjectDocument(_conceptDraft!);
@@ -158,6 +318,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (draft == null) return;
     for (final opt in draft.effectiveCameraDecisionOptions) {
       if (opt.id == optionId) {
+        _pushStage1UndoSnapshot();
         draft.cameraChoiceId = opt.id;
         draft.cameraContract = opt.contractValue;
         ProjectConceptAgent.syncEpicCameraFraming(
@@ -167,6 +328,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         );
         draft.lastCoDesignNote =
             'Camera contract & E01 look framing set to ${opt.label}.';
+        _lastStage1ChangedSections = const <String>{'s02', 's05'};
         _ensureActiveProjectDocument(draft);
         notifyListeners();
         return;
@@ -177,10 +339,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   void selectCoreFeelOption(String feelId) {
     final draft = _conceptDraft;
     if (draft == null) return;
+    _pushStage1UndoSnapshot();
     final chosen = ProjectConceptBlueprint.coreFeelOptionById(feelId);
     ProjectConceptAgent.syncEpicCoreFeel(draft, feelId: chosen.id);
     draft.lastCoDesignNote =
         'Core feel & E01 locomotion set to ${chosen.label}.';
+    _lastStage1ChangedSections = const <String>{'s03', 's05'};
     _ensureActiveProjectDocument(draft);
     notifyListeners();
   }
@@ -189,6 +353,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   /// project when existing approved Releases exist so saved project work is preserved.
   void resetStage1ToNewIdea() {
     final dim = projectDimension;
+    _clearStage1TransientState();
     if (projectReleases.isNotEmpty) {
       createNewProject();
       _userPinnedDimension = false;
@@ -223,18 +388,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   void _renumberInitialEpics(ProjectConceptBlueprint draft) {
-    for (int i = 0; i < draft.initialEpics.length; i++) {
-      final ep = draft.initialEpics[i];
-      ep.code = 'E${(i + 1).toString().padLeft(2, '0')}';
-      if (ep.lineageKey.trim().isEmpty) {
-        ep.lineageKey = 'epic_${i + 1}';
-      }
-      if (!ep.isPassed &&
-          ep.lifecycle != EpicLifecycle.upgrading &&
-          ep.lifecycle != EpicLifecycle.newEpic) {
-        ep.lifecycle = i == 0 ? EpicLifecycle.active : EpicLifecycle.queued;
-      }
-    }
+    ProjectConceptAgent.normalizeSequentialEpicAndFeatureCodes(draft);
   }
 
   /// Reorders a Stage 1 `§05` prototype Epic (`delta = -1` up, `+1` down) while keeping `id` & `lineageKey`.
@@ -249,11 +403,13 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         newIndex == index) {
       return;
     }
+    _pushStage1UndoSnapshot();
     final moved = draft.initialEpics.removeAt(index);
     draft.initialEpics.insert(newIndex, moved);
     _renumberInitialEpics(draft);
     draft.lastCoDesignNote =
         'Reordered §05 queue: ${moved.title} -> ${moved.code}.';
+    _lastStage1ChangedSections = const <String>{'s05'};
     _ensureActiveProjectDocument(draft);
     notifyListeners();
   }
@@ -267,9 +423,11 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         index >= draft.initialEpics.length) {
       return;
     }
+    _pushStage1UndoSnapshot();
     final removed = draft.initialEpics.removeAt(index);
     _renumberInitialEpics(draft);
     draft.lastCoDesignNote = 'Removed ${removed.title} from Stage 1 §05.';
+    _lastStage1ChangedSections = const <String>{'s05'};
     _ensureActiveProjectDocument(draft);
     notifyListeners();
   }
@@ -288,18 +446,149 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }) {
     final draft = _conceptDraft;
     if (draft == null) return;
+    _pushStage1UndoSnapshot();
+    final dim = draft.dimension;
+    final changed = <String>{};
     if (gameTitle != null && gameTitle.trim().isNotEmpty) {
       draft.gameTitle = gameTitle.trim().toUpperCase();
+      changed.add('s01');
     }
-    if (pitch != null) draft.pitch = pitch.trim();
-    if (cameraContract != null) draft.cameraContract = cameraContract.trim();
-    if (characterScale != null) draft.characterScale = characterScale.trim();
-    if (inputContract != null) draft.inputContract = inputContract.trim();
-    if (assetPolicy != null) draft.assetPolicy = assetPolicy.trim();
-    if (releaseDoneWhen != null) draft.releaseDoneWhen = releaseDoneWhen.trim();
-    if (coreLoop != null) draft.coreLoop = coreLoop;
-    if (pillars != null) draft.pillars = pillars;
-    if (outOfScope != null) draft.outOfScope = outOfScope;
+    if (pitch != null && pitch.trim().isNotEmpty) {
+      draft.pitch = GodotSpecGuard.sanitizeLine(pitch, dimension: dim);
+      changed.add('s01');
+    }
+    if (cameraContract != null) {
+      draft.cameraContract =
+          GodotSpecGuard.sanitizeLine(cameraContract, dimension: dim);
+      changed.add('s02');
+    }
+    if (characterScale != null) {
+      draft.characterScale =
+          GodotSpecGuard.sanitizeLine(characterScale, dimension: dim);
+      changed.add('s02');
+    }
+    if (inputContract != null) {
+      draft.inputContract =
+          GodotSpecGuard.sanitizeLine(inputContract, dimension: dim);
+      changed.add('s02');
+    }
+    if (assetPolicy != null) {
+      draft.assetPolicy =
+          GodotSpecGuard.sanitizeLine(assetPolicy, dimension: dim);
+      changed.add('s02');
+    }
+    if (releaseDoneWhen != null) {
+      draft.releaseDoneWhen =
+          GodotSpecGuard.sanitizeLine(releaseDoneWhen, dimension: dim);
+      changed.add('s05');
+    }
+    if (coreLoop != null) {
+      draft.coreLoop = [
+        for (final b in coreLoop)
+          if (GodotSpecGuard.sanitizeLine(b, dimension: dim).isNotEmpty)
+            GodotSpecGuard.sanitizeLine(b, dimension: dim),
+      ];
+      changed.add('s01');
+    }
+    if (pillars != null) {
+      draft.pillars = [
+        for (final p in pillars)
+          if (GodotSpecGuard.sanitizeLine(p, dimension: dim).isNotEmpty)
+            GodotSpecGuard.sanitizeLine(p, dimension: dim),
+      ];
+      changed.add('s03');
+    }
+    if (outOfScope != null) {
+      draft.outOfScope = [
+        for (final cut in outOfScope)
+          if (GodotSpecGuard.sanitizeExclusion(cut, dimension: dim).isNotEmpty)
+            GodotSpecGuard.sanitizeExclusion(cut, dimension: dim),
+      ];
+      changed.add('s04');
+    }
+    if (changed.isNotEmpty) {
+      draft.lastCoDesignNote = 'Edited Stage 1 spec inline.';
+      _lastStage1ChangedSections = changed;
+    }
+    _ensureActiveProjectDocument(draft);
+    notifyListeners();
+  }
+
+  void addStage1OutOfScopeCut(String rawCut) {
+    final draft = _conceptDraft;
+    if (draft == null) return;
+    final item = GodotSpecGuard.sanitizeExclusion(
+      rawCut,
+      dimension: draft.dimension,
+    );
+    if (item.isEmpty || draft.outOfScope.contains(item)) return;
+    _pushStage1UndoSnapshot();
+    draft.outOfScope = [...draft.outOfScope, item];
+    draft.lastCoDesignNote = 'Added §04 cut: $item';
+    _lastStage1ChangedSections = const <String>{'s04'};
+    _ensureActiveProjectDocument(draft);
+    notifyListeners();
+  }
+
+  void removeStage1OutOfScopeCut(int index) {
+    final draft = _conceptDraft;
+    if (draft == null || index < 0 || index >= draft.outOfScope.length) {
+      return;
+    }
+    _pushStage1UndoSnapshot();
+    final updated = List<String>.from(draft.outOfScope);
+    final removed = updated.removeAt(index);
+    draft.outOfScope = updated;
+    draft.lastCoDesignNote = 'Removed §04 cut: $removed';
+    _lastStage1ChangedSections = const <String>{'s04'};
+    _ensureActiveProjectDocument(draft);
+    notifyListeners();
+  }
+
+  void renameStage1FeatureSlice(
+    int epicIndex,
+    String featureId,
+    String newTitle,
+  ) {
+    final draft = _conceptDraft;
+    if (draft == null ||
+        epicIndex < 0 ||
+        epicIndex >= draft.initialEpics.length) {
+      return;
+    }
+    final clean = GodotSpecGuard.sanitizeLine(
+      newTitle,
+      dimension: draft.dimension,
+    );
+    if (clean.isEmpty) return;
+    final ep = draft.initialEpics[epicIndex];
+    final featIdx = ep.features.indexWhere((f) => f.id == featureId);
+    if (featIdx < 0 || ep.features[featIdx].title == clean) return;
+    _pushStage1UndoSnapshot();
+    ep.features[featIdx].title = clean;
+    draft.lastCoDesignNote = 'Renamed ${ep.features[featIdx].code} to $clean.';
+    _lastStage1ChangedSections = const <String>{'s05'};
+    _ensureActiveProjectDocument(draft);
+    notifyListeners();
+  }
+
+  void removeStage1FeatureSlice(int epicIndex, String featureId) {
+    final draft = _conceptDraft;
+    if (draft == null ||
+        epicIndex < 0 ||
+        epicIndex >= draft.initialEpics.length) {
+      return;
+    }
+    final ep = draft.initialEpics[epicIndex];
+    if (ep.features.length <= 1) return;
+    final featIdx = ep.features.indexWhere((f) => f.id == featureId);
+    if (featIdx < 0) return;
+    _pushStage1UndoSnapshot();
+    final removed = ep.features.removeAt(featIdx);
+    _renumberInitialEpics(draft);
+    draft.lastCoDesignNote =
+        'Removed ${removed.title} from ${ep.code} in Stage 1 §05.';
+    _lastStage1ChangedSections = const <String>{'s05'};
     _ensureActiveProjectDocument(draft);
     notifyListeners();
   }

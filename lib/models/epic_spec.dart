@@ -67,7 +67,12 @@ enum GodotProjectDimension {
     final lower = sparkPrompt.trim().toLowerCase();
     if (lower.isEmpty) return GodotProjectDimension.dim3d;
     if (RegExp(
-      r'\b(?:2d|pixel[- ]?art|side[- ]?scroller|metroidvania|platformer\s*2d|top[- ]?down\s*2d|tilemap|spritesheet)\b',
+      r'\b(?:3d|first[- ]?person|third[- ]?person|fps|tps|over[- ]?shoulder|springarm3d|low[- ]?poly)\b',
+    ).hasMatch(lower)) {
+      return GodotProjectDimension.dim3d;
+    }
+    if (RegExp(
+      r'\b(?:2d|pixel[- ]?art|pixel|side[- ]?scroll(?:er|ing)|metroidvania|platformer|top[- ]?down\s*2d|tilemap|spritesheet|sprite|hand[- ]?drawn|shmup|bullet[- ]?hell|card\s+game|deckbuilder|puzzle\s+box|sokoban|arcade\s+shooter)\b',
     ).hasMatch(lower)) {
       return GodotProjectDimension.dim2d;
     }
