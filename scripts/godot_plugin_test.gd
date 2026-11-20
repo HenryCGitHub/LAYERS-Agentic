@@ -715,6 +715,223 @@ func _physics_process(_delta: float) -> void:
 	dock_sync.set("_is_busy", false)
 	dock_sync.call("clear_pending_requests")
 	dock_sync.call("clear_link_token")
+	dock_sync.set("_is_busy", false)
+	dock_sync.call("clear_pending_requests")
+	dock_sync.call("clear_link_token")
+
+	# Test 12: Read-only project introspection tools & security dispatcher
+	if true:
+		var t12_cleanup: Callable = func() -> void:
+			var t12_root_dir: String = "res://layers_tool_test"
+			var t12_stack: Array[String] = [t12_root_dir]
+			var t12_dirs: Array[String] = []
+			while not t12_stack.is_empty():
+				var t12_cur: String = t12_stack.pop_back()
+				var t12_da: DirAccess = DirAccess.open(t12_cur)
+				if t12_da == null:
+					continue
+				t12_dirs.append(t12_cur)
+				t12_da.list_dir_begin()
+				while true:
+					var t12_item: String = t12_da.get_next()
+					if t12_item.is_empty():
+						break
+					if t12_item == "." or t12_item == "..":
+						continue
+					var t12_full: String = t12_cur + "/" + t12_item
+					if t12_da.current_is_dir():
+						t12_stack.append(t12_full)
+					else:
+						DirAccess.remove_absolute(ProjectSettings.globalize_path(t12_full))
+				t12_da.list_dir_end()
+			t12_dirs.reverse()
+			for t12_d: String in t12_dirs:
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(t12_d))
+
+		t12_cleanup.call()
+		var t12_bus_lines: PackedStringArray = PackedStringArray([
+			"extends Node",
+			"",
+			"signal hit_landed(amount: int)",
+			"@export var max_combo: int = 3",
+			"",
+			"var current_combo: int = 0",
+			"",
+			"func register_hit(amount: int) -> void:",
+			"\tcurrent_combo = mini(current_combo + 1, max_combo)",
+			"\thit_landed.emit(amount)",
+			"",
+			"func reset_combo() -> void:",
+			"\tcurrent_combo = 0",
+			"",
+			"func get_combo() -> int:",
+			"\treturn current_combo",
+			"",
+			"# end combat_bus",
+		])
+		if not _write_text("res://layers_tool_test/combat_bus.gd", "\n".join(t12_bus_lines) + "\n"):
+			t12_cleanup.call()
+			_fail("Test12: failed to write combat_bus.gd fixture")
+
+		var t12_tres_text: String = "[gd_resource type=\"Resource\" script_class=\"WeaponStats\" format=3]\n\n[resource]\ndamage = 35\ncooldown = 0.4\n"
+		if not _write_text("res://layers_tool_test/weapon_stats.tres", t12_tres_text):
+			t12_cleanup.call()
+			_fail("Test12: failed to write weapon_stats.tres fixture")
+
+		var t12_child_root: Node3D = Node3D.new()
+		t12_child_root.name = "ChildProp"
+		var t12_child_pack: PackedScene = PackedScene.new()
+		t12_child_pack.pack(t12_child_root)
+		var t12_child_save_err: int = ResourceSaver.save(t12_child_pack, "res://layers_tool_test/child_prop.tscn")
+		t12_child_root.free()
+		if t12_child_save_err != OK:
+			t12_cleanup.call()
+			_fail("Test12: failed to save child_prop.tscn fixture")
+
+		var t12_loaded_child_pack: PackedScene = ResourceLoader.load("res://layers_tool_test/child_prop.tscn", "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+		if t12_loaded_child_pack == null:
+			t12_cleanup.call()
+			_fail("Test12: failed to reload child_prop.tscn fixture")
+		var t12_arena_root: Node3D = Node3D.new()
+		t12_arena_root.name = "BossArena"
+		var t12_pillar: Node = t12_loaded_child_pack.instantiate()
+		t12_pillar.name = "PillarProp"
+		t12_arena_root.add_child(t12_pillar)
+		t12_pillar.owner = t12_arena_root
+		var t12_boss_body: CharacterBody3D = CharacterBody3D.new()
+		t12_boss_body.name = "BossBody"
+		t12_boss_body.collision_layer = 4
+		t12_arena_root.add_child(t12_boss_body)
+		t12_boss_body.owner = t12_arena_root
+		var t12_arena_pack: PackedScene = PackedScene.new()
+		t12_arena_pack.pack(t12_arena_root)
+		var t12_arena_save_err: int = ResourceSaver.save(t12_arena_pack, "res://layers_tool_test/boss_arena.tscn")
+		t12_arena_root.free()
+		if t12_arena_save_err != OK:
+			t12_cleanup.call()
+			_fail("Test12: failed to save boss_arena.tscn fixture")
+
+		# (1) list_project_files includes test fixtures and excludes addons/
+		var t12_list_raw: Variant = exec.call("execute_agent_tool_call", {
+			"tool": "list_project_files",
+			"args": {"dir": "res://layers_tool_test"},
+		}, mock_ed_4t)
+		var t12_list_res: Dictionary = t12_list_raw if typeof(t12_list_raw) == TYPE_DICTIONARY else {}
+		if not bool(t12_list_res.get("ok", false)):
+			t12_cleanup.call()
+			_fail("Test12(1): list_project_files failed: " + str(t12_list_res))
+		var t12_files: Array = t12_list_res.get("files", []) as Array if typeof(t12_list_res.get("files")) == TYPE_ARRAY else []
+		if not t12_files.has("res://layers_tool_test/combat_bus.gd") or not t12_files.has("res://layers_tool_test/boss_arena.tscn") or not t12_files.has("res://layers_tool_test/weapon_stats.tres"):
+			t12_cleanup.call()
+			_fail("Test12(1): list_project_files missing fixture files: " + str(t12_files))
+		var t12_root_list_raw: Variant = exec.call("execute_agent_tool_call", {
+			"tool": "list_project_files",
+			"args": {"dir": "res://"},
+		}, mock_ed_4t)
+		var t12_root_list_res: Dictionary = t12_root_list_raw if typeof(t12_root_list_raw) == TYPE_DICTIONARY else {}
+		var t12_root_files: Array = t12_root_list_res.get("files", []) as Array if typeof(t12_root_list_res.get("files")) == TYPE_ARRAY else []
+		for t12_rf: Variant in t12_root_files:
+			if "addons/" in str(t12_rf):
+				t12_cleanup.call()
+				_fail("Test12(1): list_project_files leaked addons file: " + str(t12_rf))
+
+		# (2) grep_project_text finds hit_landed
+		var t12_grep_raw: Variant = exec.call("execute_agent_tool_call", {
+			"tool": "grep_project_text",
+			"args": {"query": "hit_landed", "dir": "res://layers_tool_test"},
+		}, mock_ed_4t)
+		var t12_grep_res: Dictionary = t12_grep_raw if typeof(t12_grep_raw) == TYPE_DICTIONARY else {}
+		var t12_matches: Array = t12_grep_res.get("matches", []) as Array if typeof(t12_grep_res.get("matches")) == TYPE_ARRAY else []
+		if not bool(t12_grep_res.get("ok", false)) or t12_matches.is_empty():
+			t12_cleanup.call()
+			_fail("Test12(2): grep_project_text expected hit_landed match: " + str(t12_grep_res))
+		var t12_first_match: Dictionary = t12_matches[0] if typeof(t12_matches[0]) == TYPE_DICTIONARY else {}
+		if str(t12_first_match.get("path", "")) != "res://layers_tool_test/combat_bus.gd" or not ("hit_landed" in str(t12_first_match.get("text", ""))):
+			t12_cleanup.call()
+			_fail("Test12(2): unexpected grep match: " + str(t12_first_match))
+
+		# (3) read_script_slice lines 1..5
+		var t12_slice_raw: Variant = exec.call("execute_agent_tool_call", {
+			"tool": "read_script_slice",
+			"args": {"path": "res://layers_tool_test/combat_bus.gd", "startLine": 1, "endLine": 5},
+		}, mock_ed_4t)
+		var t12_slice_res: Dictionary = t12_slice_raw if typeof(t12_slice_raw) == TYPE_DICTIONARY else {}
+		if not bool(t12_slice_res.get("ok", false)) or not bool(t12_slice_res.get("truncated", false)) or not ("signal hit_landed" in str(t12_slice_res.get("content", ""))):
+			t12_cleanup.call()
+			_fail("Test12(3): read_script_slice failed: " + str(t12_slice_res))
+
+		# (4) path security rejects addons, traversal, and host paths
+		for t12_bad_path: String in [
+			"res://addons/layers/layers_dock.gd",
+			"res://../outside.gd",
+			"/etc/passwd",
+		]:
+			var t12_sec_raw: Variant = exec.call("execute_agent_tool_call", {
+				"tool": "read_script_slice",
+				"args": {"path": t12_bad_path, "startLine": 1, "endLine": 10},
+			}, mock_ed_4t)
+			var t12_sec_res: Dictionary = t12_sec_raw if typeof(t12_sec_raw) == TYPE_DICTIONARY else {}
+			if bool(t12_sec_res.get("ok", false)):
+				t12_cleanup.call()
+				_fail("Test12(4): expected security rejection for " + t12_bad_path)
+
+		# (5) inspect_scene_tree on boss_arena.tscn
+		var t12_scene_raw: Variant = exec.call("execute_agent_tool_call", {
+			"tool": "inspect_scene_tree",
+			"args": {"path": "res://layers_tool_test/boss_arena.tscn"},
+		}, mock_ed_4t)
+		var t12_scene_res: Dictionary = t12_scene_raw if typeof(t12_scene_raw) == TYPE_DICTIONARY else {}
+		if not bool(t12_scene_res.get("ok", false)):
+			t12_cleanup.call()
+			_fail("Test12(5): inspect_scene_tree failed: " + str(t12_scene_res))
+		var t12_nodes: Array = t12_scene_res.get("nodes", []) as Array if typeof(t12_scene_res.get("nodes")) == TYPE_ARRAY else []
+		var t12_saw_pillar_inst: bool = false
+		var t12_saw_boss_layer: bool = false
+		for t12_nv: Variant in t12_nodes:
+			if typeof(t12_nv) != TYPE_DICTIONARY:
+				continue
+			var t12_nd: Dictionary = t12_nv
+			if str(t12_nd.get("name", "")) == "PillarProp" and bool(t12_nd.get("isInstancedScene", false)):
+				t12_saw_pillar_inst = true
+			if str(t12_nd.get("name", "")) == "BossBody" and int(t12_nd.get("collisionLayer", -1)) == 4:
+				t12_saw_boss_layer = true
+		if not t12_saw_pillar_inst or not t12_saw_boss_layer:
+			t12_cleanup.call()
+			_fail("Test12(5): missing PillarProp isInstancedScene or BossBody collisionLayer=4: " + str(t12_nodes))
+
+		# (6) read_autoloads_and_layers
+		var t12_proj_raw: Variant = exec.call("execute_agent_tool_call", {
+			"tool": "read_autoloads_and_layers",
+			"args": {},
+		}, mock_ed_4t)
+		var t12_proj_res: Dictionary = t12_proj_raw if typeof(t12_proj_raw) == TYPE_DICTIONARY else {}
+		if not bool(t12_proj_res.get("ok", false)) or typeof(t12_proj_res.get("autoloads")) != TYPE_DICTIONARY or typeof(t12_proj_res.get("layerNames")) != TYPE_DICTIONARY:
+			t12_cleanup.call()
+			_fail("Test12(6): read_autoloads_and_layers failed: " + str(t12_proj_res))
+
+		# (7) inspect_tres_resource on weapon_stats.tres
+		var t12_tres_raw: Variant = exec.call("execute_agent_tool_call", {
+			"tool": "inspect_tres_resource",
+			"args": {"path": "res://layers_tool_test/weapon_stats.tres"},
+		}, mock_ed_4t)
+		var t12_tres_res: Dictionary = t12_tres_raw if typeof(t12_tres_raw) == TYPE_DICTIONARY else {}
+		var t12_props: Dictionary = t12_tres_res.get("properties", {}) as Dictionary if typeof(t12_tres_res.get("properties")) == TYPE_DICTIONARY else {}
+		if not bool(t12_tres_res.get("ok", false)) or str(t12_tres_res.get("resourceType", "")) != "Resource" or str(t12_tres_res.get("scriptClass", "")) != "WeaponStats" or str(t12_props.get("damage", "")) != "35":
+			t12_cleanup.call()
+			_fail("Test12(7): inspect_tres_resource failed: " + str(t12_tres_res))
+
+		# (8) disallowed tool delete_file rejected without deleting anything
+		var t12_deny_raw: Variant = exec.call("execute_agent_tool_call", {
+			"tool": "delete_file",
+			"args": {"path": "res://layers_tool_test/combat_bus.gd"},
+		}, mock_ed_4t)
+		var t12_deny_res: Dictionary = t12_deny_raw if typeof(t12_deny_raw) == TYPE_DICTIONARY else {}
+		if bool(t12_deny_res.get("ok", false)) or not FileAccess.file_exists("res://layers_tool_test/combat_bus.gd"):
+			t12_cleanup.call()
+			_fail("Test12(8): disallowed tool delete_file should be rejected")
+
+		t12_cleanup.call()
+
 	mock_ed_4t.base_ctrl.free()
 
 	print("GODOT_PLUGIN_TEST_OK")
