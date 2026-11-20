@@ -1070,11 +1070,25 @@ func _build_compact_project_manifest(
 			var tres_arr_v: Variant = tres_res.get("files", [])
 			if typeof(tres_arr_v) == TYPE_ARRAY or typeof(tres_arr_v) == TYPE_PACKED_STRING_ARRAY:
 				resource_files = Array(tres_arr_v)
+	var autoloads: Dictionary = {}
+	var layer_names: Dictionary = {}
+	if _executor != null and _executor.has_method("tool_read_autoloads_and_layers"):
+		var proj_cfg_raw: Variant = _executor.call("tool_read_autoloads_and_layers", {})
+		var proj_cfg_res: Dictionary = proj_cfg_raw as Dictionary if typeof(proj_cfg_raw) == TYPE_DICTIONARY else {}
+		if bool(proj_cfg_res.get("ok", false)):
+			var auto_v: Variant = proj_cfg_res.get("autoloads", {})
+			if typeof(auto_v) == TYPE_DICTIONARY:
+				autoloads = (auto_v as Dictionary).duplicate(true)
+			var layer_v: Variant = proj_cfg_res.get("layerNames", {})
+			if typeof(layer_v) == TYPE_DICTIONARY:
+				layer_names = (layer_v as Dictionary).duplicate(true)
 	var manifest: Dictionary = {
 		"sceneFiles": Array(scene_files).slice(0, 60),
 		"scriptFiles": Array(script_files).slice(0, 60),
 		"resourceFiles": resource_files.slice(0, 40),
 		"inputActions": Array(input_actions),
+		"autoloads": autoloads,
+		"layerNames": layer_names,
 		"ownershipPaths": _collect_epic_ownership_paths(epic),
 		"activeScenePath": arena_scene,
 	}

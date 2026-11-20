@@ -1186,6 +1186,199 @@ func _physics_process(_delta: float) -> void:
 		dock_sync.call("clear_link_token")
 		dock.set("_last_bundle_snapshot", {})
 
+	# Test 14: Autoload/layer manifest injection + instanced/custom-asset/collision guards
+	if true:
+		# 14a: Turn-1 projectManifest includes autoloads & layerNames from project.godot
+		var t14_orig_project_godot: String = FileAccess.get_file_as_string("res://project.godot")
+		var t14_cleanup_guard_dir: Callable = func() -> void:
+			var t14_stack: Array[String] = ["res://layers_guard_test"]
+			var t14_dirs: Array[String] = []
+			while not t14_stack.is_empty():
+				var t14_cur: String = t14_stack.pop_back()
+				var t14_da: DirAccess = DirAccess.open(t14_cur)
+				if t14_da == null:
+					continue
+				t14_dirs.append(t14_cur)
+				t14_da.list_dir_begin()
+				while true:
+					var t14_item: String = t14_da.get_next()
+					if t14_item.is_empty():
+						break
+					if t14_item == "." or t14_item == "..":
+						continue
+					var t14_full: String = t14_cur + "/" + t14_item
+					if t14_da.current_is_dir():
+						t14_stack.append(t14_full)
+					else:
+						DirAccess.remove_absolute(ProjectSettings.globalize_path(t14_full))
+				t14_da.list_dir_end()
+			t14_dirs.reverse()
+			for t14_d: String in t14_dirs:
+				DirAccess.remove_absolute(ProjectSettings.globalize_path(t14_d))
+
+		var t14_restore_env: Callable = func() -> void:
+			if not t14_orig_project_godot.is_empty():
+				_write_text("res://project.godot", t14_orig_project_godot)
+			dock.call("_on_cancel_agent_pressed")
+			dock_sync.set("_agent_transport_override", Callable())
+			dock_sync.set("_is_busy", false)
+			dock_sync.call("clear_pending_requests")
+			dock_sync.call("clear_link_token")
+			t14_cleanup_guard_dir.call()
+
+		var t14_extra_cfg: String = "\n[autoload]\nGameBus=\"*res://scripts/scoped_player.gd\"\n\n[layer_names]\n3d_physics/layer_1=\"World\"\n3d_physics/layer_3=\"Enemy\"\n"
+		if not _write_text("res://project.godot", t14_orig_project_godot + t14_extra_cfg):
+			t14_restore_env.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14a: failed to write augmented project.godot")
+			return
+
+		dock_sync.save_link_token("lyr_test_dock_r4_1234567890")
+		dock_sync.set("_is_busy", false)
+		dock_sync.call("clear_pending_requests")
+		dock.call("_on_epic_updated", payload_4t)
+		var t14_requests: Array[Dictionary] = []
+		dock_sync.set("_agent_transport_override", func(req_payload: Dictionary) -> void:
+			t14_requests.append(req_payload.duplicate(true))
+		)
+		dock.call("_trigger_epic_agent", "build_feature")
+		if t14_requests.size() != 1:
+			t14_restore_env.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14a: expected 1 Turn-1 request, got %d" % t14_requests.size())
+			return
+		var t14_man: Dictionary = t14_requests[0].get("projectManifest", {}) as Dictionary if typeof(t14_requests[0].get("projectManifest")) == TYPE_DICTIONARY else {}
+		var t14_auto: Dictionary = t14_man.get("autoloads", {}) as Dictionary if typeof(t14_man.get("autoloads")) == TYPE_DICTIONARY else {}
+		var t14_layers: Dictionary = t14_man.get("layerNames", {}) as Dictionary if typeof(t14_man.get("layerNames")) == TYPE_DICTIONARY else {}
+		if str(t14_auto.get("GameBus", "")) != "res://scripts/scoped_player.gd" or str(t14_layers.get("3d_physics/layer_3", "")) != "Enemy":
+			t14_restore_env.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14a: expected autoloads.GameBus and layerNames in projectManifest, got: %s" % str(t14_man))
+			return
+		t14_restore_env.call()
+
+		# 14b: Automatic scene override, custom asset & hand-tuned collision protection
+		var t14_dir_abs: String = ProjectSettings.globalize_path("res://layers_guard_test")
+		DirAccess.make_dir_recursive_absolute(t14_dir_abs)
+
+		var t14_mat := StandardMaterial3D.new()
+		t14_mat.albedo_color = Color(0.2, 0.8, 0.9, 1.0)
+		var t14_mat_err: int = ResourceSaver.save(t14_mat, "res://layers_guard_test/custom_chrome.tres")
+		var t14_mesh := CylinderMesh.new()
+		var t14_mesh_err: int = ResourceSaver.save(t14_mesh, "res://layers_guard_test/custom_mesh.tres")
+		if t14_mat_err != OK or t14_mesh_err != OK:
+			t14_cleanup_guard_dir.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14b: failed to save custom .tres asset fixtures")
+			return
+
+		var t14_prop_root := Node3D.new()
+		t14_prop_root.name = "PropPillar"
+		var t14_prop_mesh := MeshInstance3D.new()
+		t14_prop_mesh.name = "PropMesh"
+		t14_prop_mesh.visible = true
+		t14_prop_root.add_child(t14_prop_mesh)
+		t14_prop_mesh.owner = t14_prop_root
+		var t14_prop_pack := PackedScene.new()
+		t14_prop_pack.pack(t14_prop_root)
+		var t14_prop_save_err: int = ResourceSaver.save(t14_prop_pack, "res://layers_guard_test/prop_pillar.tscn")
+		t14_prop_root.free()
+		if t14_prop_save_err != OK:
+			t14_cleanup_guard_dir.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14b: failed to save prop_pillar.tscn fixture")
+			return
+
+		var t14_loaded_mat: Material = ResourceLoader.load("res://layers_guard_test/custom_chrome.tres", "", ResourceLoader.CACHE_MODE_IGNORE) as Material
+		var t14_loaded_mesh: Mesh = ResourceLoader.load("res://layers_guard_test/custom_mesh.tres", "", ResourceLoader.CACHE_MODE_IGNORE) as Mesh
+		var t14_loaded_prop: PackedScene = ResourceLoader.load("res://layers_guard_test/prop_pillar.tscn", "", ResourceLoader.CACHE_MODE_IGNORE) as PackedScene
+		if t14_loaded_mat == null or t14_loaded_mesh == null or t14_loaded_prop == null:
+			t14_cleanup_guard_dir.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14b: failed to reload fixtures")
+			return
+
+		var t14_root := Node3D.new()
+		t14_root.name = "BossRoom"
+
+		var t14_pillar_inst: Node3D = t14_loaded_prop.instantiate() as Node3D
+		t14_pillar_inst.name = "PillarInst"
+		t14_pillar_inst.position = Vector3(3.0, 0.0, 2.0)
+		t14_root.add_child(t14_pillar_inst)
+
+		var t14_hero_art := MeshInstance3D.new()
+		t14_hero_art.name = "HeroArt"
+		t14_hero_art.mesh = t14_loaded_mesh
+		t14_hero_art.material_override = t14_loaded_mat
+		t14_root.add_child(t14_hero_art)
+
+		var t14_boss_body := CharacterBody3D.new()
+		t14_boss_body.name = "BossBody"
+		t14_boss_body.collision_layer = 4
+		t14_boss_body.collision_mask = 6
+		t14_root.add_child(t14_boss_body)
+
+		var t14_default_body := CharacterBody3D.new()
+		t14_default_body.name = "DefaultBody"
+		t14_default_body.collision_layer = 1
+		t14_default_body.collision_mask = 1
+		t14_root.add_child(t14_default_body)
+
+		var t14_build_ops: Array = [
+			{"op": "remove_node", "nodePath": "PillarInst"},
+			{"op": "reparent_node", "nodePath": "PillarInst", "newParentPath": "BossBody"},
+			{"op": "set_property", "nodePath": "PillarInst", "properties": {"position": [0.0, 0.0, 0.0]}},
+			{"op": "set_property", "nodePath": "PillarInst/PropMesh", "properties": {"visible": false}},
+			{"op": "ensure_node", "parentPath": ".", "nodeName": "HeroArt", "nodeType": "MeshInstance3D", "subResourceClass": "BoxMesh", "subResourceProps": {"size": [1.0, 1.0, 1.0]}},
+			{"op": "set_property", "nodePath": "HeroArt", "properties": {"material_override": {"albedo_color": [1.0, 0.0, 0.0, 1.0]}}},
+			{"op": "set_property", "nodePath": "BossBody", "properties": {"collision_layer": 1, "collision_mask": 1}},
+			{"op": "set_property", "nodePath": "DefaultBody", "properties": {"collision_layer": 2}},
+		]
+		exec.call("apply_scene_ops_to_root", t14_root, t14_build_ops, PackedStringArray(), true)
+
+		var t14_pillar_after: Node = t14_root.get_node_or_null("PillarInst")
+		var t14_pmesh_after: Node = t14_root.get_node_or_null("PillarInst/PropMesh")
+		if t14_pillar_after == null or t14_pillar_after.get_parent() != t14_root or not (t14_pillar_after as Node3D).position.is_equal_approx(Vector3(3.0, 0.0, 2.0)):
+			t14_root.free()
+			t14_cleanup_guard_dir.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14b: instanced scene PillarInst must not be removed, reparented, or moved on build pass")
+			return
+		if t14_pmesh_after == null or not (t14_pmesh_after as MeshInstance3D).visible:
+			t14_root.free()
+			t14_cleanup_guard_dir.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14b: internal instanced child PillarInst/PropMesh must not be mutated on build pass")
+			return
+		if t14_hero_art.mesh == null or t14_hero_art.mesh.resource_path != "res://layers_guard_test/custom_mesh.tres" or t14_hero_art.material_override == null or t14_hero_art.material_override.resource_path != "res://layers_guard_test/custom_chrome.tres":
+			t14_root.free()
+			t14_cleanup_guard_dir.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14b: HeroArt custom .tres mesh/material_override must be protected on build pass")
+			return
+		if t14_boss_body.collision_layer != 4 or t14_boss_body.collision_mask != 6 or t14_default_body.collision_layer != 2:
+			t14_root.free()
+			t14_cleanup_guard_dir.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14b: BossBody hand-tuned collision should stay (4,6) and DefaultBody should update to 2, got boss=(%d,%d) def=%d" % [t14_boss_body.collision_layer, t14_boss_body.collision_mask, t14_default_body.collision_layer])
+			return
+
+		# Explicit fix pass (preserve_existing_visuals = false) CAN update collision_layer & material_override
+		var t14_fix_ops: Array = [
+			{"op": "set_property", "nodePath": "BossBody", "properties": {"collision_layer": 8}},
+			{"op": "set_property", "nodePath": "HeroArt", "properties": {"material_override": {"albedo_color": [1.0, 0.2, 0.2, 1.0]}}},
+		]
+		exec.call("apply_scene_ops_to_root", t14_root, t14_fix_ops, PackedStringArray(), false)
+		if t14_boss_body.collision_layer != 8 or t14_hero_art.material_override == null or t14_hero_art.material_override.resource_path == "res://layers_guard_test/custom_chrome.tres":
+			t14_root.free()
+			t14_cleanup_guard_dir.call()
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test14b: fix pass (preserve_existing_visuals=false) must allow explicit collision & material updates")
+			return
+
+		t14_root.free()
+		t14_cleanup_guard_dir.call()
+
 	mock_ed_4t.base_ctrl.free()
 
 	print("GODOT_PLUGIN_TEST_OK")

@@ -1304,13 +1304,14 @@ func _apply_material_dict_to_node(node: Node, mat_props: Dictionary) -> bool:
 		var cs := node as CSGShape3D
 		var cmat := cs.material as StandardMaterial3D
 		var cchanged := false
-		if cmat == null:
-			cmat = StandardMaterial3D.new()
+		if cmat == null or not cmat.resource_path.is_empty():
+			cmat = (cmat.duplicate() as StandardMaterial3D) if cmat != null else StandardMaterial3D.new()
+			cmat.resource_path = ""
 			cs.material = cmat
 			cchanged = true
 		for k in mat_props.keys():
-			var val: Variant = _coerce_prop_value(mat_props[k], "")
-			if cmat.get(k) != val:
+			var val: Variant = _coerce_prop_value(mat_props[k], String(k))
+			if typeof(cmat.get(k)) != typeof(val) or cmat.get(k) != val:
 				cmat.set(k, val)
 				cchanged = true
 		return cchanged
@@ -1319,13 +1320,14 @@ func _apply_material_dict_to_node(node: Node, mat_props: Dictionary) -> bool:
 	var gi := node as GeometryInstance3D
 	var mat := gi.material_override as StandardMaterial3D
 	var changed := false
-	if mat == null:
-		mat = StandardMaterial3D.new()
+	if mat == null or not mat.resource_path.is_empty():
+		mat = (mat.duplicate() as StandardMaterial3D) if mat != null else StandardMaterial3D.new()
+		mat.resource_path = ""
 		gi.material_override = mat
 		changed = true
 	for k in mat_props.keys():
-		var val: Variant = _coerce_prop_value(mat_props[k], "")
-		if mat.get(k) != val:
+		var val: Variant = _coerce_prop_value(mat_props[k], String(k))
+		if typeof(mat.get(k)) != typeof(val) or mat.get(k) != val:
 			mat.set(k, val)
 			changed = true
 	return changed
@@ -1368,7 +1370,7 @@ func _coerce_prop_value(val: Variant, prop_name: String = "") -> Variant:
 			return Vector3(float(arr[0]), float(arr[1]), float(arr[2]))
 		if arr.size() == 2:
 			return Vector2(float(arr[0]), float(arr[1]))
-	if (prop_name == "color" or prop_name == "modulate" or prop_name == "self_modulate") and typeof(val) == TYPE_ARRAY:
+	if (prop_name == "color" or prop_name == "albedo_color" or prop_name == "emission" or prop_name == "modulate" or prop_name == "self_modulate") and typeof(val) == TYPE_ARRAY:
 		var carr: Array = val
 		if carr.size() >= 3:
 			return Color(float(carr[0]), float(carr[1]), float(carr[2]), float(carr[3]) if carr.size() >= 4 else 1.0)
@@ -1385,6 +1387,43 @@ func _is_physics_or_rig_node(node: Node, node_type_hint: String = "", node_name_
 		if tok in nm:
 			return true
 	return false
+
+
+func _has_custom_asset_resource(res: Variant) -> bool:
+	if res is Resource:
+		var rp: String = (res as Resource).resource_path.strip_edges().to_lower()
+		return rp.begins_with("res://")
+	return false
+
+
+func _is_instanced_scene_node(scene_root: Node, node: Node) -> bool:
+	if node == null or node == scene_root:
+		return false
+	var cur: Node = node
+	while cur != null and cur != scene_root:
+		if not cur.scene_file_path.strip_edges().is_empty():
+			return true
+		cur = cur.get_parent()
+	return false
+
+
+func _is_internal_instanced_child(scene_root: Node, node: Node) -> bool:
+	if node == null or node == scene_root:
+		return false
+	var cur: Node = node.get_parent()
+	while cur != null and cur != scene_root:
+		if not cur.scene_file_path.strip_edges().is_empty():
+			return true
+		cur = cur.get_parent()
+	return false
+
+
+func _is_hand_tuned_collision_prop(node: Node, prop_name: String) -> bool:
+	if node == null or (prop_name != "collision_layer" and prop_name != "collision_mask"):
+		return false
+	if not (prop_name in node):
+		return false
+	return int(node.get(prop_name)) != 1
 
 
 func _sync_existing_node_from_spec(
@@ -1459,8 +1498,11 @@ func _sync_existing_node_from_spec(
 	var props: Dictionary = sp.get("props", {})
 	for pk in props.keys():
 		var pk_str := String(pk)
+		var pv: Variant = _coerce_prop_value(props[pk], pk_str)
 		if preserve_existing_visuals:
 			if (pk_str in visual_transform_keys) and not _is_physics_or_rig_node(node):
+				continue
+			if pk_str == "mesh" and node is MeshInstance3D and (_has_custom_asset_resource(node.get("mesh")) or node.get("mesh") != null):
 				continue
 			if (node is Sprite2D or node is Sprite3D) and pk_str == "texture" and node.get("texture") != null:
 				continue
@@ -1468,7 +1510,8 @@ func _sync_existing_node_from_spec(
 				continue
 			if pk_str == "material" and node is CSGShape3D and node.get("material") != null:
 				continue
-		var pv: Variant = _coerce_prop_value(props[pk], pk_str)
+			if _is_hand_tuned_collision_prop(node, pk_str) and int(pv) != int(node.get(pk_str)):
+				continue
 		if node.get(pk) != pv:
 			node.set(pk, pv)
 			changed = true
@@ -2655,6 +2698,9 @@ func apply_scene_ops_to_root(
 		if op == "detach_script":
 			var np := String(op_dict.get("nodePath", "."))
 			var node := _resolve_op_node(scene_root, np)
+			if node != null and preserve_existing_visuals and _is_internal_instanced_child(scene_root, node):
+				warnings.append("Protected internal instanced child %s from detach_script." % np)
+				continue
 			if node != null and node.get_script() != null:
 				node.set_script(null)
 				count += 1
@@ -2662,6 +2708,9 @@ func apply_scene_ops_to_root(
 			var np := String(op_dict.get("nodePath", "."))
 			var spath := String(op_dict.get("scriptPath", "")).strip_edges()
 			var node := _resolve_op_node(scene_root, np)
+			if node != null and preserve_existing_visuals and _is_internal_instanced_child(scene_root, node):
+				warnings.append("Protected internal instanced child %s from attach_script." % np)
+				continue
 			if node == null or spath.is_empty() or not FileAccess.file_exists(spath):
 				warnings.append("attach_script skipped (%s -> %s)." % [spath, np])
 				continue
@@ -2714,6 +2763,9 @@ func apply_scene_ops_to_root(
 					node.owner = scene_root
 					created_new = true
 					count += 1
+			if not created_new and preserve_existing_visuals and _is_internal_instanced_child(scene_root, node):
+				warnings.append("Protected internal instanced child %s from ensure_node." % node.name)
+				continue
 			var sr_cls := String(op_dict.get("subResourceClass", "")).strip_edges()
 			var sr_props: Dictionary = op_dict.get("subResourceProps", {})
 			var fake_sp := {
@@ -2738,6 +2790,9 @@ func apply_scene_ops_to_root(
 			if src_node == null or dst_parent == null:
 				warnings.append("reparent_node target not found (%s -> %s)." % [np_src, dst_p])
 				continue
+			if preserve_existing_visuals and _is_instanced_scene_node(scene_root, src_node):
+				warnings.append("Protected instanced scene node %s from reparent_node." % np_src)
+				continue
 			if src_node != scene_root and src_node != dst_parent and not src_node.is_ancestor_of(dst_parent) and src_node.get_parent() != dst_parent:
 				if src_node.get_parent() != null:
 					src_node.get_parent().remove_child(src_node)
@@ -2758,18 +2813,34 @@ func apply_scene_ops_to_root(
 			if node == null:
 				warnings.append("set_property node not found: %s" % np)
 				continue
+			if preserve_existing_visuals and _is_internal_instanced_child(scene_root, node):
+				warnings.append("Protected internal instanced child %s from set_property." % np)
+				continue
 			var sr_cls2 := String(op_dict.get("subResourceClass", "")).strip_edges()
 			var sr_props2: Dictionary = op_dict.get("subResourceProps", {})
 			if not sr_cls2.is_empty() or not sr_props2.is_empty():
 				if sr_cls2.is_empty() and (node is CollisionShape3D or node is CollisionShape2D) and node.get("shape") != null:
 					sr_cls2 = (node.get("shape") as Object).get_class()
-				if _sync_existing_node_from_spec(node, {"subResourceClass": sr_cls2, "subResourceProps": sr_props2, "props": {}}, false):
+				if _sync_existing_node_from_spec(node, {"subResourceClass": sr_cls2, "subResourceProps": sr_props2, "props": {}}, preserve_existing_visuals):
 					count += 1
 			var props: Dictionary = op_dict.get("properties", {})
 			for pk in props.keys():
 				var pk_str := String(pk)
-				if preserve_existing_visuals and (pk_str in visual_transform_keys) and not _is_physics_or_rig_node(node):
-					continue
+				if preserve_existing_visuals:
+					if (pk_str in visual_transform_keys) and (_is_instanced_scene_node(scene_root, node) or not _is_physics_or_rig_node(node)):
+						continue
+					if pk_str == "mesh" and node is MeshInstance3D and (_has_custom_asset_resource(node.get("mesh")) or node.get("mesh") != null):
+						continue
+					if pk_str == "material_override" and node is GeometryInstance3D and (node as GeometryInstance3D).material_override != null:
+						continue
+					if pk_str == "material" and node is CSGShape3D and node.get("material") != null:
+						continue
+					if pk_str == "texture" and (node is Sprite2D or node is Sprite3D) and node.get("texture") != null:
+						continue
+					if _is_hand_tuned_collision_prop(node, pk_str):
+						var next_col: int = int(_coerce_prop_value(props[pk], pk_str))
+						if next_col != int(node.get(pk_str)):
+							continue
 				var raw_v: Variant = props[pk]
 				if (node is CollisionShape3D or node is CollisionShape2D) and (pk_str == "size" or pk_str == "radius" or pk_str == "height" or pk_str == "length"):
 					var sh_obj: Variant = node.get("shape")
@@ -2845,6 +2916,9 @@ func apply_scene_ops_to_root(
 			var np := String(op_dict.get("nodePath", "")).strip_edges()
 			var node := _resolve_op_node(scene_root, np)
 			if node != null and node != scene_root:
+				if preserve_existing_visuals and _is_instanced_scene_node(scene_root, node):
+					warnings.append("Protected instanced scene node %s from remove_node." % np)
+					continue
 				if node.get_parent() != null:
 					node.get_parent().remove_child(node)
 				node.queue_free()
