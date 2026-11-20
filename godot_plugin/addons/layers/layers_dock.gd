@@ -4,6 +4,8 @@ extends VBoxContainer
 const SYNC_CLIENT_SCRIPT_PATH := "res://addons/layers/layers_sync_client.gd"
 const STEP_EXECUTOR_SCRIPT_PATH := "res://addons/layers/layers_step_executor.gd"
 const DEFAULT_WEB_STUDIO_URL := "https://henrycgithub.github.io/LAYERS-Agentic/"
+const MAX_AGENT_TURNS := 6
+const MAX_AUTO_HEAL_ATTEMPTS := 3
 
 
 class _LayersEditorLogger extends Logger:
@@ -80,7 +82,8 @@ var _logger_registered: bool = false
 
 var _payload: Dictionary = {}
 var _last_bundle_snapshot: Dictionary = {}
-var _auto_heal_attempted: bool = false
+var _auto_heal_count: int = 0
+var _agent_session: Dictionary = {}
 var _status_message: String = ""
 var _status_is_error: bool = false
 var _available_update_ver: String = ""
@@ -120,6 +123,7 @@ var _feature_selector: OptionButton
 var _locked_baseline_label: Label
 
 var _primary_cta_btn: Button
+var _cancel_agent_btn: Button
 var _play_btn: Button
 var _undo_btn: Button
 
@@ -361,6 +365,13 @@ func _build_ui() -> void:
 	_primary_cta_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	action_row.add_child(_primary_cta_btn)
 
+	_cancel_agent_btn = Button.new()
+	_cancel_agent_btn.text = "✕ Cancel"
+	_cancel_agent_btn.tooltip_text = "Cancel running Cloud Gemini loop"
+	_cancel_agent_btn.visible = false
+	_cancel_agent_btn.disabled = true
+	action_row.add_child(_cancel_agent_btn)
+
 	_play_btn = Button.new()
 	_play_btn.text = "▶ Play"
 	_play_btn.tooltip_text = "Run Test Scene (or Main Scene)"
@@ -508,12 +519,13 @@ func _wire_signals() -> void:
 	_epic_selector.item_selected.connect(_on_epic_selected)
 	_feature_selector.item_selected.connect(_on_feature_selected)
 	_primary_cta_btn.pressed.connect(_on_primary_cta_pressed)
+	_cancel_agent_btn.pressed.connect(_on_cancel_agent_pressed)
 	_play_btn.pressed.connect(_on_play_pressed)
 	_undo_btn.pressed.connect(_on_undo_pressed)
 	_pass_reopen_btn.pressed.connect(_on_pass_reopen_pressed)
 	_clear_errors_btn.pressed.connect(clear_captured_errors)
 	_auto_fix_errors_btn.pressed.connect(func() -> void:
-		_auto_heal_attempted = false
+		_auto_heal_count = 0
 		var fix_action: String = "fix_feature" if not _get_active_feature().is_empty() else "fix_epic"
 		_trigger_epic_agent(fix_action)
 	)
@@ -526,6 +538,7 @@ func _wire_signals() -> void:
 		_sync_client.connect("busy_changed", _on_busy_changed)
 		_sync_client.connect("agent_busy_changed", _on_agent_busy_changed)
 		_sync_client.connect("agent_bundle_received", _on_agent_bundle_received)
+		_sync_client.connect("agent_step_received", _on_agent_step_received)
 		_sync_client.connect("auth_completed", _on_auth_completed)
 		_sync_client.connect("auth_status_changed", _on_auth_status_changed)
 		_sync_client.connect("update_available", _on_update_available)
@@ -766,7 +779,9 @@ func _on_epic_updated(new_payload: Dictionary) -> void:
 
 
 func _on_sync_failed(message: String) -> void:
-	_auto_heal_attempted = false
+	_agent_session = {}
+	_auto_heal_count = 0
+	_on_agent_busy_changed(false)
 	_set_status(message, true)
 	_refresh_ui()
 
@@ -777,14 +792,25 @@ func _on_busy_changed(busy: bool) -> void:
 
 
 func _on_agent_busy_changed(agent_busy: bool) -> void:
+	var running: bool = agent_busy or bool(_agent_session.get("active", false))
 	var locked: bool = _is_active_feature_locked()
-	_primary_cta_btn.disabled = agent_busy or locked
-	_auto_fix_errors_btn.disabled = agent_busy or locked
-	_pass_reopen_btn.disabled = agent_busy or locked
-	_epic_selector.disabled = agent_busy
+	if _cancel_agent_btn != null:
+		_cancel_agent_btn.visible = running
+		_cancel_agent_btn.disabled = not running
+	if _primary_cta_btn != null:
+		_primary_cta_btn.disabled = running or locked
+	if _auto_fix_errors_btn != null:
+		_auto_fix_errors_btn.disabled = running or locked
+	if _pass_reopen_btn != null:
+		_pass_reopen_btn.disabled = running or locked
+	if _epic_selector != null:
+		_epic_selector.disabled = running
 	if _feature_selector != null:
-		_feature_selector.disabled = agent_busy
-	_flag_fix_btn.disabled = agent_busy or locked
+		_feature_selector.disabled = running
+	if _flag_fix_btn != null:
+		_flag_fix_btn.disabled = running or locked
+	if _undo_btn != null:
+		_undo_btn.disabled = running or _last_bundle_snapshot.is_empty()
 
 
 func _on_epic_selected(idx: int) -> void:
@@ -1017,11 +1043,51 @@ func _on_primary_cta_pressed() -> void:
 				mut["featureId"] = str(feat.get("id", ""))
 			_sync_client.call("push_epic_mutation", mut, _collect_live_context())
 		return
-	_auto_heal_attempted = false
+	_auto_heal_count = 0
 	if mode == "fix":
 		_trigger_epic_agent("fix_feature" if not feat.is_empty() else "fix_epic")
 	else:
 		_trigger_epic_agent("build_feature" if not feat.is_empty() else "build_epic")
+
+
+func _build_compact_project_manifest(
+	epic: Dictionary,
+	arena_scene: String,
+	live_ctx: Dictionary,
+	ed_int: EditorInterface
+) -> Dictionary:
+	var scene_files_v: Variant = live_ctx.get("scene_files", [])
+	var scene_files: Array = scene_files_v as Array if (typeof(scene_files_v) == TYPE_ARRAY or typeof(scene_files_v) == TYPE_PACKED_STRING_ARRAY) else []
+	var script_files_v: Variant = live_ctx.get("script_files", [])
+	var script_files: Array = script_files_v as Array if (typeof(script_files_v) == TYPE_ARRAY or typeof(script_files_v) == TYPE_PACKED_STRING_ARRAY) else []
+	var input_actions_v: Variant = live_ctx.get("input_actions", [])
+	var input_actions: Array = input_actions_v as Array if (typeof(input_actions_v) == TYPE_ARRAY or typeof(input_actions_v) == TYPE_PACKED_STRING_ARRAY) else []
+	var resource_files: Array = []
+	if _executor != null and _executor.has_method("tool_list_project_files"):
+		var tres_raw: Variant = _executor.call("tool_list_project_files", {"dir": "res://", "ext": ".tres", "cap": 40})
+		var tres_res: Dictionary = tres_raw as Dictionary if typeof(tres_raw) == TYPE_DICTIONARY else {}
+		if bool(tres_res.get("ok", false)):
+			var tres_arr_v: Variant = tres_res.get("files", [])
+			if typeof(tres_arr_v) == TYPE_ARRAY or typeof(tres_arr_v) == TYPE_PACKED_STRING_ARRAY:
+				resource_files = Array(tres_arr_v)
+	var manifest: Dictionary = {
+		"sceneFiles": Array(scene_files).slice(0, 60),
+		"scriptFiles": Array(script_files).slice(0, 60),
+		"resourceFiles": resource_files.slice(0, 40),
+		"inputActions": Array(input_actions),
+		"ownershipPaths": _collect_epic_ownership_paths(epic),
+		"activeScenePath": arena_scene,
+	}
+	if _executor != null and FileAccess.file_exists(arena_scene) and _executor.has_method("tool_inspect_scene_tree"):
+		var tree_raw: Variant = _executor.call("tool_inspect_scene_tree", {"path": arena_scene, "limitNodes": 60}, ed_int)
+		var tree_res: Dictionary = tree_raw as Dictionary if typeof(tree_raw) == TYPE_DICTIONARY else {}
+		if bool(tree_res.get("ok", false)):
+			manifest["activeSceneSummary"] = {
+				"path": arena_scene,
+				"baseScenePath": str(tree_res.get("baseScenePath", "")),
+				"nodes": tree_res.get("nodes", []),
+			}
+	return manifest
 
 
 func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
@@ -1044,13 +1110,6 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 
 	var ed_int: EditorInterface = _as_editor_interface()
 	var ownership_paths: Array = _collect_epic_ownership_paths(epic)
-	var live_scripts_v: Variant = null
-	if _executor.has_method("read_scoped_project_scripts"):
-		live_scripts_v = _executor.call("read_scoped_project_scripts", ownership_paths, "res://", ed_int, 16)
-	else:
-		live_scripts_v = _executor.call("read_all_live_project_scripts", "res://", ed_int)
-	var live_scripts: Dictionary = live_scripts_v as Dictionary if typeof(live_scripts_v) == TYPE_DICTIONARY else {}
-
 	var diag_scenes: Array = []
 	var extra_scenes := PackedStringArray()
 	var add_scene_cand := func(raw_s: String) -> void:
@@ -1063,11 +1122,11 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 	for own_p in ownership_paths:
 		add_scene_cand.call(str(own_p))
 
-	var snap_v: Variant = _executor.call("capture_rich_scene_snapshot", ed_int, extra_scenes)
+	var manifest: Dictionary = _build_compact_project_manifest(epic, arena_scene, live_ctx, ed_int)
 	var input_v: Variant = _executor.call("capture_input_map_snapshot")
 	var input_snap: Dictionary = input_v as Dictionary if typeof(input_v) == TYPE_DICTIONARY else {}
-	var diag_v: Variant = _executor.call("diagnose_project_combat_and_wiring", diag_scenes, live_scripts, ed_int)
-	var diag_arr: Array = diag_v as Array if typeof(diag_v) == TYPE_ARRAY or typeof(diag_v) == TYPE_PACKED_STRING_ARRAY else []
+	var diag_v: Variant = _executor.call("diagnose_project_combat_and_wiring", diag_scenes, {}, ed_int)
+	var diag_arr: Array = diag_v as Array if (typeof(diag_v) == TYPE_ARRAY or typeof(diag_v) == TYPE_PACKED_STRING_ARRAY) else []
 
 	var errs: Array[String] = _collect_recent_errors()
 	if not extra_error_text.strip_edges().is_empty():
@@ -1082,32 +1141,158 @@ func _trigger_epic_agent(action: String, extra_error_text: String = "") -> void:
 				if not fxt.is_empty():
 					prompt_parts.append("[FIX] " + fxt)
 
-	var is_fix: bool = action == "fix_epic" or action == "fix_feature"
 	_pending_build_preferred_scene = arena_scene
+	_agent_session = {
+		"active": true,
+		"cancelled": false,
+		"action": action,
+		"epic_id": epic_id,
+		"feature_id": feature_id,
+		"target_code": _get_active_target_code(),
+		"arena_scene": arena_scene,
+		"prompt_text": "\n".join(prompt_parts),
+		"error_text": "\n".join(errs),
+		"live_context": live_ctx,
+		"project_manifest": manifest,
+		"input_map_snapshot": input_snap,
+		"project_diagnostics": diag_arr,
+		"tool_history": [],
+		"turn_index": 1,
+		"max_turns": MAX_AGENT_TURNS,
+		"tool_reads_count": 0,
+		"steps_used": 0,
+	}
+	_on_agent_busy_changed(true)
+	_dispatch_agent_turn()
+
+
+func _dispatch_agent_turn() -> void:
+	if _sync_client == null or _agent_session.is_empty():
+		return
+	if not bool(_agent_session.get("active", false)) or bool(_agent_session.get("cancelled", false)):
+		return
+	var cur_turn: int = int(_agent_session.get("turn_index", 1))
+	var max_t: int = int(_agent_session.get("max_turns", MAX_AGENT_TURNS))
+	var action: String = str(_agent_session.get("action", "build_feature"))
+	var target_code: String = str(_agent_session.get("target_code", _get_active_target_code()))
+	var is_fix: bool = action == "fix_epic" or action == "fix_feature"
 	_set_status(
-		"%s %s via Cloud Gemini..." % ["🔧 Fixing" if is_fix else "⚡ Building", _get_active_target_code()],
+		"Step %d/%d: %s %s via Cloud Gemini..." % [cur_turn, max_t, "Fixing" if is_fix else "Building", target_code],
 		false
 	)
+	var manifest_v: Variant = _agent_session.get("project_manifest", {})
+	var manifest: Dictionary = manifest_v as Dictionary if typeof(manifest_v) == TYPE_DICTIONARY else {}
+	var history_v: Variant = _agent_session.get("tool_history", [])
+	var history: Array = history_v as Array if typeof(history_v) == TYPE_ARRAY else []
+	var live_ctx_v: Variant = _agent_session.get("live_context", {})
+	var live_ctx: Dictionary = live_ctx_v as Dictionary if typeof(live_ctx_v) == TYPE_DICTIONARY else {}
+	var arena_scene: String = str(_agent_session.get("arena_scene", ""))
+	var input_v: Variant = _agent_session.get("input_map_snapshot", {})
+	var input_snap: Dictionary = input_v as Dictionary if typeof(input_v) == TYPE_DICTIONARY else {}
+	var diag_v: Variant = _agent_session.get("project_diagnostics", [])
+	var diag_arr: Array = diag_v as Array if typeof(diag_v) == TYPE_ARRAY else []
 	_sync_client.call(
-		"run_epic_agent",
+		"run_epic_agent_step",
 		action,
-		epic_id,
-		snap_v,
-		live_scripts,
+		str(_agent_session.get("epic_id", "")),
+		manifest,
+		history,
+		cur_turn,
+		max_t,
 		live_ctx,
 		arena_scene,
 		arena_scene,
-		"\n".join(prompt_parts),
-		"\n".join(errs),
+		str(_agent_session.get("prompt_text", "")),
+		str(_agent_session.get("error_text", "")),
 		input_snap,
 		diag_arr,
-		feature_id
+		str(_agent_session.get("feature_id", ""))
 	)
 
 
-func _on_agent_bundle_received(agent_bundle: Dictionary, _payload_resp: Dictionary) -> void:
+func _on_agent_step_received(agent_step: Dictionary, payload_resp: Dictionary) -> void:
+	if not bool(_agent_session.get("active", false)) or bool(_agent_session.get("cancelled", false)):
+		return
+	var cur_turn: int = int(_agent_session.get("turn_index", 1))
+	var max_t: int = int(_agent_session.get("max_turns", MAX_AGENT_TURNS))
+	_agent_session["steps_used"] = int(_agent_session.get("steps_used", 0)) + 1
+
+	var step_type: String = str(agent_step.get("type", "")).strip_edges().to_lower()
+	var raw_calls_v: Variant = agent_step.get("toolCalls", agent_step.get("tool_calls", []))
+	var raw_calls: Array = raw_calls_v as Array if typeof(raw_calls_v) == TYPE_ARRAY else []
+
+	if step_type == "tool_calls" and not raw_calls.is_empty() and cur_turn < max_t:
+		var history_v: Variant = _agent_session.get("tool_history", [])
+		var history: Array = history_v as Array if typeof(history_v) == TYPE_ARRAY else []
+		var inspected_labels: PackedStringArray = PackedStringArray()
+		var cap: int = mini(raw_calls.size(), 4)
+		for i: int in range(cap):
+			if not bool(_agent_session.get("active", false)) or bool(_agent_session.get("cancelled", false)):
+				return
+			var call_v: Variant = raw_calls[i]
+			if typeof(call_v) != TYPE_DICTIONARY:
+				continue
+			var call_dict: Dictionary = call_v as Dictionary
+			var tool_name: String = str(call_dict.get("tool", call_dict.get("name", ""))).strip_edges()
+			var raw_args_v: Variant = call_dict.get("args", call_dict.get("arguments", {}))
+			var args_dict: Dictionary = raw_args_v as Dictionary if typeof(raw_args_v) == TYPE_DICTIONARY else {}
+			var res_raw: Variant = _executor.call("execute_agent_tool_call", {
+				"tool": tool_name,
+				"args": args_dict,
+			}, editor_interface) if _executor != null else {"ok": false, "error": "Missing executor."}
+			var res_dict: Dictionary = res_raw as Dictionary if typeof(res_raw) == TYPE_DICTIONARY else {"ok": false, "error": "Invalid tool response."}
+			history.append({
+				"turn": cur_turn,
+				"tool": tool_name,
+				"args": args_dict,
+				"result": res_dict,
+			})
+			_agent_session["tool_reads_count"] = int(_agent_session.get("tool_reads_count", 0)) + 1
+			var lbl_path: String = str(args_dict.get("path", args_dict.get("query", args_dict.get("dir", tool_name)))).get_file()
+			if lbl_path.is_empty():
+				lbl_path = tool_name
+			if not (lbl_path in inspected_labels):
+				inspected_labels.append(lbl_path)
+		_agent_session["tool_history"] = history
+		if not bool(_agent_session.get("active", false)) or bool(_agent_session.get("cancelled", false)):
+			return
+		_agent_session["turn_index"] = cur_turn + 1
+		var inspected_txt: String = ", ".join(inspected_labels) if not inspected_labels.is_empty() else "project"
+		_set_status("Step %d/%d: Inspected %s — planning next step..." % [cur_turn + 1, max_t, inspected_txt], false)
+		_dispatch_agent_turn()
+		return
+
+	var bundle_v: Variant = agent_step.get("bundle", {})
+	var bundle: Dictionary = bundle_v as Dictionary if typeof(bundle_v) == TYPE_DICTIONARY else {}
+	if bundle.is_empty() and typeof(payload_resp.get("agentBundle", null)) == TYPE_DICTIONARY:
+		bundle = payload_resp.get("agentBundle") as Dictionary
+	_agent_session["active"] = false
+	_on_agent_busy_changed(false)
+	_apply_final_agent_bundle(bundle, payload_resp)
+
+
+func _on_cancel_agent_pressed() -> void:
+	_agent_session["cancelled"] = true
+	_agent_session["active"] = false
+	_auto_heal_count = 0
+	if _sync_client != null and _sync_client.has_method("cancel_agent_request"):
+		_sync_client.call("cancel_agent_request")
+	_on_agent_busy_changed(false)
+	_set_status("Cancelled Cloud Gemini run (no files modified).", false)
+	_refresh_ui()
+
+
+func _on_agent_bundle_received(agent_bundle: Dictionary, payload_resp: Dictionary) -> void:
+	_agent_session["active"] = false
+	_on_agent_busy_changed(false)
+	_apply_final_agent_bundle(agent_bundle, payload_resp)
+
+
+func _apply_final_agent_bundle(agent_bundle: Dictionary, _payload_resp: Dictionary) -> void:
 	if _executor == null or agent_bundle.is_empty():
+		_auto_heal_count = 0
 		_set_status("Cloud Gemini returned empty bundle.", true)
+		_refresh_ui()
 		return
 
 	var ed_int: EditorInterface = _as_editor_interface()
@@ -1143,15 +1328,15 @@ func _on_agent_bundle_received(agent_bundle: Dictionary, _payload_resp: Dictiona
 
 	var compile_errs_v: Variant = res.get("compile_errors", PackedStringArray())
 	var compile_errs: PackedStringArray = compile_errs_v as PackedStringArray if (typeof(compile_errs_v) == TYPE_PACKED_STRING_ARRAY or typeof(compile_errs_v) == TYPE_ARRAY) else PackedStringArray()
-	if not compile_errs.is_empty() and not _auto_heal_attempted:
-		_auto_heal_attempted = true
+	if not compile_errs.is_empty() and _auto_heal_count < MAX_AUTO_HEAL_ATTEMPTS:
+		_auto_heal_count += 1
 		var joined_err: String = "\n".join(compile_errs)
 		var heal_action: String = "fix_feature" if not _get_active_feature().is_empty() else "fix_epic"
-		_set_status("Auto-healing GDScript compile/patch error...", true)
+		_set_status("Auto-repair %d/%d: fixing compile/patch error..." % [_auto_heal_count, MAX_AUTO_HEAL_ATTEMPTS], true)
 		_trigger_epic_agent(heal_action, joined_err)
 		return
 
-	_auto_heal_attempted = false
+	_auto_heal_count = 0
 	var summary: String = str(res.get("summary", agent_bundle.get("summary", "Applied Epic build.")))
 	if not compile_errs.is_empty():
 		_set_status("Applied with compile warning: %s" % compile_errs[0], true)
@@ -1547,11 +1732,15 @@ func _refresh_ui() -> void:
 	var is_passed: bool = _get_active_target_is_passed()
 	var cta: Dictionary = compute_primary_cta_state()
 	_primary_cta_btn.text = str(cta.get("text", "⚡ Build %s" % tcode))
-	var agent_busy_now: bool = _sync_client != null and bool(_sync_client.call("is_agent_busy"))
+	var agent_busy_now: bool = (_sync_client != null and bool(_sync_client.call("is_agent_busy"))) or bool(_agent_session.get("active", false))
+	if _cancel_agent_btn != null:
+		_cancel_agent_btn.visible = agent_busy_now
+		_cancel_agent_btn.disabled = not agent_busy_now
 	_primary_cta_btn.disabled = agent_busy_now or locked
 	_auto_fix_errors_btn.disabled = agent_busy_now or locked
 	_pass_reopen_btn.disabled = agent_busy_now or locked
 	_flag_fix_btn.disabled = agent_busy_now or locked
+	_undo_btn.disabled = agent_busy_now or _last_bundle_snapshot.is_empty()
 	if _fix_input != null:
 		_fix_input.editable = not locked
 

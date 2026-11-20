@@ -6,6 +6,7 @@ signal sync_failed(message: String)
 signal busy_changed(is_busy: bool)
 signal agent_busy_changed(is_agent_busy: bool)
 signal agent_bundle_received(agent_bundle: Dictionary, payload: Dictionary)
+signal agent_step_received(agent_step: Dictionary, payload: Dictionary)
 signal auth_completed(project_title: String)
 signal auth_status_changed(waiting: bool, message: String)
 signal update_available(local_ver: String, remote_ver: String)
@@ -24,6 +25,7 @@ const REMOTE_PLUGIN_CFG_URL := "https://raw.githubusercontent.com/HenryCGitHub/L
 const REMOTE_ZIP_PRIMARY_URL := "https://raw.githubusercontent.com/HenryCGitHub/LAYERS-Agentic/main/web/layers_godot_plugin.zip"
 const REMOTE_ZIP_FALLBACK_URL := "https://henrycgithub.github.io/LAYERS-Agentic/layers_godot_plugin.zip"
 const LOOPBACK_TIMEOUT_MSEC := 180000
+const AGENT_MAX_TURNS := 6
 
 var _http: HTTPRequest = null
 var _agent_http: HTTPRequest = null
@@ -33,6 +35,8 @@ var _link_token: String = ""
 var _sync_base_url: String = DEFAULT_SYNC_BASE_URL
 var _is_busy: bool = false
 var _agent_busy: bool = false
+var _agent_cancel_requested: bool = false
+var _agent_transport_override: Callable = Callable()
 var _pending_requests: Array[Dictionary] = []
 
 var _update_busy: bool = false
@@ -442,6 +446,14 @@ func push_epic_mutation(payload_dict: Dictionary, live_context: Dictionary = {})
 	})
 
 
+func cancel_agent_request() -> void:
+	_agent_cancel_requested = true
+	if _agent_http != null and is_instance_valid(_agent_http):
+		_agent_http.cancel_request()
+	_agent_busy = false
+	_emit_busy_state()
+
+
 func run_epic_agent(
 	action: String,
 	epic_id: String,
@@ -462,6 +474,7 @@ func run_epic_agent(
 	if _agent_busy:
 		return
 	_ensure_http_nodes()
+	_agent_cancel_requested = false
 
 	var payload := {
 		"action": action,
@@ -485,6 +498,85 @@ func run_epic_agent(
 
 	_agent_busy = true
 	_emit_busy_state()
+
+	if _agent_transport_override.is_valid():
+		_agent_transport_override.call(payload)
+		return
+
+	var url := "%s/godotLink/update" % _sync_base_url
+	var headers := PackedStringArray([
+		"Authorization: Bearer %s" % _link_token,
+		"Content-Type: application/json",
+	])
+	var err: int = _agent_http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if err != OK:
+		_agent_busy = false
+		_emit_busy_state()
+		sync_failed.emit("Agent HTTP request failed (%s)" % error_string(err))
+
+
+func run_epic_agent_step(
+	action: String,
+	epic_id: String,
+	project_manifest: Dictionary,
+	tool_history: Array,
+	turn_index: int,
+	max_turns: int,
+	live_context: Dictionary,
+	arena_scene_path: String = "",
+	epic_scene_path: String = "",
+	prompt_text: String = "",
+	error_text: String = "",
+	input_map_snapshot: Dictionary = {},
+	project_diagnostics: Array = [],
+	feature_id: String = "",
+	scene_snapshot: Variant = {},
+	live_scripts: Dictionary = {}
+) -> void:
+	if not has_link_token():
+		sync_failed.emit("Connect Godot 4 to LAYERS first.")
+		return
+	if _agent_busy:
+		return
+	_ensure_http_nodes()
+	_agent_cancel_requested = false
+
+	var clamped_max: int = clampi(max_turns, 1, AGENT_MAX_TURNS)
+	var clamped_turn: int = clampi(turn_index, 1, clamped_max)
+
+	var payload: Dictionary = {
+		"action": action,
+		"epicId": epic_id,
+		"agentProtocol": "multi_turn_v1",
+		"turnIndex": clamped_turn,
+		"maxTurns": clamped_max,
+		"projectManifest": project_manifest,
+		"toolHistory": tool_history,
+		"godotContext": live_context,
+		"arenaScenePath": arena_scene_path,
+		"epicScenePath": epic_scene_path,
+	}
+	if not feature_id.strip_edges().is_empty():
+		payload["featureId"] = feature_id.strip_edges()
+	if not prompt_text.strip_edges().is_empty():
+		payload["prompt"] = prompt_text.strip_edges()
+	if not error_text.strip_edges().is_empty():
+		payload["errorText"] = error_text.strip_edges()
+	if not input_map_snapshot.is_empty():
+		payload["inputMapSnapshot"] = input_map_snapshot
+	if not project_diagnostics.is_empty():
+		payload["projectDiagnostics"] = project_diagnostics
+	if typeof(scene_snapshot) == TYPE_DICTIONARY and not (scene_snapshot as Dictionary).is_empty():
+		payload["sceneSnapshot"] = scene_snapshot
+	if not live_scripts.is_empty():
+		payload["liveScripts"] = live_scripts
+
+	_agent_busy = true
+	_emit_busy_state()
+
+	if _agent_transport_override.is_valid():
+		_agent_transport_override.call(payload)
+		return
 
 	var url := "%s/godotLink/update" % _sync_base_url
 	var headers := PackedStringArray([
@@ -572,6 +664,9 @@ func _on_request_completed(result: int, response_code: int, _headers: PackedStri
 func _on_agent_http_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray) -> void:
 	_agent_busy = false
 	_emit_busy_state()
+	if _agent_cancel_requested:
+		_agent_cancel_requested = false
+		return
 
 	var text: String = body.get_string_from_utf8()
 	var parsed_raw: Variant = JSON.parse_string(text)
@@ -590,6 +685,16 @@ func _on_agent_http_completed(result: int, response_code: int, _headers: PackedS
 	var parsed: Dictionary = parsed_raw as Dictionary
 	if not bool(parsed.get("ok", false)):
 		sync_failed.emit(_extract_error_message(parsed, "Cloud Gemini build failed."))
+		return
+
+	var step_v: Variant = parsed.get("agentStep", null)
+	if typeof(step_v) == TYPE_DICTIONARY:
+		var step: Dictionary = step_v as Dictionary
+		var step_type: String = str(step.get("type", "")).strip_edges().to_lower()
+		if step_type == "final_bundle":
+			_write_cache(parsed)
+			epic_updated.emit(parsed)
+		agent_step_received.emit(step, parsed)
 		return
 
 	var bundle_v: Variant = parsed.get("agentBundle", {})

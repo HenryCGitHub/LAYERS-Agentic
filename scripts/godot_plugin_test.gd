@@ -715,9 +715,6 @@ func _physics_process(_delta: float) -> void:
 	dock_sync.set("_is_busy", false)
 	dock_sync.call("clear_pending_requests")
 	dock_sync.call("clear_link_token")
-	dock_sync.set("_is_busy", false)
-	dock_sync.call("clear_pending_requests")
-	dock_sync.call("clear_link_token")
 
 	# Test 12: Read-only project introspection tools & security dispatcher
 	if true:
@@ -931,6 +928,263 @@ func _physics_process(_delta: float) -> void:
 			_fail("Test12(8): disallowed tool delete_file should be rejected")
 
 		t12_cleanup.call()
+
+	# Test 13: Multi-turn 6-turn orchestrator, Cancel button, compact manifest & 3x auto-repair
+	if true:
+		dock_sync.save_link_token("lyr_test_dock_mt_1234567890")
+		dock_sync.set("_is_busy", false)
+		dock_sync.call("clear_pending_requests")
+		dock.call("_on_epic_updated", payload_4t)
+		dock.set("_last_bundle_snapshot", {})
+		dock.set("_auto_heal_count", 0)
+
+		var t13_requests: Array[Dictionary] = []
+		dock_sync.set("_agent_transport_override", func(req_payload: Dictionary) -> void:
+			t13_requests.append(req_payload.duplicate(true))
+		)
+		var t13_make_resp: Callable = func(step_dict: Dictionary, turn_idx: int) -> String:
+			var resp: Dictionary = payload_4t.duplicate(true)
+			resp["agentProtocol"] = "multi_turn_v1"
+			resp["turnIndex"] = turn_idx
+			resp["maxTurns"] = 6
+			resp["agentStep"] = step_dict
+			if str(step_dict.get("type", "")) == "final_bundle":
+				resp["agentBundle"] = step_dict.get("bundle", {})
+			return JSON.stringify(resp)
+
+		var t13_cancel_v: Variant = dock.get("_cancel_agent_btn")
+		if not (t13_cancel_v is Button):
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected _cancel_agent_btn Button on dock")
+			return
+		var t13_cancel_btn: Button = t13_cancel_v as Button
+		var t13_cta_btn: Button = dock.get("_primary_cta_btn") as Button
+		if t13_cancel_btn.visible:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: _cancel_agent_btn should start hidden")
+			return
+
+		# Turn 1: Trigger build_feature -> compact manifest, no 16 liveScripts, no undo snapshot yet
+		dock.call("_trigger_epic_agent", "build_feature")
+		if not t13_cancel_btn.visible or not t13_cta_btn.disabled:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected cancel visible and primary CTA disabled during run")
+			return
+		if t13_requests.size() != 1:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected 1 Turn-1 request, got %d" % t13_requests.size())
+			return
+		var t13_r0: Dictionary = t13_requests[0]
+		var t13_man: Dictionary = t13_r0.get("projectManifest", {}) as Dictionary if typeof(t13_r0.get("projectManifest")) == TYPE_DICTIONARY else {}
+		var t13_ls_v: Variant = t13_r0.get("liveScripts", {})
+		var t13_ls: Dictionary = t13_ls_v as Dictionary if typeof(t13_ls_v) == TYPE_DICTIONARY else {}
+		if str(t13_r0.get("agentProtocol", "")) != "multi_turn_v1" or int(t13_r0.get("turnIndex", 0)) != 1 or int(t13_r0.get("maxTurns", 0)) != 6:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: unexpected Turn-1 protocol metadata: %s" % str(t13_r0))
+			return
+		if t13_man.is_empty() or not t13_man.has("sceneFiles") or not t13_man.has("scriptFiles") or not t13_man.has("ownershipPaths") or not t13_man.has("activeScenePath"):
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: missing compact projectManifest fields: %s" % str(t13_man))
+			return
+		var t13_th0: Array = t13_r0.get("toolHistory", ["bad"]) as Array if typeof(t13_r0.get("toolHistory")) == TYPE_ARRAY else ["bad"]
+		if not t13_th0.is_empty() or not t13_ls.is_empty():
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected empty toolHistory & empty liveScripts on Turn 1")
+			return
+		if not (dock.get("_last_bundle_snapshot") as Dictionary).is_empty():
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: Undo snapshot should not be captured before final_bundle")
+			return
+
+		# Simulate Turn 1 Cloud tool_calls response -> runs read_script_slice locally & dispatches Turn 2
+		var t13_step1: Dictionary = {
+			"type": "tool_calls",
+			"thought": "Read scoped player script",
+			"toolCalls": [
+				{
+					"tool": "read_script_slice",
+					"args": {"path": "res://scripts/scoped_player.gd", "startLine": 1, "endLine": 25},
+				},
+			],
+		}
+		dock_sync.call("_on_agent_http_completed", HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), t13_make_resp.call(t13_step1, 1).to_utf8_buffer())
+		if t13_requests.size() != 2:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected Turn-2 dispatch after tool_calls, requests=%d" % t13_requests.size())
+			return
+		var t13_r1: Dictionary = t13_requests[1]
+		var t13_th1: Array = t13_r1.get("toolHistory", []) as Array if typeof(t13_r1.get("toolHistory")) == TYPE_ARRAY else []
+		if int(t13_r1.get("turnIndex", 0)) != 2 or t13_th1.size() != 1:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected turnIndex=2 and 1 toolHistory entry, got %s" % str(t13_r1))
+			return
+		var t13_th1_entry: Dictionary = t13_th1[0] as Dictionary if typeof(t13_th1[0]) == TYPE_DICTIONARY else {}
+		var t13_th1_res: Dictionary = t13_th1_entry.get("result", {}) as Dictionary if typeof(t13_th1_entry.get("result")) == TYPE_DICTIONARY else {}
+		if str(t13_th1_entry.get("tool", "")) != "read_script_slice" or not bool(t13_th1_res.get("ok", false)) or not ("move_speed" in str(t13_th1_res.get("content", ""))):
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: unexpected Turn-2 toolHistory result: %s" % str(t13_th1_entry))
+			return
+		if not t13_cancel_btn.visible or not (dock.get("_last_bundle_snapshot") as Dictionary).is_empty():
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected cancel still visible & Undo snapshot still empty during discovery")
+			return
+
+		# Simulate Turn 2 Cloud final_bundle response -> Undo snapshot captured, targeted patch applied
+		var t13_cur_src: String = FileAccess.get_file_as_string("res://scripts/scoped_player.gd")
+		var t13_anchor: String = ""
+		for t13_ln: String in t13_cur_src.split("\n"):
+			if "move_speed" in t13_ln and t13_ln.strip_edges().begins_with("@export"):
+				t13_anchor = t13_ln
+				break
+		if t13_anchor.is_empty():
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: missing @export move_speed anchor in scoped_player.gd")
+			return
+		var t13_step2: Dictionary = {
+			"type": "final_bundle",
+			"thought": "Patch chain_dash_cooldown",
+			"bundle": {
+				"mode": "build_feature",
+				"summary": "Built F02 dash",
+				"dimension": "dim3d",
+				"preserveExports": ["move_speed"],
+				"scriptUpdates": [
+					{
+						"resPath": "res://scripts/scoped_player.gd",
+						"patches": [
+							{
+								"find": t13_anchor,
+								"replace": t13_anchor + "\n@export var chain_dash_cooldown: float = 0.6",
+							},
+						],
+					},
+				],
+			},
+		}
+		dock_sync.call("_on_agent_http_completed", HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), t13_make_resp.call(t13_step2, 2).to_utf8_buffer())
+		var t13_after_src: String = FileAccess.get_file_as_string("res://scripts/scoped_player.gd")
+		if (dock.get("_last_bundle_snapshot") as Dictionary).is_empty():
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected Undo snapshot captured right before final_bundle apply")
+			return
+		if not ("chain_dash_cooldown" in t13_after_src) or not ("move_speed" in t13_after_src):
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected both move_speed and chain_dash_cooldown in patched scoped_player.gd")
+			return
+		if t13_cancel_btn.visible or t13_cta_btn.disabled:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected cancel hidden & CTA re-enabled after final_bundle")
+			return
+
+		# Cancel mid-discovery ignores late final_bundle responses
+		var t13_before_cancel: String = FileAccess.get_file_as_string("res://scripts/scoped_player.gd")
+		dock.call("_trigger_epic_agent", "build_feature")
+		if not t13_cancel_btn.visible:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: cancel button should be visible after starting cancel test run")
+			return
+		dock.call("_on_cancel_agent_pressed")
+		if t13_cancel_btn.visible or bool(dock_sync.call("is_agent_busy")) or t13_cta_btn.disabled:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: cancel must clear busy state and restore CTA")
+			return
+		var t13_late_step: Dictionary = {
+			"type": "final_bundle",
+			"thought": "Late response after cancel",
+			"bundle": {
+				"mode": "build_feature",
+				"summary": "Should be ignored",
+				"dimension": "dim3d",
+				"scriptUpdates": [
+					{
+						"resPath": "res://scripts/scoped_player.gd",
+						"content": "extends CharacterBody3D\n# OVERWRITTEN_AFTER_CANCEL\n",
+					},
+				],
+			},
+		}
+		dock_sync.call("_on_agent_http_completed", HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), t13_make_resp.call(t13_late_step, 1).to_utf8_buffer())
+		if FileAccess.get_file_as_string("res://scripts/scoped_player.gd") != t13_before_cancel:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: late final_bundle after Cancel must be ignored")
+			return
+
+		# Up to 3 compile/patch auto-repair attempts, then stops
+		t13_requests.clear()
+		dock.set("_auto_heal_count", 0)
+		dock.call("_trigger_epic_agent", "build_feature")
+		if t13_requests.size() != 1:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: expected 1 request at start of auto-heal test")
+			return
+		var t13_bad_step: Dictionary = {
+			"type": "final_bundle",
+			"thought": "Bad patch trigger",
+			"bundle": {
+				"mode": "build_feature",
+				"summary": "Fails patch match",
+				"dimension": "dim3d",
+				"scriptUpdates": [
+					{
+						"resPath": "res://scripts/scoped_player.gd",
+						"patches": [
+							{"find": "NONEXISTENT_LINE_FOR_T13", "replace": "NOOP"},
+						],
+					},
+				],
+			},
+		}
+		var t13_bad_bytes: PackedByteArray = t13_make_resp.call(t13_bad_step, 1).to_utf8_buffer()
+		dock_sync.call("_on_agent_http_completed", HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), t13_bad_bytes)
+		if int(dock.get("_auto_heal_count")) != 1 or t13_requests.size() != 2 or str(t13_requests[1].get("action", "")) != "fix_feature" or not ("PATCH MISMATCH" in str(t13_requests[1].get("errorText", ""))):
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: auto-heal attempt 1 failed: count=%s reqs=%s" % [str(dock.get("_auto_heal_count")), str(t13_requests)])
+			return
+		dock_sync.call("_on_agent_http_completed", HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), t13_bad_bytes)
+		if int(dock.get("_auto_heal_count")) != 2 or t13_requests.size() != 3:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: auto-heal attempt 2 failed: count=%s reqs=%d" % [str(dock.get("_auto_heal_count")), t13_requests.size()])
+			return
+		dock_sync.call("_on_agent_http_completed", HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), t13_bad_bytes)
+		if int(dock.get("_auto_heal_count")) != 3 or t13_requests.size() != 4:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: auto-heal attempt 3 failed: count=%s reqs=%d" % [str(dock.get("_auto_heal_count")), t13_requests.size()])
+			return
+		dock_sync.call("_on_agent_http_completed", HTTPRequest.RESULT_SUCCESS, 200, PackedStringArray(), t13_bad_bytes)
+		if int(dock.get("_auto_heal_count")) != 0 or t13_requests.size() != 4 or t13_cancel_btn.visible:
+			dock_sync.set("_agent_transport_override", Callable())
+			mock_ed_4t.base_ctrl.free()
+			_fail("Test13: auto-heal must stop after 3 attempts: count=%s reqs=%d cancel_vis=%s" % [str(dock.get("_auto_heal_count")), t13_requests.size(), str(t13_cancel_btn.visible)])
+			return
+
+		dock_sync.set("_agent_transport_override", Callable())
+		dock_sync.set("_is_busy", false)
+		dock_sync.call("clear_pending_requests")
+		dock_sync.call("clear_link_token")
+		dock.set("_last_bundle_snapshot", {})
 
 	mock_ed_4t.base_ctrl.free()
 
