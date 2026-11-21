@@ -1,6 +1,9 @@
 import 'dart:convert';
 import '../constants/tiers.dart';
+import 'progressive_release_models.dart';
 import 'tier_document.dart';
+
+export 'progressive_release_models.dart';
 
 /// Godot 4 spatial target dimension for `ROOT_GODOT_CONTEXT`, `GodotSpecGuard`,
 /// and `§02` / `§04` Studio contracts (`3D`: `1 unit = 1 m`, `2D`: pixel space).
@@ -259,221 +262,6 @@ class EpicPieFix {
   }
 }
 
-class EpicUpgradeOption {
-  String id;
-  String text;
-  String? targetFeatureCode;
-  bool chosen;
-
-  EpicUpgradeOption({
-    required this.id,
-    required this.text,
-    this.targetFeatureCode,
-    this.chosen = false,
-  });
-
-  EpicUpgradeOption copyWith({
-    String? id,
-    String? text,
-    String? targetFeatureCode,
-    bool? chosen,
-  }) {
-    return EpicUpgradeOption(
-      id: id ?? this.id,
-      text: text ?? this.text,
-      targetFeatureCode: targetFeatureCode ?? this.targetFeatureCode,
-      chosen: chosen ?? this.chosen,
-    );
-  }
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'text': text,
-        if (targetFeatureCode != null && targetFeatureCode!.trim().isNotEmpty)
-          'targetFeatureCode': targetFeatureCode,
-        'chosen': chosen,
-      };
-
-  factory EpicUpgradeOption.fromJson(Map<String, dynamic> json, [int idx = 0]) {
-    final rawTarget = (json['targetFeatureCode'] ?? '').toString().trim();
-    return EpicUpgradeOption(
-      id: (json['id'] ?? 'up_${idx + 1}').toString(),
-      text: (json['text'] ?? '').toString().trim(),
-      targetFeatureCode: rawTarget.isEmpty ? null : rawTarget,
-      chosen: json['chosen'] == true,
-    );
-  }
-}
-
-class ReleaseDirectionPreset {
-  final String id;
-  final String label;
-  final String description;
-  final List<String> upgradeIds;
-  final List<String> newEpicIds;
-
-  const ReleaseDirectionPreset({
-    required this.id,
-    required this.label,
-    required this.description,
-    required this.upgradeIds,
-    required this.newEpicIds,
-  });
-
-  Map<String, dynamic> toJson() => <String, dynamic>{
-        'id': id,
-        'label': label,
-        'desc': description,
-        'upgrades': upgradeIds,
-        'newEpics': newEpicIds,
-      };
-
-  factory ReleaseDirectionPreset.fromJson(Map<String, dynamic> json) {
-    final mergedUpgradeAndNewFeatureIds = <String>{
-      ..._strList(json['upgrades']),
-      ..._strList(json['newFeatures']),
-    }.toList();
-    return ReleaseDirectionPreset(
-      id: (json['id'] ?? 'preset').toString(),
-      label: (json['label'] ?? 'Release Direction').toString(),
-      description: (json['desc'] ?? json['description'] ?? '').toString(),
-      upgradeIds: mergedUpgradeAndNewFeatureIds,
-      newEpicIds: _strList(json['newEpics']),
-    );
-  }
-}
-
-class ProgressiveReleaseDraft {
-  final String targetVersion;
-  List<ReleaseDirectionPreset> presets;
-  Map<String, List<EpicUpgradeOption>> upgradesByLineageKey;
-  Map<String, List<FeatureSpec>> candidateNewFeaturesByLineageKey;
-  Set<String> chosenNewFeatureIds;
-  List<EpicSpec> candidateNewEpics;
-  String? activePresetId;
-
-  ProgressiveReleaseDraft({
-    required this.targetVersion,
-    required this.presets,
-    required this.upgradesByLineageKey,
-    Map<String, List<FeatureSpec>>? candidateNewFeaturesByLineageKey,
-    Set<String>? chosenNewFeatureIds,
-    required this.candidateNewEpics,
-    this.activePresetId,
-  })  : candidateNewFeaturesByLineageKey =
-            candidateNewFeaturesByLineageKey ?? <String, List<FeatureSpec>>{},
-        chosenNewFeatureIds = chosenNewFeatureIds ??
-            <String>{
-              for (final list
-                  in (candidateNewFeaturesByLineageKey ?? const {}).values)
-                for (final f in list) f.id,
-            };
-
-  bool get hasSelectedChanges {
-    for (final opts in upgradesByLineageKey.values) {
-      if (opts.any((u) => u.chosen)) return true;
-    }
-    for (final feats in candidateNewFeaturesByLineageKey.values) {
-      if (feats.any((f) => chosenNewFeatureIds.contains(f.id))) return true;
-    }
-    return candidateNewEpics.any((ep) => ep.chosenForNextRelease);
-  }
-
-  ProgressiveReleaseDraft deepCopy() {
-    return ProgressiveReleaseDraft(
-      targetVersion: targetVersion,
-      presets: List<ReleaseDirectionPreset>.from(presets),
-      upgradesByLineageKey: {
-        for (final e in upgradesByLineageKey.entries)
-          e.key: [for (final u in e.value) u.copyWith()],
-      },
-      candidateNewFeaturesByLineageKey: {
-        for (final e in candidateNewFeaturesByLineageKey.entries)
-          e.key: [for (final f in e.value) f.deepCopy()],
-      },
-      chosenNewFeatureIds: Set<String>.from(chosenNewFeatureIds),
-      candidateNewEpics: [
-        for (final ep in candidateNewEpics) ep.deepCopy(),
-      ],
-      activePresetId: activePresetId,
-    );
-  }
-}
-
-List<String> _strList(dynamic raw) {
-  if (raw is! List) return <String>[];
-  return raw
-      .map((e) => e.toString().trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
-}
-
-List<int> _parseReleaseParts(String version) {
-  final clean = version.trim().toLowerCase().replaceFirst(RegExp(r'^v'), '');
-  if (clean.isEmpty) return const <int>[0, 0];
-  return [
-    for (final seg in clean.split('.'))
-      int.tryParse(RegExp(r'^\d+').firstMatch(seg)?.group(0) ?? '') ?? 0,
-  ];
-}
-
-int _compareReleaseVersions(
-  String a,
-  String b,
-  List<String> releaseOrder,
-) {
-  final normA = a.trim().toLowerCase();
-  final normB = b.trim().toLowerCase();
-  if (releaseOrder.isNotEmpty) {
-    final normalizedOrder =
-        releaseOrder.map((r) => r.trim().toLowerCase()).toList();
-    final idxA = normalizedOrder.indexOf(normA);
-    final idxB = normalizedOrder.indexOf(normB);
-    if (idxA != -1 && idxB != -1) {
-      return idxA.compareTo(idxB);
-    }
-  }
-  final pa = _parseReleaseParts(normA);
-  final pb = _parseReleaseParts(normB);
-  final maxLen = pa.length > pb.length ? pa.length : pb.length;
-  for (int i = 0; i < maxLen; i++) {
-    final va = i < pa.length ? pa[i] : 0;
-    final vb = i < pb.length ? pb[i] : 0;
-    if (va != vb) return va.compareTo(vb);
-  }
-  return 0;
-}
-
-List<EpicSceneOwnership> _extractLegacySceneOwnership(
-  List<String> links,
-  String levelStaging,
-) {
-  final resPattern = RegExp(r'res://[^\s,)\];"]+');
-  final seen = <String>{};
-  final result = <EpicSceneOwnership>[];
-
-  void scanText(String source, String fallbackRole) {
-    final trimmed = source.trim();
-    if (trimmed.isEmpty) return;
-    for (final m in resPattern.allMatches(trimmed)) {
-      final path = m.group(0)!.trim();
-      if (path.isEmpty || !seen.add(path)) continue;
-      String role = fallbackRole;
-      final split = trimmed.split(RegExp(r'\s+[—-]\s+'));
-      if (split.length > 1 && split.first.contains(path)) {
-        role = split.sublist(1).join(' - ').trim();
-      }
-      result.add(EpicSceneOwnership(path: path, role: role));
-    }
-  }
-
-  for (final link in links) {
-    scanText(link, 'Shared scene or script');
-  }
-  scanText(levelStaging, 'Playtest room scene');
-  return result;
-}
-
 enum FeatureStatus {
   queued,
   active,
@@ -598,7 +386,7 @@ class FeatureSpec {
   bool isLockedBaselineInRelease(String releaseVersion) {
     final target = releaseVersion.trim();
     if (target.isEmpty) return false;
-    return _compareReleaseVersions(introducedIn, target, const []) < 0 &&
+    return compareReleaseVersions(introducedIn, target, const []) < 0 &&
         releaseDelta.trim().isEmpty;
   }
 
@@ -714,8 +502,8 @@ class FeatureSpec {
       sliceTime: (json['sliceTime'] ?? '45 min').toString().trim(),
       status: FeatureStatus.fromString(json['status']?.toString()),
       goal: (json['goal'] ?? '').toString().trim(),
-      inScope: _strList(json['inScope']),
-      doneWhen: _strList(json['doneWhen']),
+      inScope: parseStringList(json['inScope']),
+      doneWhen: parseStringList(json['doneWhen']),
       releaseDelta:
           (json['releaseDelta'] ?? json['v02Delta'] ?? '').toString().trim(),
       controls: [
@@ -728,7 +516,7 @@ class FeatureSpec {
           if (item is Map)
             EpicTuningParam.fromJson(Map<String, dynamic>.from(item)),
       ],
-      cues: _strList(json['cues'] ?? json['feedback']),
+      cues: parseStringList(json['cues'] ?? json['feedback']),
       checks: parseCheckList(rawChecks, 'fchk'),
       releaseDeltaChecks: parseCheckList(rawDeltaChecks, 'fdchk'),
       fixes: [
@@ -858,7 +646,7 @@ class EpicSpec {
     return features
         .where(
           (f) =>
-              _compareReleaseVersions(
+              compareReleaseVersions(
                 f.introducedIn,
                 targetReleaseVersion,
                 releaseOrder,
@@ -1030,9 +818,9 @@ class EpicSpec {
     final parsedLifecycle =
         EpicLifecycle.fromString(json['lifecycle']?.toString());
     final parsedGoal = (json['goal'] ?? '').toString().trim();
-    final parsedInScope = _strList(json['inScope']);
-    final parsedDoneWhen = _strList(json['doneWhen']);
-    final parsedLinks = _strList(json['links'] ?? json['plugsInto']);
+    final parsedInScope = parseStringList(json['inScope']);
+    final parsedDoneWhen = parseStringList(json['doneWhen']);
+    final parsedLinks = parseStringList(json['links'] ?? json['plugsInto']);
     final parsedLevelStaging = (json['levelStaging'] ?? '').toString().trim();
 
     final rawChecks = json['checks'] as List? ?? const [];
@@ -1051,7 +839,7 @@ class EpicSpec {
         if (item is Map)
           EpicTuningParam.fromJson(Map<String, dynamic>.from(item)),
     ];
-    final parsedFeedback = _strList(json['feedback']);
+    final parsedFeedback = parseStringList(json['feedback']);
     final parsedChecks = [
       for (int i = 0; i < rawChecks.length; i++)
         if (rawChecks[i] is Map)
@@ -1080,7 +868,7 @@ class EpicSpec {
             text: rawFixes[i].toString().trim(),
           ),
     ];
-    final parsedUpgradeDeltas = _strList(json['upgradeDeltas']);
+    final parsedUpgradeDeltas = parseStringList(json['upgradeDeltas']);
 
     final List<EpicSceneOwnership> explicitOwnership =
         (json.containsKey('sceneOwnership') && json['sceneOwnership'] is List)
@@ -1092,7 +880,7 @@ class EpicSpec {
     final List<EpicSceneOwnership> parsedOwnership =
         explicitOwnership.isNotEmpty
             ? explicitOwnership
-            : _extractLegacySceneOwnership(
+            : extractLegacySceneOwnership(
                 parsedLinks,
                 parsedLevelStaging,
               );
@@ -1162,17 +950,17 @@ class EpicSpec {
       doneWhen: parsedDoneWhen,
       sceneOwnership: parsedOwnership,
       links: parsedLinks,
-      outOfScope: _strList(json['outOfScope']),
+      outOfScope: parseStringList(json['outOfScope']),
       controls: parsedControls,
-      states: _strList(json['stateFlow'] ?? json['states']),
-      interrupts: _strList(json['interruptRules'] ?? json['interrupts']),
+      states: parseStringList(json['stateFlow'] ?? json['states']),
+      interrupts: parseStringList(json['interruptRules'] ?? json['interrupts']),
       tuning: parsedTuning,
       feedback: parsedFeedback,
       levelStaging: parsedLevelStaging,
       checks: parsedChecks,
       fixes: parsedFixes,
       features: parsedFeatures,
-      baselineSummary: _strList(json['baselineSummary']),
+      baselineSummary: parseStringList(json['baselineSummary']),
       upgradeDeltas: parsedUpgradeDeltas,
       copilotUpgrades: [
         for (int i = 0; i < rawUps.length; i++)

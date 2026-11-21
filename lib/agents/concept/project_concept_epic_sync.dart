@@ -1,4 +1,6 @@
-part of 'project_concept_agent.dart';
+import '../../models/agent_blueprints.dart';
+import '../../models/epic_spec.dart';
+import '../../utils/godot_spec_guard.dart';
 
 String _fmtScaleNum(double v) {
   if ((v - v.roundToDouble()).abs() < 0.01) {
@@ -148,7 +150,7 @@ void _convertEpicDimensionContent(
 
 /// Converts an active [ProjectConceptBlueprint] between Godot 4 `3D` (`m`, `m/s`)
 /// and `2D` (`px`, `px/s`), updating §02 camera/scale contracts, Epics, and Features cleanly.
-ProjectConceptBlueprint _convertBlueprintDimensionImpl(
+ProjectConceptBlueprint convertBlueprintDimensionImpl(
   ProjectConceptBlueprint current,
   GodotProjectDimension targetDim,
 ) {
@@ -217,17 +219,17 @@ ProjectConceptBlueprint _convertBlueprintDimensionImpl(
       ],
   };
 
-  _syncEpicCameraFramingImpl(
+  syncEpicCameraFramingImpl(
     next,
     optionId: next.cameraChoiceId,
     contractValue: next.cameraContract,
   );
-  _syncEpicCoreFeelImpl(next, feelId: next.feelChoiceId);
+  syncEpicCoreFeelImpl(next, feelId: next.feelChoiceId);
   return GodotSpecGuard.sanitizeConceptBlueprint(next);
 }
 
 /// Keeps `E01..EN` and `F01..FM` strictly sequential across `initialEpics` without gaps or duplicate codes.
-void _normalizeSequentialEpicAndFeatureCodesImpl(
+void normalizeSequentialEpicAndFeatureCodesImpl(
   ProjectConceptBlueprint bp,
 ) {
   final usedLineageKeys = <String>{};
@@ -370,7 +372,7 @@ void _upsertCameraCheck(
 
 /// Synchronizes locomotion Epic & first Feature's aim/look controls, tail tuning, and playtest check
 /// whenever the Stage 1 Camera Decision (`§02`) changes, without shifting `tuning[0]`.
-void _syncEpicCameraFramingImpl(
+void syncEpicCameraFramingImpl(
   ProjectConceptBlueprint draft, {
   required String optionId,
   required String contractValue,
@@ -501,7 +503,7 @@ void _syncEpicCameraFramingImpl(
 
 /// Synchronizes `feelChoiceId`, primary §03 feel `TradeOffRule`, and locomotion Epic tail tuning (`braking_decel`)
 /// without disturbing `tuning[0]`.
-void _syncEpicCoreFeelImpl(
+void syncEpicCoreFeelImpl(
   ProjectConceptBlueprint draft, {
   required String feelId,
 }) {

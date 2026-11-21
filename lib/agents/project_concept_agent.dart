@@ -5,9 +5,9 @@ import '../models/epic_spec.dart';
 import '../utils/godot_spec_guard.dart';
 import 'gemini_agent_client.dart';
 
-part 'project_concept_schemas_part.dart';
-part 'project_concept_sync_part.dart';
-part 'project_concept_fallback_part.dart';
+import 'concept/concept_fallback_synthesizer.dart';
+import 'concept/project_concept_epic_sync.dart';
+import 'concept/project_concept_schemas.dart';
 
 /// Stage 1 Godot 4 Co-Designer Agent (`1. Project Spec` -> `PROJECT_SPEC.md`).
 /// Generates the high-level Godot 4 foundation (`§01–§04`) and strictly `v0.1` Epics (`§05`),
@@ -17,13 +17,13 @@ class ProjectConceptAgent {
     ProjectConceptBlueprint source,
     GodotProjectDimension targetDim,
   ) =>
-      _convertBlueprintDimensionImpl(source, targetDim);
+      convertBlueprintDimensionImpl(source, targetDim);
 
   /// Keeps `E01..EN` and `F01..FM` strictly sequential across `initialEpics` without gaps or duplicate codes.
   static void normalizeSequentialEpicAndFeatureCodes(
     ProjectConceptBlueprint bp,
   ) =>
-      _normalizeSequentialEpicAndFeatureCodesImpl(bp);
+      normalizeSequentialEpicAndFeatureCodesImpl(bp);
 
   /// Synchronizes locomotion Epic & first Feature's aim/look controls, tail tuning, and playtest check
   /// whenever the Stage 1 Camera Decision (`§02`) changes, without shifting `tuning[0]`.
@@ -32,7 +32,7 @@ class ProjectConceptAgent {
     required String optionId,
     required String contractValue,
   }) =>
-      _syncEpicCameraFramingImpl(
+      syncEpicCameraFramingImpl(
         draft,
         optionId: optionId,
         contractValue: contractValue,
@@ -44,7 +44,7 @@ class ProjectConceptAgent {
     ProjectConceptBlueprint draft, {
     required String feelId,
   }) =>
-      _syncEpicCoreFeelImpl(draft, feelId: feelId);
+      syncEpicCoreFeelImpl(draft, feelId: feelId);
 
   static Future<ProjectConceptBlueprint> draftSpecFromSpark({
     required String sparkPrompt,
@@ -105,7 +105,7 @@ class ProjectConceptAgent {
           changedSections: const <String>{'s01', 's02', 's03', 's04', 's05'},
         );
       }
-      final fallback = _buildSynthesizedFallback(
+      final fallback = buildSynthesizedFallback(
         trimmedSpark,
         dimension: effectiveDim,
         archetypeId: archetypeId,
@@ -157,7 +157,7 @@ CRITICAL CONSTRAINTS:
       preferredModel: preferredModel,
       thinkingLevel: thinkingLevel,
       temperature: 0.4,
-      functionDeclarations: [_rootSpecToolSchema],
+      functionDeclarations: [rootSpecToolSchema],
     );
 
     if (res == null) {
@@ -624,7 +624,7 @@ CRITICAL CONSTRAINTS:
       return _tryApplyDeterministicOfflineEdit(currentSpec, trimmed);
     }
 
-    final compactJson = jsonEncode(_compactStage1JsonForPrompt(currentSpec));
+    final compactJson = jsonEncode(compactStage1JsonForPrompt(currentSpec));
     final prompt = '''
 ${LayersTextStyleGuide.compactStyleRules}
 
@@ -650,7 +650,7 @@ USER CO-DESIGN INSTRUCTION:
       preferredModel: preferredModel,
       thinkingLevel: thinkingLevel,
       temperature: 0.3,
-      functionDeclarations: [_patchRootSpecToolSchema],
+      functionDeclarations: [patchRootSpecToolSchema],
     );
 
     if (res == null) {

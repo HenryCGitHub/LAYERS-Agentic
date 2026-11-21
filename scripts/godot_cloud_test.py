@@ -1019,16 +1019,24 @@ assert.throws(
 );
 
 const fs = require("fs");
-const indexLines = fs
-  .readFileSync(path.resolve(process.argv[1], "functions", "index.js"), "utf8")
-  .split(/\r?\n/).length;
-assert(
-  indexLines <= 1300,
-  `Expected functions/index.js <= 1300 lines after modularization, got ${indexLines}`
-);
-const specCtxMod = require(path.resolve(process.argv[1], "functions", "godot_spec_context.js"));
-const linkSyncMod = require(path.resolve(process.argv[1], "functions", "godot_link_sync.js"));
-const agentRunnerMod = require(path.resolve(process.argv[1], "functions", "godot_agent_runner.js"));
+const functionsDir = path.resolve(process.argv[1], "functions");
+for (const fname of fs.readdirSync(functionsDir)) {
+  if (!fname.endsWith(".js")) continue;
+  const lineCount = fs
+    .readFileSync(path.join(functionsDir, fname), "utf8")
+    .split(/\r?\n/).length;
+  assert(
+    lineCount <= 1100,
+    `Expected functions/${fname} <= 1100 lines after modularization, got ${lineCount}`
+  );
+}
+const specGuardMod = require(path.join(functionsDir, "godot_spec_guard.js"));
+const authAccessMod = require(path.join(functionsDir, "auth_access_control.js"));
+const specCtxMod = require(path.join(functionsDir, "godot_spec_context.js"));
+const linkSyncMod = require(path.join(functionsDir, "godot_link_sync.js"));
+const agentRunnerMod = require(path.join(functionsDir, "godot_agent_runner.js"));
+assert.strictEqual(typeof specGuardMod.sanitizeGodotLineJs, "function");
+assert.strictEqual(typeof authAccessMod.parseJsonBody, "function");
 assert.strictEqual(typeof specCtxMod.renderServerGodotFeatureContextJs, "function");
 assert.strictEqual(typeof linkSyncMod.applyGodotEpicMutationJs, "function");
 assert.strictEqual(typeof agentRunnerMod.runGodotMultiTurnStepWithGemini, "function");

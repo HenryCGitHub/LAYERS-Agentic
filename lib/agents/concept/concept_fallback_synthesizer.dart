@@ -1,6 +1,8 @@
-part of 'project_concept_agent.dart';
+import '../../models/agent_blueprints.dart';
+import '../../models/epic_spec.dart';
+import 'project_concept_epic_sync.dart';
 
-ProjectConceptBlueprint _buildSynthesizedFallback(
+ProjectConceptBlueprint buildSynthesizedFallback(
   String sparkPrompt, {
   required GodotProjectDimension dimension,
   String? archetypeId,
@@ -1275,12 +1277,12 @@ ProjectConceptBlueprint _buildSynthesizedFallback(
         'Run F6 on $testScenePath -> complete full 30s core loop cleanly with 0 Debugger errors',
     initialEpics: epics,
   );
-  _normalizeSequentialEpicAndFeatureCodesImpl(bp);
-  _syncEpicCameraFramingImpl(
+  normalizeSequentialEpicAndFeatureCodesImpl(bp);
+  syncEpicCameraFramingImpl(
     bp,
     optionId: cameraChoice,
     contractValue: cameraContract,
   );
-  _syncEpicCoreFeelImpl(bp, feelId: feelId);
+  syncEpicCoreFeelImpl(bp, feelId: feelId);
   return bp;
 }

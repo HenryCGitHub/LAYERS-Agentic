@@ -2462,28 +2462,58 @@ console.log(JSON.stringify({
           lessThanOrEqualTo(260),
         );
         expect(
-          File('lib/models/agent_blueprints.dart').readAsLinesSync().length,
-          lessThanOrEqualTo(1050),
+          File('lib/models/epic_spec.dart').readAsLinesSync().length,
+          lessThanOrEqualTo(1160),
         );
-        expect(File('lib/models/spark_presets_part.dart').existsSync(), isTrue);
+        expect(
+          File('lib/models/agent_blueprints.dart').readAsLinesSync().length,
+          lessThanOrEqualTo(750),
+        );
         expect(
           File('lib/agents/project_concept_agent.dart')
               .readAsLinesSync()
               .length,
-          lessThanOrEqualTo(1150),
+          lessThanOrEqualTo(1050),
         );
-        expect(
-          File('lib/agents/project_concept_schemas_part.dart').existsSync(),
-          isTrue,
+        const expectedStandaloneModules = <String>[
+          'lib/models/progressive_release_models.dart',
+          'lib/models/presets/spark_presets.dart',
+          'lib/models/presets/shellbreaker_preset.dart',
+          'lib/models/presets/railjack_preset.dart',
+          'lib/models/presets/emberkeep_preset.dart',
+          'lib/agents/concept/project_concept_schemas.dart',
+          'lib/agents/concept/project_concept_epic_sync.dart',
+          'lib/agents/concept/spark_clarifier.dart',
+          'lib/agents/concept/concept_fallback_synthesizer.dart',
+          'lib/agents/release_planner_fallback.dart',
+        ];
+        for (final path in expectedStandaloneModules) {
+          final modFile = File(path);
+          expect(modFile.existsSync(), isTrue, reason: '$path should exist');
+          expect(modFile.readAsLinesSync().length, greaterThan(20));
+        }
+
+        final partPattern = RegExp(
+          r'''^\s*part\s+(of\s+)?['"]''',
+          multiLine: true,
         );
-        expect(
-          File('lib/agents/project_concept_sync_part.dart').existsSync(),
-          isTrue,
-        );
-        expect(
-          File('lib/agents/project_concept_fallback_part.dart').existsSync(),
-          isTrue,
-        );
+        for (final dirPath in const ['lib/models', 'lib/agents']) {
+          for (final entity in Directory(dirPath).listSync(recursive: true)) {
+            if (entity is File && entity.path.endsWith('.dart')) {
+              final normalizedPath = entity.path.replaceAll('\\', '/');
+              expect(
+                normalizedPath.endsWith('_part.dart'),
+                isFalse,
+                reason: '$normalizedPath should be removed',
+              );
+              expect(
+                partPattern.hasMatch(entity.readAsStringSync()),
+                isFalse,
+                reason: '$normalizedPath should not use part/part of',
+              );
+            }
+          }
+        }
 
         for (final id in const ['shellbreaker', 'railjack', 'emberkeep']) {
           final bp = GodotSparkPresets.byId(id);

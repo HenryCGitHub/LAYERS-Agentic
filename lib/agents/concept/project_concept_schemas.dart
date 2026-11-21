@@ -1,6 +1,7 @@
-part of 'project_concept_agent.dart';
+import '../../constants/text_style_guide.dart';
+import '../../models/agent_blueprints.dart';
 
-Map<String, dynamic> get _rootSpecToolSchema => <String, dynamic>{
+Map<String, dynamic> get rootSpecToolSchema => <String, dynamic>{
       'name': 'commit_godot_root_spec',
       'description':
           'Create the Godot 4 Project Spec (PROJECT_SPEC.md -> ROOT_GODOT_CONTEXT) with §01-§04 foundation contracts and strictly v0.1 prototype Epics in §05 using the 4-tier Epic -> Feature hierarchy.',
@@ -124,7 +125,7 @@ Map<String, dynamic> get _rootSpecToolSchema => <String, dynamic>{
             'type': 'ARRAY',
             'description':
                 'Strictly 2-4 v0.1 playable prototype Epics ordered by dependency (defer v0.2+ waves/meta).',
-            'items': _epicJsonSchema,
+            'items': epicJsonSchema,
           },
           'coDesignNote': {
             'type': 'STRING',
@@ -134,7 +135,7 @@ Map<String, dynamic> get _rootSpecToolSchema => <String, dynamic>{
       },
     };
 
-Map<String, dynamic> get _featureJsonSchema => <String, dynamic>{
+Map<String, dynamic> get featureJsonSchema => <String, dynamic>{
       'type': 'OBJECT',
       'required': [
         'code',
@@ -230,7 +231,7 @@ Map<String, dynamic> get _featureJsonSchema => <String, dynamic>{
       },
     };
 
-Map<String, dynamic> get _epicJsonSchema => <String, dynamic>{
+Map<String, dynamic> get epicJsonSchema => <String, dynamic>{
       'type': 'OBJECT',
       'required': [
         'code',
@@ -310,12 +311,12 @@ Map<String, dynamic> get _epicJsonSchema => <String, dynamic>{
           'type': 'ARRAY',
           'description':
               '2-3 sittable 30-90 min playable v0.1 Feature slices inside this domain Epic (zero Tasks, zero Steps). Include controls, @export tuning, cues, and Playtest Gate checks here only.',
-          'items': _featureJsonSchema,
+          'items': featureJsonSchema,
         },
       },
     };
 
-Map<String, dynamic> get _patchRootSpecToolSchema => <String, dynamic>{
+Map<String, dynamic> get patchRootSpecToolSchema => <String, dynamic>{
       'name': 'patch_godot_root_spec',
       'description':
           'Apply a scoped partial patch to only the Stage 1 Project Spec sections (§01-§05) affected by the user instruction, leaving untouched sections and Epics intact.',
@@ -404,7 +405,7 @@ Map<String, dynamic> get _patchRootSpecToolSchema => <String, dynamic>{
             'type': 'ARRAY',
             'description':
                 'Only Epics created or modified by this instruction (matched by lineageKey or code). Omit untouched Epics.',
-            'items': _epicJsonSchema,
+            'items': epicJsonSchema,
           },
           'removeEpicLineageKeys': {
             'type': 'ARRAY',
@@ -414,13 +415,13 @@ Map<String, dynamic> get _patchRootSpecToolSchema => <String, dynamic>{
             'type': 'ARRAY',
             'description':
                 'Only include full initialEpics array when restructuring the entire §05 prototype queue.',
-            'items': _epicJsonSchema,
+            'items': epicJsonSchema,
           },
         },
       },
     };
 
-Map<String, dynamic> _compactStage1JsonForPrompt(
+Map<String, dynamic> compactStage1JsonForPrompt(
   ProjectConceptBlueprint spec,
 ) {
   final full = spec.toJson();
