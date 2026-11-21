@@ -622,14 +622,13 @@ assert.strictEqual(sanitizedHistory[0].tool, "read_script_slice");
 assert.strictEqual(typeof sanitizedHistory[0].result, "string");
 assert(sanitizedHistory[0].result.length <= 12000, "Expected oversized tool result truncated <= 12000 chars");
 
-const mtPromptT1 = buildGodotMultiTurnPrompt({
+const mtBaseArgs = {
   mode: "build_feature",
   rootSpec: payload4t.rootSpec,
   epicSpec: payload4t.activeEpic,
   featureSpec: payload4t.activeFeature,
   siblingFeaturesSummary: payload4t.siblingFeaturesSummary,
   godotContextMarkdown: payload4t.activeFeatureContextMarkdown,
-  turnIndex: 1,
   maxTurns: 6,
   projectManifest: {
     sceneFiles: ["res://scenes/arena_proto.tscn"],
@@ -639,6 +638,11 @@ const mtPromptT1 = buildGodotMultiTurnPrompt({
   },
   arenaScenePath: payload4t.arenaScenePath,
   epicScenePath: "res://scenes/player_mech.tscn",
+};
+
+const mtPromptT1 = buildGodotMultiTurnPrompt({
+  ...mtBaseArgs,
+  turnIndex: 1,
 });
 assert.strictEqual(mtPromptT1.thinkingLevel, "LOW");
 assert.strictEqual(mtPromptT1.forceFinal, false);
@@ -653,10 +657,58 @@ assert(mtPromptT1.systemInstruction.includes("4"));
 assert(mtPromptT1.systemInstruction.includes("patches"));
 assert(mtPromptT1.preserveExports.includes("move_speed"));
 assert(mtPromptT1.preserveInputActions.includes("move_left"));
-assert(mtPromptT1.userPrompt.includes("GameBus"));
-assert(mtPromptT1.userPrompt.includes("3d_physics/layer_1"));
-assert(mtPromptT1.userPrompt.includes('"turnIndex":1'));
-assert(mtPromptT1.userPrompt.includes('"maxTurns":6'));
+assert(Array.isArray(mtPromptT1.contents), "Expected contents[] on multi-turn prompt");
+assert.strictEqual(mtPromptT1.contents.length, 1);
+assert.strictEqual(mtPromptT1.contents[0].role, "user");
+const mtT1Text = mtPromptT1.contents[0].parts[0].text;
+assert(mtT1Text.includes("GameBus"));
+assert(mtT1Text.includes("3d_physics/layer_1"));
+assert(mtT1Text.includes('"maxTurns":6'));
+assert(!mtT1Text.includes("# ACTIVE FEATURE SPEC"), "Expected no duplicated godotContextMarkdown when featureSpec present");
+
+const t1ReadEntry = {
+  turn: 1,
+  tool: "read_script_slice",
+  args: { path: "res://scripts/player.gd", startLine: 1, endLine: 20 },
+  result: { ok: true, content: "extends CharacterBody3D\n@export var move_speed: float = 6.4" },
+};
+const t2InspectEntry = {
+  turn: 2,
+  tool: "inspect_scene_tree",
+  args: { path: "res://scenes/arena_proto.tscn" },
+  result: { ok: true, nodes: [{ path: ".", name: "ArenaProto", class: "Node3D" }] },
+};
+
+const mtPromptT2 = buildGodotMultiTurnPrompt({
+  ...mtBaseArgs,
+  turnIndex: 2,
+  toolHistory: [t1ReadEntry],
+});
+assert.strictEqual(mtPromptT2.systemInstruction, mtPromptT1.systemInstruction, "systemInstruction must stay byte-identical Turn 1 -> 2");
+assert.deepStrictEqual(mtPromptT2.contents.map((c) => c.role), ["user", "model", "user"]);
+assert.strictEqual(
+  mtPromptT2.contents[0].parts[0].text,
+  mtPromptT1.contents[0].parts[0].text,
+  "Turn-1 user prefix must stay byte-identical across Turn 2"
+);
+
+const mtPromptT3 = buildGodotMultiTurnPrompt({
+  ...mtBaseArgs,
+  turnIndex: 3,
+  toolHistory: [t1ReadEntry, t2InspectEntry],
+});
+assert.strictEqual(mtPromptT3.systemInstruction, mtPromptT1.systemInstruction, "systemInstruction must stay byte-identical Turn 1 -> 3");
+assert.deepStrictEqual(
+  mtPromptT3.contents.map((c) => c.role),
+  ["user", "model", "user", "model", "user"]
+);
+for (let i = 0; i < 3; i += 1) {
+  assert.deepStrictEqual(
+    mtPromptT3.contents[i],
+    mtPromptT2.contents[i],
+    `Expected prefix contents[${i}] to match byte-for-byte between Turn 2 and Turn 3`
+  );
+}
 
 const mtPromptT6 = buildGodotMultiTurnPrompt({
   mode: "fix_feature",
@@ -672,13 +724,17 @@ const mtPromptT6 = buildGodotMultiTurnPrompt({
 });
 assert.strictEqual(mtPromptT6.thinkingLevel, "MEDIUM");
 assert.strictEqual(mtPromptT6.forceFinal, true);
+assert(Array.isArray(mtPromptT6.contents) && mtPromptT6.contents.length === 3);
+assert.strictEqual(mtPromptT6.contents[0].role, "user");
+assert.strictEqual(mtPromptT6.contents[1].role, "model");
+assert.strictEqual(mtPromptT6.contents[2].role, "user");
+assert(mtPromptT6.contents[0].parts[0].text.includes("Parse Error at line 14"));
+assert(mtPromptT6.contents[1].parts[0].text.includes("read_script_slice"));
 assert(
-  mtPromptT6.systemInstruction.toLowerCase().includes("disabled") ||
-    mtPromptT6.systemInstruction.toLowerCase().includes("final"),
-  "Expected Turn 6 systemInstruction to disallow tool_calls and require final_bundle"
+  mtPromptT6.contents[2].parts[0].text.toLowerCase().includes("disabled") &&
+    mtPromptT6.contents[2].parts[0].text.includes("final_bundle"),
+  "Expected Turn 6 trailing user turn to disable tool_calls and require final_bundle"
 );
-assert(mtPromptT6.userPrompt.includes("Parse Error at line 14"));
-assert(mtPromptT6.userPrompt.includes("read_script_slice"));
 
 // (a) tool_calls step: strips disallowed tool, normalizes name/arguments aliases, caps at 4
 const rawStepCandidates = {

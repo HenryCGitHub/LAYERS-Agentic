@@ -2550,10 +2550,15 @@ async function callGeminiFlashJson({
   apiKey,
   systemInstruction,
   userPrompt,
+  contents = null,
   thinkingLevel = "LOW",
   maxOutputTokens = 16384,
 }) {
   const models = ["gemini-4-hydrogen", "gemini-flash-latest"];
+  const resolvedContents =
+    Array.isArray(contents) && contents.length > 0
+      ? contents
+      : [{ role: "user", parts: [{ text: userPrompt }] }];
   let lastError = "Gemini request failed.";
   for (const modelId of models) {
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${encodeURIComponent(
@@ -2561,7 +2566,7 @@ async function callGeminiFlashJson({
     )}`;
     const basePayload = {
       systemInstruction: { parts: [{ text: systemInstruction }] },
-      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      contents: resolvedContents,
       generationConfig: {
         temperature: 0.2,
         maxOutputTokens,
@@ -2932,15 +2937,13 @@ function buildGodotMultiTurnPrompt({
   });
   const sanitizedHistory = sanitizeToolHistoryJs(toolHistory);
 
-  const responseProtocolBlock = forceFinal
-    ? `MULTI-TURN PROTOCOL (Turn ${clampedTurnIndex}/${clampedMaxTurns} — FINAL TURN): Tool calls are disabled on this final turn. You MUST return { "type": "final_bundle", "thought": "concise summary", "bundle": { "mode": "${mode}", "summary": "...", "diagnosis": "...", "arenaScenePath": "...", "epicScenePath": "...", "scriptUpdates": [...], "sceneOps": [...], "inputOps": [...] } } now.`
-    : [
-        `MULTI-TURN PROTOCOL (Turn ${clampedTurnIndex}/${clampedMaxTurns}): Either inspect the Godot 4 project with read-only tools OR emit your final edit bundle.`,
-        `Option A — Request read-only project tools (max ${GODOT_MULTI_TURN_MAX_CALLS_PER_TURN} calls per turn):`,
-        '  { "type": "tool_calls", "thought": "what you are checking next", "toolCalls": [{ "tool": "<tool_name>", "args": { ... } }] }',
-        "Option B — Return final implementation/fix bundle when ready:",
-        `  { "type": "final_bundle", "thought": "brief summary", "bundle": { "mode": "${mode}", "summary": "...", "diagnosis": "...", "arenaScenePath": "...", "epicScenePath": "...", "scriptUpdates": [...], "sceneOps": [...], "inputOps": [...] } }`,
-      ].join("\n");
+  const responseProtocolBlock = [
+    `MULTI-TURN PROTOCOL (up to ${clampedMaxTurns} turns): Either inspect the Godot 4 project with read-only tools OR emit your final edit bundle.`,
+    `Option A — Request read-only project tools (max ${GODOT_MULTI_TURN_MAX_CALLS_PER_TURN} calls per turn; disabled on final turn ${clampedMaxTurns}/${clampedMaxTurns}):`,
+    '  { "type": "tool_calls", "thought": "what you are checking next", "toolCalls": [{ "tool": "<tool_name>", "args": { ... } }] }',
+    "Option B — Return final implementation/fix bundle when ready (required on final turn):",
+    `  { "type": "final_bundle", "thought": "brief summary", "bundle": { "mode": "${mode}", "summary": "...", "diagnosis": "...", "arenaScenePath": "...", "epicScenePath": "...", "scriptUpdates": [...], "sceneOps": [...], "inputOps": [...] } }`,
+  ].join("\n");
 
   const systemInstruction = [
     "You are LAYERS Godot 4 Feature Co-Builder targeting Godot 4.7.2.stable.",
@@ -2960,21 +2963,14 @@ function buildGodotMultiTurnPrompt({
     ...GODOT_AGENT_CORE_RULES,
   ].join("\n");
 
-  const turnTaskHeader = forceFinal
-    ? `${scope.taskHeader} [FINAL TURN ${clampedTurnIndex}/${clampedMaxTurns}: tool calls disabled — return final_bundle now]`
-    : `${scope.taskHeader} [Turn ${clampedTurnIndex}/${clampedMaxTurns}]`;
-
-  const contextPayload = {
+  const staticContextPayload = {
     mode,
     agentProtocol: "multi_turn_v1",
-    turnIndex: clampedTurnIndex,
     maxTurns: clampedMaxTurns,
-    forceFinal,
     dimension: scope.dimMeta.id,
     projectTitle: rootSpec?.normalizedTitle || "LAYERS Project",
     arenaScenePath: String(arenaScenePath || ""),
     epicScenePath: String(epicScenePath || ""),
-    godotContextMarkdown: String(godotContextMarkdown || "").slice(0, 16000),
     ...(featureSpec
       ? {
           epicArchitecture: scope.compactEpicArchitecture,
@@ -2984,6 +2980,7 @@ function buildGodotMultiTurnPrompt({
           preserveInputActions: scope.preserveInputActions,
         }
       : {
+          godotContextMarkdown: String(godotContextMarkdown || "").slice(0, 16000),
           epicSpec: epicSpec || {},
         }),
     userPrompt: String(prompt || "").trim(),
@@ -2993,7 +2990,6 @@ function buildGodotMultiTurnPrompt({
       projectManifest && typeof projectManifest === "object" && !Array.isArray(projectManifest)
         ? projectManifest
         : {},
-    toolHistory: sanitizedHistory,
     ...(Object.keys(mergedScripts).length ? { liveScripts: mergedScripts } : {}),
     ...(sceneSnapshot && typeof sceneSnapshot === "object" && Object.keys(sceneSnapshot).length
       ? { liveSceneSnapshot: sceneSnapshot }
@@ -3012,12 +3008,62 @@ function buildGodotMultiTurnPrompt({
     ? "PROJECT & FEATURE CONTEXT JSON:"
     : "PROJECT & EPIC CONTEXT JSON:";
 
-  const userPrompt = [turnTaskHeader, payloadLabel, JSON.stringify(contextPayload)].join(
-    "\n\n"
-  );
+  const initialUserText = [
+    scope.taskHeader,
+    payloadLabel,
+    JSON.stringify(staticContextPayload),
+  ].join("\n\n");
+
+  const contents = [{ role: "user", parts: [{ text: initialUserText }] }];
+  const entriesByTurn = new Map();
+  for (const entry of sanitizedHistory) {
+    const t = entry.turn;
+    if (!entriesByTurn.has(t)) entriesByTurn.set(t, []);
+    entriesByTurn.get(t).push(entry);
+  }
+  const sortedTurnNums = Array.from(entriesByTurn.keys()).sort((a, b) => a - b);
+
+  if (sortedTurnNums.length === 0 && forceFinal) {
+    contents[0].parts[0].text += `\n\nFINAL TURN (${clampedTurnIndex}/${clampedMaxTurns}): Tool calls are disabled now. Return final_bundle immediately.`;
+  } else {
+    sortedTurnNums.forEach((turnNum, idx) => {
+      const entries = entriesByTurn.get(turnNum);
+      contents.push({
+        role: "model",
+        parts: [
+          {
+            text: JSON.stringify({
+              type: "tool_calls",
+              toolCalls: entries.map((e) => ({ tool: e.tool, args: e.args })),
+            }),
+          },
+        ],
+      });
+      const isLastGroup = idx === sortedTurnNums.length - 1;
+      const nextTurnNum = isLastGroup
+        ? clampedTurnIndex
+        : Math.min(clampedMaxTurns, turnNum + 1);
+      const isFinalInstruction = isLastGroup && forceFinal;
+      const header = isFinalInstruction
+        ? `TOOL RESULTS (Turn ${turnNum}) — FINAL TURN ${clampedTurnIndex}/${clampedMaxTurns}: Tool calls are disabled now. Return final_bundle using the gathered evidence.`
+        : `TOOL RESULTS (Turn ${turnNum}) — Turn ${nextTurnNum}/${clampedMaxTurns}: Request up to ${GODOT_MULTI_TURN_MAX_CALLS_PER_TURN} more read-only tools or return final_bundle.`;
+      const body = JSON.stringify(
+        entries.map((e) => ({ tool: e.tool, args: e.args, result: e.result }))
+      );
+      contents.push({
+        role: "user",
+        parts: [{ text: `${header}\n\n${body}` }],
+      });
+    });
+  }
+
+  const userPrompt = contents
+    .map((c) => c.parts.map((p) => p.text).join("\n"))
+    .join("\n\n");
 
   return {
     systemInstruction,
+    contents,
     userPrompt,
     thinkingLevel: scope.isFixMode ? "MEDIUM" : "LOW",
     preserveExports: scope.preserveExports,
@@ -3213,6 +3259,7 @@ async function runGodotMultiTurnStepWithGemini({
     apiKey,
     systemInstruction: built.systemInstruction,
     userPrompt: built.userPrompt,
+    contents: built.contents,
     thinkingLevel: built.thinkingLevel,
     maxOutputTokens: 16384,
   });
