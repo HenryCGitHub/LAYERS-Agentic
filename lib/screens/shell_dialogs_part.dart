@@ -1,5 +1,40 @@
 part of '../main.dart';
 
+class _DisposableTextControllerScope extends StatefulWidget {
+  final String initialText;
+  final Widget Function(BuildContext context, TextEditingController controller)
+      builder;
+
+  const _DisposableTextControllerScope({
+    this.initialText = '',
+    required this.builder,
+  });
+
+  @override
+  State<_DisposableTextControllerScope> createState() =>
+      _DisposableTextControllerScopeState();
+}
+
+class _DisposableTextControllerScopeState
+    extends State<_DisposableTextControllerScope> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _controller);
+}
+
 extension _ShellDialogsExt on WorkbenchShell {
   void _showCloudSyncDialog(BuildContext context) {
     final isDark = workbench.isDark;
@@ -12,20 +47,24 @@ extension _ShellDialogsExt on WorkbenchShell {
     final textMuted = AppTheme.textMutedFor(isDark);
     final accentAmber = AppTheme.accentAmberFor(isDark);
 
-    final collabEmailCtrl = TextEditingController();
     String selectedCollabRole = 'editor';
     bool isSigningIn = false;
 
     showDialog<void>(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            final isSynced = workbench.isCloudSynced;
-            final projs = workbench.savedProjects;
-            final activeProj = workbench.activeProject;
-            final collabs = workbench.collaboratorsForProject(activeProj?.id);
-            return AlertDialog(
+        return _DisposableTextControllerScope(
+          builder: (ctx, collabEmailCtrl) {
+            return ListenableBuilder(
+              listenable: workbench,
+              builder: (ctx, _) {
+                return StatefulBuilder(
+                  builder: (ctx, setModalState) {
+                    final isSynced = workbench.isCloudSynced;
+                    final projs = workbench.savedProjects;
+                    final activeProj = workbench.activeProject;
+                    final collabs = workbench.collaboratorsForProject(activeProj?.id);
+                    return AlertDialog(
               backgroundColor: bgSurface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
@@ -523,9 +562,11 @@ extension _ShellDialogsExt on WorkbenchShell {
                             try {
                               await workbench.signInWithGoogle();
                             } finally {
-                              setModalState(() {
-                                isSigningIn = false;
-                              });
+                              if (ctx.mounted) {
+                                setModalState(() {
+                                  isSigningIn = false;
+                                });
+                              }
                             }
                           },
                     icon: isSigningIn
@@ -549,6 +590,10 @@ extension _ShellDialogsExt on WorkbenchShell {
                     ),
                   ),
               ],
+            );
+                  },
+                );
+              },
             );
           },
         );
@@ -580,7 +625,6 @@ extension _ShellDialogsExt on WorkbenchShell {
     final accentGreen = AppTheme.accentGreenFor(isDark);
     final accentRed = AppTheme.accentRedFor(isDark);
 
-    final emailController = TextEditingController();
     bool isSubmitting = false;
     String? feedbackText;
     bool feedbackOk = true;
@@ -588,33 +632,36 @@ extension _ShellDialogsExt on WorkbenchShell {
     showDialog<void>(
       context: context,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setModalState) {
-            Future<void> triggerInvite(
-              String rawEmail, {
-              bool resetStatus = false,
-            }) async {
-              if (isSubmitting) return;
-              setModalState(() {
-                isSubmitting = true;
-                feedbackText = null;
-              });
-              final res = await workbench.sendUserInvite(
-                rawEmail,
-                resetStatus: resetStatus,
-              );
-              if (res.ok && res.inviteUrl != null && !res.emailSent) {
-                await Clipboard.setData(ClipboardData(text: res.inviteUrl!));
-              }
-              if (res.ok && rawEmail == emailController.text) {
-                emailController.clear();
-              }
-              setModalState(() {
-                isSubmitting = false;
-                feedbackOk = res.ok;
-                feedbackText = res.message;
-              });
-            }
+        return _DisposableTextControllerScope(
+          builder: (ctx, emailController) {
+            return StatefulBuilder(
+              builder: (ctx, setModalState) {
+                Future<void> triggerInvite(
+                  String rawEmail, {
+                  bool resetStatus = false,
+                }) async {
+                  if (isSubmitting) return;
+                  setModalState(() {
+                    isSubmitting = true;
+                    feedbackText = null;
+                  });
+                  final res = await workbench.sendUserInvite(
+                    rawEmail,
+                    resetStatus: resetStatus,
+                  );
+                  if (res.ok && res.inviteUrl != null && !res.emailSent) {
+                    await Clipboard.setData(ClipboardData(text: res.inviteUrl!));
+                  }
+                  if (!ctx.mounted) return;
+                  if (res.ok && rawEmail == emailController.text) {
+                    emailController.clear();
+                  }
+                  setModalState(() {
+                    isSubmitting = false;
+                    feedbackOk = res.ok;
+                    feedbackText = res.message;
+                  });
+                }
 
             return ListenableBuilder(
               listenable: workbench,
@@ -1130,6 +1177,8 @@ extension _ShellDialogsExt on WorkbenchShell {
             );
           },
         );
+          },
+        );
       },
     );
   }
@@ -1142,46 +1191,48 @@ extension _ShellDialogsExt on WorkbenchShell {
     final bgSurface = AppTheme.bgSurfaceFor(isDark);
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
-    final ctrl = TextEditingController(text: proj.title);
     final newTitle = await showDialog<String>(
       context: context,
-      builder: (rCtx) => AlertDialog(
-        backgroundColor: bgSurface,
-        title: Text(
-          'Rename Project',
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: textPrimary,
+      builder: (rCtx) => _DisposableTextControllerScope(
+        initialText: proj.title,
+        builder: (rCtx, ctrl) => AlertDialog(
+          backgroundColor: bgSurface,
+          title: Text(
+            'Rename Project',
+            style: GoogleFonts.inter(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: textPrimary,
+            ),
           ),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
+            onSubmitted: (v) => Navigator.of(rCtx).pop(v),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(rCtx).pop(),
+              child: Text(
+                'Cancel',
+                style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF10B981),
+                foregroundColor: const Color(0xFF06281E),
+                elevation: 0,
+              ),
+              onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
+              child: Text(
+                'Save',
+                style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
         ),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          style: GoogleFonts.inter(fontSize: 13, color: textPrimary),
-          onSubmitted: (v) => Navigator.of(rCtx).pop(v),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(rCtx).pop(),
-            child: Text(
-              'Cancel',
-              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
-            ),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
-              foregroundColor: const Color(0xFF06281E),
-              elevation: 0,
-            ),
-            onPressed: () => Navigator.of(rCtx).pop(ctrl.text),
-            child: Text(
-              'Save',
-              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
-            ),
-          ),
-        ],
       ),
     );
     if (newTitle != null && newTitle.trim().isNotEmpty) {

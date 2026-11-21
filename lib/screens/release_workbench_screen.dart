@@ -56,6 +56,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       _lastSelectionKey = selectionKey;
       _showAddFeatureForm = false;
       _passGateHint = null;
+      _fixInputController.clear();
+      _newFeatureTitleController.clear();
+      _newFeatureGoalController.clear();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_specScrollController.hasClients) {
           _specScrollController.jumpTo(0);
@@ -1735,7 +1738,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                   children: [
                     for (int i = 0; i < feat.tuning.length; i++)
                       _LiveTuningChip(
-                        key: ValueKey('tuning_chip_${feat.id}_$i'),
+                        key: ValueKey(
+                          'tuning_chip_${wb.activeReleaseId}_${feat.id}_${feat.tuning[i].key}_$i',
+                        ),
                         inputKey: ValueKey('tuning_input_${feat.id}_$i'),
                         param: feat.tuning[i],
                         isDark: isDark,
@@ -2193,8 +2198,11 @@ class _LiveTuningChipState extends State<_LiveTuningChip> {
   void didUpdateWidget(covariant _LiveTuningChip oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.param.value != widget.param.value &&
-        _controller.text != widget.param.value) {
-      _controller.text = widget.param.value;
+        _controller.text.trim() != widget.param.value.trim()) {
+      _controller.value = TextEditingValue(
+        text: widget.param.value,
+        selection: TextSelection.collapsed(offset: widget.param.value.length),
+      );
     }
   }
 

@@ -35,12 +35,24 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   bool _editingPitch = false;
   bool _addingCut = false;
   String? _editingFeatureId;
+  String? _lastActiveProjectId;
 
   void _resetInlineEditFlags() {
     _editingTitle = false;
     _editingPitch = false;
     _addingCut = false;
     _editingFeatureId = null;
+  }
+
+  void _clearInlineControllers({bool includeSpark = false}) {
+    _titleController.clear();
+    _pitchController.clear();
+    _cutController.clear();
+    _featureTitleController.clear();
+    _coDesignController.clear();
+    if (includeSpark) {
+      _sparkController.clear();
+    }
   }
 
   @override
@@ -59,6 +71,22 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     final wb = widget.workbench;
     final draft = wb.conceptDraft;
     final hasSpec = draft != null && draft.hasSpec;
+    if (_lastActiveProjectId != wb.activeProjectId ||
+        (!hasSpec &&
+            (_editingTitle ||
+                _editingPitch ||
+                _addingCut ||
+                _editingFeatureId != null))) {
+      final projectChanged = _lastActiveProjectId != null &&
+          _lastActiveProjectId != wb.activeProjectId;
+      _lastActiveProjectId = wb.activeProjectId;
+      _resetInlineEditFlags();
+      _clearInlineControllers(
+        includeSpark: projectChanged &&
+            !hasSpec &&
+            (draft == null || draft.sparkPrompt.isEmpty),
+      );
+    }
     final isDark = wb.isDark;
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
@@ -455,7 +483,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             isDark: isDark,
             textPrimary: textPrimary,
             retryKey: const ValueKey('stage1_intake_retry_btn'),
-            onRetry: () => wb.handleStage1SparkSubmit(_sparkController.text),
+            onRetry: () => wb.pendingSparkClarification != null
+                ? wb.confirmSparkClarification()
+                : wb.handleStage1SparkSubmit(_sparkController.text),
           ),
         ],
         if (wb.pendingSparkClarification != null) ...[
@@ -490,7 +520,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 ),
                 onPressed: wb.isAgentBusy
                     ? null
-                    : () => wb.loadPresetSpark(preset.id),
+                    : () {
+                        setState(_resetInlineEditFlags);
+                        _clearInlineControllers();
+                        wb.loadPresetSpark(preset.id);
+                      },
               ),
           ],
         ),
@@ -583,7 +617,8 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
                 icon: Icon(Icons.close_rounded, size: 15, color: textMuted),
-                onPressed: wb.dismissSparkClarification,
+                onPressed:
+                    wb.isAgentBusy ? null : wb.dismissSparkClarification,
               ),
             ],
           ),
@@ -790,7 +825,11 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 key: const ValueKey('stage1_undo_btn'),
                 onPressed: (wb.isAgentBusy || !wb.canUndoStage1)
                     ? null
-                    : wb.undoStage1Edit,
+                    : () {
+                        setState(_resetInlineEditFlags);
+                        _clearInlineControllers();
+                        wb.undoStage1Edit();
+                      },
                 icon: const Icon(Icons.undo_rounded, size: 15),
                 label: const Text('Undo'),
               ),
@@ -1128,7 +1167,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       key: ValueKey('camera_opt_${opt.id}'),
                       label: Text(opt.label),
                       selected: spec.cameraChoiceId == opt.id,
-                      onSelected: (_) => wb.selectCameraDecisionOption(opt.id),
+                      onSelected: wb.isAgentBusy
+                          ? null
+                          : (_) => wb.selectCameraDecisionOption(opt.id),
                     ),
                 ],
               ),
@@ -1169,7 +1210,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       key: ValueKey('feel_opt_${opt.id}'),
                       label: Text(opt.label),
                       selected: spec.feelChoiceId == opt.id,
-                      onSelected: (_) => wb.selectCoreFeelOption(opt.id),
+                      onSelected: wb.isAgentBusy
+                          ? null
+                          : (_) => wb.selectCoreFeelOption(opt.id),
                     ),
                 ],
               ),
@@ -1771,8 +1814,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       minHeight: 26,
                     ),
                     iconSize: 16,
-                    color: index > 0 ? textSecondary : textMuted.withValues(alpha: 0.3),
-                    onPressed: index > 0
+                    color: (!wb.isAgentBusy && index > 0)
+                        ? textSecondary
+                        : textMuted.withValues(alpha: 0.3),
+                    onPressed: (!wb.isAgentBusy && index > 0)
                         ? () => wb.moveInitialEpic(index, -1)
                         : null,
                     icon: const Icon(Icons.keyboard_arrow_up_rounded),
@@ -1787,10 +1832,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       minHeight: 26,
                     ),
                     iconSize: 16,
-                    color: index < spec.initialEpics.length - 1
+                    color: (!wb.isAgentBusy &&
+                            index < spec.initialEpics.length - 1)
                         ? textSecondary
                         : textMuted.withValues(alpha: 0.3),
-                    onPressed: index < spec.initialEpics.length - 1
+                    onPressed: (!wb.isAgentBusy &&
+                            index < spec.initialEpics.length - 1)
                         ? () => wb.moveInitialEpic(index, 1)
                         : null,
                     icon: const Icon(Icons.keyboard_arrow_down_rounded),
@@ -1805,10 +1852,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                       minHeight: 26,
                     ),
                     iconSize: 15,
-                    color: spec.initialEpics.length > 1
+                    color: (!wb.isAgentBusy && spec.initialEpics.length > 1)
                         ? AppTheme.accentRedFor(isDark)
                         : textMuted.withValues(alpha: 0.3),
-                    onPressed: spec.initialEpics.length > 1
+                    onPressed: (!wb.isAgentBusy && spec.initialEpics.length > 1)
                         ? () => wb.removeInitialEpicAt(index)
                         : null,
                     icon: const Icon(Icons.close_rounded),

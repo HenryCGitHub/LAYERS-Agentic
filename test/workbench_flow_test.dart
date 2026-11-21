@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
+import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
@@ -1572,6 +1573,167 @@ void main() {
         expect(wb.activeProjectId, equals(draftNewProjId));
         expect(wb.showingSparkPicker, isTrue);
         expect(wb.activeProjectId, isNot(equals(projId)));
+      },
+    );
+
+    testWidgets(
+      'Stage 1 & Stage 2 UI state hygiene: resets inline edits/fix inputs on project/feature switch, preserves clarification picks on Retry, guards busy controls, keeps tuning cursor & updates Cloud Sync modal live',
+      (tester) async {
+        tester.view.physicalSize = const Size(1400, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+
+        try {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..updateAiConfig(apiKey: 'test-key-1234');
+          String capturedPrompt = '';
+
+          // 1) Clarification picks survive AI failure & Retry re-submits them
+          GeminiAgentClient.testMockResponder = (prompt, model) async => null;
+          await wb.handleStage1SparkSubmit('robot arena');
+          expect(wb.pendingSparkClarification, isNotNull);
+          final chosenArch = SparkClarificationDraft.archetypeOptions.last;
+          wb.updateSparkClarification(archetypeId: chosenArch.id);
+          final failedDraft = await wb.confirmSparkClarification();
+          expect(failedDraft, isNull);
+          expect(wb.pendingSparkClarification, isNotNull);
+          expect(
+            wb.pendingSparkClarification!.archetypeId,
+            equals(chosenArch.id),
+          );
+
+          final seedSb = GodotSparkPresets.byId('shellbreaker');
+          GeminiAgentClient.testMockResponder = (prompt, model) async {
+            capturedPrompt = prompt;
+            return seedSb.toJson();
+          };
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          final retryBtn = find.byKey(const ValueKey('stage1_intake_retry_btn'));
+          expect(retryBtn, findsOneWidget);
+          await tester.ensureVisible(retryBtn);
+          await tester.tap(retryBtn);
+          await tester.pumpAndSettle();
+
+          expect(wb.conceptDraft?.hasSpec, isTrue);
+          expect(capturedPrompt, contains(chosenArch.label));
+
+          // 2) Stage 1 inline edit closes cleanly when switching projects / loading preset
+          final editPitchBtn =
+              find.byKey(const ValueKey('stage1_edit_pitch_btn'));
+          await tester.ensureVisible(editPitchBtn);
+          await tester.tap(editPitchBtn);
+          await tester.pump();
+          expect(
+            find.byKey(const ValueKey('stage1_pitch_input')),
+            findsOneWidget,
+          );
+
+          wb.createNewProject();
+          wb.loadPresetSpark('emberkeep');
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('stage1_pitch_input')),
+            findsNothing,
+          );
+
+          // 3) Stage 1 ChoiceChips & Epic reorder/remove buttons disable while isAgentBusy
+          wb.setAgentBusyForTest(true);
+          await tester.pump();
+          final camChip = tester.widget<ChoiceChip>(
+            find.byKey(
+              ValueKey(
+                'camera_opt_${wb.conceptDraft!.effectiveCameraDecisionOptions.first.id}',
+              ),
+            ),
+          );
+          final feelChip = tester.widget<ChoiceChip>(
+            find.byKey(
+              ValueKey(
+                'feel_opt_${ProjectConceptBlueprint.coreFeelOptions.first.id}',
+              ),
+            ),
+          );
+          final downBtn = tester.widget<IconButton>(
+            find.byKey(const ValueKey('stage1_epic_down_0')),
+          );
+          final removeBtn = tester.widget<IconButton>(
+            find.byKey(const ValueKey('stage1_epic_remove_0')),
+          );
+          expect(camChip.onSelected, isNull);
+          expect(feelChip.onSelected, isNull);
+          expect(downBtn.onPressed, isNull);
+          expect(removeBtn.onPressed, isNull);
+          wb.setAgentBusyForTest(false);
+          await tester.pump();
+
+          // 4) Stage 2 clears unsent Fix input on Feature switch & keeps tuning cursor sane
+          wb.loadPresetSpark('shellbreaker');
+          wb.approveRootSpecAndLaunchWorkbench();
+          await tester.pumpAndSettle();
+          final e01 = wb.activeReleaseEpics.first;
+          final initialFeatId = wb.selectedFeatureId;
+          final nextFeat = e01.features.firstWhere((f) => f.id != initialFeatId);
+
+          final tuningFinder = find.byKey(
+            ValueKey('tuning_input_${initialFeatId}_0'),
+          );
+          await tester.ensureVisible(tuningFinder);
+          final tuningBefore = tester.widget<TextField>(tuningFinder).controller!.text;
+          await tester.enterText(tuningFinder, '$tuningBefore ');
+          await tester.pump();
+          expect(
+            tester.widget<TextField>(tuningFinder).controller!.selection.baseOffset,
+            equals('$tuningBefore '.length),
+          );
+
+          final fixFieldFinder = find.byKey(const ValueKey('flag_fix_input'));
+          await tester.ensureVisible(fixFieldFinder);
+          await tester.enterText(fixFieldFinder, 'Stale draft fix');
+          await tester.pump();
+          expect(
+            tester.widget<TextField>(fixFieldFinder).controller!.text,
+            equals('Stale draft fix'),
+          );
+
+          wb.selectFeature(e01.id, nextFeat.id);
+          await tester.pumpAndSettle();
+          expect(
+            tester.widget<TextField>(fixFieldFinder).controller!.text,
+            equals(''),
+          );
+
+          // 5) Cloud Sync dialog updates live via ListenableBuilder and disposes cleanly
+          await tester.tap(find.byKey(const ValueKey('cloud_sync_auth_btn')));
+          await tester.pumpAndSettle();
+          expect(find.textContaining('SAVED PROJECTS IN VAULT'), findsOneWidget);
+
+          wb.renameProject(wb.activeProjectId!, 'RENAMED LIVE VAULT');
+          await tester.pump();
+          expect(
+            find.descendant(
+              of: find.byType(AlertDialog),
+              matching: find.text('RENAMED LIVE VAULT'),
+            ),
+            findsOneWidget,
+          );
+
+          Navigator.of(tester.element(find.byType(AlertDialog))).pop();
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+        }
       },
     );
   });

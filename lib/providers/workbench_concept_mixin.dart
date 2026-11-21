@@ -161,22 +161,28 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }) async {
     final pending = _pendingSparkClarification;
     if (pending == null || _isAgentBusy) return null;
+    final savedPending = pending;
     _pendingSparkClarification = null;
     _stage1InlineError = null;
     notifyListeners();
-    if (skipPicks) {
-      return generateSpecFromSpark(
-        pending.rawSpark,
-        explicitDimension: _userPinnedDimension ? projectDimension : null,
-      );
+    final ProjectConceptBlueprint? result = skipPicks
+        ? await generateSpecFromSpark(
+            savedPending.rawSpark,
+            explicitDimension: _userPinnedDimension ? projectDimension : null,
+          )
+        : await generateSpecFromSpark(
+            savedPending.buildEnrichedSpark(),
+            explicitDimension: savedPending.dimension,
+            archetypeId: savedPending.archetypeId,
+            viewChoiceId: savedPending.viewChoiceId,
+            prototypeHookId: savedPending.prototypeHookId,
+          );
+    if (result == null &&
+        (_conceptDraft == null || !_conceptDraft!.hasSpec)) {
+      _pendingSparkClarification = savedPending;
+      notifyListeners();
     }
-    return generateSpecFromSpark(
-      pending.buildEnrichedSpark(),
-      explicitDimension: pending.dimension,
-      archetypeId: pending.archetypeId,
-      viewChoiceId: pending.viewChoiceId,
-      prototypeHookId: pending.prototypeHookId,
-    );
+    return result;
   }
 
   Future<ProjectConceptBlueprint?> generateSpecFromSpark(

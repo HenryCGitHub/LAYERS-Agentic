@@ -68,7 +68,6 @@ extension _WorkbenchShellExporters on WorkbenchShell {
 
   Future<void> _showImportProjectJsonDialog(BuildContext context) async {
     final wb = workbench;
-    final controller = TextEditingController();
     final isDark = wb.isDark;
     final primary = AppTheme.textPrimaryFor(isDark);
     final muted = AppTheme.textMutedFor(isDark);
@@ -76,51 +75,52 @@ extension _WorkbenchShellExporters on WorkbenchShell {
     await showDialog<void>(
       context: context,
       builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: AppTheme.bgSurfaceRaisedFor(isDark),
-          title: Text('Import .layers.json Backup', style: TextStyle(color: primary)),
-          content: SizedBox(
-            width: 480,
-            child: TextField(
-              controller: controller,
-              maxLines: 8,
-              style: GoogleFonts.jetBrainsMono(fontSize: 12, color: primary),
-              decoration: InputDecoration(
-                hintText: 'Paste exported .layers.json contents here...',
-                hintStyle: TextStyle(color: muted, fontSize: 12),
+        return _DisposableTextControllerScope(
+          builder: (dialogCtx, controller) => AlertDialog(
+            backgroundColor: AppTheme.bgSurfaceRaisedFor(isDark),
+            title: Text('Import .layers.json Backup', style: TextStyle(color: primary)),
+            content: SizedBox(
+              width: 480,
+              child: TextField(
+                controller: controller,
+                maxLines: 8,
+                style: GoogleFonts.jetBrainsMono(fontSize: 12, color: primary),
+                decoration: InputDecoration(
+                  hintText: 'Paste exported .layers.json contents here...',
+                  hintStyle: TextStyle(color: muted, fontSize: 12),
+                ),
               ),
             ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  final importedId = wb.importProjectFromJson(controller.text);
+                  if (importedId != null) {
+                    Navigator.of(dialogCtx).pop();
+                    AppToast.show(
+                      context,
+                      'Imported project cleanly.',
+                      isDark: isDark,
+                    );
+                  } else {
+                    AppToast.show(
+                      dialogCtx,
+                      'Invalid .layers.json payload.',
+                      isDark: isDark,
+                      accentColor: AppTheme.accentRedFor(isDark),
+                    );
+                  }
+                },
+                child: const Text('Import Project'),
+              ),
+            ],
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(dialogCtx).pop(),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                final importedId = wb.importProjectFromJson(controller.text);
-                if (importedId != null) {
-                  Navigator.of(dialogCtx).pop();
-                  AppToast.show(
-                    context,
-                    'Imported project cleanly.',
-                    isDark: isDark,
-                  );
-                } else {
-                  AppToast.show(
-                    dialogCtx,
-                    'Invalid .layers.json payload.',
-                    isDark: isDark,
-                    accentColor: AppTheme.accentRedFor(isDark),
-                  );
-                }
-              },
-              child: const Text('Import Project'),
-            ),
-          ],
         );
       },
     );
-    controller.dispose();
   }
 }
