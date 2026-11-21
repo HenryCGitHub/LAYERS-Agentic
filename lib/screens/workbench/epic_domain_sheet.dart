@@ -1,7 +1,78 @@
-part of 'release_workbench_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../models/epic_spec.dart';
+import '../../providers/workbench_provider.dart';
+import '../../theme/app_theme.dart';
+import 'workbench_shared_widgets.dart';
 
-extension _WorkbenchEpicSheetPart on _ReleaseWorkbenchScreenState {
-  Widget _buildEpicDomainSheet(
+class EpicDomainSheet extends StatefulWidget {
+  final WorkbenchProvider workbench;
+  final EpicSpec epic;
+  final bool isDark;
+  final String selectionKey;
+
+  const EpicDomainSheet({
+    super.key,
+    required this.workbench,
+    required this.epic,
+    required this.isDark,
+    required this.selectionKey,
+  });
+
+  @override
+  State<EpicDomainSheet> createState() => _EpicDomainSheetState();
+}
+
+class _EpicDomainSheetState extends State<EpicDomainSheet> {
+  final TextEditingController _newFeatureTitleController =
+      TextEditingController();
+  final TextEditingController _newFeatureGoalController =
+      TextEditingController();
+
+  bool _showAddFeatureForm = false;
+
+  @override
+  void didUpdateWidget(covariant EpicDomainSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectionKey != widget.selectionKey) {
+      _showAddFeatureForm = false;
+      _newFeatureTitleController.clear();
+      _newFeatureGoalController.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    _newFeatureTitleController.dispose();
+    _newFeatureGoalController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = AppTheme.textPrimaryFor(widget.isDark);
+    final secondary = AppTheme.textSecondaryFor(widget.isDark);
+    final muted = AppTheme.textMutedFor(widget.isDark);
+    final border = AppTheme.borderFor(widget.isDark);
+    final cyan = AppTheme.accentCyanFor(widget.isDark);
+    final green = AppTheme.accentGreenFor(widget.isDark);
+    final red = AppTheme.accentRedFor(widget.isDark);
+    return _buildSheetContent(
+      context,
+      widget.workbench,
+      widget.epic,
+      widget.isDark,
+      primary,
+      secondary,
+      muted,
+      border,
+      cyan,
+      green,
+      red,
+    );
+  }
+
+  Widget _buildSheetContent(
     BuildContext context,
     WorkbenchProvider wb,
     EpicSpec epic,
@@ -24,7 +95,7 @@ extension _WorkbenchEpicSheetPart on _ReleaseWorkbenchScreenState {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // §01 Domain Scope (Zero Feature Duplication)
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§01',
           title: 'Domain Scope (Zero Feature Duplication)',
@@ -112,7 +183,7 @@ extension _WorkbenchEpicSheetPart on _ReleaseWorkbenchScreenState {
         const SizedBox(height: 14),
 
         // §02 Shared Scene & Script Ownership
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§02',
           title: 'Shared Scene & Script Ownership',
@@ -175,7 +246,7 @@ extension _WorkbenchEpicSheetPart on _ReleaseWorkbenchScreenState {
         const SizedBox(height: 14),
 
         // §03 Shared State & Interrupt Rules
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§03',
           title: 'Shared State & Interrupt Rules',
@@ -233,7 +304,7 @@ extension _WorkbenchEpicSheetPart on _ReleaseWorkbenchScreenState {
         const SizedBox(height: 14),
 
         // §04 Domain Out-of-Scope Cuts
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§04',
           title: 'Domain Out-of-Scope Cuts',
@@ -268,14 +339,14 @@ extension _WorkbenchEpicSheetPart on _ReleaseWorkbenchScreenState {
         const SizedBox(height: 14),
 
         // §05 Child Features + Add Feature Slice
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§05',
           title: 'Child Features in ${epic.code} ($relVer)',
           trailing: OutlinedButton.icon(
             key: const ValueKey('show_add_feature_btn'),
             onPressed: () =>
-                _mutateUi(() => _showAddFeatureForm = !_showAddFeatureForm),
+                setState(() => _showAddFeatureForm = !_showAddFeatureForm),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size(0, 30),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -336,7 +407,7 @@ extension _WorkbenchEpicSheetPart on _ReleaseWorkbenchScreenState {
                             onPressed: () {
                               _newFeatureTitleController.clear();
                               _newFeatureGoalController.clear();
-                              _mutateUi(() => _showAddFeatureForm = false);
+                              setState(() => _showAddFeatureForm = false);
                             },
                             child: const Text('Cancel'),
                           ),
@@ -355,7 +426,7 @@ extension _WorkbenchEpicSheetPart on _ReleaseWorkbenchScreenState {
                               );
                               _newFeatureTitleController.clear();
                               _newFeatureGoalController.clear();
-                              _mutateUi(() => _showAddFeatureForm = false);
+                              setState(() => _showAddFeatureForm = false);
                             },
                             child: const Text(
                               'Create Feature Slice →',

@@ -2542,7 +2542,7 @@ console.log(JSON.stringify({
     );
 
     testWidgets(
-      '25. Stage 1 & Stage 2 screen files stay modular (<= 1120 lines each) with Epic Domain Sheet, Feature Spec Sheet & Stage 1 UI parity',
+      '25. Flutter shell, Stage 1 & Stage 2 use standalone widget modules (<= 950 lines each, zero part files) with UI parity',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 1000);
         tester.view.devicePixelRatio = 1.0;
@@ -2556,7 +2556,7 @@ console.log(JSON.stringify({
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
         await tester.pumpAndSettle();
 
-        // Stage 1 widgets & Clean Spec Document part parity
+        // Stage 1 widgets & Clean Spec Document parity
         expect(find.byKey(const ValueKey('stage1_dim_3d')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage1_dim_2d')), findsOneWidget);
         expect(
@@ -2573,7 +2573,7 @@ console.log(JSON.stringify({
         expect(find.text('Feature Scope'), findsOneWidget);
         expect(find.text('Playtest Gate & [FIX] Notes'), findsOneWidget);
 
-        // Select parent Epic Domain & exercise inline _mutateUi toggle
+        // Select parent Epic Domain & exercise inline add-slice toggle
         wb.selectEpic(wb.activeReleaseEpics.first.id);
         await tester.pumpAndSettle();
         expect(
@@ -2590,39 +2590,58 @@ console.log(JSON.stringify({
         await tester.pumpWidget(const SizedBox.shrink());
         wb.dispose();
 
-        const expectedParts = <String>[
-          'lib/screens/workbench_epic_sheet_part.dart',
-          'lib/screens/workbench_feature_sheet_part.dart',
-          'lib/screens/workbench_widgets_part.dart',
-          'lib/screens/stage1_spec_document_part.dart',
-          'lib/screens/stage1_widgets_part.dart',
+        const expectedModules = <String>[
+          'lib/screens/shell/studio_top_bar.dart',
+          'lib/screens/shell/cloud_ai_settings_dialog.dart',
+          'lib/screens/shell/team_invites_dialog.dart',
+          'lib/screens/shell/project_manage_dialogs.dart',
+          'lib/screens/shell/studio_export_actions.dart',
+          'lib/screens/stage1/stage1_spec_document.dart',
+          'lib/screens/stage1/stage1_shared_widgets.dart',
+          'lib/screens/workbench/workbench_outliner_rail.dart',
+          'lib/screens/workbench/epic_domain_sheet.dart',
+          'lib/screens/workbench/feature_spec_sheet.dart',
+          'lib/screens/workbench/progressive_release_modal.dart',
+          'lib/screens/workbench/workbench_shared_widgets.dart',
         ];
-        for (final path in expectedParts) {
-          final partFile = File(path);
-          expect(partFile.existsSync(), isTrue, reason: '$path should exist');
+        for (final path in expectedModules) {
+          final modFile = File(path);
+          expect(modFile.existsSync(), isTrue, reason: '$path should exist');
           expect(
-            partFile.readAsLinesSync().length,
-            greaterThan(50),
-            reason: '$path should hold extracted part code',
+            modFile.readAsLinesSync().length,
+            greaterThan(30),
+            reason: '$path should hold standalone module code',
           );
         }
 
-        final releaseLines = File(
-          'lib/screens/release_workbench_screen.dart',
-        ).readAsLinesSync().length;
-        final pitchLines = File(
-          'lib/screens/project_pitch_screen.dart',
-        ).readAsLinesSync().length;
-        expect(releaseLines, lessThanOrEqualTo(1120));
-        expect(pitchLines, lessThanOrEqualTo(1060));
+        final mainText = File('lib/main.dart').readAsStringSync();
+        final mainLines = File('lib/main.dart').readAsLinesSync().length;
+        expect(mainLines, lessThanOrEqualTo(250));
+        final partPattern = RegExp(
+          r'''^\s*part\s+(of\s+)?['"]''',
+          multiLine: true,
+        );
+        expect(partPattern.hasMatch(mainText), isFalse);
 
-        for (final entity in Directory('lib/screens').listSync()) {
+        for (final entity in Directory('lib/screens').listSync(recursive: true)) {
           if (entity is File && entity.path.endsWith('.dart')) {
+            final normalizedPath = entity.path.replaceAll('\\', '/');
+            expect(
+              normalizedPath.endsWith('_part.dart'),
+              isFalse,
+              reason: '$normalizedPath should be removed',
+            );
+            final contents = entity.readAsStringSync();
+            expect(
+              partPattern.hasMatch(contents),
+              isFalse,
+              reason: '$normalizedPath should not contain part/part of',
+            );
             final lineCount = entity.readAsLinesSync().length;
             expect(
               lineCount,
-              lessThanOrEqualTo(1350),
-              reason: '${entity.path} has $lineCount lines',
+              lessThanOrEqualTo(950),
+              reason: '$normalizedPath has $lineCount lines',
             );
           }
         }

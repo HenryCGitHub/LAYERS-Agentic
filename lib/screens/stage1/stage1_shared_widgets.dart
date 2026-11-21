@@ -1,11 +1,15 @@
-part of 'project_pitch_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../models/epic_spec.dart';
+import '../../theme/app_theme.dart';
 
-class _GodotDimensionToggle extends StatelessWidget {
+class GodotDimensionToggle extends StatelessWidget {
   final GodotProjectDimension dimension;
   final bool isDark;
   final ValueChanged<GodotProjectDimension>? onChanged;
 
-  const _GodotDimensionToggle({
+  const GodotDimensionToggle({
+    super.key,
     required this.dimension,
     required this.isDark,
     required this.onChanged,
@@ -73,14 +77,15 @@ class _GodotDimensionToggle extends StatelessWidget {
   }
 }
 
-class _SectionCard extends StatelessWidget {
+class Stage1SectionCard extends StatelessWidget {
   final bool isDark;
   final String code;
   final String title;
   final Widget child;
   final bool isUpdated;
 
-  const _SectionCard({
+  const Stage1SectionCard({
+    super.key,
     required this.isDark,
     required this.code,
     required this.title,
@@ -158,13 +163,14 @@ class _SectionCard extends StatelessWidget {
   }
 }
 
-class _ContractRow extends StatelessWidget {
+class Stage1ContractRow extends StatelessWidget {
   final String label;
   final String value;
   final bool isDark;
   final bool isLast;
 
-  const _ContractRow({
+  const Stage1ContractRow({
+    super.key,
     required this.label,
     required this.value,
     required this.isDark,
@@ -208,5 +214,115 @@ class _ContractRow extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class Stage1EmptyBlueprintOutline extends StatelessWidget {
+  final bool isDark;
+
+  const Stage1EmptyBlueprintOutline({super.key, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final border = AppTheme.borderFor(isDark);
+    final cyan = AppTheme.accentCyanFor(isDark);
+      const sections = <(String, String, String)>[
+        (
+          '§01',
+          'Core Fantasy & 30s Loop',
+          '1-sentence game vision and 4 playable gameplay beats.',
+        ),
+        (
+          '§02',
+          'Global Godot 4 Scale & Architecture (3D m | 2D px)',
+          'Camera framing fork (3D SpringArm3D or 2D Camera2D), scale, and InputMap actions.',
+        ),
+        (
+          '§03',
+          'Core Feel, Design Pillars & Conflict Trade-Offs',
+          'Movement feel toggle (Snappy Arcade, Heavy Deliberate, Physics Momentum) and OVER rules.',
+        ),
+        (
+          '§04',
+          'Hard Scope Cuts (Do Not Build)',
+          'Explicit exclusions keeping v0.1 free of menus, save systems, and networking bloat.',
+        ),
+        (
+          '§05',
+          'Seeded Epics & Initial v0.1 Feature Slices',
+          'Large-Domain E01–E0N Epics holding playable 30–90 min v0.1 Feature slices.',
+        ),
+      ];
+
+      return Container(
+        key: const ValueKey('stage1_blueprint_empty_outline'),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurfaceFor(isDark),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(color: border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'PROJECT BLUEPRINT PREVIEW · §01–§05',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: textMuted,
+              ),
+            ),
+            const SizedBox(height: 10),
+            for (int i = 0; i < sections.length; i++)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: i == sections.length - 1
+                    ? null
+                    : BoxDecoration(
+                        border: Border(bottom: BorderSide(color: border)),
+                      ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SizedBox(
+                      width: 38,
+                      child: Text(
+                        sections[i].$1,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: cyan.withValues(alpha: 0.75),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            sections[i].$2,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            sections[i].$3,
+                            style: TextStyle(fontSize: 12, color: textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
   }
 }

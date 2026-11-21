@@ -1,7 +1,80 @@
-part of 'release_workbench_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../models/epic_spec.dart';
+import '../../providers/workbench_provider.dart';
+import '../../theme/app_theme.dart';
+import 'workbench_shared_widgets.dart';
 
-extension _WorkbenchFeatureSheetPart on _ReleaseWorkbenchScreenState {
-  Widget _buildFeatureSpecSheet(
+class FeatureSpecSheet extends StatefulWidget {
+  final WorkbenchProvider workbench;
+  final EpicSpec epic;
+  final FeatureSpec feature;
+  final bool isLockedBaseline;
+  final bool isDark;
+  final String selectionKey;
+  final String? passGateHint;
+
+  const FeatureSpecSheet({
+    super.key,
+    required this.workbench,
+    required this.epic,
+    required this.feature,
+    required this.isLockedBaseline,
+    required this.isDark,
+    required this.selectionKey,
+    required this.passGateHint,
+  });
+
+  @override
+  State<FeatureSpecSheet> createState() => _FeatureSpecSheetState();
+}
+
+class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
+  final TextEditingController _fixInputController = TextEditingController();
+
+  @override
+  void didUpdateWidget(covariant FeatureSpecSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectionKey != widget.selectionKey) {
+      _fixInputController.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    _fixInputController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = AppTheme.textPrimaryFor(widget.isDark);
+    final secondary = AppTheme.textSecondaryFor(widget.isDark);
+    final muted = AppTheme.textMutedFor(widget.isDark);
+    final border = AppTheme.borderFor(widget.isDark);
+    final cyan = AppTheme.accentCyanFor(widget.isDark);
+    final green = AppTheme.accentGreenFor(widget.isDark);
+    final red = AppTheme.accentRedFor(widget.isDark);
+    final amber = AppTheme.accentAmberFor(widget.isDark);
+    return _buildSheetContent(
+      context,
+      widget.workbench,
+      widget.epic,
+      widget.feature,
+      widget.isLockedBaseline,
+      widget.isDark,
+      primary,
+      secondary,
+      muted,
+      border,
+      cyan,
+      green,
+      red,
+      amber,
+    );
+  }
+
+  Widget _buildSheetContent(
     BuildContext context,
     WorkbenchProvider wb,
     EpicSpec epic,
@@ -26,7 +99,7 @@ extension _WorkbenchFeatureSheetPart on _ReleaseWorkbenchScreenState {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // §01 Feature Scope
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§01',
           title: 'Feature Scope',
@@ -115,7 +188,7 @@ extension _WorkbenchFeatureSheetPart on _ReleaseWorkbenchScreenState {
         const SizedBox(height: 14),
 
         // §02 Input Actions (InputMap)
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§02',
           title: 'Input Actions (${target.inputContractLabel})',
@@ -182,7 +255,7 @@ extension _WorkbenchFeatureSheetPart on _ReleaseWorkbenchScreenState {
         const SizedBox(height: 14),
 
         // §03 Exposed Tuning (@export GDScript Vars)
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§03',
           title: 'Exposed Tuning (${target.tuningColumnLabel})',
@@ -202,7 +275,7 @@ extension _WorkbenchFeatureSheetPart on _ReleaseWorkbenchScreenState {
                   runSpacing: 10,
                   children: [
                     for (int i = 0; i < feat.tuning.length; i++)
-                      _LiveTuningChip(
+                      LiveTuningChip(
                         key: ValueKey(
                           'tuning_chip_${wb.activeReleaseId}_${feat.id}_${feat.tuning[i].key}_$i',
                         ),
@@ -223,7 +296,7 @@ extension _WorkbenchFeatureSheetPart on _ReleaseWorkbenchScreenState {
         const SizedBox(height: 14),
 
         // §04 Viewport, UI & Audio Cues
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§04',
           title: 'Viewport, UI & Audio Cues',
@@ -249,7 +322,7 @@ extension _WorkbenchFeatureSheetPart on _ReleaseWorkbenchScreenState {
         const SizedBox(height: 14),
 
         // §05 Playtest Gate & [FIX] Notes
-        _EpicSectionCard(
+        EpicSectionCard(
           isDark: isDark,
           code: '§05',
           title: 'Playtest Gate & [FIX] Notes',
@@ -293,10 +366,10 @@ extension _WorkbenchFeatureSheetPart on _ReleaseWorkbenchScreenState {
                   ),
                 ),
 
-              if (_passGateHint != null) ...[
+              if (widget.passGateHint != null) ...[
                 const SizedBox(height: 6),
                 Text(
-                  _passGateHint!,
+                  widget.passGateHint!,
                   key: const ValueKey('pass_gate_hint'),
                   style: TextStyle(
                     fontSize: 12,

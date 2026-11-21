@@ -1,13 +1,16 @@
-part of 'release_workbench_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../models/epic_spec.dart';
+import '../../theme/app_theme.dart';
 
-class _OutlinerReleasePill extends StatelessWidget {
+class OutlinerReleasePill extends StatelessWidget {
   final String label;
   final String goal;
   final bool isActive;
   final bool isDark;
   final VoidCallback onTap;
 
-  const _OutlinerReleasePill({
+  const OutlinerReleasePill({
     super.key,
     required this.label,
     required this.goal,
@@ -81,11 +84,11 @@ class _OutlinerReleasePill extends StatelessWidget {
   }
 }
 
-class _HeaderPill extends StatelessWidget {
+class HeaderPill extends StatelessWidget {
   final String label;
   final Color color;
 
-  const _HeaderPill({required this.label, required this.color});
+  const HeaderPill({super.key, required this.label, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -108,14 +111,15 @@ class _HeaderPill extends StatelessWidget {
   }
 }
 
-class _EpicSectionCard extends StatelessWidget {
+class EpicSectionCard extends StatelessWidget {
   final bool isDark;
   final String code;
   final String title;
   final Widget child;
   final Widget? trailing;
 
-  const _EpicSectionCard({
+  const EpicSectionCard({
+    super.key,
     required this.isDark,
     required this.code,
     required this.title,
@@ -189,14 +193,14 @@ class _EpicSectionCard extends StatelessWidget {
   }
 }
 
-class _LiveTuningChip extends StatefulWidget {
+class LiveTuningChip extends StatefulWidget {
   final EpicTuningParam param;
   final bool isDark;
   final bool readOnly;
   final ValueChanged<String> onChanged;
   final Key? inputKey;
 
-  const _LiveTuningChip({
+  const LiveTuningChip({
     super.key,
     this.inputKey,
     required this.param,
@@ -206,10 +210,10 @@ class _LiveTuningChip extends StatefulWidget {
   });
 
   @override
-  State<_LiveTuningChip> createState() => _LiveTuningChipState();
+  State<LiveTuningChip> createState() => LiveTuningChipState();
 }
 
-class _LiveTuningChipState extends State<_LiveTuningChip> {
+class LiveTuningChipState extends State<LiveTuningChip> {
   late final TextEditingController _controller;
 
   @override
@@ -219,7 +223,7 @@ class _LiveTuningChipState extends State<_LiveTuningChip> {
   }
 
   @override
-  void didUpdateWidget(covariant _LiveTuningChip oldWidget) {
+  void didUpdateWidget(covariant LiveTuningChip oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.param.value != widget.param.value &&
         _controller.text.trim() != widget.param.value.trim()) {

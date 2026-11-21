@@ -1,4 +1,10 @@
-part of 'release_workbench_screen.dart';
+import 'dart:async' show unawaited;
+
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../models/epic_spec.dart';
+import '../../providers/workbench_provider.dart';
+import '../../theme/app_theme.dart';
 
 /// Opens the `v0.2+` Progressive Release Co-Pilot Dialog:
 /// 1-click direction presets, baseline `[UPGRADE]` `+Delta` toggles, and `[NEW]` Domain Epics.

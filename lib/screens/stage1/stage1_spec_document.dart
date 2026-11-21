@@ -1,7 +1,68 @@
-part of 'project_pitch_screen.dart';
+import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
+import '../../models/agent_blueprints.dart';
+import '../../models/epic_spec.dart';
+import '../../providers/workbench_provider.dart';
+import '../../theme/app_theme.dart';
+import 'stage1_shared_widgets.dart';
 
-extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
-  Widget _buildCleanSpecDocument(
+class Stage1SpecDocument extends StatefulWidget {
+  final WorkbenchProvider workbench;
+  final ProjectConceptBlueprint spec;
+  final String? activeProjectId;
+
+  const Stage1SpecDocument({
+    super.key,
+    required this.workbench,
+    required this.spec,
+    required this.activeProjectId,
+  });
+
+  @override
+  State<Stage1SpecDocument> createState() => _Stage1SpecDocumentState();
+}
+
+class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
+  final TextEditingController _pitchController = TextEditingController();
+  final TextEditingController _cutController = TextEditingController();
+  final TextEditingController _featureTitleController = TextEditingController();
+
+  bool _editingPitch = false;
+  bool _addingCut = false;
+  String? _editingFeatureId;
+
+  void _resetInlineFlags() {
+    _editingPitch = false;
+    _addingCut = false;
+    _editingFeatureId = null;
+  }
+
+  @override
+  void didUpdateWidget(covariant Stage1SpecDocument oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.activeProjectId != widget.activeProjectId ||
+        (!widget.spec.hasSpec &&
+            (_editingPitch || _addingCut || _editingFeatureId != null))) {
+      _resetInlineFlags();
+      _pitchController.clear();
+      _cutController.clear();
+      _featureTitleController.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pitchController.dispose();
+    _cutController.dispose();
+    _featureTitleController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _buildDocumentContent(context, widget.workbench, widget.spec);
+
+  Widget _buildDocumentContent(
     BuildContext context,
     WorkbenchProvider wb,
     ProjectConceptBlueprint spec,
@@ -22,7 +83,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // §01 Core Fantasy & 30s Loop
-        _SectionCard(
+        Stage1SectionCard(
           isDark: isDark,
           code: '§01',
           title: 'Core Fantasy & 30s Loop',
@@ -50,7 +111,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                         ),
                         onSubmitted: (val) {
                           wb.updateRootSpecSections(pitch: val);
-                          _mutateUi(() => _editingPitch = false);
+                          setState(() => _editingPitch = false);
                         },
                       ),
                     ),
@@ -62,7 +123,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                       icon: Icon(Icons.check_rounded, size: 17, color: green),
                       onPressed: () {
                         wb.updateRootSpecSections(pitch: _pitchController.text);
-                        _mutateUi(() => _editingPitch = false);
+                        setState(() => _editingPitch = false);
                       },
                     ),
                     IconButton(
@@ -70,7 +131,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                       tooltip: 'Cancel pitch edit',
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.close_rounded, size: 16),
-                      onPressed: () => _mutateUi(() => _editingPitch = false),
+                      onPressed: () => setState(() => _editingPitch = false),
                     ),
                   ],
                 )
@@ -107,7 +168,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                           ? null
                           : () {
                               _pitchController.text = spec.pitch;
-                              _mutateUi(() => _editingPitch = true);
+                              setState(() => _editingPitch = true);
                             },
                     ),
                   ],
@@ -148,7 +209,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
         const SizedBox(height: 16),
 
         // §02 Global Godot 4 Scale & Architecture
-        _SectionCard(
+        Stage1SectionCard(
           isDark: isDark,
           code: '§02',
           title: 'Global Godot 4 Scale & Architecture (${spec.dimension.pillLabel})',
@@ -181,17 +242,17 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                 ],
               ),
               const SizedBox(height: 14),
-              _ContractRow(label: 'Camera Rig', value: spec.cameraContract, isDark: isDark),
-              _ContractRow(label: 'Player Scale', value: spec.characterScale, isDark: isDark),
-              _ContractRow(label: 'Input Contract', value: spec.inputContract, isDark: isDark),
-              _ContractRow(label: 'Asset Policy', value: spec.assetPolicy, isDark: isDark, isLast: true),
+              Stage1ContractRow(label: 'Camera Rig', value: spec.cameraContract, isDark: isDark),
+              Stage1ContractRow(label: 'Player Scale', value: spec.characterScale, isDark: isDark),
+              Stage1ContractRow(label: 'Input Contract', value: spec.inputContract, isDark: isDark),
+              Stage1ContractRow(label: 'Asset Policy', value: spec.assetPolicy, isDark: isDark, isLast: true),
             ],
           ),
         ),
         const SizedBox(height: 16),
 
         // §03 Core Feel, Design Pillars & Conflict Trade-Offs
-        _SectionCard(
+        Stage1SectionCard(
           isDark: isDark,
           code: '§03',
           title: 'Core Feel, Design Pillars & Conflict Trade-Offs',
@@ -271,7 +332,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
         const SizedBox(height: 16),
 
         // §04 Hard Scope Cuts (Do Not Build)
-        _SectionCard(
+        Stage1SectionCard(
           isDark: isDark,
           code: '§04',
           title: 'Hard Scope Cuts (Do Not Build)',
@@ -341,7 +402,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                         ),
                         onSubmitted: (val) {
                           wb.addStage1OutOfScopeCut(val);
-                          _mutateUi(() => _addingCut = false);
+                          setState(() => _addingCut = false);
                         },
                       ),
                     ),
@@ -352,7 +413,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                       icon: Icon(Icons.check_rounded, size: 16, color: green),
                       onPressed: () {
                         wb.addStage1OutOfScopeCut(_cutController.text);
-                        _mutateUi(() => _addingCut = false);
+                        setState(() => _addingCut = false);
                       },
                     ),
                     IconButton(
@@ -360,7 +421,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                       tooltip: 'Cancel cut',
                       visualDensity: VisualDensity.compact,
                       icon: const Icon(Icons.close_rounded, size: 15),
-                      onPressed: () => _mutateUi(() => _addingCut = false),
+                      onPressed: () => setState(() => _addingCut = false),
                     ),
                   ],
                 )
@@ -376,7 +437,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                       ? null
                       : () {
                           _cutController.clear();
-                          _mutateUi(() => _addingCut = true);
+                          setState(() => _addingCut = true);
                         },
                 ),
             ],
@@ -385,7 +446,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
         const SizedBox(height: 16),
 
         // §05 Seeded Epics & Initial v0.1 Feature Slices
-        _SectionCard(
+        Stage1SectionCard(
           isDark: isDark,
           code: '§05',
           title: 'Seeded Epics & Initial v0.1 Feature Slices',
@@ -678,7 +739,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                                         feat.id,
                                         val,
                                       );
-                                      _mutateUi(() => _editingFeatureId = null);
+                                      setState(() => _editingFeatureId = null);
                                     },
                                   ),
                                 ),
@@ -702,7 +763,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                                       feat.id,
                                       _featureTitleController.text,
                                     );
-                                    _mutateUi(() => _editingFeatureId = null);
+                                    setState(() => _editingFeatureId = null);
                                   },
                                 ),
                                 IconButton(
@@ -719,7 +780,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                                     size: 14,
                                   ),
                                   onPressed: () =>
-                                      _mutateUi(() => _editingFeatureId = null),
+                                      setState(() => _editingFeatureId = null),
                                 ),
                               ],
                             )
@@ -761,7 +822,7 @@ extension _Stage1SpecDocumentPart on _ProjectPitchScreenState {
                                       : () {
                                           _featureTitleController.text =
                                               feat.title;
-                                          _mutateUi(
+                                          setState(
                                             () => _editingFeatureId = feat.id,
                                           );
                                         },

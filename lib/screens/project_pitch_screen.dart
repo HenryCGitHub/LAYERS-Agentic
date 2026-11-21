@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
-import '../models/epic_spec.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
+import 'stage1/stage1_shared_widgets.dart';
+import 'stage1/stage1_spec_document.dart';
 
-part 'stage1_spec_document_part.dart';
-part 'stage1_widgets_part.dart';
 
 /// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`).
 /// Single-space canvas with Idea Intake + vague-spark forks, scoped patch Refine + Undo,
@@ -30,30 +29,17 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   final TextEditingController _sparkController = TextEditingController();
   final TextEditingController _coDesignController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _pitchController = TextEditingController();
-  final TextEditingController _cutController = TextEditingController();
-  final TextEditingController _featureTitleController = TextEditingController();
 
   bool _editingTitle = false;
-  bool _editingPitch = false;
-  bool _addingCut = false;
-  String? _editingFeatureId;
   String? _lastActiveProjectId;
 
-  void _mutateUi(VoidCallback fn) => setState(fn);
 
   void _resetInlineEditFlags() {
     _editingTitle = false;
-    _editingPitch = false;
-    _addingCut = false;
-    _editingFeatureId = null;
   }
 
   void _clearInlineControllers({bool includeSpark = false}) {
     _titleController.clear();
-    _pitchController.clear();
-    _cutController.clear();
-    _featureTitleController.clear();
     _coDesignController.clear();
     if (includeSpark) {
       _sparkController.clear();
@@ -65,9 +51,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     _sparkController.dispose();
     _coDesignController.dispose();
     _titleController.dispose();
-    _pitchController.dispose();
-    _cutController.dispose();
-    _featureTitleController.dispose();
     super.dispose();
   }
 
@@ -77,11 +60,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     final draft = wb.conceptDraft;
     final hasSpec = draft != null && draft.hasSpec;
     if (_lastActiveProjectId != wb.activeProjectId ||
-        (!hasSpec &&
-            (_editingTitle ||
-                _editingPitch ||
-                _addingCut ||
-                _editingFeatureId != null))) {
+        (!hasSpec && _editingTitle)) {
       final projectChanged = _lastActiveProjectId != null &&
           _lastActiveProjectId != wb.activeProjectId;
       _lastActiveProjectId = wb.activeProjectId;
@@ -144,15 +123,13 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                         ),
                       const SizedBox(height: 20),
                       if (!hasSpec)
-                        _buildEmptyBlueprintOutline(
-                          isDark: isDark,
-                          textPrimary: textPrimary,
-                          textMuted: textMuted,
-                          border: border,
-                          cyan: cyan,
-                        )
+                        Stage1EmptyBlueprintOutline(isDark: isDark)
                       else
-                        _buildCleanSpecDocument(context, wb, draft),
+                        Stage1SpecDocument(
+                          workbench: wb,
+                          spec: draft,
+                          activeProjectId: wb.activeProjectId,
+                        ),
                     ],
                   ),
                 ),
@@ -311,7 +288,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               spacing: 10,
               runSpacing: 6,
               children: [
-                _GodotDimensionToggle(
+                GodotDimensionToggle(
                   dimension: wb.projectDimension,
                   isDark: isDark,
                   onChanged: wb.isAgentBusy ? null : wb.setProjectDimension,
@@ -441,7 +418,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  _GodotDimensionToggle(
+                  GodotDimensionToggle(
                     dimension: wb.projectDimension,
                     isDark: isDark,
                     onChanged: wb.isAgentBusy ? null : wb.setProjectDimension,
@@ -879,111 +856,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyBlueprintOutline({
-    required bool isDark,
-    required Color textPrimary,
-    required Color textMuted,
-    required Color border,
-    required Color cyan,
-  }) {
-    const sections = <(String, String, String)>[
-      (
-        '§01',
-        'Core Fantasy & 30s Loop',
-        '1-sentence game vision and 4 playable gameplay beats.',
-      ),
-      (
-        '§02',
-        'Global Godot 4 Scale & Architecture (3D m | 2D px)',
-        'Camera framing fork (3D SpringArm3D or 2D Camera2D), scale, and InputMap actions.',
-      ),
-      (
-        '§03',
-        'Core Feel, Design Pillars & Conflict Trade-Offs',
-        'Movement feel toggle (Snappy Arcade, Heavy Deliberate, Physics Momentum) and OVER rules.',
-      ),
-      (
-        '§04',
-        'Hard Scope Cuts (Do Not Build)',
-        'Explicit exclusions keeping v0.1 free of menus, save systems, and networking bloat.',
-      ),
-      (
-        '§05',
-        'Seeded Epics & Initial v0.1 Feature Slices',
-        'Large-Domain E01–E0N Epics holding playable 30–90 min v0.1 Feature slices.',
-      ),
-    ];
-
-    return Container(
-      key: const ValueKey('stage1_blueprint_empty_outline'),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'PROJECT BLUEPRINT PREVIEW · §01–§05',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: textMuted,
-            ),
-          ),
-          const SizedBox(height: 10),
-          for (int i = 0; i < sections.length; i++)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              decoration: i == sections.length - 1
-                  ? null
-                  : BoxDecoration(
-                      border: Border(bottom: BorderSide(color: border)),
-                    ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    width: 38,
-                    child: Text(
-                      sections[i].$1,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: cyan.withValues(alpha: 0.75),
-                      ),
-                    ),
-                  ),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          sections[i].$2,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          sections[i].$3,
-                          style: TextStyle(fontSize: 12, color: textMuted),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
         ],
       ),
     );
