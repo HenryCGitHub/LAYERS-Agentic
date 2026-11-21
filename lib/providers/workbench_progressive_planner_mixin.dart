@@ -370,11 +370,11 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
           ),
       ];
 
+      nextEpic.releaseVersion = nextVer;
       final hasEpicWorkInNext =
           chosenUps.isNotEmpty || chosenNewFeats.isNotEmpty;
       if (hasEpicWorkInNext) {
         nextEpic.lifecycle = EpicLifecycle.upgrading;
-        nextEpic.releaseVersion = nextVer;
         final epicDeltaTexts = chosenUps.isNotEmpty
             ? chosenUps
             : [for (final nf in chosenNewFeats) '+${nf.code} ${nf.title}'];

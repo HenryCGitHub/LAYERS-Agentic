@@ -925,6 +925,99 @@ const featScaled3d = parseFeatureSpecJs(
 assert.deepStrictEqual(featScaled3d.tuning[0], { key: "speed", value: "6", unit: "m/s" });
 assert.deepStrictEqual(featScaled3d.tuning[1], { key: "dash", value: "6", unit: "m/s" });
 
+// (h) Semver v0.1.1 baseline lock, v0.1 delta isolation, and 409 on reopening untouched v0.2 Epic
+assert.strictEqual(
+  isFeatureLockedBaselineJs({ introducedIn: "v0.1", releaseDelta: "" }, "v0.1.1"),
+  true
+);
+
+const v01SeededDoc = {
+  id: "epic_v01_seeded",
+  tier: "EPIC",
+  parentId: "rel_v01",
+  title: "Movement",
+  isCompleted: false,
+  sections: {
+    code: "E01",
+    release_version: "v0.1",
+    lifecycle: "queued",
+    epic_spec_json: JSON.stringify({
+      code: "E01",
+      title: "Movement",
+      releaseVersion: "v0.1",
+      lifecycle: "queued",
+      features: [
+        {
+          id: "f_v01_dash",
+          code: "F02",
+          title: "Dash",
+          introducedIn: "v0.1",
+          releaseDelta: "+Hitstop ring",
+          checks: [{ id: "chk_base", text: "Tap Space -> Dashes", passed: false }],
+          releaseDeltaChecks: [{ id: "chk_v02", text: "Dash hit -> Ring plays", passed: false }],
+        },
+      ],
+    }),
+  },
+};
+const v01ToggleMut = applyGodotEpicMutationJs({
+  epicDoc: v01SeededDoc,
+  action: "toggle_check",
+  body: { featureId: "f_v01_dash", checkId: "chk_base", passed: true },
+  dimension: "dim3d",
+});
+assert.strictEqual(v01ToggleMut.epicSpec.lifecycle, "active");
+
+const v01PassMut = applyGodotEpicMutationJs({
+  epicDoc: { id: "epic_v01_seeded", sections: v01ToggleMut.sections },
+  action: "pass_feature",
+  body: { featureId: "f_v01_dash" },
+  dimension: "dim3d",
+});
+assert.strictEqual(v01PassMut.epicSpec.features[0].checks[0].passed, true);
+assert.strictEqual(v01PassMut.epicSpec.features[0].releaseDeltaChecks[0].passed, false);
+
+const untouchedV02Doc = {
+  id: "epic_v02_untouched",
+  tier: "EPIC",
+  parentId: "rel_v02",
+  title: "Cannon",
+  isCompleted: true,
+  sections: {
+    code: "E02",
+    release_version: "v0.2",
+    lifecycle: "stable",
+    epic_spec_json: JSON.stringify({
+      code: "E02",
+      title: "Cannon",
+      releaseVersion: "v0.2",
+      lifecycle: "stable",
+      upgradeDeltas: [],
+      features: [
+        {
+          id: "f_v01_shot",
+          code: "F03",
+          title: "Bolt",
+          introducedIn: "v0.1",
+          releaseDelta: "",
+          status: "passed",
+          checks: [{ id: "c1", text: "Fire bolt -> Hits cube", passed: true }],
+        },
+      ],
+    }),
+  },
+};
+assert.throws(
+  () =>
+    applyGodotEpicMutationJs({
+      epicDoc: untouchedV02Doc,
+      action: "reopen_epic",
+      body: {},
+      dimension: "dim3d",
+    }),
+  (err) => err && err.statusCode === 409
+);
+
 console.log("GODOT_CLOUD_TEST_OK");
 """
 

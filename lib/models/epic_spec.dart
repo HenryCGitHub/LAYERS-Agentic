@@ -398,15 +398,13 @@ List<String> _strList(dynamic raw) {
       .toList();
 }
 
-int _parseReleaseOrdinal(String version) {
+List<int> _parseReleaseParts(String version) {
   final clean = version.trim().toLowerCase().replaceFirst(RegExp(r'^v'), '');
-  final parts = clean.split('.');
-  final major = parts.isNotEmpty ? (int.tryParse(parts[0]) ?? 0) : 0;
-  final minor = parts.length > 1
-      ? (int.tryParse(RegExp(r'^\d+').firstMatch(parts[1])?.group(0) ?? '') ??
-          0)
-      : 0;
-  return major * 1000 + minor;
+  if (clean.isEmpty) return const <int>[0, 0];
+  return [
+    for (final seg in clean.split('.'))
+      int.tryParse(RegExp(r'^\d+').firstMatch(seg)?.group(0) ?? '') ?? 0,
+  ];
 }
 
 int _compareReleaseVersions(
@@ -425,7 +423,15 @@ int _compareReleaseVersions(
       return idxA.compareTo(idxB);
     }
   }
-  return _parseReleaseOrdinal(normA).compareTo(_parseReleaseOrdinal(normB));
+  final pa = _parseReleaseParts(normA);
+  final pb = _parseReleaseParts(normB);
+  final maxLen = pa.length > pb.length ? pa.length : pb.length;
+  for (int i = 0; i < maxLen; i++) {
+    final va = i < pa.length ? pa[i] : 0;
+    final vb = i < pb.length ? pb[i] : 0;
+    if (va != vb) return va.compareTo(vb);
+  }
+  return 0;
 }
 
 List<EpicSceneOwnership> _extractLegacySceneOwnership(
@@ -881,13 +887,17 @@ class EpicSpec {
       checks.isNotEmpty && checks.every((c) => c.passed);
 
   bool get isPassed {
-    if (openFixes.isNotEmpty || totalOpenFeatureFixes() > 0) return false;
+    if (openFixes.isNotEmpty || totalOpenFeatureFixes(releaseVersion) > 0) {
+      return false;
+    }
     if (lifecycle == EpicLifecycle.stable &&
         (checks.isEmpty || checks.every((c) => c.passed))) {
       return true;
     }
     if (features.isNotEmpty) {
-      return features.every((f) => f.isPassed);
+      final visible = featuresForRelease(releaseVersion);
+      return visible.isNotEmpty &&
+          visible.every((f) => f.isPassedForRelease(releaseVersion));
     }
     return false;
   }
@@ -908,13 +918,26 @@ class EpicSpec {
   }
 
   String get statusLabel {
-    if (openFixesCount > 0 || totalOpenFeatureFixes() > 0) {
-      final count = openFixesCount + totalOpenFeatureFixes();
+    if (openFixesCount > 0 || totalOpenFeatureFixes(releaseVersion) > 0) {
+      final count = openFixesCount + totalOpenFeatureFixes(releaseVersion);
       return '$count [FIX] Open';
     }
     if (isPassed) return 'Baseline ✓';
-    if (allChecksPassed) return 'Ready to Pass';
-    if (lifecycle == EpicLifecycle.upgrading) return 'Upgrading $releaseVersion';
+    final visible = features.isNotEmpty
+        ? featuresForRelease(releaseVersion)
+        : const <FeatureSpec>[];
+    final readyToPass = visible.isNotEmpty
+        ? visible.every((f) {
+            final eff = f.effectiveChecksForRelease(releaseVersion);
+            return f.isPassedForRelease(releaseVersion) ||
+                (eff.isNotEmpty && eff.every((c) => c.passed));
+          })
+        : allChecksPassed;
+    if (readyToPass) return 'Ready to Pass';
+    if (lifecycle == EpicLifecycle.upgrading &&
+        releaseVersion.trim() != 'v0.1') {
+      return 'Upgrading $releaseVersion';
+    }
     if (lifecycle == EpicLifecycle.newEpic) return 'NEW $releaseVersion';
     if (passedChecksCount > 0 || lifecycle == EpicLifecycle.active) {
       return 'In Progress';

@@ -2336,5 +2336,111 @@ console.log(JSON.stringify({
         expect(ekAs3d.initialEpics.first.goal, isNot(contains('px/s')));
       },
     );
+
+    test(
+      '23. Cross-release baseline locks on untouched v0.2 Epics, v0.1 delta isolation, v0.2->v0.3 Open-in-Baseline jump & semver v0.1.2',
+      () async {
+        expect(
+          FeatureSpec(
+            id: 'f1',
+            code: 'F01',
+            title: 'Walk',
+            introducedIn: 'v0.1',
+            goal: 'Walk',
+          ).isLockedBaselineInRelease('v0.1.2'),
+          isTrue,
+        );
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+        final v01Epics = wb.epicsForRelease(v01Id);
+        final v01E01 = v01Epics.first;
+        final v01F01 = v01E01.features.firstWhere((f) => f.code == 'F01');
+        final v01F02 = v01E01.features.firstWhere((f) => f.code == 'F02');
+
+        // 1) v0.1 isolates pre-seeded v0.2 releaseDelta & delta checks
+        wb.toggleFeatureCheck(
+          v01E01.id,
+          v01F01.id,
+          v01F01.checks.first.id,
+          true,
+        );
+        final activeV01E01 = wb.activeReleaseEpics.first;
+        expect(activeV01E01.lifecycle, equals(EpicLifecycle.active));
+        expect(activeV01E01.statusLabel, isNot(equals('Upgrading v0.1')));
+
+        expect(wb.passFeature(v01E01.id, v01F01.id, forceResolve: true), isTrue);
+        expect(wb.passFeature(v01E01.id, v01F02.id, forceResolve: true), isTrue);
+        final passedF02InV01 = wb
+            .epicsForRelease(v01Id)
+            .first
+            .features
+            .firstWhere((f) => f.id == v01F02.id);
+        expect(passedF02InV01.releaseDeltaChecks.first.passed, isFalse);
+
+        // Pass remaining v0.1 Epics and launch v0.2 ('juice' preset leaves E02 untouched)
+        for (final ep in wb.epicsForRelease(v01Id).skip(1)) {
+          wb.passActiveEpic(ep.id);
+        }
+        await wb.openProgressiveReleaseCopilot();
+        final v02Id = wb.commitProgressiveReleaseDraft()!;
+
+        final v02E02 = wb
+            .epicsForRelease(v02Id)
+            .firstWhere((e) => e.lineageKey == 'e02');
+        expect(v02E02.releaseVersion, equals('v0.2'));
+        expect(v02E02.isPassed, isTrue);
+        final v02F03 = v02E02.features.firstWhere((f) => f.code == 'F03');
+        expect(wb.isFeatureLockedBaseline(v02F03), isTrue);
+
+        // Reopening an untouched all-baseline Epic in v0.2 is blocked cleanly
+        wb.reopenEpic(v02E02.id);
+        final v02E02AfterReopen = wb
+            .epicsForRelease(v02Id)
+            .firstWhere((e) => e.id == v02E02.id);
+        expect(v02E02AfterReopen.lifecycle, equals(EpicLifecycle.stable));
+        expect(v02E02AfterReopen.isPassed, isTrue);
+
+        // Off-release baseline guard: switching to v0.1 must still block editing v02E02.F03
+        final beforeF03Val = v02F03.tuning.first.value;
+        wb.selectActiveRelease(v01Id);
+        wb.updateFeatureTuningParam(v02E02.id, v02F03.id, 0, '999');
+        final v02F03AfterOffReleaseEdit = wb
+            .epicsForRelease(v02Id)
+            .firstWhere((e) => e.id == v02E02.id)
+            .features
+            .firstWhere((f) => f.id == v02F03.id);
+        expect(v02F03AfterOffReleaseEdit.tuning.first.value, equals(beforeF03Val));
+
+        // 2) Pass all v0.2 Epics, commit v0.3 without delta on F07, then Open in v0.2 -> jumps to v0.2
+        wb.selectActiveRelease(v02Id);
+        for (final ep in wb.epicsForRelease(v02Id)) {
+          wb.passActiveEpic(ep.id);
+        }
+        final v03Draft = await wb.openProgressiveReleaseCopilot();
+        expect(v03Draft, isNotNull);
+        for (final entry in v03Draft!.upgradesByLineageKey.entries) {
+          for (final opt in entry.value) {
+            if (opt.chosen) {
+              wb.toggleProgressiveUpgrade(entry.key, opt.id);
+            }
+          }
+        }
+        final v03Id = wb.commitProgressiveReleaseDraft()!;
+        final v03E01 = wb
+            .epicsForRelease(v03Id)
+            .firstWhere((e) => e.lineageKey == 'e01');
+        final v03F07 = v03E01.features.firstWhere((f) => f.code == 'F07');
+        expect(v03F07.introducedIn, equals('v0.2'));
+        wb.selectFeature(v03E01.id, v03F07.id);
+        expect(wb.isSelectedFeatureLockedBaseline, isTrue);
+
+        wb.openSelectedFeatureInBaselineRelease();
+        expect(wb.activeReleaseVersionTag, equals('v0.2'));
+        expect(wb.selectedFeatureSpec?.code, equals('F07'));
+        expect(wb.isSelectedFeatureLockedBaseline, isFalse);
+      },
+    );
   });
 }

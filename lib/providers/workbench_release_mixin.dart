@@ -47,6 +47,21 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     return visible.first.id;
   }
 
+  String _releaseVersionForEpicDoc(TierDocument doc, EpicSpec spec) {
+    final parentId = doc.parentId;
+    if (parentId != null) {
+      final parentDoc = documents[parentId];
+      if (parentDoc != null && parentDoc.tier == TierType.release) {
+        return releaseVersionTagFor(parentDoc);
+      }
+    }
+    final specVer = spec.releaseVersion.trim();
+    if (specVer.isNotEmpty) {
+      return ReleasePlannerAgent.extractReleaseVersionTag(specVer);
+    }
+    return activeReleaseVersionTag;
+  }
+
   void _syncEpicLifecycleFromFeatures(EpicSpec spec, String releaseVersion) {
     final visible = visibleFeaturesForEpic(spec, releaseVersion: releaseVersion);
     if (visible.isEmpty) return;
@@ -62,8 +77,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       }
     } else if (spec.lifecycle == EpicLifecycle.stable ||
         spec.lifecycle == EpicLifecycle.queued) {
-      final hasDelta = spec.upgradeDeltas.isNotEmpty ||
-          visible.any((f) => f.releaseDelta.trim().isNotEmpty);
+      final relTrimmed = releaseVersion.trim();
+      final hasDelta = relTrimmed != 'v0.1' &&
+          (spec.upgradeDeltas.isNotEmpty ||
+              visible.any((f) => f.releaseDelta.trim().isNotEmpty));
       spec.lifecycle =
           hasDelta ? EpicLifecycle.upgrading : EpicLifecycle.active;
     }
@@ -125,9 +142,40 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   }
 
   void openSelectedFeatureInBaselineRelease() {
-    final baseline = v01BaselineRelease;
-    if (baseline == null) return;
-    selectActiveRelease(baseline.id);
+    final feat = selectedFeatureSpec;
+    final epic = selectedEpicSpec;
+    final targetTag = (feat?.introducedIn ?? 'v0.1').trim().toLowerCase();
+    TierDocument? targetRel;
+    for (final rel in projectReleases) {
+      if (releaseVersionTagFor(rel).toLowerCase() == targetTag) {
+        targetRel = rel;
+        break;
+      }
+    }
+    targetRel ??= v01BaselineRelease;
+    if (targetRel == null) return;
+    selectActiveRelease(targetRel.id);
+    if (feat != null && epic != null) {
+      final targetEpics = epicDocsForRelease(targetRel.id);
+      final targetLineage = epic.lineageKey.trim().toLowerCase();
+      final targetCode = epic.code.trim().toLowerCase();
+      for (int i = 0; i < targetEpics.length; i++) {
+        final cand = EpicSpec.fromDocument(targetEpics[i], indexHint: i);
+        if ((targetLineage.isNotEmpty &&
+                cand.lineageKey.trim().toLowerCase() == targetLineage) ||
+            (targetCode.isNotEmpty &&
+                cand.code.trim().toLowerCase() == targetCode)) {
+          final matchFeat = cand.features.firstWhere(
+            (f) =>
+                f.id == feat.id ||
+                f.code.trim().toLowerCase() == feat.code.trim().toLowerCase(),
+            orElse: () => feat,
+          );
+          selectFeature(targetEpics[i].id, matchFeat.id);
+          return;
+        }
+      }
+    }
   }
 
   void selectEpic(String epicId, {bool openDomainSheet = true}) {
@@ -198,7 +246,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   bool _updateAndPersistFeature(
     String epicId,
     String featureId,
-    void Function(EpicSpec spec, FeatureSpec feat) mutate, {
+    void Function(EpicSpec spec, FeatureSpec feat, String relVer) mutate, {
     bool debounce = false,
     bool requireUnlocked = true,
   }) {
@@ -206,10 +254,13 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     if (doc == null || doc.tier != TierType.epic) return false;
     final idx = activeReleaseEpicDocs.indexWhere((d) => d.id == epicId);
     final spec = EpicSpec.fromDocument(doc, indexHint: idx >= 0 ? idx : 0);
+    final relVer = _releaseVersionForEpicDoc(doc, spec);
     final feat = _findFeatureByIdOrCode(spec, featureId);
     if (feat == null) return false;
-    if (requireUnlocked && !_canEditFeature(feat)) return false;
-    mutate(spec, feat);
+    if (requireUnlocked && !_canEditFeature(feat, releaseVersion: relVer)) {
+      return false;
+    }
+    mutate(spec, feat, relVer);
     final updatedDoc = spec.applyToDocument(doc);
     documents[epicId] = updatedDoc;
     _persistDocument(updatedDoc, debounce: debounce);
@@ -227,7 +278,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _updateAndPersistFeature(
       epicId,
       featureId,
-      (spec, feat) {
+      (spec, feat, _) {
         if (paramIndex < 0 || paramIndex >= feat.tuning.length) return;
         final param = feat.tuning[paramIndex];
         param.value = cleanVal;
@@ -252,7 +303,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final cleanKey = GodotSpecGuard.sanitizeTuningKey(key, fallback: '');
     if (cleanKey.isEmpty) return;
     final dim = projectDimension;
-    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+    _updateAndPersistFeature(epicId, featureId, (spec, feat, _) {
       final nextVal = value.trim().isEmpty ? '0' : value.trim();
       final nextUnit = GodotSpecGuard.normalizeGodotUnit(
         cleanKey,
@@ -295,7 +346,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _updateAndPersistFeature(
       epicId,
       featureId,
-      (_, feat) {
+      (_, feat, __) {
         if (title != null && title.trim().isNotEmpty) {
           feat.title = GodotSpecGuard.sanitizeLine(title, dimension: dim);
         }
@@ -316,10 +367,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     String checkId, [
     bool? value,
   ]) {
-    final relVer = activeReleaseVersionTag;
-    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+    _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
       bool matched = false;
-      for (final c in [...feat.checks, ...feat.releaseDeltaChecks]) {
+      for (final c in feat.effectiveChecksForRelease(relVer)) {
         if (c.id == checkId) {
           c.passed = value ?? !c.passed;
           matched = true;
@@ -341,8 +391,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final clean = fixText.trim();
     if (clean.isEmpty) return;
     final dim = projectDimension;
-    final relVer = activeReleaseVersionTag;
-    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+    _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
       feat.fixes.add(
         EpicPieFix(
           id: 'fix_${DateTime.now().microsecondsSinceEpoch}',
@@ -361,8 +410,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     String fixId, {
     bool resolved = true,
   }) {
-    final relVer = activeReleaseVersionTag;
-    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+    _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
       for (final f in feat.fixes) {
         if (f.id == fixId) {
           f.resolved = resolved;
@@ -377,8 +425,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   }
 
   void deleteFeatureFix(String epicId, String featureId, String fixId) {
-    final relVer = activeReleaseVersionTag;
-    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+    _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
       feat.fixes.removeWhere((f) => f.id == fixId);
       _syncEpicLifecycleFromFeatures(spec, relVer);
     });
@@ -504,8 +551,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final doc = documents[epicId];
     if (doc == null || doc.tier != TierType.epic) return false;
     final spec = EpicSpec.fromDocument(doc);
+    final relVer = _releaseVersionForEpicDoc(doc, spec);
     final target = _findFeatureByIdOrCode(spec, featureId);
-    final relVer = activeReleaseVersionTag;
     if (target == null || !_canEditFeature(target, releaseVersion: relVer)) {
       return false;
     }
@@ -513,17 +560,17 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       return false;
     }
 
-    final saved = _updateAndPersistFeature(epicId, target.id, (epSpec, feat) {
+    final saved = _updateAndPersistFeature(epicId, target.id, (epSpec, feat, docRelVer) {
       if (forceResolve) {
         for (final fx in feat.fixes) {
           fx.resolved = true;
         }
-        for (final c in [...feat.checks, ...feat.releaseDeltaChecks]) {
+        for (final c in feat.effectiveChecksForRelease(docRelVer)) {
           c.passed = true;
         }
       }
       feat.status = FeatureStatus.passed;
-      _syncEpicLifecycleFromFeatures(epSpec, relVer);
+      _syncEpicLifecycleFromFeatures(epSpec, docRelVer);
     });
     if (!saved) return false;
 
@@ -535,9 +582,36 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   }
 
   void reopenFeature(String epicId, String featureId) {
-    final relVer = activeReleaseVersionTag;
-    _updateAndPersistFeature(epicId, featureId, (spec, feat) {
+    _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
       feat.status = FeatureStatus.active;
+      final hasDelta = relVer != 'v0.1' &&
+          feat.releaseDelta.trim().isNotEmpty &&
+          feat.releaseDeltaChecks.isNotEmpty;
+      if (hasDelta) {
+        for (final c in feat.releaseDeltaChecks) {
+          c.passed = false;
+        }
+      } else {
+        for (final c in feat.checks) {
+          c.passed = false;
+        }
+      }
+      if (spec.lifecycle == EpicLifecycle.stable) {
+        if (relVer != 'v0.1' && spec.upgradeDeltas.isNotEmpty) {
+          final verLower = relVer.toLowerCase();
+          for (final c in spec.checks) {
+            final t = c.text.trim().toLowerCase();
+            if (c.id.contains('_delta_') ||
+                t.startsWith('verify $verLower delta')) {
+              c.passed = false;
+            }
+          }
+        } else {
+          for (final c in spec.checks) {
+            c.passed = false;
+          }
+        }
+      }
       _syncEpicLifecycleFromFeatures(spec, relVer);
     });
   }
@@ -718,7 +792,10 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   }
 
   void passActiveEpic(String epicId) {
+    final doc = documents[epicId];
+    if (doc == null || doc.tier != TierType.epic) return;
     _updateAndPersistEpic(epicId, (spec) {
+      final relVer = _releaseVersionForEpicDoc(doc, spec);
       for (final f in spec.fixes) {
         f.resolved = true;
       }
@@ -726,10 +803,11 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
         c.passed = true;
       }
       for (final feat in spec.features) {
+        if (feat.isLockedBaselineInRelease(relVer)) continue;
         for (final fx in feat.fixes) {
           fx.resolved = true;
         }
-        for (final c in [...feat.checks, ...feat.releaseDeltaChecks]) {
+        for (final c in feat.effectiveChecksForRelease(relVer)) {
           c.passed = true;
         }
         feat.status = FeatureStatus.passed;
@@ -740,9 +818,18 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   }
 
   void reopenEpic(String epicId) {
+    final doc = documents[epicId];
+    if (doc == null || doc.tier != TierType.epic) return;
+    final initialSpec = EpicSpec.fromDocument(doc);
+    final relVer = _releaseVersionForEpicDoc(doc, initialSpec);
+    final visible = visibleFeaturesForEpic(initialSpec, releaseVersion: relVer);
+    if (initialSpec.upgradeDeltas.isEmpty &&
+        visible.isNotEmpty &&
+        visible.every((f) => f.isLockedBaselineInRelease(relVer))) {
+      return;
+    }
     _updateAndPersistEpic(epicId, (spec) {
-      final relVer = spec.releaseVersion.trim();
-      if (spec.upgradeDeltas.isNotEmpty) {
+      if (relVer != 'v0.1' && spec.upgradeDeltas.isNotEmpty) {
         spec.lifecycle = EpicLifecycle.upgrading;
         final verLower = relVer.toLowerCase();
         final deltaChecks = spec.checks.where((c) {

@@ -2013,9 +2013,11 @@ function syncEpicLifecycleFromFeaturesJs(spec, releaseVersion, releaseOrder = []
     spec.lifecycle = "stable";
     for (const c of spec.checks || []) c.passed = true;
   } else if (spec.lifecycle === "stable" || spec.lifecycle === "queued") {
+    const relTrimmed = String(releaseVersion || "v0.1").trim();
     const hasDelta =
-      (Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) ||
-      visible.some((f) => String(f.releaseDelta || "").trim() !== "");
+      relTrimmed !== "v0.1" &&
+      ((Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) ||
+        visible.some((f) => String(f.releaseDelta || "").trim() !== ""));
     spec.lifecycle = hasDelta ? "upgrading" : "active";
   }
 }
@@ -2080,7 +2082,7 @@ function applyGodotEpicMutationJs({
     }
 
     if (action === "toggle_check") {
-      const effList = [...(targetFeat.checks || []), ...(targetFeat.releaseDeltaChecks || [])];
+      const effList = getEffectiveChecksForReleaseJs(targetFeat, relVer);
       const checkId = String(body.checkId || "").trim();
       const checkIdx =
         body.checkIndex !== undefined &&
@@ -2230,7 +2232,9 @@ function applyGodotEpicMutationJs({
     } else if (action === "pass_feature") {
       for (const f of targetFeat.fixes || []) f.resolved = true;
       for (const c of targetFeat.checks || []) c.passed = true;
-      for (const c of targetFeat.releaseDeltaChecks || []) c.passed = true;
+      if (relVer !== "v0.1") {
+        for (const c of targetFeat.releaseDeltaChecks || []) c.passed = true;
+      }
       targetFeat.status = "passed";
       syncEpicLifecycleFromFeaturesJs(spec, relVer, releaseOrder);
     } else if (action === "reopen_feature") {
@@ -2247,9 +2251,10 @@ function applyGodotEpicMutationJs({
       }
       if (spec.lifecycle === "stable" || spec.lifecycle === "queued") {
         const epicHasDelta =
-          (Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) ||
-          hasDelta ||
-          features.some((f) => String(f.releaseDelta || "").trim() !== "");
+          relVer !== "v0.1" &&
+          ((Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) ||
+            hasDelta ||
+            features.some((f) => String(f.releaseDelta || "").trim() !== ""));
         spec.lifecycle = epicHasDelta ? "upgrading" : "active";
       }
     } else {
@@ -2432,12 +2437,30 @@ function applyGodotEpicMutationJs({
         if (isFeatureLockedBaselineJs(ft, relVer, releaseOrder)) continue;
         for (const f of ft.fixes || []) f.resolved = true;
         for (const c of ft.checks || []) c.passed = true;
-        for (const c of ft.releaseDeltaChecks || []) c.passed = true;
+        if (relVer !== "v0.1") {
+          for (const c of ft.releaseDeltaChecks || []) c.passed = true;
+        }
         ft.status = "passed";
       }
     }
   } else if (action === "reopen_epic") {
-    if (Array.isArray(spec.upgradeDeltas) && spec.upgradeDeltas.length > 0) {
+    const relVer = spec.releaseVersion || "v0.1";
+    if (
+      !wasSynthesizedLegacy &&
+      Array.isArray(spec.features) &&
+      spec.features.length > 0 &&
+      (!Array.isArray(spec.upgradeDeltas) || spec.upgradeDeltas.length === 0) &&
+      spec.features.every((ft) => isFeatureLockedBaselineJs(ft, relVer, releaseOrder))
+    ) {
+      const err = new Error(`Epic ${spec.code} is a locked ${relVer} baseline.`);
+      err.statusCode = 409;
+      throw err;
+    }
+    if (
+      relVer !== "v0.1" &&
+      Array.isArray(spec.upgradeDeltas) &&
+      spec.upgradeDeltas.length > 0
+    ) {
       spec.lifecycle = "upgrading";
       const verLower = String(spec.releaseVersion || "").trim().toLowerCase();
       const deltaChecks = spec.checks.filter((c) => {
