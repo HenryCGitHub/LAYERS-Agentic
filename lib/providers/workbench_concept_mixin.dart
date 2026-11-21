@@ -71,6 +71,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
           return candidate;
         }();
     _activeProjectId = pid;
+    _unpersistedNewProjectId = null;
     final existing = documents[pid];
     final nextSections = Map<String, String>.from(
       existing?.sections ?? const <String, String>{},
@@ -232,6 +233,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
+      flushDeferredRemoteSnapshotIfIdle();
       notifyListeners();
     }
   }
@@ -279,6 +281,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     } finally {
       _isAgentBusy = false;
       _agentProgressStep = null;
+      flushDeferredRemoteSnapshotIfIdle();
       notifyListeners();
     }
   }
@@ -372,6 +375,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       }
     }
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    _unpersistedNewProjectId = _activeProjectId;
     _activeReleaseId = null;
     _selectedEpicId = null;
     _selectedFeatureId = null;

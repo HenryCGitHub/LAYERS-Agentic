@@ -1392,6 +1392,188 @@ void main() {
         );
       },
     );
+
+    test(
+      'Cloud Vault queues snapshots during in-flight writes/agent turns, merges newer remote Godot Epics in syncNowWithCloud, and preserves Stage 1 Undo, expanded Epics & +New Project intake',
+      () async {
+        final pushedDocs = <String, TierDocument>{};
+        var writeGate = Completer<void>()..complete();
+        final wb = WorkbenchProvider(enableAutoLoad: false)
+          ..testOverrideUserUid = 'uid_cloud_sync_test'
+          ..testOverrideUserEmail = WorkbenchProvider.ownerAdminEmail
+          ..testCloudDocumentSaver = (uid, doc) async {
+            pushedDocs[doc.id] = doc;
+            if (!writeGate.isCompleted) {
+              await writeGate.future;
+            }
+          };
+        wb.loadPresetSpark('shellbreaker');
+        // Push a Stage 1 undo entry so canUndoStage1 == true
+        wb.setProjectDimension(GodotProjectDimension.dim2d);
+        await Future<void>.delayed(Duration.zero);
+        expect(wb.canUndoStage1, isTrue);
+
+        // Same-project snapshot in Stage 1 preserves _stage1UndoStack
+        final projId = wb.activeProjectId!;
+        final snapSameStage1 = <String, TierDocument>{
+          for (final entry in wb.documents.entries) entry.key: entry.value,
+        };
+        expect(wb.applyRemoteDocumentSnapshot(snapSameStage1), isTrue);
+        expect(wb.canUndoStage1, isTrue);
+
+        // Undo back to 3D and approve to enter Stage 2
+        expect(wb.undoStage1Edit(), isTrue);
+        wb.approveRootSpecAndLaunchWorkbench();
+        await Future<void>.delayed(Duration.zero);
+        final epics = wb.activeReleaseEpics;
+        expect(epics.length, greaterThanOrEqualTo(2));
+        final e01 = epics[0];
+        final e02 = epics[1];
+        wb.toggleEpicExpanded(e01.id, true);
+        wb.toggleEpicExpanded(e02.id, true);
+        expect(wb.expandedEpicIds.contains(e01.id), isTrue);
+        expect(wb.expandedEpicIds.contains(e02.id), isTrue);
+
+        // Stage 2 same-project snapshot retains all expanded Epics
+        final mutatedViaRemote = EpicSpec.fromDocument(wb.documents[e01.id]!);
+        mutatedViaRemote.features.first.tuning.first.value = '9.2';
+        final stage2Snap = <String, TierDocument>{
+          for (final entry in wb.documents.entries) entry.key: entry.value,
+          e01.id: mutatedViaRemote.applyToDocument(wb.documents[e01.id]!),
+        };
+        expect(wb.applyRemoteDocumentSnapshot(stage2Snap), isTrue);
+        expect(wb.expandedEpicIds.contains(e01.id), isTrue);
+        expect(wb.expandedEpicIds.contains(e02.id), isTrue);
+        expect(
+          wb.documents[e01.id] != null &&
+              EpicSpec.fromDocument(wb.documents[e01.id]!)
+                      .features
+                      .first
+                      .tuning
+                      .first
+                      .value ==
+                  '9.2',
+          isTrue,
+        );
+
+        // 1) In-flight Cloud write queues remote snapshot and auto-applies when write finishes
+        writeGate = Completer<void>();
+
+        // Trigger _persistDocument via selectFeature -> _syncActiveProjectMetadata
+        wb.selectFeature(e01.id, e01.features.first.id);
+
+        final queuedE01 = EpicSpec.fromDocument(wb.documents[e01.id]!);
+        queuedE01.features.first.tuning.first.value = '11.4';
+        final futureTs =
+            (DateTime.now().millisecondsSinceEpoch + 60000).toString();
+        final queuedRemoteDoc = queuedE01.applyToDocument(wb.documents[e01.id]!);
+        queuedRemoteDoc.sections['updated_at_ms'] = futureTs;
+        queuedRemoteDoc.sections['last_godot_sync_ms'] = futureTs;
+        final queuedSnap = <String, TierDocument>{
+          for (final entry in wb.documents.entries) entry.key: entry.value,
+          e01.id: queuedRemoteDoc,
+        };
+
+        // Blocked while writeGate is pending
+        expect(wb.applyRemoteDocumentSnapshot(queuedSnap), isFalse);
+        expect(
+          EpicSpec.fromDocument(wb.documents[e01.id]!)
+              .features
+              .first
+              .tuning
+              .first
+              .value,
+          equals('9.2'),
+        );
+
+        // Completing the write flushes the deferred snapshot automatically
+        writeGate.complete();
+        await Future<void>.delayed(Duration.zero);
+        expect(
+          EpicSpec.fromDocument(wb.documents[e01.id]!)
+              .features
+              .first
+              .tuning
+              .first
+              .value,
+          equals('11.4'),
+        );
+
+        // 2) Agent busy queues remote snapshot and auto-applies when agent finishes
+        wb.setAgentBusyForTest(true);
+        final agentRemoteE01 = EpicSpec.fromDocument(wb.documents[e01.id]!);
+        agentRemoteE01.features.first.tuning.first.value = '12.5';
+        final laterTs =
+            (DateTime.now().millisecondsSinceEpoch + 120000).toString();
+        final agentRemoteDoc = agentRemoteE01.applyToDocument(
+          wb.documents[e01.id]!,
+        );
+        agentRemoteDoc.sections['updated_at_ms'] = laterTs;
+        agentRemoteDoc.sections['last_godot_sync_ms'] = laterTs;
+        final agentSnap = <String, TierDocument>{
+          for (final entry in wb.documents.entries) entry.key: entry.value,
+          e01.id: agentRemoteDoc,
+        };
+        expect(wb.applyRemoteDocumentSnapshot(agentSnap), isFalse);
+        expect(
+          EpicSpec.fromDocument(wb.documents[e01.id]!)
+              .features
+              .first
+              .tuning
+              .first
+              .value,
+          equals('11.4'),
+        );
+        wb.setAgentBusyForTest(false);
+        expect(
+          EpicSpec.fromDocument(wb.documents[e01.id]!)
+              .features
+              .first
+              .tuning
+              .first
+              .value,
+          equals('12.5'),
+        );
+
+        // 3) syncNowWithCloud() adopts remote-newer Godot Dock Epic instead of overwriting Cloud
+        final remoteWinnerE02 = EpicSpec.fromDocument(wb.documents[e02.id]!);
+        remoteWinnerE02.features.first.checks.first.passed = true;
+        final remoteWinnerDoc = remoteWinnerE02.applyToDocument(
+          wb.documents[e02.id]!,
+        );
+        final godotNewerTs =
+            (DateTime.now().millisecondsSinceEpoch + 240000).toString();
+        remoteWinnerDoc.sections['updated_at_ms'] = godotNewerTs;
+        remoteWinnerDoc.sections['last_godot_sync_ms'] = godotNewerTs;
+
+        pushedDocs.clear();
+        wb.testCloudDocumentsFetcher = (uid) async => <String, TierDocument>{
+          for (final entry in wb.documents.entries) entry.key: entry.value,
+          e02.id: remoteWinnerDoc,
+        };
+        await wb.syncNowWithCloud();
+        expect(
+          EpicSpec.fromDocument(wb.documents[e02.id]!)
+              .features
+              .first
+              .checks
+              .first
+              .passed,
+          isTrue,
+        );
+        expect(pushedDocs.containsKey(e02.id), isFalse);
+
+        // 4) Unpersisted + New Project intake survives remote snapshots on other projects
+        wb.createNewProject();
+        final draftNewProjId = wb.activeProjectId!;
+        expect(wb.documents.containsKey(draftNewProjId), isFalse);
+        expect(wb.showingSparkPicker, isTrue);
+        expect(wb.applyRemoteDocumentSnapshot(agentSnap), isTrue);
+        expect(wb.activeProjectId, equals(draftNewProjId));
+        expect(wb.showingSparkPicker, isTrue);
+        expect(wb.activeProjectId, isNot(equals(projId)));
+      },
+    );
   });
 }
 

@@ -235,14 +235,25 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           }
           if (mergedAny && !_isAgentBusy) {
             if (!_tryResolvePendingDeepLink()) {
-              if (_activeProjectId == null ||
-                  !documents.containsKey(_activeProjectId)) {
-                final projs = savedProjects;
-                if (projs.isNotEmpty) {
-                  _restoreProjectState(projs.first.id);
+              final keepingNewProjectIntake =
+                  _activeProjectId != null &&
+                  _activeProjectId == _unpersistedNewProjectId &&
+                  !documents.containsKey(_activeProjectId);
+              if (!keepingNewProjectIntake) {
+                if (_activeProjectId == null ||
+                    !documents.containsKey(_activeProjectId)) {
+                  final projs = savedProjects;
+                  if (projs.isNotEmpty) {
+                    _restoreProjectState(projs.first.id);
+                  }
+                } else {
+                  _restoreProjectState(
+                    _activeProjectId!,
+                    preserveProgressiveDraft:
+                        _isDraftingProgressive || _progressiveDraft != null,
+                    preserveSameProjectUi: true,
+                  );
                 }
-              } else {
-                _restoreProjectState(_activeProjectId!);
               }
             }
             notifyListeners();
@@ -293,10 +304,25 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     );
   }
 
+  /// Re-applies the latest queued Firestore snapshot once in-flight writes and agent turns finish.
+  void flushDeferredRemoteSnapshotIfIdle() {
+    if (_isDisposed || _isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) {
+      return;
+    }
+    final queued = _deferredRemoteSnapshot;
+    if (queued == null) return;
+    _deferredRemoteSnapshot = null;
+    applyRemoteDocumentSnapshot(queued);
+  }
+
   /// Applies an incoming Firestore snapshot across `documents` while protecting
-  /// active debounced keystrokes and live progressive release drafts.
+  /// active debounced keystrokes, in-flight Cloud writes, and live progressive release drafts.
   bool applyRemoteDocumentSnapshot(Map<String, TierDocument> remoteDocs) {
-    if (_isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) return false;
+    if (_isAgentBusy || _pendingCloudWriteDocIds.isNotEmpty) {
+      _deferredRemoteSnapshot = Map<String, TierDocument>.from(remoteDocs);
+      return false;
+    }
+    _deferredRemoteSnapshot = null;
     if (remoteDocs.isNotEmpty) {
       final removedIds = documents.keys
           .where(
@@ -312,22 +338,38 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
     for (final entry in remoteDocs.entries) {
       if (_persistTimers.containsKey(entry.key)) continue;
+      final localDoc = documents[entry.key];
+      if (localDoc != null &&
+          _docEffectiveTimestampMs(localDoc) >
+              _docEffectiveTimestampMs(entry.value)) {
+        continue;
+      }
       documents[entry.key] = entry.value;
       LocalVaultService.saveDocument(entry.value);
     }
     if (!_tryResolvePendingDeepLink()) {
-      if (_activeProjectId == null ||
-          !documents.containsKey(_activeProjectId)) {
-        final projs = savedProjects;
-        if (projs.isNotEmpty) {
-          _restoreProjectState(projs.first.id);
+      final keepingNewProjectIntake =
+          _activeProjectId != null &&
+          _activeProjectId == _unpersistedNewProjectId &&
+          !documents.containsKey(_activeProjectId);
+      if (!keepingNewProjectIntake) {
+        if (_activeProjectId == null ||
+            !documents.containsKey(_activeProjectId)) {
+          final projs = savedProjects;
+          if (projs.isNotEmpty) {
+            _restoreProjectState(projs.first.id);
+          } else {
+            createNewProject();
+            return true;
+          }
+        } else {
+          _restoreProjectState(
+            _activeProjectId!,
+            preserveProgressiveDraft:
+                _isDraftingProgressive || _progressiveDraft != null,
+            preserveSameProjectUi: true,
+          );
         }
-      } else {
-        _restoreProjectState(
-          _activeProjectId!,
-          preserveProgressiveDraft:
-              _isDraftingProgressive || _progressiveDraft != null,
-        );
       }
     }
     notifyListeners();
@@ -511,15 +553,116 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  /// Manually pushes all current local documents and settings to Cloud Firestore.
+  /// Flushes pending debounced edits, merges remote-newer Cloud documents, and pushes
+  /// local changes to Cloud Firestore without overwriting newer Godot Dock edits.
   Future<void> syncNowWithCloud() async {
-    final user = _authService.currentUser;
-    for (final doc in documents.values) {
-      await LocalVaultService.saveDocument(doc);
-      if (user != null && isSessionApprovedForAi) {
-        await _firestoreService.saveDocument(uid: user.uid, doc: doc);
+    if (_persistTimers.isNotEmpty) {
+      final pendingIds = _persistTimers.keys.toList();
+      for (final id in pendingIds) {
+        _persistTimers.remove(id)?.cancel();
+        final pendingDoc = documents[id];
+        if (pendingDoc != null) {
+          await LocalVaultService.saveDocument(pendingDoc);
+        }
+      }
+    } else {
+      for (final doc in documents.values) {
+        await LocalVaultService.saveDocument(doc);
       }
     }
+
+    final uid = (testOverrideUserUid ?? _authService.currentUser?.uid)?.trim();
+    if (uid == null || uid.isEmpty || !isSessionApprovedForAi) {
+      _persistSettings();
+      _lastCloudSyncAt = DateTime.now();
+      notifyListeners();
+      return;
+    }
+
+    final remoteDocs = testCloudDocumentsFetcher != null
+        ? await testCloudDocumentsFetcher!(uid)
+        : await _firestoreService.fetchAllDocuments(uid: uid);
+
+    final docsToPush = <TierDocument>[];
+    bool mergedAny = false;
+    if (remoteDocs != null && remoteDocs.isNotEmpty) {
+      for (final entry in remoteDocs.entries) {
+        final docId = entry.key;
+        final remoteDoc = entry.value;
+        final localDoc = documents[docId];
+        if (localDoc == null) {
+          documents[docId] = remoteDoc;
+          await LocalVaultService.saveDocument(remoteDoc);
+          mergedAny = true;
+          continue;
+        }
+        final preferRemote = shouldPreferRemoteDocumentOnSync(
+          localDoc,
+          remoteDoc,
+        );
+        final baseDoc = preferRemote ? remoteDoc : localDoc;
+        final otherDoc = preferRemote ? localDoc : remoteDoc;
+        final mergedChildren = <String>{
+          ...baseDoc.childrenIds,
+          ...otherDoc.childrenIds,
+        }.toList();
+        final childrenChanged =
+            mergedChildren.length != baseDoc.childrenIds.length;
+        final winner = childrenChanged
+            ? baseDoc.copyWith(childrenIds: mergedChildren)
+            : baseDoc;
+        if (preferRemote || childrenChanged) {
+          documents[docId] = winner;
+          await LocalVaultService.saveDocument(winner);
+          mergedAny = true;
+        }
+        if (!preferRemote || childrenChanged) {
+          docsToPush.add(winner);
+        }
+      }
+      for (final localDoc in documents.values) {
+        if (!remoteDocs.containsKey(localDoc.id)) {
+          docsToPush.add(localDoc);
+        }
+      }
+    } else {
+      docsToPush.addAll(documents.values);
+    }
+
+    final futures = <Future<void>>[];
+    for (final doc in docsToPush) {
+      _pendingCloudWriteDocIds.add(doc.id);
+      final saveFuture = testCloudDocumentSaver != null
+          ? testCloudDocumentSaver!(uid, doc)
+          : _firestoreService.saveDocument(uid: uid, doc: doc);
+      futures.add(
+        saveFuture.whenComplete(() {
+          _pendingCloudWriteDocIds.remove(doc.id);
+          if (_pendingCloudWriteDocIds.isEmpty) {
+            flushDeferredRemoteSnapshotIfIdle();
+          }
+        }),
+      );
+    }
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
+    if (_pendingCloudWriteDocIds.isEmpty) {
+      flushDeferredRemoteSnapshotIfIdle();
+    }
+
+    if (mergedAny &&
+        !_isAgentBusy &&
+        _activeProjectId != null &&
+        documents.containsKey(_activeProjectId)) {
+      _restoreProjectState(
+        _activeProjectId!,
+        preserveProgressiveDraft:
+            _isDraftingProgressive || _progressiveDraft != null,
+        preserveSameProjectUi: true,
+      );
+    }
+
     _persistSettings();
     _lastCloudSyncAt = DateTime.now();
     notifyListeners();
@@ -565,6 +708,9 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   }
 
   Future<void> signOutFromCloud() async {
+    _autoSyncDebounceTimer?.cancel();
+    _deferredRemoteSnapshot = null;
+    _pendingCloudWriteDocIds.clear();
     clearCachedGodotLinkTokens();
     await _authService.signOut();
     notifyListeners();
@@ -826,6 +972,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   /// Starts a brand-new Project at Stage 1 (`1. Project Spec`) while keeping existing projects in the vault.
   void createNewProject() {
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
+    _unpersistedNewProjectId = _activeProjectId;
     _activeReleaseId = null;
     _selectedEpicId = null;
     _selectedFeatureId = null;
@@ -931,6 +1078,9 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       futures.add(
         saveFuture.whenComplete(() {
           _pendingCloudWriteDocIds.remove(id);
+          if (_pendingCloudWriteDocIds.isEmpty) {
+            flushDeferredRemoteSnapshotIfIdle();
+          }
         }),
       );
     }
@@ -1223,14 +1373,22 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     } else {
       notifyListeners();
     }
+    if (_pendingCloudWriteDocIds.isEmpty) {
+      flushDeferredRemoteSnapshotIfIdle();
+    }
   }
 
   void _restoreProjectState(
     String projectId, {
     bool preserveProgressiveDraft = false,
+    bool preserveSameProjectUi = false,
   }) {
     final proj = documents[projectId];
     if (proj == null) return;
+    final prevProjectId = _activeProjectId;
+    final prevConceptJson =
+        _conceptDraft != null ? jsonEncode(_conceptDraft!.toJson()) : null;
+    _unpersistedNewProjectId = null;
     if (!preserveProgressiveDraft) {
       _executionLog.clear();
       _progressiveDraft = null;
@@ -1255,6 +1413,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
     // Restore Concept Blueprint
     final rawConcept = proj.sections['concept_blueprint_json'];
+    final sameConceptUnchanged = preserveSameProjectUi &&
+        prevProjectId == projectId &&
+        ((rawConcept == null && prevConceptJson == null) ||
+            (rawConcept != null && rawConcept == prevConceptJson));
     if (rawConcept != null && rawConcept.isNotEmpty) {
       try {
         _conceptDraft = ProjectConceptBlueprint.fromJson(
@@ -1267,7 +1429,9 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     } else {
       _conceptDraft = null;
     }
-    _clearStage1TransientState();
+    if (!sameConceptUnchanged) {
+      _clearStage1TransientState();
+    }
     _showingSparkPicker = _conceptDraft == null || !_conceptDraft!.hasSpec;
 
     // Restore active Release & Epic selection
@@ -1281,7 +1445,12 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     }
 
     final epicDocs = activeReleaseEpicDocs;
-    _expandedEpicIds.clear();
+    final validEpicIds = epicDocs.map((d) => d.id).toSet();
+    if (preserveSameProjectUi && prevProjectId == projectId) {
+      _expandedEpicIds.retainWhere(validEpicIds.contains);
+    } else {
+      _expandedEpicIds.clear();
+    }
     if (epicDocs.isNotEmpty) {
       final savedEpicId = proj.sections['selected_epic_id'];
       if (savedEpicId != null && epicDocs.any((d) => d.id == savedEpicId)) {
@@ -1331,13 +1500,20 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         DateTime.now().millisecondsSinceEpoch.toString();
     void writeNow() {
       LocalVaultService.saveDocument(doc);
-      final user = _authService.currentUser;
-      if (user != null && isSessionApprovedForAi) {
+      final uid = (testOverrideUserUid ?? _authService.currentUser?.uid)?.trim();
+      if (uid != null && uid.isNotEmpty && isSessionApprovedForAi) {
         _pendingCloudWriteDocIds.add(doc.id);
-        _firestoreService.saveDocument(uid: user.uid, doc: doc).whenComplete(() {
+        final saveFuture = testCloudDocumentSaver != null
+            ? testCloudDocumentSaver!(uid, doc)
+            : _firestoreService.saveDocument(uid: uid, doc: doc);
+        saveFuture.then((_) {
+          _lastCloudSyncAt = DateTime.now();
+        }).whenComplete(() {
           _pendingCloudWriteDocIds.remove(doc.id);
+          if (_pendingCloudWriteDocIds.isEmpty) {
+            flushDeferredRemoteSnapshotIfIdle();
+          }
         });
-        scheduleDebouncedAutoSync();
       }
     }
 

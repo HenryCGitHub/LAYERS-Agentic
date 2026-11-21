@@ -2378,6 +2378,76 @@ function applyGodotEpicMutationJs({
   return { sections: sec, isCompleted, subtasks, epicSpec: spec };
 }
 
+function buildGodotSyncProjectSectionsJs({
+  existingSections = null,
+  payload,
+  liveGodotContext = null,
+  nowMs,
+  explicitEpicId = "",
+  explicitFeatureId = "",
+  isReadOnlyPull = false,
+  action = "",
+  epicCompletedOnPass = false,
+}) {
+  const nextProjSec = {
+    last_godot_sync_ms: String(nowMs),
+  };
+  if (liveGodotContext) {
+    nextProjSec.godot_live_context_json = JSON.stringify(liveGodotContext);
+  }
+
+  const activeEpicId = String(payload?.activeEpic?.id || "").trim();
+  const activeFeatureId = String(payload?.activeFeature?.id || "").trim();
+
+  if (isReadOnlyPull) {
+    if (String(explicitEpicId || "").trim() && activeEpicId) {
+      nextProjSec.selected_epic_id = activeEpicId;
+    }
+    if (String(explicitFeatureId || "").trim() && activeFeatureId) {
+      nextProjSec.selected_feature_id = activeFeatureId;
+    }
+    return nextProjSec;
+  }
+
+  if (epicCompletedOnPass) {
+    nextProjSec.selected_epic_id = activeEpicId;
+    nextProjSec.selected_feature_id = activeFeatureId;
+    return nextProjSec;
+  }
+
+  if (action === "pass_feature") {
+    nextProjSec.selected_epic_id = activeEpicId;
+    nextProjSec.selected_feature_id = activeFeatureId;
+    return nextProjSec;
+  }
+
+  const cleanExplicitFeatureId = String(explicitFeatureId || "").trim();
+  const hasBlankSelectedFeature =
+    existingSections &&
+    typeof existingSections === "object" &&
+    Object.prototype.hasOwnProperty.call(existingSections, "selected_feature_id") &&
+    String(existingSections.selected_feature_id || "").trim() === "";
+  const existingEpicId = String(existingSections?.selected_epic_id || "").trim();
+  if (
+    action === "sync_project" &&
+    !cleanExplicitFeatureId &&
+    hasBlankSelectedFeature &&
+    (!existingEpicId || existingEpicId === activeEpicId)
+  ) {
+    if (activeEpicId) {
+      nextProjSec.selected_epic_id = activeEpicId;
+    }
+    nextProjSec.selected_feature_id = "";
+    return nextProjSec;
+  }
+
+  if (activeEpicId) {
+    nextProjSec.selected_epic_id = activeEpicId;
+  }
+  nextProjSec.selected_feature_id = activeFeatureId;
+  return nextProjSec;
+}
+
 const VALID_SCENE_OPS = new Set([
   "ensure_node",
   "set_property",
@@ -3851,18 +3921,20 @@ exports.geminiProxy = onRequest(
       }
 
       const nowMs = String(Date.now());
-      const nextProjSections = {
-        last_godot_sync_ms: nowMs,
-      };
-      if (liveGodotContext) {
-        nextProjSections.godot_live_context_json = JSON.stringify(liveGodotContext);
-      }
-      if (payload.activeEpic?.id) {
-        nextProjSections.selected_epic_id = payload.activeEpic.id;
-      }
-      if (payload.activeFeature?.id) {
-        nextProjSections.selected_feature_id = payload.activeFeature.id;
-      }
+      const existingPullSections =
+        docsById.get(linkAuth.projectId)?.sections &&
+        typeof docsById.get(linkAuth.projectId)?.sections === "object"
+          ? docsById.get(linkAuth.projectId).sections
+          : null;
+      const nextProjSections = buildGodotSyncProjectSectionsJs({
+        existingSections: existingPullSections,
+        payload,
+        liveGodotContext,
+        nowMs,
+        explicitEpicId: preferredEpicId,
+        explicitFeatureId: preferredFeatureId,
+        isReadOnlyPull: true,
+      });
 
       linkAuth.linkRef.set({ lastSyncAt: Date.now() }, { merge: true }).catch(() => {});
       db.collection("users")
@@ -4159,6 +4231,10 @@ exports.geminiProxy = onRequest(
         action === "pass_epic" ||
         (action === "pass_feature" && Boolean(updatedEpicDoc?.isCompleted));
       const inMemProj = docsById.get(linkAuth.projectId);
+      const prevProjSec =
+        inMemProj?.sections && typeof inMemProj.sections === "object"
+          ? { ...inMemProj.sections }
+          : null;
       if (inMemProj) {
         const existingSec =
           inMemProj.sections && typeof inMemProj.sections === "object"
@@ -4201,16 +4277,16 @@ exports.geminiProxy = onRequest(
         return;
       }
 
-      const nextProjSec = {
-        last_godot_sync_ms: String(nowMs),
-      };
-      if (liveGodotContext) {
-        nextProjSec.godot_live_context_json = JSON.stringify(liveGodotContext);
-      }
-      if (payload.activeEpic?.id) {
-        nextProjSec.selected_epic_id = payload.activeEpic.id;
-      }
-      nextProjSec.selected_feature_id = payload.activeFeature?.id || "";
+      const nextProjSec = buildGodotSyncProjectSectionsJs({
+        existingSections: prevProjSec,
+        payload,
+        liveGodotContext,
+        nowMs,
+        explicitEpicId: targetEpicId,
+        explicitFeatureId: requestedFeatureId,
+        action,
+        epicCompletedOnPass,
+      });
 
       linkAuth.linkRef.set({ lastSyncAt: nowMs }, { merge: true }).catch(() => {});
       docsCol
@@ -4370,6 +4446,7 @@ exports._testHelpers = {
   computeActiveGodotEpicPayload,
   resolveTargetEpicDocIdJs,
   applyGodotEpicMutationJs,
+  buildGodotSyncProjectSectionsJs,
   normalizeAgentBundle,
   buildGodotAgentPrompts,
   GODOT_READONLY_TOOL_NAMES,

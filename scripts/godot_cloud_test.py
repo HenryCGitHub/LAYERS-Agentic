@@ -33,6 +33,7 @@ const {
   computeActiveGodotEpicPayload,
   resolveTargetEpicDocIdJs,
   applyGodotEpicMutationJs,
+  buildGodotSyncProjectSectionsJs,
   normalizeAgentBundle,
   buildGodotAgentPrompts,
   GODOT_READONLY_TOOL_NAMES,
@@ -816,6 +817,70 @@ const stepOnlyDisallowed = normalizeAgentStepResponse({
 }, "build_feature", { dimension: "dim3d", forceFinal: false });
 assert.strictEqual(stepOnlyDisallowed.type, "final_bundle");
 assert(stepOnlyDisallowed.bundle && Array.isArray(stepOnlyDisallowed.bundle.scriptUpdates));
+
+// (f) Read-only /godotLink/epic pull does not hijack Web Studio's selected_epic_id / selected_feature_id
+const readOnlyPullSec = buildGodotSyncProjectSectionsJs({
+  existingSections: { selected_epic_id: "epic_2", selected_feature_id: "" },
+  payload: { activeEpic: { id: "epic_2" }, activeFeature: { id: "feat_dash" } },
+  liveGodotContext: liveCtx,
+  nowMs: 1234567890,
+  explicitEpicId: "",
+  explicitFeatureId: "",
+  isReadOnlyPull: true,
+});
+assert.strictEqual(readOnlyPullSec.last_godot_sync_ms, "1234567890");
+assert(typeof readOnlyPullSec.godot_live_context_json === "string");
+assert.strictEqual(
+  Object.prototype.hasOwnProperty.call(readOnlyPullSec, "selected_epic_id"),
+  false
+);
+assert.strictEqual(
+  Object.prototype.hasOwnProperty.call(readOnlyPullSec, "selected_feature_id"),
+  false
+);
+
+// Explicit pull selection updates selected_epic_id & selected_feature_id
+const explicitPullSec = buildGodotSyncProjectSectionsJs({
+  existingSections: { selected_epic_id: "epic_1", selected_feature_id: "" },
+  payload: { activeEpic: { id: "epic_2" }, activeFeature: { id: "feat_dash" } },
+  liveGodotContext: liveCtx,
+  nowMs: 1234567891,
+  explicitEpicId: "epic_2",
+  explicitFeatureId: "feat_dash",
+  isReadOnlyPull: true,
+});
+assert.strictEqual(explicitPullSec.selected_epic_id, "epic_2");
+assert.strictEqual(explicitPullSec.selected_feature_id, "feat_dash");
+
+// sync_project without explicitFeatureId preserves Web Studio's Epic Domain Sheet (selected_feature_id: "")
+const syncDomainSheetSec = buildGodotSyncProjectSectionsJs({
+  existingSections: { selected_epic_id: "epic_2", selected_feature_id: "" },
+  payload: { activeEpic: { id: "epic_2" }, activeFeature: { id: "feat_dash" } },
+  nowMs: 1234567892,
+  explicitFeatureId: "",
+  action: "sync_project",
+});
+assert.strictEqual(syncDomainSheetSec.selected_epic_id, "epic_2");
+assert.strictEqual(syncDomainSheetSec.selected_feature_id, "");
+
+// pass_feature clears selected_feature_id when payload advances/clears, toggle_check selects active feature
+const passFeatureSec = buildGodotSyncProjectSectionsJs({
+  existingSections: { selected_epic_id: "epic_2", selected_feature_id: "feat_dash" },
+  payload: { activeEpic: { id: "epic_2" }, activeFeature: null },
+  nowMs: 1234567893,
+  action: "pass_feature",
+});
+assert.strictEqual(passFeatureSec.selected_epic_id, "epic_2");
+assert.strictEqual(passFeatureSec.selected_feature_id, "");
+
+const toggleCheckSec = buildGodotSyncProjectSectionsJs({
+  existingSections: { selected_epic_id: "epic_2", selected_feature_id: "" },
+  payload: { activeEpic: { id: "epic_2" }, activeFeature: { id: "feat_dash" } },
+  nowMs: 1234567894,
+  action: "toggle_check",
+});
+assert.strictEqual(toggleCheckSec.selected_epic_id, "epic_2");
+assert.strictEqual(toggleCheckSec.selected_feature_id, "feat_dash");
 
 console.log("GODOT_CLOUD_TEST_OK");
 """

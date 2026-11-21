@@ -46,6 +46,8 @@ class WorkbenchProvider extends ChangeNotifier {
   /// Test-only hooks for verifying cloud vault flushes without live Firebase Auth/Firestore.
   String? testOverrideUserUid;
   Future<void> Function(String uid, TierDocument doc)? testCloudDocumentSaver;
+  Future<Map<String, TierDocument>?> Function(String uid)?
+      testCloudDocumentsFetcher;
 
   bool _isCloudSynced = false;
   bool get isCloudSynced => _isCloudSynced;
@@ -197,6 +199,8 @@ class WorkbenchProvider extends ChangeNotifier {
   final Map<String, List<Map<String, String>>> _projectCollaborators = {};
   final Map<String, Timer> _persistTimers = {};
   final Set<String> _pendingCloudWriteDocIds = <String>{};
+  Map<String, TierDocument>? _deferredRemoteSnapshot;
+  String? _unpersistedNewProjectId;
   final List<String> _executionLog = <String>[];
   final Map<String, String> _cachedGodotLinkTokensByProjectId = {};
 
@@ -252,6 +256,15 @@ class WorkbenchProvider extends ChangeNotifier {
 
   bool _isAgentBusy = false;
   bool get isAgentBusy => _isAgentBusy;
+
+  @visibleForTesting
+  void setAgentBusyForTest(bool busy) {
+    _isAgentBusy = busy;
+    if (!busy) {
+      flushDeferredRemoteSnapshotIfIdle();
+    }
+    notifyListeners();
+  }
 
   String? _agentProgressStep;
   String? get agentProgressStep => _agentProgressStep;
@@ -334,6 +347,7 @@ class WorkbenchProvider extends ChangeNotifier {
     if (_isDisposed) return;
     _isDisposed = true;
     _autoSyncDebounceTimer?.cancel();
+    _deferredRemoteSnapshot = null;
     for (final timer in _persistTimers.values) {
       timer.cancel();
     }
