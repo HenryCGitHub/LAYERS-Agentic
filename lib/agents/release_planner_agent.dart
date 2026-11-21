@@ -576,15 +576,17 @@ CRITICAL RULES:
       if (candidateNew.isNotEmpty ||
           upgradesByKey.isNotEmpty ||
           newFeaturesByKey.isNotEmpty) {
+        final effectivePresets = presets.isNotEmpty
+            ? presets
+            : _defaultPresets(upgradesByKey, newFeaturesByKey, candidateNew);
         return ProgressiveReleaseDraft(
           targetVersion: targetVersion,
-          presets: presets.isNotEmpty
-              ? presets
-              : _defaultPresets(upgradesByKey, newFeaturesByKey, candidateNew),
+          presets: effectivePresets,
           upgradesByLineageKey: upgradesByKey,
           candidateNewFeaturesByLineageKey: newFeaturesByKey,
           candidateNewEpics: candidateNew,
-          activePresetId: presets.isNotEmpty ? presets.first.id : null,
+          activePresetId:
+              effectivePresets.isNotEmpty ? effectivePresets.first.id : null,
         );
       }
     }

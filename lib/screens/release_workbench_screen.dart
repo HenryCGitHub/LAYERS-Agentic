@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/epic_spec.dart';
@@ -192,8 +194,12 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     ),
                     OutlinedButton.icon(
                       key: const ValueKey('plan_next_release_btn'),
-                      onPressed: () =>
-                          showProgressiveReleaseCopilotDialog(context, wb),
+                      onPressed: wb.isDraftingProgressive
+                          ? null
+                          : () => showProgressiveReleaseCopilotDialog(
+                                context,
+                                wb,
+                              ),
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,
@@ -658,7 +664,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
           IconButton(
             tooltip: wb.nextReleaseActionLabel,
             visualDensity: VisualDensity.compact,
-            onPressed: () => showProgressiveReleaseCopilotDialog(context, wb),
+            onPressed: wb.isDraftingProgressive
+                ? null
+                : () => showProgressiveReleaseCopilotDialog(context, wb),
             icon: Icon(
               Icons.auto_awesome,
               size: 16,

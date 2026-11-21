@@ -1736,6 +1736,175 @@ void main() {
         }
       },
     );
+
+    testWidgets(
+      'Progressive Release Co-Pilot opens loading modal immediately, discards canceled requests, preserves preset tooltips & direction Enter submit, blocks empty releases & cleans up barrier dismiss',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+        addTearDown(() {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false)
+          ..updateAiConfig(apiKey: 'test-key-1234');
+        wb.loadPresetSpark('shellbreaker');
+        final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+        for (final ep in wb.epicsForRelease(v01Id)) {
+          wb.passActiveEpic(ep.id);
+        }
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // 1) Tapping + New Release opens loading modal immediately without blocking
+        final firstCompleter = Completer<Map<String, dynamic>?>();
+        GeminiAgentClient.testMockResponder = (prompt, model) =>
+            firstCompleter.future;
+
+        await tester.tap(find.byKey(const ValueKey('plan_next_release_btn')));
+        await tester.pump();
+
+        expect(wb.isDraftingProgressive, isTrue);
+        expect(find.byType(CircularProgressIndicator), findsAtLeastNWidgets(1));
+        expect(
+          find.byKey(const ValueKey('copilot_loading_cancel_btn')),
+          findsOneWidget,
+        );
+
+        // Canceling mid-flight closes modal & ignores late completion
+        await tester.tap(
+          find.byKey(const ValueKey('copilot_loading_cancel_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(wb.isDraftingProgressive, isFalse);
+        expect(wb.progressiveDraft, isNull);
+
+        firstCompleter.complete(null);
+        await tester.pumpAndSettle();
+        expect(wb.isDraftingProgressive, isFalse);
+        expect(wb.progressiveDraft, isNull);
+
+        // 2) Live response transitions cleanly from loading to full Co-Pilot with presets: [] fallback & Tooltip
+        final capturedPrompts = <String>[];
+        final secondCompleter = Completer<Map<String, dynamic>?>();
+        GeminiAgentClient.testMockResponder = (prompt, model) {
+          capturedPrompts.add(prompt);
+          return secondCompleter.future;
+        };
+
+        await tester.tap(find.byKey(const ValueKey('plan_next_release_btn')));
+        await tester.pump();
+        expect(
+          find.byKey(const ValueKey('copilot_loading_cancel_btn')),
+          findsOneWidget,
+        );
+
+        secondCompleter.complete(<String, dynamic>{
+          'presets': const <Map<String, dynamic>>[],
+          'upgrades': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'lineageKey': 'e01',
+              'options': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'id': 'up_live_1',
+                  'targetFeatureCode': 'F02',
+                  'text': '+60ms hit-stop freeze on armor crack',
+                },
+              ],
+            },
+          ],
+          'newFeatures': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'lineageKey': 'e01',
+              'features': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'code': 'F07',
+                  'title': 'Magnetic Scrap Pull',
+                  'sliceTime': '45 min',
+                  'goal': 'Pull nearby armor shards within 4.5 m after dash.',
+                  'tuning': <Map<String, dynamic>>[
+                    {'key': 'pull_radius', 'value': '4.5', 'unit': 'm'},
+                  ],
+                  'checks': <Map<String, dynamic>>[
+                    {'text': 'Break shell -> Shards pull within 4.5 m'},
+                  ],
+                },
+              ],
+            },
+          ],
+          'newEpics': const <Map<String, dynamic>>[],
+        });
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('copilot_preset_focused')),
+          findsOneWidget,
+        );
+        expect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Tooltip &&
+                w.message ==
+                    'Apply core game-feel upgrades and add the primary new Epic.',
+          ),
+          findsOneWidget,
+        );
+        expect(wb.hasSelectedProgressiveChanges, isTrue);
+
+        // 3) Pressing Enter in direction input regenerates Co-Pilot draft with custom prompt
+        GeminiAgentClient.testMockResponder = (prompt, model) async {
+          capturedPrompts.add(prompt);
+          return null;
+        };
+        await tester.enterText(
+          find.byKey(const ValueKey('copilot_direction_input')),
+          'Add arena wave timer',
+        );
+        await tester.testTextInput.receiveAction(TextInputAction.send);
+        await tester.pumpAndSettle();
+        expect(capturedPrompts.last, contains('Add arena wave timer'));
+
+        // 4) Unchecking all upgrades, new Features & new Epics blocks empty clone releases
+        while (true) {
+          final tileFinder = find.descendant(
+            of: find.byType(Dialog),
+            matching: find.byType(CheckboxListTile),
+          );
+          final tiles = tester.widgetList<CheckboxListTile>(tileFinder).toList();
+          final checkedIndex = tiles.indexWhere((t) => t.value == true);
+          if (checkedIndex < 0) break;
+          final targetTile = tileFinder.at(checkedIndex);
+          await tester.ensureVisible(targetTile);
+          await tester.tap(targetTile);
+          await tester.pumpAndSettle();
+        }
+
+        expect(wb.hasSelectedProgressiveChanges, isFalse);
+        final commitBtn = tester.widget<ElevatedButton>(
+          find.byKey(const ValueKey('copilot_commit_btn')),
+        );
+        expect(commitBtn.onPressed, isNull);
+        expect(wb.commitProgressiveReleaseDraft(), isNull);
+        expect(wb.projectReleases.length, equals(1));
+
+        // 5) Dismissing via barrier cleans up _progressiveDraft & disposes controller safely
+        await tester.tapAt(const Offset(8, 8));
+        await tester.pumpAndSettle();
+        expect(wb.progressiveDraft, isNull);
+        expect(wb.isDraftingProgressive, isFalse);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }
 

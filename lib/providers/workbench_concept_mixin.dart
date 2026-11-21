@@ -386,7 +386,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _selectedEpicId = null;
     _selectedFeatureId = null;
     _expandedEpicIds.clear();
-    _progressiveDraft = null;
+    _resetProgressiveDraftState();
     _executionLog.clear();
     _userPinnedDimension = false;
     _conceptDraft = ProjectConceptBlueprint(dimension: dim);

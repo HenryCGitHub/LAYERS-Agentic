@@ -980,7 +980,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _userPinnedDimension = false;
     _conceptDraft = null;
     _clearStage1TransientState();
-    _progressiveDraft = null;
+    _resetProgressiveDraftState();
     _showingSparkPicker = true;
     _offlineErrorMessage = null;
     _executionLog.clear();
@@ -1391,7 +1391,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _unpersistedNewProjectId = null;
     if (!preserveProgressiveDraft) {
       _executionLog.clear();
-      _progressiveDraft = null;
+      _resetProgressiveDraftState();
     }
     _activeProjectId = projectId;
 

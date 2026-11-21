@@ -254,6 +254,14 @@ class WorkbenchProvider extends ChangeNotifier {
   bool _isDraftingProgressive = false;
   bool get isDraftingProgressive => _isDraftingProgressive;
 
+  int _progressiveDraftRequestSeq = 0;
+
+  void _resetProgressiveDraftState() {
+    _progressiveDraftRequestSeq++;
+    _isDraftingProgressive = false;
+    _progressiveDraft = null;
+  }
+
   bool _isAgentBusy = false;
   bool get isAgentBusy => _isAgentBusy;
 
@@ -669,8 +677,10 @@ class WorkbenchProvider extends ChangeNotifier {
     return epicsForRelease(latest.id);
   }
 
-  String get nextReleaseActionLabel =>
-      '+ Plan ${ReleasePlannerAgent.nextMinorVersionTag(highestProjectReleaseVersionTag)} Release';
+  String get nextReleaseVersionTag =>
+      ReleasePlannerAgent.nextMinorVersionTag(highestProjectReleaseVersionTag);
+
+  String get nextReleaseActionLabel => '+ Plan $nextReleaseVersionTag Release';
 
   bool get isActiveReleaseComplete {
     final epics = activeReleaseEpics;

@@ -8,9 +8,9 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     final rootSpec = _conceptDraft;
     if (rootSpec == null) return null;
 
-    final nextVer = ReleasePlannerAgent.nextMinorVersionTag(
-      highestProjectReleaseVersionTag,
-    );
+    final reqSeq = ++_progressiveDraftRequestSeq;
+    final startedProjectId = _activeProjectId;
+    final nextVer = nextReleaseVersionTag;
     _isDraftingProgressive = true;
     notifyListeners();
 
@@ -24,20 +24,45 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         preferredModel: _planningModel,
         thinkingLevel: _thinkingLevel,
       );
+      if (reqSeq != _progressiveDraftRequestSeq ||
+          _activeProjectId != startedProjectId) {
+        return null;
+      }
       _progressiveDraft = draft;
       if (draft.activePresetId != null && draft.presets.isNotEmpty) {
         applyProgressivePreset(draft.activePresetId!);
       }
       return draft;
     } finally {
-      _isDraftingProgressive = false;
-      notifyListeners();
+      if (reqSeq == _progressiveDraftRequestSeq) {
+        _isDraftingProgressive = false;
+        notifyListeners();
+      }
     }
   }
 
   void closeProgressiveReleaseCopilot() {
-    _progressiveDraft = null;
+    _resetProgressiveDraftState();
     notifyListeners();
+  }
+
+  bool get hasSelectedProgressiveChanges {
+    final draft = _progressiveDraft;
+    if (draft == null) return false;
+    final existingKeys = <String>{
+      for (final ep in latestReleaseEpics)
+        if (ep.lineageKey.trim().isNotEmpty) ep.lineageKey.trim().toLowerCase(),
+    };
+    for (final key in existingKeys) {
+      final ups = draft.upgradesByLineageKey[key];
+      if (ups != null && ups.any((u) => u.chosen)) return true;
+      final feats = draft.candidateNewFeaturesByLineageKey[key];
+      if (feats != null &&
+          feats.any((f) => draft.chosenNewFeatureIds.contains(f.id))) {
+        return true;
+      }
+    }
+    return draft.candidateNewEpics.any((ep) => ep.chosenForNextRelease);
   }
 
   bool isProgressiveNewFeatureChosen(String featureId) {
@@ -48,7 +73,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
   void toggleProgressiveNewFeature(String lineageKey, String featureId) {
     final draft = _progressiveDraft;
     if (draft == null) return;
-    final list = draft.candidateNewFeaturesByLineageKey[lineageKey.toLowerCase()];
+    final list = draft.candidateNewFeaturesByLineageKey[lineageKey.trim().toLowerCase()];
     final exists = (list != null && list.any((f) => f.id == featureId)) ||
         draft.candidateNewFeaturesByLineageKey.values.any(
           (items) => items.any((f) => f.id == featureId),
@@ -63,7 +88,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
 
   void applyProgressivePreset(String presetId) {
     final draft = _progressiveDraft;
-    if (draft == null) return;
+    if (draft == null || draft.presets.isEmpty) return;
     final preset = draft.presets.firstWhere(
       (p) => p.id == presetId,
       orElse: () => draft.presets.first,
@@ -149,7 +174,9 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
   String? commitProgressiveReleaseDraft() {
     final draft = _progressiveDraft;
     final proj = activeProject;
-    if (draft == null || proj == null) return null;
+    if (draft == null || proj == null || !hasSelectedProgressiveChanges) {
+      return null;
+    }
 
     final nextVer = draft.targetVersion;
     final relId =
@@ -469,7 +496,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       }
     }
 
-    final presetLabel = draft.activePresetId != null
+    final presetLabel = (draft.activePresetId != null && draft.presets.isNotEmpty)
         ? draft.presets
             .firstWhere(
               (p) => p.id == draft.activePresetId,
@@ -502,7 +529,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     }
     _selectedFeatureId = firstFocusFeatureId ??
         _defaultFeatureIdForEpicDoc(_selectedEpicId, releaseVersion: nextVer);
-    _progressiveDraft = null;
+    _resetProgressiveDraftState();
     _currentStage = WorkbenchStage.releaseWorkbench;
     _syncActiveProjectMetadata();
     notifyListeners();

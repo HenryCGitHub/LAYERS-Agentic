@@ -369,6 +369,16 @@ class ProgressiveReleaseDraft {
                 for (final f in list) f.id,
             };
 
+  bool get hasSelectedChanges {
+    for (final opts in upgradesByLineageKey.values) {
+      if (opts.any((u) => u.chosen)) return true;
+    }
+    for (final feats in candidateNewFeaturesByLineageKey.values) {
+      if (feats.any((f) => chosenNewFeatureIds.contains(f.id))) return true;
+    }
+    return candidateNewEpics.any((ep) => ep.chosenForNextRelease);
+  }
+
   ProgressiveReleaseDraft deepCopy() {
     return ProgressiveReleaseDraft(
       targetVersion: targetVersion,
