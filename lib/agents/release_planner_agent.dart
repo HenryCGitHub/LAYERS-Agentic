@@ -129,7 +129,7 @@ class ReleasePlannerAgent {
             'Propose next Godot 4 release presets, baseline [UPGRADE] deltas, [NEW] Feature slices inside existing Epics, and candidate [NEW] domain Epics.',
         'parameters': <String, dynamic>{
           'type': 'OBJECT',
-          'required': ['presets', 'upgrades', 'newEpics'],
+          'required': ['presets', 'upgrades', 'newFeatures', 'newEpics'],
           'properties': <String, dynamic>{
             'presets': {
               'type': 'ARRAY',
@@ -141,6 +141,10 @@ class ReleasePlannerAgent {
                   'label': {'type': 'STRING'},
                   'desc': {'type': 'STRING'},
                   'upgrades': {
+                    'type': 'ARRAY',
+                    'items': {'type': 'STRING'},
+                  },
+                  'newFeatures': {
                     'type': 'ARRAY',
                     'items': {'type': 'STRING'},
                   },
@@ -198,23 +202,23 @@ class ReleasePlannerAgent {
             },
             'newEpics': {
               'type': 'ARRAY',
-              'description': 'Candidate NEW 6-section Godot 4 Epics for this release.',
+              'description':
+                  'Candidate NEW 4-tier Godot 4 Domain Epics (architecture + child playable Feature slices) for this release.',
               'items': {
                 'type': 'OBJECT',
                 'required': [
                   'id',
                   'code',
                   'title',
+                  'coreLoopBeat',
                   'goal',
-                  'links',
-                  'outOfScope',
-                  'controls',
+                  'inScope',
+                  'doneWhen',
+                  'sceneOwnership',
                   'states',
                   'interrupts',
-                  'tuning',
-                  'feedback',
-                  'levelStaging',
-                  'checks',
+                  'outOfScope',
+                  'features',
                 ],
                 'properties': {
                   'id': {'type': 'STRING'},
@@ -230,35 +234,27 @@ class ReleasePlannerAgent {
                   },
                   'chosen': {'type': 'BOOLEAN'},
                   'goal': {'type': 'STRING'},
-                  'links': {
+                  'inScope': {
+                    'type': 'ARRAY',
+                    'items': {'type': 'STRING'},
+                  },
+                  'doneWhen': {
                     'type': 'ARRAY',
                     'items': {
                       'type': 'STRING',
                       'description':
-                          LayersTextStyleGuide.godotSceneLinkSchemaDesc,
+                          LayersTextStyleGuide.causalPlaytestCheckSchemaDesc,
                     },
                   },
-                  'outOfScope': {
+                  'sceneOwnership': {
                     'type': 'ARRAY',
-                    'items': {
-                      'type': 'STRING',
-                      'description':
-                          LayersTextStyleGuide.exclusionItemSchemaDesc,
-                    },
-                  },
-                  'controls': {
-                    'type': 'ARRAY',
+                    'description': LayersTextStyleGuide.sceneOwnershipSchemaDesc,
                     'items': {
                       'type': 'OBJECT',
-                      'required': ['action', 'trigger', 'rule'],
+                      'required': ['path', 'role'],
                       'properties': {
-                        'action': {'type': 'STRING'},
-                        'trigger': {'type': 'STRING'},
-                        'rule': {
-                          'type': 'STRING',
-                          'description':
-                              LayersTextStyleGuide.godotControlRuleSchemaDesc,
-                        },
+                        'path': {'type': 'STRING'},
+                        'role': {'type': 'STRING'},
                       },
                     },
                   },
@@ -270,47 +266,12 @@ class ReleasePlannerAgent {
                     'type': 'ARRAY',
                     'items': {'type': 'STRING'},
                   },
-                  'tuning': {
+                  'outOfScope': {
                     'type': 'ARRAY',
                     'items': {
-                      'type': 'OBJECT',
-                      'required': ['key', 'value', 'unit'],
-                      'properties': {
-                        'key': {
-                          'type': 'STRING',
-                          'description':
-                              LayersTextStyleGuide.godotTuningKeySchemaDesc,
-                        },
-                        'value': {'type': 'STRING'},
-                        'unit': {
-                          'type': 'STRING',
-                          'description':
-                              LayersTextStyleGuide.godotTuningUnitSchemaDesc,
-                        },
-                      },
-                    },
-                  },
-                  'feedback': {
-                    'type': 'ARRAY',
-                    'items': {'type': 'STRING'},
-                  },
-                  'levelStaging': {
-                    'type': 'STRING',
-                    'description':
-                        LayersTextStyleGuide.godotSceneStagingSchemaDesc,
-                  },
-                  'checks': {
-                    'type': 'ARRAY',
-                    'items': {
-                      'type': 'OBJECT',
-                      'required': ['text'],
-                      'properties': {
-                        'text': {
-                          'type': 'STRING',
-                          'description':
-                              LayersTextStyleGuide.causalPlaytestCheckSchemaDesc,
-                        },
-                      },
+                      'type': 'STRING',
+                      'description':
+                          LayersTextStyleGuide.exclusionItemSchemaDesc,
                     },
                   },
                   'features': {
@@ -324,6 +285,12 @@ class ReleasePlannerAgent {
         },
       };
 
+  static bool _hasRootV02Cache(ProjectConceptBlueprint rootSpec) {
+    return rootSpec.v02NewPool.isNotEmpty ||
+        rootSpec.v02UpgradesByLineageKey.isNotEmpty ||
+        rootSpec.v02NewFeaturesByLineageKey.isNotEmpty;
+  }
+
   /// Proposes the next progressive release Co-Pilot draft (presets + baseline `[UPGRADE]` + `[NEW]` Epics).
   static Future<ProgressiveReleaseDraft> proposeNextReleaseCopilot({
     required ProjectConceptBlueprint rootSpec,
@@ -334,13 +301,10 @@ class ReleasePlannerAgent {
     String preferredModel = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = 'LOW',
   }) async {
-    // Instant local curated Co-Pilot pack when switching v0.1 -> v0.2 with built-in presets
+    // Instant local curated Co-Pilot pack when switching v0.1 -> v0.2 with cached v0.2 data
     if (targetVersion == 'v0.2' &&
         directionPrompt.trim().isEmpty &&
-        rootSpec.v02Presets.isNotEmpty &&
-        (rootSpec.v02NewPool.isNotEmpty ||
-            rootSpec.v02UpgradesByLineageKey.isNotEmpty ||
-            rootSpec.v02NewFeaturesByLineageKey.isNotEmpty) &&
+        _hasRootV02Cache(rootSpec) &&
         !GeminiAgentClient.hasKey(apiKey)) {
       return _draftFromRootCache(rootSpec, currentEpics, targetVersion);
     }
@@ -361,11 +325,21 @@ class ReleasePlannerAgent {
           'lineageKey': e.lineageKey,
           'title': e.title,
           'goal': e.goal,
-          if (e.links.isNotEmpty) 'links': e.links.take(3).toList(),
-          if (e.controls.isNotEmpty)
-            'controls': e.controls.map((c) => c.action).take(4).toList(),
-          if (e.levelStaging.trim().isNotEmpty)
-            'levelStaging': e.levelStaging.trim(),
+          if (e.inScope.isNotEmpty) 'inScope': e.inScope.take(4).toList(),
+          if (e.sceneOwnership.isNotEmpty)
+            'sceneOwnership': [
+              for (final s in e.sceneOwnership.take(4))
+                {'path': s.path, 'role': s.role},
+            ],
+          if (e.features.isNotEmpty)
+            'features': [
+              for (final f in e.features)
+                {
+                  'code': f.code,
+                  'title': f.title,
+                  'introducedIn': f.introducedIn,
+                },
+            ],
         },
     ];
 
@@ -473,20 +447,8 @@ CRITICAL RULES:
 
       final newFeaturesByKey = <String, List<FeatureSpec>>{};
       final rawNewFeatures = res['newFeatures'] as List? ?? const [];
-      final usedFeatCodesLower = <String>{
-        for (final ep in currentEpics)
-          for (final f in ep.features)
-            if (f.code.trim().isNotEmpty) f.code.trim().toLowerCase(),
-      };
-      final featCodeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
-      int nextFeatureOrdinal = 1;
-      for (final ep in currentEpics) {
-        for (final f in ep.features) {
-          final m = featCodeRx.firstMatch(f.code.trim());
-          final numVal = int.tryParse(m?.group(1) ?? '') ?? 0;
-          if (numVal >= nextFeatureOrdinal) nextFeatureOrdinal = numVal + 1;
-        }
-      }
+      final featureCodes = _FeatureCodeAllocator(currentEpics);
+
       final verSlug = targetVersion.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
       for (final entry in rawNewFeatures) {
         if (entry is! Map) continue;
@@ -502,20 +464,11 @@ CRITICAL RULES:
           if (rawList[i] is! Map) continue;
           var feat = FeatureSpec.fromJson(
             Map<String, dynamic>.from(rawList[i] as Map),
-            indexHint: nextFeatureOrdinal - 1,
+            indexHint: featureCodes.nextOrdinal - 1,
             idPrefixHint: '${resolvedKey}_$verSlug',
           );
           feat.introducedIn = targetVersion;
-          while (usedFeatCodesLower.contains(
-              FeatureSpec.formatCode(nextFeatureOrdinal).toLowerCase())) {
-            nextFeatureOrdinal++;
-          }
-          if (feat.code.trim().isEmpty ||
-              usedFeatCodesLower.contains(feat.code.trim().toLowerCase())) {
-            feat.code = FeatureSpec.formatCode(nextFeatureOrdinal);
-          }
-          usedFeatCodesLower.add(feat.code.trim().toLowerCase());
-          nextFeatureOrdinal++;
+          feat.code = featureCodes.allocate(feat.code);
           parsedList.add(
             GodotSpecGuard.sanitizeFeatureSpec(
               feat,
@@ -554,13 +507,60 @@ CRITICAL RULES:
         usedLineageKeys.add(parsed.lineageKey);
         parsed.releaseVersion = targetVersion;
         parsed.lifecycle = EpicLifecycle.newEpic;
-        for (final feat in parsed.features) {
-          feat.introducedIn = targetVersion;
-        }
         if (parsed.coreLoopBeat.trim().isEmpty) {
           parsed.coreLoopBeat = rootSpec.coreLoop.isNotEmpty
               ? 'Beat ${rootSpec.coreLoop.length} · ${rootSpec.coreLoop.last}'
               : 'Loop Escalation';
+        }
+        if (parsed.inScope.isEmpty && parsed.goal.trim().isNotEmpty) {
+          parsed.inScope = [parsed.goal.trim()];
+        }
+        if (parsed.doneWhen.isEmpty) {
+          parsed.doneWhen = [
+            'Run F6 -> ${parsed.title} operates cleanly with 0 Debugger errors',
+          ];
+        }
+        if (parsed.sceneOwnership.isEmpty) {
+          final slug = parsed.title
+              .toLowerCase()
+              .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+              .replaceAll(RegExp(r'^_+|_+$'), '');
+          final safeSlug =
+              slug.isEmpty ? 'epic_${parsed.code.toLowerCase()}' : slug;
+          parsed.sceneOwnership = [
+            EpicSceneOwnership(
+              path: 'res://scripts/$safeSlug.gd',
+              role: parsed.title,
+            ),
+          ];
+        }
+        if (parsed.features.isEmpty) {
+          parsed.features = [
+            FeatureSpec(
+              id: '${parsed.id}_f01',
+              code: featureCodes.allocate(),
+              title: parsed.title,
+              introducedIn: targetVersion,
+              sliceTime: '45 min',
+              status: FeatureStatus.queued,
+              goal: parsed.goal.trim().isNotEmpty
+                  ? parsed.goal.trim()
+                  : parsed.title,
+              inScope: List<String>.from(parsed.inScope),
+              doneWhen: List<String>.from(parsed.doneWhen),
+              checks: [
+                EpicPieCheck(
+                  id: '${parsed.id}_f01_c1',
+                  text: parsed.doneWhen.first,
+                ),
+              ],
+            ),
+          ];
+        } else {
+          for (final feat in parsed.features) {
+            feat.introducedIn = targetVersion;
+            feat.code = featureCodes.allocate(feat.code);
+          }
         }
         parsed.chosenForNextRelease =
             (rawNewEpics[i] as Map)['chosen'] == true || i == 0;
@@ -580,7 +580,7 @@ CRITICAL RULES:
           targetVersion: targetVersion,
           presets: presets.isNotEmpty
               ? presets
-              : _defaultPresets(upgradesByKey, candidateNew),
+              : _defaultPresets(upgradesByKey, newFeaturesByKey, candidateNew),
           upgradesByLineageKey: upgradesByKey,
           candidateNewFeaturesByLineageKey: newFeaturesByKey,
           candidateNewEpics: candidateNew,
@@ -601,20 +601,22 @@ CRITICAL RULES:
     String rawKeyOriginal,
     List<EpicSpec> currentEpics,
   ) {
-    final rawKey = rawKeyOriginal.toLowerCase();
+    final cleanOrig = rawKeyOriginal.trim();
+    final rawKey = cleanOrig.toLowerCase();
     if (rawKey.isEmpty) return '';
     EpicSpec? matched = currentEpics
-        .where((ep) => ep.lineageKey.trim() == rawKeyOriginal)
-        .firstOrNull;
-    matched ??=
-        currentEpics.where((ep) => ep.code.trim() == rawKeyOriginal).firstOrNull;
-    matched ??= currentEpics
         .where((ep) => ep.lineageKey.trim().toLowerCase() == rawKey)
         .firstOrNull;
     matched ??= currentEpics
         .where((ep) => ep.code.trim().toLowerCase() == rawKey)
         .firstOrNull;
-    return matched?.lineageKey.trim().toLowerCase() ?? rawKey;
+    matched ??= currentEpics
+        .where((ep) => ep.id.trim().toLowerCase() == rawKey)
+        .firstOrNull;
+    matched ??= currentEpics
+        .where((ep) => ep.title.trim().toLowerCase() == rawKey)
+        .firstOrNull;
+    return matched != null ? matched.lineageKey.trim().toLowerCase() : '';
   }
 
   static ProgressiveReleaseDraft _draftFromRootCache(
@@ -624,6 +626,8 @@ CRITICAL RULES:
   ) {
     final upgrades = <String, List<EpicUpgradeOption>>{};
     final newFeatures = <String, List<FeatureSpec>>{};
+    final featureCodes = _FeatureCodeAllocator(currentEpics);
+
     for (final ep in currentEpics) {
       final key = ep.lineageKey.toLowerCase();
       final cached = rootSpec.v02UpgradesByLineageKey[key];
@@ -634,7 +638,11 @@ CRITICAL RULES:
       if (cachedNewFeats != null && cachedNewFeats.isNotEmpty) {
         newFeatures[key] = [
           for (final f in cachedNewFeats)
-            f.deepCopy()..introducedIn = targetVersion,
+            () {
+              final copy = f.deepCopy()..introducedIn = targetVersion;
+              copy.code = featureCodes.allocate(copy.code);
+              return copy;
+            }(),
         ];
       }
     }
@@ -647,19 +655,22 @@ CRITICAL RULES:
           );
           for (final feat in copy.features) {
             feat.introducedIn = targetVersion;
+            feat.code = featureCodes.allocate(feat.code);
           }
           return copy;
         }(),
     ];
+    final effectivePresets = rootSpec.v02Presets.isNotEmpty
+        ? List<ReleaseDirectionPreset>.from(rootSpec.v02Presets)
+        : _defaultPresets(upgrades, newFeatures, newPool);
     return ProgressiveReleaseDraft(
       targetVersion: targetVersion,
-      presets: List<ReleaseDirectionPreset>.from(rootSpec.v02Presets),
+      presets: effectivePresets,
       upgradesByLineageKey: upgrades,
       candidateNewFeaturesByLineageKey: newFeatures,
       candidateNewEpics: newPool,
-      activePresetId: rootSpec.v02Presets.isNotEmpty
-          ? rootSpec.v02Presets.first.id
-          : null,
+      activePresetId:
+          effectivePresets.isNotEmpty ? effectivePresets.first.id : null,
     );
   }
 
@@ -670,8 +681,8 @@ CRITICAL RULES:
     required String directionPrompt,
   }) {
     if (targetVersion == 'v0.2' &&
-        rootSpec.v02Presets.isNotEmpty &&
-        directionPrompt.trim().isEmpty) {
+        directionPrompt.trim().isEmpty &&
+        _hasRootV02Cache(rootSpec)) {
       return _draftFromRootCache(rootSpec, currentEpics, targetVersion);
     }
 
@@ -680,6 +691,7 @@ CRITICAL RULES:
     final is2d = rootSpec.dimension == GodotProjectDimension.dim2d;
     final distUnit = rootSpec.dimension.distanceUnit;
     final speedUnit = rootSpec.dimension.speedUnit;
+    final featureCodes = _FeatureCodeAllocator(currentEpics);
 
     if (currentEpics.isNotEmpty) {
       final firstEpic = currentEpics.first;
@@ -687,6 +699,7 @@ CRITICAL RULES:
       final firstFeatCode = firstEpic.features.isNotEmpty
           ? firstEpic.features.last.code
           : 'F01';
+      final newFeatCode = featureCodes.allocate();
       upgradesByKey[firstKey] = [
         EpicUpgradeOption(
           id: 'up_${firstKey}_juice',
@@ -704,9 +717,7 @@ CRITICAL RULES:
         GodotSpecGuard.sanitizeFeatureSpec(
           FeatureSpec(
             id: '${firstKey}_${targetVersion}_chain',
-            code: FeatureSpec.formatCode(
-              currentEpics.fold<int>(1, (sum, ep) => sum + ep.features.length),
-            ),
+            code: newFeatCode,
             title: 'Counter Impulse & Quick Recover',
             introducedIn: targetVersion,
             sliceTime: '45 min',
@@ -729,7 +740,8 @@ CRITICAL RULES:
             checks: [
               EpicPieCheck(
                 id: 'off_feat_c1',
-                text: 'Trigger counter -> Follow-up movement bursts cleanly with 0 cooldown wait',
+                text:
+                    'Trigger counter -> Follow-up movement bursts cleanly with 0 cooldown wait',
               ),
             ],
           ),
@@ -738,14 +750,24 @@ CRITICAL RULES:
       ];
     }
 
+    final usedLineageKeys = <String>{
+      for (final ep in currentEpics)
+        if (ep.lineageKey.trim().isNotEmpty) ep.lineageKey.trim().toLowerCase(),
+    };
+    int nextLineageOrd = currentEpics.length + 1;
+    while (usedLineageKeys.contains(EpicSpec.formatLineageKey(nextLineageOrd))) {
+      nextLineageOrd++;
+    }
     final nextCode = EpicSpec.formatCode(currentEpics.length + 1);
+    final nextLineageKey = EpicSpec.formatLineageKey(nextLineageOrd);
     final focusTitle = directionPrompt.trim().isNotEmpty
         ? LayersTextStyleGuide.formatConciseTaskTitle(directionPrompt.trim())
-        : 'Wave Progression & Score Loop';
+        : 'Round & Score Escalation';
+    final newEpicFeatCode = featureCodes.allocate();
     final newEpic = EpicSpec(
       id: 'ep_${targetVersion}_1',
       code: nextCode,
-      lineageKey: nextCode.toLowerCase(),
+      lineageKey: nextLineageKey,
       title: focusTitle,
       releaseVersion: targetVersion,
       lifecycle: EpicLifecycle.newEpic,
@@ -754,73 +776,48 @@ CRITICAL RULES:
           : 'Loop Escalation',
       chosenForNextRelease: true,
       goal:
-          'Expand $targetVersion loop continuity with wave escalation, Control HUD counter readout, and instant quick-restart.',
+          'Expand $targetVersion loop continuity with round pacing, Control HUD counter readout, and instant quick-restart.',
       inScope: const [
-        '3-wave perimeter spawn director',
-        'Top-center HUD wave counter & R quick reset',
+        '3-stage round progression timer',
+        'Top-center HUD round counter & R quick reset',
       ],
       doneWhen: const [
-        'Clear wave 1 enemies -> HUD updates and wave 2 spawns cleanly after 2.0 s',
+        'Complete Stage 1 objective -> HUD counter updates and Stage 2 starts after 2.0 s',
       ],
       sceneOwnership: [
         EpicSceneOwnership(
-          path: 'res://scripts/wave_director.gd',
-          role: 'SpawnWave timer, counter HUD signal & R quick reset',
+          path: 'res://scripts/round_director.gd',
+          role: 'Stage timer progression, HUD signal & R quick reset',
         ),
-      ],
-      links: [
-        if (currentEpics.isNotEmpty)
-          'Instantiates / resets ${currentEpics.last.code} (${currentEpics.last.title}) scenes',
-        'Updates Control HUD wave label and remaining enemy counter',
       ],
       outOfScope: const [
         'No main menu save-slot persistence',
       ],
-      controls: [
-        EpicControlBinding(
-          action: 'quick_restart',
-          trigger: 'Just Pressed (R)',
-          rule: 'Resets round counter and player health cleanly in < 0.2s',
-        ),
-      ],
       states: const [
-        'WaveStart (1.0s) -> ActiveWave -> RoundClear (2.0s) -> NextWave / Victory',
+        'RoundStart (1.0s) -> ActiveRound -> StageClear (2.0s) -> NextStage / Victory',
       ],
       interrupts: const [
-        'Player defeat cleanly halts wave spawner timers and displays retry prompt',
-      ],
-      tuning: [
-        EpicTuningParam(key: 'round_wave_count', value: '3', unit: 'count'),
-        EpicTuningParam(key: 'wave_delay', value: '2.0', unit: 's'),
-      ],
-      feedback: const [
-        'Top-center HUD wave counter flashes bright cyan on wave transition',
-      ],
-      levelStaging:
-          'Reuse active v0.1 prototype scene with 3 SpawnPoint marker nodes',
-      checks: [
-        EpicPieCheck(
-          id: '${nextCode.toLowerCase()}_c1',
-          text: 'Clear wave 1 enemies -> HUD updates and wave 2 spawns cleanly after 2.0s',
-        ),
+        'Run reset cleanly halts stage timers and restores initial actors in < 0.2 s',
       ],
       features: [
         FeatureSpec(
           id: 'ep_${targetVersion}_f01',
-          code: 'F01',
-          title: 'Multi-Wave Spawner & Counter',
+          code: newEpicFeatCode,
+          title: 'Multi-Stage Pacer & HUD Counter',
           introducedIn: targetVersion,
           sliceTime: '45 min',
           status: FeatureStatus.queued,
-          goal: 'Spawn 3 timed enemy waves and update top-center Control HUD banner.',
+          goal:
+              'Advance 3 timed gameplay stages and update top-center Control HUD banner.',
           tuning: [
-            EpicTuningParam(key: 'round_wave_count', value: '3', unit: 'count'),
-            EpicTuningParam(key: 'wave_delay', value: '2.0', unit: 's'),
+            EpicTuningParam(key: 'round_stage_count', value: '3', unit: 'count'),
+            EpicTuningParam(key: 'stage_delay', value: '2.0', unit: 's'),
           ],
           checks: [
             EpicPieCheck(
               id: 'ep_${targetVersion}_f01_c1',
-              text: 'Defeat Wave 1 -> Banner updates and Wave 2 spawns after 2.0 s',
+              text:
+                  'Complete Stage 1 objective -> HUD updates and Stage 2 starts after 2.0 s',
             ),
           ],
         ),
@@ -835,7 +832,7 @@ CRITICAL RULES:
       ),
     ];
 
-    final presets = _defaultPresets(upgradesByKey, candidateList);
+    final presets = _defaultPresets(upgradesByKey, newFeaturesByKey, candidateList);
     return ProgressiveReleaseDraft(
       targetVersion: targetVersion,
       presets: presets,
@@ -848,10 +845,13 @@ CRITICAL RULES:
 
   static List<ReleaseDirectionPreset> _defaultPresets(
     Map<String, List<EpicUpgradeOption>> upgradesByKey,
+    Map<String, List<FeatureSpec>> newFeaturesByKey,
     List<EpicSpec> candidates,
   ) {
     final firstUpIds = <String>[
       for (final list in upgradesByKey.values)
+        if (list.isNotEmpty) list.first.id,
+      for (final list in newFeaturesByKey.values)
         if (list.isNotEmpty) list.first.id,
     ];
     final firstNewIds = <String>[
@@ -860,6 +860,8 @@ CRITICAL RULES:
     final allUpIds = <String>[
       for (final list in upgradesByKey.values)
         for (final o in list) o.id,
+      for (final list in newFeaturesByKey.values)
+        for (final f in list) f.id,
     ];
     final allNewIds = <String>[for (final c in candidates) c.id];
 
@@ -881,5 +883,50 @@ CRITICAL RULES:
         newEpicIds: allNewIds,
       ),
     ];
+  }
+}
+
+/// Tracks allocated `F##` codes across baseline Epics and assigns non-colliding sequential codes.
+class _FeatureCodeAllocator {
+  static final RegExp _codeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
+  final Set<String> _usedLower = <String>{};
+  int _nextOrdinal = 1;
+
+  int get nextOrdinal => _nextOrdinal;
+
+  _FeatureCodeAllocator(List<EpicSpec> currentEpics) {
+    for (final ep in currentEpics) {
+      for (final f in ep.features) {
+        final clean = f.code.trim();
+        if (clean.isNotEmpty) {
+          _usedLower.add(clean.toLowerCase());
+        }
+        final m = _codeRx.firstMatch(clean);
+        final numVal = int.tryParse(m?.group(1) ?? '') ?? 0;
+        if (numVal >= _nextOrdinal) _nextOrdinal = numVal + 1;
+      }
+    }
+  }
+
+  String allocate([String preferred = '']) {
+    final cleanPref = preferred.trim();
+    final prefLower = cleanPref.toLowerCase();
+    if (cleanPref.isNotEmpty && !_usedLower.contains(prefLower)) {
+      _usedLower.add(prefLower);
+      final m = _codeRx.firstMatch(cleanPref);
+      if (m != null) {
+        final numVal = int.tryParse(m.group(1) ?? '') ?? 0;
+        if (numVal >= _nextOrdinal) _nextOrdinal = numVal + 1;
+      }
+      return cleanPref;
+    }
+    while (_usedLower
+        .contains(FeatureSpec.formatCode(_nextOrdinal).toLowerCase())) {
+      _nextOrdinal++;
+    }
+    final allocated = FeatureSpec.formatCode(_nextOrdinal);
+    _usedLower.add(allocated.toLowerCase());
+    _nextOrdinal++;
+    return allocated;
   }
 }

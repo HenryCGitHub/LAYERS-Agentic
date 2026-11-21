@@ -329,11 +329,15 @@ class ReleaseDirectionPreset {
       };
 
   factory ReleaseDirectionPreset.fromJson(Map<String, dynamic> json) {
+    final mergedUpgradeAndNewFeatureIds = <String>{
+      ..._strList(json['upgrades']),
+      ..._strList(json['newFeatures']),
+    }.toList();
     return ReleaseDirectionPreset(
       id: (json['id'] ?? 'preset').toString(),
       label: (json['label'] ?? 'Release Direction').toString(),
       description: (json['desc'] ?? json['description'] ?? '').toString(),
-      upgradeIds: _strList(json['upgrades']),
+      upgradeIds: mergedUpgradeAndNewFeatureIds,
       newEpicIds: _strList(json['newEpics']),
     );
   }
@@ -1045,18 +1049,20 @@ class EpicSpec {
     ];
     final parsedUpgradeDeltas = _strList(json['upgradeDeltas']);
 
-    final List<EpicSceneOwnership> parsedOwnership;
-    if (json.containsKey('sceneOwnership') && json['sceneOwnership'] is List) {
-      parsedOwnership = [
-        for (final item in (json['sceneOwnership'] as List))
-          EpicSceneOwnership.fromJson(item),
-      ].where((o) => o.path.isNotEmpty).toList();
-    } else {
-      parsedOwnership = _extractLegacySceneOwnership(
-        parsedLinks,
-        parsedLevelStaging,
-      );
-    }
+    final List<EpicSceneOwnership> explicitOwnership =
+        (json.containsKey('sceneOwnership') && json['sceneOwnership'] is List)
+            ? [
+                for (final item in (json['sceneOwnership'] as List))
+                  EpicSceneOwnership.fromJson(item),
+              ].where((o) => o.path.isNotEmpty).toList()
+            : <EpicSceneOwnership>[];
+    final List<EpicSceneOwnership> parsedOwnership =
+        explicitOwnership.isNotEmpty
+            ? explicitOwnership
+            : _extractLegacySceneOwnership(
+                parsedLinks,
+                parsedLevelStaging,
+              );
 
     final List<FeatureSpec> parsedFeatures;
     if (json.containsKey('features') && json['features'] is List) {

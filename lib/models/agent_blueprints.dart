@@ -1518,8 +1518,8 @@ class GodotSparkPresets {
           label: 'Combat Juice Pass',
           description:
               'Tighten dash hitstop, add chain dash on shell break, and bring in 3-wave arena escalation.',
-          upgradeIds: ['up_e01_hitstop', 'up_e03_knockback'],
-          newEpicIds: ['e04_waves'],
+          upgradeIds: ['up_e01_hitstop', 'up_e03_knockback', 'sb_f07_chain'],
+          newEpicIds: ['sb_e04'],
         ),
         ReleaseDirectionPreset(
           id: 'defensive',
@@ -1527,7 +1527,7 @@ class GodotSparkPresets {
           description:
               'Reward close-range shell parries while expanding the wave loop.',
           upgradeIds: ['up_e02_crit', 'up_e03_deathshatter'],
-          newEpicIds: ['e04_waves', 'e05_parry'],
+          newEpicIds: ['sb_e04', 'sb_e05'],
         ),
       ],
       v02UpgradesByLineageKey: {
@@ -1625,7 +1625,7 @@ class GodotSparkPresets {
           features: [
             FeatureSpec(
               id: 'sb_e04_f01',
-              code: 'F01',
+              code: 'F08',
               title: '3-Wave Arena Spawner & Quick Restart',
               introducedIn: 'v0.2',
               sliceTime: '60 min',
@@ -1741,7 +1741,7 @@ class GodotSparkPresets {
           features: [
             FeatureSpec(
               id: 'sb_e05_f01',
-              code: 'F01',
+              code: 'F09',
               title: 'Timed Buckler Parry Counter',
               introducedIn: 'v0.2',
               sliceTime: '45 min',
@@ -2148,6 +2148,49 @@ class GodotSparkPresets {
           ],
         ),
       ],
+      v02Presets: const [
+        ReleaseDirectionPreset(
+          id: 'precision',
+          label: 'Precision Drift Flow',
+          description:
+              'Hold boost charge through apex carves and spray canyon wall sparks cleanly.',
+          upgradeIds: ['up_rj_e01_slipstream', 'up_rj_e03_split_badge', 'rj_f07_wallglide'],
+          newEpicIds: ['rj_e04'],
+        ),
+        ReleaseDirectionPreset(
+          id: 'marathon',
+          label: 'Time Trial Rivals',
+          description:
+              'Add sector split ghost playback alongside drift spark feedback and overdrive.',
+          upgradeIds: ['up_rj_e02_grip_flash', 'up_rj_e03_split_badge', 'rj_f07_wallglide'],
+          newEpicIds: ['rj_e04'],
+        ),
+      ],
+      v02UpgradesByLineageKey: {
+        'e01': [
+          EpicUpgradeOption(
+            id: 'up_rj_e01_slipstream',
+            targetFeatureCode: 'F01',
+            text: '+12% yaw turn-in crispness above 28 m/s cruise speed',
+            chosen: true,
+          ),
+        ],
+        'e02': [
+          EpicUpgradeOption(
+            id: 'up_rj_e02_grip_flash',
+            targetFeatureCode: 'F04',
+            text: '+Amber thrusters pulse when Drift Charge reaches 100%',
+          ),
+        ],
+        'e03': [
+          EpicUpgradeOption(
+            id: 'up_rj_e03_split_badge',
+            targetFeatureCode: 'F06',
+            text: '+Floating green/red split sector delta flash on gate pass',
+            chosen: true,
+          ),
+        ],
+      },
       v02NewFeaturesByLineageKey: {
         'e01': [
           FeatureSpec(
@@ -2170,6 +2213,62 @@ class GodotSparkPresets {
           ),
         ],
       },
+      v02NewPool: [
+        EpicSpec(
+          id: 'rj_e04',
+          code: 'E04',
+          lineageKey: 'e04',
+          title: 'Ghost Split Replay',
+          releaseVersion: 'v0.2',
+          lifecycle: EpicLifecycle.newEpic,
+          coreLoopBeat: 'Beat 4 · Best-Lap Ghost Comparison',
+          chosenForNextRelease: true,
+          goal:
+              'Record local best-run transform samples at 15 Hz and replay a translucent wireframe skiff ghost.',
+          inScope: const [
+            '15 Hz ring-buffer transform recorder',
+            'Translucent ghost skiff playback against par clock',
+          ],
+          doneWhen: const [
+            'Complete Lap 1 and press R -> Ghost skiff races along prior best line cleanly',
+          ],
+          sceneOwnership: [
+            EpicSceneOwnership(
+              path: 'res://scripts/ghost_recorder.gd',
+              role: '15 Hz transform sampling & translucent ghost playback',
+            ),
+          ],
+          outOfScope: const [
+            'No online leaderboard uploads',
+          ],
+          states: const [
+            'Recording -> LapSaved -> PlaybackLoop',
+          ],
+          interrupts: const [
+            'Press R resets ghost playback cleanly to frame 0 at StartLine',
+          ],
+          features: [
+            FeatureSpec(
+              id: 'rj_e04_f01',
+              code: 'F08',
+              title: 'Best-Lap Wireframe Ghost Skiff',
+              introducedIn: 'v0.2',
+              sliceTime: '45 min',
+              status: FeatureStatus.queued,
+              goal: 'Record 15 Hz skiff transforms and spawn translucent wireframe ghost on subsequent runs.',
+              tuning: [
+                EpicTuningParam(key: 'ghost_sample_hz', value: '15', unit: 'count'),
+              ],
+              checks: [
+                EpicPieCheck(
+                  id: 'rj_e04_f01_c1',
+                  text: 'Finish Lap 1 and tap R -> Wireframe ghost skiff replays prior line cleanly',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -2538,6 +2637,49 @@ class GodotSparkPresets {
           ],
         ),
       ],
+      v02Presets: const [
+        ReleaseDirectionPreset(
+          id: 'agile_flame',
+          label: 'Agile Flame Combat',
+          description:
+              'Pair 2D ember roll dodge with crisp cleave arcs and stalker threat waves.',
+          upgradeIds: ['up_ek_e01_arc', 'up_ek_e03_telegraph', 'ek_f07_roll'],
+          newEpicIds: ['ek_e04'],
+        ),
+        ReleaseDirectionPreset(
+          id: 'siege_ring',
+          label: 'Brazier Siege Sustain',
+          description:
+              'Extend brazier flare bursts while defending against escalating night waves.',
+          upgradeIds: ['up_ek_e02_flare', 'up_ek_e03_telegraph', 'ek_f07_roll'],
+          newEpicIds: ['ek_e04'],
+        ),
+      ],
+      v02UpgradesByLineageKey: {
+        'e01': [
+          EpicUpgradeOption(
+            id: 'up_ek_e01_arc',
+            targetFeatureCode: 'F02',
+            text: '+24 px wider 2D torch axe swipe arc with 35ms hitstop',
+            chosen: true,
+          ),
+        ],
+        'e02': [
+          EpicUpgradeOption(
+            id: 'up_ek_e02_flare',
+            targetFeatureCode: 'F03',
+            text: '+60 px initial ignition flash pulse pushing nearby shadows',
+          ),
+        ],
+        'e03': [
+          EpicUpgradeOption(
+            id: 'up_ek_e03_telegraph',
+            targetFeatureCode: 'F05',
+            text: '+Glowing eye-slit telegraph line 0.35 s before BiteLunge',
+            chosen: true,
+          ),
+        ],
+      },
       v02NewFeaturesByLineageKey: {
         'e01': [
           FeatureSpec(
@@ -2561,6 +2703,63 @@ class GodotSparkPresets {
           ),
         ],
       },
+      v02NewPool: [
+        EpicSpec(
+          id: 'ek_e04',
+          code: 'E04',
+          lineageKey: 'e04',
+          title: '2D Night Wave Pressure',
+          releaseVersion: 'v0.2',
+          lifecycle: EpicLifecycle.newEpic,
+          coreLoopBeat: 'Beat 4 · Escalating Courtyard Pressure',
+          chosenForNextRelease: true,
+          goal:
+              'Spawn 3 timed 2D shadow stalker waves from dark keep corners with top-center counter HUD.',
+          inScope: const [
+            '3 courtyard wave tiers spaced 320 px outside center brazier',
+            'Top-center HUD night wave readout & R quick restart',
+          ],
+          doneWhen: const [
+            'Clear Night Wave 1 -> 2.0 s breather plays and Wave 2 spawns from shadowed edges',
+          ],
+          sceneOwnership: [
+            EpicSceneOwnership(
+              path: 'res://scripts/night_wave_director.gd',
+              role: '2D wave spawn timing, edge offsets & R reset hook',
+            ),
+          ],
+          outOfScope: const [
+            'No multi-floor procedural dungeon rooms',
+          ],
+          states: const [
+            'WaveIntro -> ActiveHunt -> Breather (2.0s) -> NightSurvived',
+          ],
+          interrupts: const [
+            'Center brazier burnout halts spawns and triggers Relight Prompt overlay',
+          ],
+          features: [
+            FeatureSpec(
+              id: 'ek_e04_f01',
+              code: 'F08',
+              title: 'Timed Courtyard Wave Spawner',
+              introducedIn: 'v0.2',
+              sliceTime: '45 min',
+              status: FeatureStatus.queued,
+              goal: 'Spawn 3 escalating 2D shadow waves at 320 px radius with top-center HUD counter.',
+              tuning: [
+                EpicTuningParam(key: 'spawn_edge_offset', value: '320', unit: 'px'),
+                EpicTuningParam(key: 'breather_seconds', value: '2.0', unit: 's'),
+              ],
+              checks: [
+                EpicPieCheck(
+                  id: 'ek_e04_f01_c1',
+                  text: 'Defeat Wave 1 stalkers -> HUD updates and Wave 2 spawns after 2.0 s',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

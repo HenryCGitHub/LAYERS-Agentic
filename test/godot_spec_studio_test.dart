@@ -1945,5 +1945,289 @@ console.log(JSON.stringify({
         }
       },
     );
+
+    test(
+      '21. ReleasePlannerAgent 4-tier [NEW] Epic schema, prompt feature/scene summary, invalid lineageKey filtering & Railjack/Emberkeep v0.2 parity',
+      () async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.resetCapabilityCacheForTest();
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+
+        try {
+          final sb = GodotSparkPresets.byId('shellbreaker');
+
+          // 1) Inspect outbound Gemini functionDeclaration schema & verify 4-tier [NEW] Epic schema
+          Map<String, dynamic>? capturedToolDecl;
+          GeminiAgentClient.testMockResponder = null;
+          GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+            if (body is String && body.isNotEmpty) {
+              final decoded = jsonDecode(body) as Map<String, dynamic>;
+              final tools = decoded['tools'] as List?;
+              if (tools != null && tools.isNotEmpty) {
+                final decls = (tools.first as Map)['functionDeclarations'] as List?;
+                if (decls != null && decls.isNotEmpty) {
+                  capturedToolDecl =
+                      Map<String, dynamic>.from(decls.first as Map);
+                }
+              }
+            }
+            return http.Response(
+              jsonEncode({
+                'candidates': [
+                  {
+                    'content': {
+                      'parts': [
+                        {
+                          'functionCall': {
+                            'name': 'propose_progressive_godot_release',
+                            'args': {
+                              'presets': [],
+                              'upgrades': [],
+                              'newFeatures': [],
+                              'newEpics': [],
+                            },
+                          },
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          };
+
+          await ReleasePlannerAgent.proposeNextReleaseCopilot(
+            rootSpec: sb,
+            currentEpics: sb.initialEpics,
+            targetVersion: 'v0.2',
+            apiKey: 'test-key-1234',
+          );
+
+          expect(capturedToolDecl, isNotNull);
+          final rootParams =
+              capturedToolDecl!['parameters'] as Map<String, dynamic>;
+          final rootProps = rootParams['properties'] as Map<String, dynamic>;
+          final newEpicItems =
+              (rootProps['newEpics'] as Map<String, dynamic>)['items']
+                  as Map<String, dynamic>;
+          final newEpicRequired =
+              (newEpicItems['required'] as List).cast<String>();
+          final newEpicProps =
+              newEpicItems['properties'] as Map<String, dynamic>;
+
+          expect(
+            newEpicRequired,
+            containsAll(<String>[
+              'inScope',
+              'doneWhen',
+              'sceneOwnership',
+              'features',
+            ]),
+          );
+          for (final legacyField in const <String>[
+            'controls',
+            'tuning',
+            'feedback',
+            'levelStaging',
+            'checks',
+          ]) {
+            expect(newEpicRequired, isNot(contains(legacyField)));
+            expect(newEpicProps.containsKey(legacyField), isFalse);
+          }
+
+          // 2) Mock Gemini Co-Pilot response with invalid lineageKey, preset newFeatures, and 2 [NEW] Epics
+          GeminiAgentClient.testHttpPost = null;
+          String capturedPrompt = '';
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..updateAiConfig(apiKey: 'test-key-1234');
+          wb.loadPresetSpark('shellbreaker');
+          for (final ep in wb.conceptDraft!.initialEpics) {
+            wb.passActiveEpic(ep.id);
+          }
+          wb.approveRootSpecAndLaunchWorkbench();
+
+          GeminiAgentClient.testMockResponder = (prompt, model) async {
+            capturedPrompt = prompt;
+            return {
+              'presets': [
+                {
+                  'id': 'preset_arena_edge',
+                  'label': 'Arena Edge Pass',
+                  'desc': 'Add wall dash slice without upgrades on e02.',
+                  'upgrades': <String>[],
+                  'newFeatures': ['cand_f_e02_wall'],
+                  'newEpics': ['cand_e_wave', 'cand_e_empty'],
+                },
+              ],
+              'upgrades': [
+                {
+                  'lineageKey': 'ghost_e99',
+                  'options': [
+                    {'id': 'up_ghost', 'text': '+Invalid upgrade for missing Epic'},
+                  ],
+                },
+              ],
+              'newFeatures': [
+                {
+                  'lineageKey': 'ghost_e99',
+                  'features': [
+                    {
+                      'id': 'ghost_feat',
+                      'title': 'Ghost Feature',
+                      'goal': 'Should be filtered.',
+                      'checks': ['Press Space -> Nothing'],
+                    },
+                  ],
+                },
+                {
+                  'lineageKey': 'e02',
+                  'features': [
+                    {
+                      'id': 'cand_f_e02_wall',
+                      'title': 'Ricochet Charge Shot',
+                      'goal': 'Bounce charged bolt off stone pillars cleanly.',
+                      'tuning': [
+                        {'key': 'ricochet_bounces', 'value': '2', 'unit': 'count'},
+                      ],
+                      'checks': [
+                        {'text': 'Fire bolt into pillar -> Reflects twice onto crab'},
+                      ],
+                    },
+                  ],
+                },
+              ],
+              'newEpics': [
+                {
+                  'id': 'cand_e_wave',
+                  'code': 'E04',
+                  'title': 'Arena Hazard Spawner',
+                  'coreLoopBeat': 'Beat 4 · Hazard Pressure',
+                  'chosen': true,
+                  'goal': 'Activate timed perimeter steam vents across the arena.',
+                  'inScope': ['4 perimeter vent nodes', 'Telegraph warning flicker'],
+                  'doneWhen': ['Stand on lit vent -> Steam erupts after 0.8 s cleanly'],
+                  'sceneOwnership': [
+                    {
+                      'path': 'res://scripts/hazard_spawner.gd',
+                      'role': 'Timed perimeter hazard activation controller',
+                    },
+                  ],
+                  'states': ['Idle -> Telegraph (0.8s) -> Erupt -> Cooldown'],
+                  'interrupts': ['Match end halts all active vent timers cleanly'],
+                  'outOfScope': ['No destructive floor tile deformation'],
+                  'features': [
+                    {
+                      'title': 'Perimeter Vent Telegraph',
+                      'goal': 'Warn player 0.8 s before vent steam knocks player back.',
+                      'tuning': [
+                        {'key': 'vent_warn_s', 'value': '0.8', 'unit': 's'},
+                      ],
+                      'checks': [
+                        {'text': 'Vent lights orange -> Steam erupts 0.8 s later cleanly'},
+                      ],
+                    },
+                  ],
+                },
+                {
+                  'id': 'cand_e_empty',
+                  'code': 'E05',
+                  'title': 'Overdrive Gauge',
+                  'coreLoopBeat': 'Beat 5 · Overdrive Surge',
+                  'chosen': true,
+                  'goal': 'Fill Overdrive charge on shatter to boost dash impulse.',
+                  'inScope': ['Charge meter 0..100 %', 'Q activation burst'],
+                  'doneWhen': ['Reach 100 % and press Q -> Surge lasts 4.0 s cleanly'],
+                  'sceneOwnership': <dynamic>[],
+                  'states': ['Charging -> Ready -> Surging (4.0s)'],
+                  'interrupts': ['Defeat resets charge meter to 0'],
+                  'outOfScope': ['No persistent cross-run meter carry'],
+                  'features': <dynamic>[],
+                },
+              ],
+            };
+          };
+
+          final draftV02 = await wb.openProgressiveReleaseCopilot();
+          expect(draftV02, isNotNull);
+
+          // Prompt includes sceneOwnership and child Feature codes from v0.1 Epics
+          expect(capturedPrompt, contains('res://scripts/player_mech.gd'));
+          expect(capturedPrompt, contains('F01'));
+          expect(capturedPrompt, contains('F02'));
+
+          // Invalid lineageKey is rejected
+          expect(
+            draftV02!.upgradesByLineageKey.containsKey('ghost_e99'),
+            isFalse,
+          );
+          expect(
+            draftV02.candidateNewFeaturesByLineageKey.containsKey('ghost_e99'),
+            isFalse,
+          );
+
+          // Preset newFeatures keeps cand_f_e02_wall checked even without an upgrade on e02
+          final e02CandFeats =
+              draftV02.candidateNewFeaturesByLineageKey['e02'] ?? const [];
+          expect(e02CandFeats, hasLength(1));
+          final wallFeat = e02CandFeats.first;
+          expect(wb.isProgressiveNewFeatureChosen(wallFeat.id), isTrue);
+
+          // New Epics receive non-colliding F## codes & empty-features Epic synthesizes playable slice + sceneOwnership
+          expect(draftV02.candidateNewEpics, hasLength(2));
+          final waveEpic = draftV02.candidateNewEpics[0];
+          final emptySynthesizedEpic = draftV02.candidateNewEpics[1];
+          expect(waveEpic.features, hasLength(1));
+          expect(waveEpic.features.first.code, isNot(equals('F01')));
+          expect(emptySynthesizedEpic.features, hasLength(1));
+          expect(emptySynthesizedEpic.sceneOwnership, isNotEmpty);
+          expect(
+            emptySynthesizedEpic.features.first.code,
+            isNot(equals(waveEpic.features.first.code)),
+          );
+
+          // 3) Offline Railjack v0.2 parity: keeps rj_f07_wallglide selected, zero hardcoded "enemies"
+          GeminiAgentClient.testMockResponder = null;
+          final wbRj = WorkbenchProvider(enableAutoLoad: false);
+          wbRj.loadPresetSpark('railjack');
+          wbRj.approveRootSpecAndLaunchWorkbench();
+          final rjDraft = await wbRj.openProgressiveReleaseCopilot();
+          expect(rjDraft, isNotNull);
+          final rjFeats =
+              rjDraft!.candidateNewFeaturesByLineageKey['e01'] ?? const [];
+          expect(rjFeats.any((f) => f.id == 'rj_f07_wallglide'), isTrue);
+          expect(wbRj.isProgressiveNewFeatureChosen('rj_f07_wallglide'), isTrue);
+          for (final ep in rjDraft.candidateNewEpics) {
+            expect(ep.goal.toLowerCase(), isNot(contains('enemies')));
+            for (final c in ep.checks) {
+              expect(c.text.toLowerCase(), isNot(contains('enemies')));
+            }
+          }
+
+          // 4) Offline Emberkeep v0.2 parity: keeps ek_f07_roll selected with 2D px/px/s units
+          final wbEk = WorkbenchProvider(enableAutoLoad: false);
+          wbEk.loadPresetSpark('emberkeep');
+          wbEk.approveRootSpecAndLaunchWorkbench();
+          final ekDraft = await wbEk.openProgressiveReleaseCopilot();
+          expect(ekDraft, isNotNull);
+          final ekFeats =
+              ekDraft!.candidateNewFeaturesByLineageKey['e01'] ?? const [];
+          expect(ekFeats.any((f) => f.id == 'ek_f07_roll'), isTrue);
+          expect(wbEk.isProgressiveNewFeatureChosen('ek_f07_roll'), isTrue);
+          expect(
+            ekFeats.firstWhere((f) => f.id == 'ek_f07_roll').tuning.any(
+                  (t) => t.unit == 'px' || t.unit == 'px/s',
+                ),
+            isTrue,
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+        }
+      },
+    );
   });
 }
