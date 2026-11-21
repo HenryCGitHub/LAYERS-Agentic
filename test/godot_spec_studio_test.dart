@@ -2540,5 +2540,93 @@ console.log(JSON.stringify({
         expect(roundTripped.subtasks.first.children.length, equals(1));
       },
     );
+
+    testWidgets(
+      '25. Stage 1 & Stage 2 screen files stay modular (<= 1120 lines each) with Epic Domain Sheet, Feature Spec Sheet & Stage 1 UI parity',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // Stage 1 widgets & Clean Spec Document part parity
+        expect(find.byKey(const ValueKey('stage1_dim_3d')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_dim_2d')), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('stage1_scope_preview_card')),
+          findsOneWidget,
+        );
+        expect(find.textContaining('SHELLBREAKER'), findsWidgets);
+
+        // Approve & Launch into Stage 2 Release Workbench (Feature Spec Sheet)
+        await tester.tap(
+          find.byKey(const ValueKey('approve_launch_workbench_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('Feature Scope'), findsOneWidget);
+        expect(find.text('Playtest Gate & [FIX] Notes'), findsOneWidget);
+
+        // Select parent Epic Domain & exercise inline _mutateUi toggle
+        wb.selectEpic(wb.activeReleaseEpics.first.id);
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Domain Scope (Zero Feature Duplication)'),
+          findsOneWidget,
+        );
+        final addSliceBtn = find.text('+ Add Feature Slice');
+        expect(addSliceBtn, findsOneWidget);
+        await tester.ensureVisible(addSliceBtn);
+        await tester.tap(addSliceBtn);
+        await tester.pumpAndSettle();
+        expect(find.text('Close'), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        wb.dispose();
+
+        const expectedParts = <String>[
+          'lib/screens/workbench_epic_sheet_part.dart',
+          'lib/screens/workbench_feature_sheet_part.dart',
+          'lib/screens/workbench_widgets_part.dart',
+          'lib/screens/stage1_spec_document_part.dart',
+          'lib/screens/stage1_widgets_part.dart',
+        ];
+        for (final path in expectedParts) {
+          final partFile = File(path);
+          expect(partFile.existsSync(), isTrue, reason: '$path should exist');
+          expect(
+            partFile.readAsLinesSync().length,
+            greaterThan(50),
+            reason: '$path should hold extracted part code',
+          );
+        }
+
+        final releaseLines = File(
+          'lib/screens/release_workbench_screen.dart',
+        ).readAsLinesSync().length;
+        final pitchLines = File(
+          'lib/screens/project_pitch_screen.dart',
+        ).readAsLinesSync().length;
+        expect(releaseLines, lessThanOrEqualTo(1120));
+        expect(pitchLines, lessThanOrEqualTo(1060));
+
+        for (final entity in Directory('lib/screens').listSync()) {
+          if (entity is File && entity.path.endsWith('.dart')) {
+            final lineCount = entity.readAsLinesSync().length;
+            expect(
+              lineCount,
+              lessThanOrEqualTo(1350),
+              reason: '${entity.path} has $lineCount lines',
+            );
+          }
+        }
+      },
+    );
   });
 }
