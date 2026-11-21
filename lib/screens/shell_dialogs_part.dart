@@ -356,9 +356,11 @@ extension _ShellDialogsExt on WorkbenchShell {
                                           message: 'Delete Project',
                                           child: InkWell(
                                             key: ValueKey('vault_delete_${p.id}'),
-                                            onTap: () {
-                                              workbench.deleteProject(p.id);
-                                              setModalState(() {});
+                                            onTap: () async {
+                                              if (await _confirmDeleteProjectDialog(ctx, p)) {
+                                                workbench.deleteProject(p.id);
+                                                if (ctx.mounted) setModalState(() {});
+                                              }
                                             },
                                             borderRadius: BorderRadius.circular(4),
                                             child: Padding(
@@ -1240,6 +1242,62 @@ extension _ShellDialogsExt on WorkbenchShell {
       return true;
     }
     return false;
+  }
+
+  Future<bool> _confirmDeleteProjectDialog(
+    BuildContext context,
+    TierDocument proj,
+  ) async {
+    final isDark = workbench.isDark;
+    final bgSurface = AppTheme.bgSurfaceFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (cCtx) => AlertDialog(
+        backgroundColor: bgSurface,
+        title: Text(
+          'Delete Project?',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: textPrimary,
+          ),
+        ),
+        content: Text(
+          'Delete "${proj.title}" and all of its Releases and Epics? This cannot be undone.',
+          style: GoogleFonts.inter(
+            fontSize: 12.5,
+            height: 1.4,
+            color: textSecondary,
+          ),
+        ),
+        actions: [
+          TextButton(
+            key: const ValueKey('cancel_delete_project_btn'),
+            onPressed: () => Navigator.of(cCtx).pop(false),
+            child: Text(
+              'Cancel',
+              style: GoogleFonts.inter(fontSize: 12, color: textSecondary),
+            ),
+          ),
+          ElevatedButton(
+            key: const ValueKey('confirm_delete_project_btn'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accentRedFor(isDark),
+              foregroundColor: Colors.white,
+              elevation: 0,
+            ),
+            onPressed: () => Navigator.of(cCtx).pop(true),
+            child: Text(
+              'Delete Project',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+    return confirmed == true;
   }
 }
 

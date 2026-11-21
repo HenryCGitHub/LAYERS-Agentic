@@ -1247,8 +1247,16 @@ function renderServerGodotEpicContextJs({
               contracts.push(clean);
             }
           };
+          for (const own of (Array.isArray(sib.sceneOwnership) ? sib.sceneOwnership : []).slice(0, 2)) {
+            addContract(own?.path);
+          }
           for (const link of (Array.isArray(sib.links) ? sib.links : []).slice(0, 2)) {
             addContract(link);
+          }
+          for (const feat of Array.isArray(sib.features) ? sib.features : []) {
+            for (const ctrl of (Array.isArray(feat?.controls) ? feat.controls : []).slice(0, 1)) {
+              addContract(ctrl?.action);
+            }
           }
           for (const ctrl of (Array.isArray(sib.controls) ? sib.controls : []).slice(0, 2)) {
             addContract(ctrl?.action);

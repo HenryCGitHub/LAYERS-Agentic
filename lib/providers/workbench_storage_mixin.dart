@@ -1097,6 +1097,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     if (clearGodotSync) {
       sections.remove('last_godot_sync_ms');
       sections.remove('godot_live_context_json');
+      sections.remove('collaborators_json');
       sections.remove('last_unreal_sync_ms');
       sections.remove('unreal_live_context_json');
     }
@@ -1139,10 +1140,10 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final mappedRelIds = <String, String>{};
     final mappedEpicIds = <String, String>{};
 
-    for (int rIdx = 0; rIdx < src.childrenIds.length; rIdx++) {
-      final oldRelId = src.childrenIds[rIdx];
-      final oldRel = documents[oldRelId];
-      if (oldRel == null) continue;
+    final srcReleases = releaseDocsForProject(src.id);
+    for (int rIdx = 0; rIdx < srcReleases.length; rIdx++) {
+      final oldRel = srcReleases[rIdx];
+      final oldRelId = oldRel.id;
       final newRelId = '${newId}_rel_${rIdx + 1}';
       mappedRelIds[oldRelId] = newRelId;
       if (copiedSections['active_release_id'] == oldRelId) {
@@ -1150,15 +1151,15 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       }
 
       final newEpicIds = <String>[];
-      for (int eIdx = 0; eIdx < oldRel.childrenIds.length; eIdx++) {
-        final oldEpicId = oldRel.childrenIds[eIdx];
+      final srcEpics = epicDocsForRelease(oldRelId);
+      for (int eIdx = 0; eIdx < srcEpics.length; eIdx++) {
+        final oldEpic = srcEpics[eIdx];
+        final oldEpicId = oldEpic.id;
         final existingMapped = mappedEpicIds[oldEpicId];
         if (existingMapped != null) {
           newEpicIds.add(existingMapped);
           continue;
         }
-        final oldEpic = documents[oldEpicId];
-        if (oldEpic == null || oldEpic.tier != TierType.epic) continue;
         final newEpicId = '${newRelId}_epic_${eIdx + 1}';
         mappedEpicIds[oldEpicId] = newEpicId;
         final epicSections = Map<String, String>.from(oldEpic.sections);
@@ -1263,17 +1264,51 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       }
       if (parsedDocs.isEmpty) return null;
 
-      final rootProj = parsedDocs.firstWhere(
-        (d) => d.tier == TierType.project,
-        orElse: () => parsedDocs.first,
-      );
+      final rootProj =
+          parsedDocs.where((d) => d.tier == TierType.project).firstOrNull;
+      if (rootProj == null) return null;
 
-      final hasCollision = parsedDocs.any((d) => documents.containsKey(d.id));
+      final parsedById = <String, TierDocument>{
+        for (final d in parsedDocs) d.id: d,
+      };
+      final childrenByParent = <String, List<String>>{};
+      for (final d in parsedDocs) {
+        if (d.parentId != null && d.parentId!.isNotEmpty) {
+          childrenByParent.putIfAbsent(d.parentId!, () => []).add(d.id);
+        }
+      }
+      final reachableIds = <String>{rootProj.id};
+      final queue = <String>[rootProj.id];
+      while (queue.isNotEmpty) {
+        final curId = queue.removeLast();
+        final curDoc = parsedById[curId];
+        if (curDoc != null) {
+          for (final cid in curDoc.childrenIds) {
+            if (parsedById.containsKey(cid) && reachableIds.add(cid)) {
+              queue.add(cid);
+            }
+          }
+        }
+        final directChildren = childrenByParent[curId];
+        if (directChildren != null) {
+          for (final cid in directChildren) {
+            if (parsedById.containsKey(cid) && reachableIds.add(cid)) {
+              queue.add(cid);
+            }
+          }
+        }
+      }
+      final scopedDocs = <TierDocument>[
+        for (final d in parsedDocs)
+          if (reachableIds.contains(d.id)) d,
+      ];
+
+      final hasCollision = scopedDocs.any((d) => documents.containsKey(d.id));
       final idMap = <String, String>{};
       final baseTs = DateTime.now().microsecondsSinceEpoch;
       if (hasCollision) {
-        for (int i = 0; i < parsedDocs.length; i++) {
-          final d = parsedDocs[i];
+        for (int i = 0; i < scopedDocs.length; i++) {
+          final d = scopedDocs[i];
           if (d.tier == TierType.project) {
             idMap[d.id] = 'proj_${baseTs}_$i';
           } else {
@@ -1281,14 +1316,14 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
           }
         }
       } else {
-        for (final d in parsedDocs) {
+        for (final d in scopedDocs) {
           idMap[d.id] = d.id;
         }
       }
 
       String remapId(String id) => idMap[id] ?? id;
 
-      for (final d in parsedDocs) {
+      for (final d in scopedDocs) {
         final newId = remapId(d.id);
         final newParentId = d.parentId != null ? remapId(d.parentId!) : null;
         final newChildrenIds = d.childrenIds.map(remapId).toList();
@@ -1297,7 +1332,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         _remapEmbeddedEpicJsonAndClearSync(
           newSections,
           newEpicDocId: d.tier == TierType.epic ? newId : null,
-          clearGodotSync: hasCollision,
+          clearGodotSync: true,
         );
 
         String importedTitle = d.title;

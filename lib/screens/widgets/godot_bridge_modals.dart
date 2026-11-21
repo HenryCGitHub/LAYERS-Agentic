@@ -16,14 +16,18 @@ Future<void> showConnectGodotPluginDialog(
   String? fetchedToken = workbench.cachedGodotLinkTokenForActiveProject;
   String? tokenError;
   bool loading = fetchedToken == null;
+  bool requestInFlight = false;
 
   await showDialog<void>(
     context: context,
     builder: (dialogCtx) {
       return StatefulBuilder(
         builder: (ctx, setModalState) {
-          if (loading && fetchedToken == null && tokenError == null) {
-            workbench.fetchOrCreateGodotLinkToken().then((res) {
+          void triggerTokenLoad({bool rotate = false}) {
+            if (requestInFlight) return;
+            requestInFlight = true;
+            workbench.fetchOrCreateGodotLinkToken(rotate: rotate).then((res) {
+              requestInFlight = false;
               if (!dialogCtx.mounted) return;
               setModalState(() {
                 loading = false;
@@ -33,19 +37,32 @@ Future<void> showConnectGodotPluginDialog(
             });
           }
 
-          final isDark = workbench.isDark;
-          final border = AppTheme.borderFor(isDark);
-          final primary = AppTheme.textPrimaryFor(isDark);
-          final secondary = AppTheme.textSecondaryFor(isDark);
-          final muted = AppTheme.textMutedFor(isDark);
-          final cyan = AppTheme.accentCyanFor(isDark);
-          final green = AppTheme.accentGreenFor(isDark);
+          if (loading &&
+              !requestInFlight &&
+              fetchedToken == null &&
+              tokenError == null) {
+            triggerTokenLoad();
+          }
 
-          const dockGuideText =
-              '1) Open the LAYERS Dock in Godot 4.7+ and click ⚡ Build F01.\n'
-              '2) Godot Cloud Gemini builds .tscn scenes, @export GDScript, InputMap & camera nodes directly.\n'
-              '3) Press F5 / ▶ Play to test. Any script errors or [FIX] items switch the Dock button to 🔧 Fix F01.\n'
-              '4) Check §05 Playtest Gate and click ✓ Pass F01 → to advance.';
+          return ListenableBuilder(
+            listenable: workbench,
+            builder: (_, __) {
+              final isDark = workbench.isDark;
+              final border = AppTheme.borderFor(isDark);
+              final primary = AppTheme.textPrimaryFor(isDark);
+              final secondary = AppTheme.textSecondaryFor(isDark);
+              final muted = AppTheme.textMutedFor(isDark);
+              final cyan = AppTheme.accentCyanFor(isDark);
+              final green = AppTheme.accentGreenFor(isDark);
+
+              final rawFeatCode =
+                  (workbench.selectedFeatureSpec?.code ?? '').trim();
+              final activeFeatCode = rawFeatCode.isNotEmpty ? rawFeatCode : 'F01';
+              final dockGuideText =
+                  '1) Open the LAYERS Dock in Godot 4.7+ and click ⚡ Build $activeFeatCode.\n'
+                  '2) Godot Cloud Gemini builds .tscn scenes, @export GDScript, InputMap & camera nodes directly.\n'
+                  '3) Press F5 / ▶ Play to test. Any script errors or [FIX] items switch the Dock button to 🔧 Fix $activeFeatCode.\n'
+                  '4) Check §05 Playtest Gate and click ✓ Pass $activeFeatCode → to advance.';
 
           return Dialog(
             backgroundColor: AppTheme.bgSurfaceRaisedFor(isDark),
@@ -117,7 +134,7 @@ Future<void> showConnectGodotPluginDialog(
                                   ),
                                   const SizedBox(height: 3),
                                   Text(
-                                    'Unzip into `<YourGodotProject>/addons/layers` and enable Project Settings → Plugins → LAYERS. Adds `[ ⚡ Build F01 ] [ ▶ Play ] [ ↶ Undo ]`, `@export` tuning, and Playtest Gate checks directly inside the Godot Dock.',
+                                    'Unzip into `<YourGodotProject>/addons/layers` and enable Project Settings → Plugins → LAYERS. Adds `[ ⚡ Build $activeFeatCode ] [ ▶ Play ] [ ↶ Undo ]`, `@export` tuning, and Playtest Gate checks directly inside the Godot Dock.',
                                     style: TextStyle(fontSize: 12, color: muted),
                                   ),
                                 ],
@@ -199,12 +216,34 @@ Future<void> showConnectGodotPluginDialog(
                             if (loading)
                               const LinearProgressIndicator(minHeight: 2)
                             else if (tokenError != null)
-                              Text(
-                                tokenError!,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.accentAmberFor(isDark),
-                                ),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      tokenError!,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppTheme.accentAmberFor(isDark),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton.icon(
+                                    key: const ValueKey('retry_godot_token_btn'),
+                                    onPressed: requestInFlight
+                                        ? null
+                                        : () {
+                                            setModalState(() {
+                                              loading = true;
+                                              tokenError = null;
+                                            });
+                                            triggerTokenLoad();
+                                          },
+                                    icon: const Icon(Icons.refresh, size: 14),
+                                    label: const Text('Retry'),
+                                  ),
+                                ],
                               )
                             else
                               Row(
@@ -253,22 +292,15 @@ Future<void> showConnectGodotPluginDialog(
                                   const SizedBox(width: 6),
                                   TextButton(
                                     key: const ValueKey('rotate_godot_token_btn'),
-                                    onPressed: () {
-                                      setModalState(() {
-                                        loading = true;
-                                        tokenError = null;
-                                      });
-                                      workbench
-                                          .fetchOrCreateGodotLinkToken(rotate: true)
-                                          .then((res) {
-                                        if (!dialogCtx.mounted) return;
-                                        setModalState(() {
-                                          loading = false;
-                                          fetchedToken = res.token;
-                                          tokenError = res.error;
-                                        });
-                                      });
-                                    },
+                                    onPressed: requestInFlight
+                                        ? null
+                                        : () {
+                                            setModalState(() {
+                                              loading = true;
+                                              tokenError = null;
+                                            });
+                                            triggerTokenLoad(rotate: true);
+                                          },
                                     child: const Text('Rotate'),
                                   ),
                                 ],
@@ -310,6 +342,8 @@ Future<void> showConnectGodotPluginDialog(
                 ),
               ),
             ),
+          );
+            },
           );
         },
       );

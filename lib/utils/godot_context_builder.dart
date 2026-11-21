@@ -149,8 +149,16 @@ class GodotContextBuilder {
           }
         }
 
+        for (final own in sib.sceneOwnership.take(2)) {
+          addContract(own.path);
+        }
         for (final link in sib.links.take(2)) {
           addContract(link);
+        }
+        for (final feat in sib.features) {
+          for (final ctrl in feat.controls.take(1)) {
+            addContract(ctrl.action);
+          }
         }
         for (final ctrl in sib.controls.take(2)) {
           addContract(ctrl.action);
@@ -329,13 +337,16 @@ class GodotContextBuilder {
   }
 
   static String _extractReleaseVersion(String rawLabel, {String fallback = 'v0.1'}) {
-    final m = RegExp(r'v\d+(?:\.\d+)?', caseSensitive: false).firstMatch(rawLabel);
+    final m = RegExp(r'v\d+(?:\.\d+)*', caseSensitive: false).firstMatch(rawLabel);
     if (m != null) return m.group(0)!.toLowerCase();
     final cleanFallback = fallback.trim();
     return cleanFallback.isEmpty ? 'v0.1' : cleanFallback;
   }
 
   static void _writeEpicOwnershipAndRules(StringBuffer b, EpicSpec epic) {
+    if (epic.coreLoopBeat.trim().isNotEmpty) {
+      b.writeln('Core Loop Beat: ${epic.coreLoopBeat.trim()}');
+    }
     b.writeln('Domain Goal: ${epic.goal.trim()}');
     if (epic.inScope.isNotEmpty) {
       b.writeln('In Scope:');
@@ -431,6 +442,22 @@ class GodotContextBuilder {
     b.writeln('## §01 Domain Architecture');
     _writeEpicOwnershipAndRules(b, epic);
 
+    if (epic.baselineSummary.isNotEmpty &&
+        (ver != 'v0.1' || epic.upgradeDeltas.isNotEmpty)) {
+      b.writeln();
+      b.writeln('Locked Baseline: ${epic.baselineSummary.join(' · ')}');
+    }
+    if (ver != 'v0.1' && epic.upgradeDeltas.isNotEmpty) {
+      b.writeln();
+      b.writeln('Upgrade Deltas ($ver):');
+      for (final delta in epic.upgradeDeltas) {
+        final cleanDelta = delta.trim().replaceFirst(RegExp(r'^\+\s*'), '');
+        if (cleanDelta.isNotEmpty) {
+          b.writeln('- +$cleanDelta');
+        }
+      }
+    }
+
     b.writeln();
     b.writeln('## §02 Feature Slices Owned by ${epic.code} ($ver)');
     if (visibleFeatures.isEmpty) {
@@ -445,7 +472,10 @@ class GodotContextBuilder {
         } else if (ver != 'v0.1' && feat.releaseDelta.trim().isNotEmpty) {
           tag = '+$ver DELTA';
         } else if (feat.isLockedBaselineInRelease(ver)) {
-          tag = 'v0.1 ✓ BASELINE';
+          final baseVer = feat.introducedIn.trim().isEmpty
+              ? 'v0.1'
+              : feat.introducedIn.trim();
+          tag = '$baseVer ✓ BASELINE';
         } else if (feat.isPassed) {
           tag = 'PASSED ✓';
         } else if (feat.openFixesCount > 0) {
@@ -475,6 +505,7 @@ class GodotContextBuilder {
     GodotProjectDimension? dimensionOverride,
     Map<String, dynamic>? liveGodotContext,
     bool includeRootContext = true,
+    bool includeParentEpicContext = true,
     bool includeExecutionFooter = true,
   }) {
     final dim = dimensionOverride ?? rootSpec.dimension;
@@ -500,11 +531,13 @@ class GodotContextBuilder {
       b.writeln();
     }
 
-    b.writeln('## 2. PARENT EPIC ARCHITECTURE (${epic.code} · ${epic.title})');
-    _writeEpicOwnershipAndRules(b, epic);
-    b.writeln();
-    b.writeln('---');
-    b.writeln();
+    if (includeParentEpicContext) {
+      b.writeln('## 2. PARENT EPIC ARCHITECTURE (${epic.code} · ${epic.title})');
+      _writeEpicOwnershipAndRules(b, epic);
+      b.writeln();
+      b.writeln('---');
+      b.writeln();
+    }
 
     b.writeln(
       '# ACTIVE FEATURE SPEC · ${feature.code} · ${feature.title} ($ver · ${feature.sliceTime})',
@@ -643,6 +676,7 @@ class GodotContextBuilder {
               releaseVersion: relVer,
               releaseOrder: effectiveOrder,
               includeRootContext: false,
+              includeParentEpicContext: false,
               includeExecutionFooter: false,
             ),
           );

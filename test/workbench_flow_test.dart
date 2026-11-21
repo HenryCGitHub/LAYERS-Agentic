@@ -11,10 +11,12 @@ import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
+import 'package:layers_agentic/screens/widgets/godot_bridge_modals.dart';
 import 'package:layers_agentic/services/firestore_vault_service.dart';
 import 'package:layers_agentic/services/local_vault_service.dart';
 import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
+import 'package:layers_agentic/utils/godot_context_builder.dart';
 
 void main() {
   group('Platform, Vault, Auth, Invite & Model Failover Regression Suite', () {
@@ -1903,6 +1905,219 @@ void main() {
         expect(wb.progressiveDraft, isNull);
         expect(wb.isDraftingProgressive, isFalse);
         expect(tester.takeException(), isNull);
+      },
+    );
+
+    test(
+      'PROJECT_SPEC export deduplicates parent Epic brief, preserves v0.2 ✓ BASELINE & v0.1.2 tags, and import/duplicate sanitize fresh-vault sync, collaborators & parentId children',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+        for (final ep in wb.epicsForRelease(v01Id)) {
+          wb.passActiveEpic(ep.id);
+        }
+
+        await wb.openProgressiveReleaseCopilot();
+        final v02Id = wb.commitProgressiveReleaseDraft()!;
+        for (final ep in wb.epicsForRelease(v02Id)) {
+          wb.passActiveEpic(ep.id);
+        }
+
+        final v03Draft = await wb.openProgressiveReleaseCopilot();
+        expect(v03Draft, isNotNull);
+        for (final entry in v03Draft!.upgradesByLineageKey.entries) {
+          for (final opt in entry.value) {
+            if (opt.chosen) {
+              wb.toggleProgressiveUpgrade(entry.key, opt.id);
+            }
+          }
+        }
+        final v03Id = wb.commitProgressiveReleaseDraft()!;
+        final v03Epics = wb.epicsForRelease(v03Id);
+        final v03E01 = v03Epics.firstWhere((e) => e.lineageKey == 'e01');
+        final v03F07 = v03E01.features.firstWhere((f) => f.code == 'F07');
+        wb.selectFeature(v03E01.id, v03F07.id);
+
+        final md = wb.buildFullProjectMarkdownExport().content;
+        expect(md, isNot(contains('## 2. PARENT EPIC ARCHITECTURE')));
+        expect(md, contains('[v0.2 ✓ BASELINE]'));
+        expect(md, contains('Core Loop Beat:'));
+        expect(
+          wb.selectedBuildPrompt,
+          contains('## 2. PARENT EPIC ARCHITECTURE'),
+        );
+
+        final relBundle = GodotContextBuilder.buildReleaseContextBundle(
+          rootSpec: wb.conceptDraft!,
+          releaseLabel: 'v0.1.2 · Patch',
+          releaseEpics: wb.epicsForRelease(v01Id),
+        );
+        expect(relBundle, contains('(v0.1.2)'));
+
+        // ParentId-linked Epic + collaborators + sync metadata in duplicateProject
+        final v01RelDoc = wb.documents[v01Id]!;
+        wb.documents[v01Id] = v01RelDoc.copyWith(childrenIds: const <String>[]);
+        wb.activeProject!.sections['last_godot_sync_ms'] = '1700000000000';
+        wb.activeProject!.sections['godot_live_context_json'] =
+            jsonEncode({'project_name': 'ShellbreakerGodot'});
+        wb.activeProject!.sections['collaborators_json'] = jsonEncode([
+          {'email': 'ally@studio.io', 'role': 'editor'},
+        ]);
+        wb.switchProject(wb.activeProjectId!);
+        expect(
+          wb.collaboratorsForProject(wb.activeProjectId),
+          isNotEmpty,
+        );
+
+        final exported = wb.exportProjectToJson();
+        final dupId = wb.duplicateProject(wb.activeProjectId!)!;
+        expect(wb.epicsForRelease(wb.projectReleases.first.id), isNotEmpty);
+        expect(wb.isActiveProjectSyncedWithGodot, isFalse);
+        expect(wb.latestLiveGodotContext, isNull);
+        expect(wb.collaboratorsForProject(dupId), isEmpty);
+
+        // Fresh-vault import strips stale sync/live/collaborator fields & rejects rootless bundles
+        final freshWb = WorkbenchProvider(enableAutoLoad: false);
+        final impId = freshWb.importProjectFromJson(exported)!;
+        expect(freshWb.isActiveProjectSyncedWithGodot, isFalse);
+        expect(freshWb.latestLiveGodotContext, isNull);
+        expect(freshWb.collaboratorsForProject(impId), isEmpty);
+
+        expect(
+          freshWb.importProjectFromJson(
+            jsonEncode({
+              'documents': [
+                {'id': 'orphan_rel', 'title': 'v0.1', 'tier': 'release'},
+              ],
+            }),
+          ),
+          isNull,
+        );
+      },
+    );
+
+    testWidgets(
+      'Connect Godot modal deduplicates token fetch, supports 1-click Retry & dynamic Feature code, and Cloud Vault delete requires confirmation',
+      (tester) async {
+        tester.view.physicalSize = const Size(1400, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevAuth = GeminiAgentClient.authTokenProvider;
+        addTearDown(() {
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.authTokenProvider = prevAuth;
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final e01 = wb.activeReleaseEpics.first;
+        final f02 = e01.features.firstWhere((f) => f.code == 'F02');
+        wb.selectFeature(e01.id, f02.id);
+
+        final firstTokenAttempt = Completer<http.Response>();
+        int tokenCalls = 0;
+        GeminiAgentClient.authTokenProvider =
+            ({bool forceRefresh = false}) async => 'fake-id-token';
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) {
+          if (uri.path.endsWith('/godotLink/token')) {
+            tokenCalls++;
+            if (tokenCalls == 1) {
+              return firstTokenAttempt.future;
+            }
+            return Future<http.Response>.value(
+              http.Response(
+                jsonEncode({
+                  'ok': true,
+                  'projectId': wb.activeProjectId,
+                  'linkToken': 'lyr_recovered_token_1234',
+                }),
+                200,
+              ),
+            );
+          }
+          return Future<http.Response>.value(
+            http.Response('{"error":{"message":"Not found"}}', 404),
+          );
+        };
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        unawaited(
+          showConnectGodotPluginDialog(
+            tester.element(find.byType(Scaffold).first),
+            wb,
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 20));
+        expect(tokenCalls, equals(1));
+
+        // Rebuilding while in flight must not spawn duplicate /godotLink/token calls
+        wb.toggleTheme();
+        await tester.pump();
+        wb.toggleTheme();
+        await tester.pump();
+        expect(tokenCalls, equals(1));
+
+        firstTokenAttempt.complete(
+          http.Response(
+            jsonEncode({
+              'error': {'message': 'Temporary token outage'},
+            }),
+            403,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Temporary token outage'), findsOneWidget);
+        expect(find.textContaining('Build F02'), findsAtLeastNWidgets(1));
+        expect(
+          find.byKey(const ValueKey('retry_godot_token_btn')),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('retry_godot_token_btn')));
+        await tester.pumpAndSettle();
+        expect(tokenCalls, equals(2));
+        expect(find.text('lyr_recovered_token_1234'), findsOneWidget);
+
+        Navigator.of(tester.element(find.byType(Dialog))).pop();
+        await tester.pumpAndSettle();
+
+        // Cloud Vault project delete requires confirmation dialog
+        final pid = wb.activeProjectId!;
+        await tester.tap(find.byKey(const ValueKey('cloud_sync_auth_btn')));
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byKey(ValueKey('vault_delete_$pid')));
+        await tester.pumpAndSettle();
+        expect(wb.savedProjects.length, equals(1));
+        expect(
+          find.byKey(const ValueKey('confirm_delete_project_btn')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('cancel_delete_project_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(wb.savedProjects.length, equals(1));
+
+        await tester.tap(find.byKey(ValueKey('vault_delete_$pid')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('confirm_delete_project_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(wb.savedProjects, isEmpty);
       },
     );
   });

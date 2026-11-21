@@ -561,8 +561,8 @@ class WorkbenchProvider extends ChangeNotifier {
     return projs;
   }
 
-  List<TierDocument> get projectReleases {
-    final proj = activeProject;
+  List<TierDocument> releaseDocsForProject(String projectId) {
+    final proj = documents[projectId];
     if (proj == null) return const [];
     final out = <TierDocument>[];
     final seen = <String>{};
@@ -581,6 +581,10 @@ class WorkbenchProvider extends ChangeNotifier {
     }
     return out;
   }
+
+  List<TierDocument> get projectReleases => _activeProjectId != null
+      ? releaseDocsForProject(_activeProjectId!)
+      : const [];
 
   List<TierDocument> epicDocsForRelease(String releaseId) {
     final rel = documents[releaseId];
