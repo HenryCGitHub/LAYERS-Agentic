@@ -20,6 +20,7 @@ const {
   resolveDimensionMetaJs,
   sanitizeGodotLineJs,
   sanitizeGodotTuningKeyJs,
+  scaleGodotTuningValueJs,
   normalizeGodotUnitJs,
   inferGodotPropertyTypeJs,
   sanitizeGodotLiveContextJs,
@@ -881,6 +882,48 @@ const toggleCheckSec = buildGodotSyncProjectSectionsJs({
 });
 assert.strictEqual(toggleCheckSec.selected_epic_id, "epic_2");
 assert.strictEqual(toggleCheckSec.selected_feature_id, "feat_dash");
+
+// (g) Sanitizer regex safety, uu & m<->px tuning/prose scaling, CSG2D removal
+assert.strictEqual(sanitizeGodotLineJs("-52 deg pitch", "dim3d"), "-52 deg pitch");
+assert.strictEqual(sanitizeGodotLineJs("- Dash item", "dim3d"), "Dash item");
+const lPathClean = sanitizeGodotLineJs(
+  "Load res://scenes/L_Arena_Proto.tscn from MyGame.uproject",
+  "dim3d"
+);
+assert(lPathClean.includes("res://scenes/arena_proto.tscn"), lPathClean);
+assert(!lPathClean.includes(".tscn.tscn"), lPathClean);
+assert(lPathClean.includes("project.godot") && !lPathClean.includes("MyGameproject.godot"), lPathClean);
+
+const uuClean = sanitizeGodotLineJs("Dash 550 uu at 1200 uu/s", "dim3d");
+assert(uuClean.includes("5.5 m") && uuClean.includes("12 m/s"), uuClean);
+
+const cross2dLine = sanitizeGodotLineJs("CharacterBody3D moves 6.4 m/s across 30x30 m", "dim2d");
+assert.strictEqual(cross2dLine, "CharacterBody2D moves 256 px/s across 1200x1200 px");
+
+const default2dRoot = parseRootSpecJs({ sections: { dimension: "dim2d" } });
+assert(!default2dRoot.assetPolicy.includes("CSG2D"), default2dRoot.assetPolicy);
+
+assert.strictEqual(scaleGodotTuningValueJs("6.4", "m/s", "dim2d"), "256");
+const featScaled2d = parseFeatureSpecJs(
+  { title: "Move", tuning: [{ key: "speed", value: "6.4", unit: "m/s" }] },
+  0,
+  "dim2d"
+);
+assert.deepStrictEqual(featScaled2d.tuning[0], { key: "speed", value: "256", unit: "px/s" });
+
+const featScaled3d = parseFeatureSpecJs(
+  {
+    title: "Move",
+    tuning: [
+      { key: "speed", value: "240", unit: "px/s" },
+      { key: "dash", value: "600", unit: "uu/s" },
+    ],
+  },
+  0,
+  "dim3d"
+);
+assert.deepStrictEqual(featScaled3d.tuning[0], { key: "speed", value: "6", unit: "m/s" });
+assert.deepStrictEqual(featScaled3d.tuning[1], { key: "dash", value: "6", unit: "m/s" });
 
 console.log("GODOT_CLOUD_TEST_OK");
 """

@@ -10,12 +10,16 @@ class GodotSpecGuard {
     caseSensitive: false,
   );
 
-  static final RegExp _leadingBulletPattern = RegExp(r'^[\-\*\u2022\s]+');
+  static final RegExp _leadingBulletPattern = RegExp(r'^(?:[\-\*]\s+|\u2022\s*)+');
+
+  static final List<(String, String)> _bannedPhraseReplacements =
+      <(String, String)>[
+    ('end-to-end loop', 'core loop'),
+    ('end-to-end', 'full'),
+    ('unified pipeline', 'pipeline'),
+  ];
 
   static final List<String> _bannedFillerPhrases = <String>[
-    'end-to-end loop',
-    'end-to-end',
-    'unified pipeline',
     'unified',
     'seamlessly',
     'synergistic',
@@ -24,18 +28,24 @@ class GodotSpecGuard {
 
   static final List<(String, String)> _jargonReplacements = <(String, String)>[
     ('leveraging', 'using'),
+    ('leveraged', 'used'),
     ('leverages', 'uses'),
     ('leverage', 'use'),
+    ('validating', 'checking'),
     ('validates', 'checks'),
     ('validated', 'checked'),
     ('validate', 'check'),
     ('verified', 'checked'),
     ('delivering', 'producing'),
+    ('delivered', 'produced'),
     ('delivers', 'produces'),
     ('deliver', 'produce'),
     ('husbandry', 'breeding'),
+    ('homesteads', 'bases'),
     ('homestead', 'base'),
+    ('expeditions', 'runs'),
     ('expedition', 'run'),
+    ('ordinances', 'weapons'),
     ('ordinance', 'weaponry'),
   ];
 
@@ -118,10 +128,38 @@ class GodotSpecGuard {
       RegExp(r'\bPrimaryDataAsset\b', caseSensitive: false): 'Resource (.tres)',
       RegExp(r'\bUDataAsset\b', caseSensitive: false): 'Resource (.tres)',
       RegExp(r'\.uasset\b', caseSensitive: false): '.tscn',
+      RegExp(r'\b[A-Za-z0-9_]+\.uproject\b', caseSensitive: false):
+          'project.godot',
       RegExp(r'\.uproject\b', caseSensitive: false): 'project.godot',
       RegExp(r'\.prefab\b', caseSensitive: false): '.tscn',
       RegExp(r'\bPrefabs\b', caseSensitive: false): 'PackedScenes',
       RegExp(r'\bPrefab\b', caseSensitive: false): 'PackedScene',
+      RegExp(r'\bCSG2D\b', caseSensitive: false): 'Polygon2D',
+      if (is2d) ...<RegExp, String>{
+        RegExp(r'\bCharacterBody3D\b'): 'CharacterBody2D',
+        RegExp(r'\bArea3D\b'): 'Area2D',
+        RegExp(r'\bNode3D\b'): 'Node2D',
+        RegExp(r'\bMarker3D\b'): 'Marker2D',
+        RegExp(r'\bCollisionShape3D\b'): 'CollisionShape2D',
+        RegExp(r'\bRayCast3D\b'): 'RayCast2D',
+        RegExp(r'\bGPUParticles3D\b'): 'GPUParticles2D',
+        RegExp(r'\bCPUParticles3D\b'): 'CPUParticles2D',
+        RegExp(r'\bSpringArm3D\b'): 'Camera2D',
+        RegExp(r'\bCamera3D\b'): 'Camera2D',
+        RegExp(r'\b(?:CSGBox3D|CSGCylinder3D|CSGShape3D|MeshInstance3D)\b'):
+            'Polygon2D',
+        RegExp(r'\bStandardMaterial3D\b'): 'CanvasItemMaterial',
+      } else ...<RegExp, String>{
+        RegExp(r'\bCharacterBody2D\b'): 'CharacterBody3D',
+        RegExp(r'\bArea2D\b'): 'Area3D',
+        RegExp(r'\bNode2D\b'): 'Node3D',
+        RegExp(r'\bMarker2D\b'): 'Marker3D',
+        RegExp(r'\bCollisionShape2D\b'): 'CollisionShape3D',
+        RegExp(r'\bRayCast2D\b'): 'RayCast3D',
+        RegExp(r'\bGPUParticles2D\b'): 'GPUParticles3D',
+        RegExp(r'\bCPUParticles2D\b'): 'CPUParticles3D',
+        RegExp(r'\bCamera2D\b'): 'Camera3D',
+      },
     };
     for (final entry in replacements.entries) {
       out = out.replaceAll(entry.key, entry.value);
@@ -137,7 +175,9 @@ class GodotSpecGuard {
       (m) => _toSnakeCaseToken(m.group(1) ?? 'entity'),
     );
     out = out.replaceAllMapped(
-      RegExp(r'\bL_([A-Za-z0-9_]+)\b'),
+      RegExp(
+        r'\bL_([A-Za-z0-9_]+)(?:\.(?:[Uu][Mm][Aa][Pp]|[Uu][Aa][Ss][Ss][Ee][Tt]|[Tt][Ss][Cc][Nn]))?\b',
+      ),
       (m) => '${_toSnakeCaseToken(m.group(1) ?? 'arena')}.tscn',
     );
     out = out.replaceAllMapped(
@@ -146,9 +186,9 @@ class GodotSpecGuard {
       (m) => '${_toSnakeCaseToken(m.group(1) ?? 'script')}.gd',
     );
 
-    // Convert cm / cm/s -> m / m/s in 3D, or px / px/s in 2D
+    // Convert cm / uu / (cm|uu)/s -> m / m/s in 3D, or px / px/s in 2D
     out = out.replaceAllMapped(
-      RegExp(r'\b(\d+(?:\.\d+)?)\s*cm/s\b', caseSensitive: false),
+      RegExp(r'\b(\d+(?:\.\d+)?)\s*(?:cm|uu)/s\b', caseSensitive: false),
       (m) {
         final rawNum = double.tryParse(m.group(1) ?? '') ?? 0;
         if (is2d) return '${_formatCleanNum(rawNum)} px/s';
@@ -156,11 +196,98 @@ class GodotSpecGuard {
       },
     );
     out = out.replaceAllMapped(
-      RegExp(r'\b(\d+(?:\.\d+)?)\s*cm\b', caseSensitive: false),
+      RegExp(r'\b(\d+(?:\.\d+)?)\s*(?:cm|uu)\b', caseSensitive: false),
       (m) {
         final rawNum = double.tryParse(m.group(1) ?? '') ?? 0;
         if (is2d) return '${_formatCleanNum(rawNum)} px';
         return '${_formatCleanNum(rawNum / 100.0)} m';
+      },
+    );
+    out = out.replaceAll(
+      RegExp(r'\buu\b', caseSensitive: false),
+      is2d ? 'px' : 'm',
+    );
+
+    // Scale cross-dimension prose units (1 m = 40 px)
+    const pxPerMeter = 40.0;
+    if (is2d) {
+      out = out.replaceAllMapped(
+        RegExp(r'(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*m(?=$|[\s.,;:)!?])',
+            caseSensitive: false),
+        (m) {
+          final a = double.tryParse(m.group(1) ?? '') ?? 0;
+          final b = double.tryParse(m.group(2) ?? '') ?? 0;
+          return '${_formatCleanNum(a * pxPerMeter)}x${_formatCleanNum(b * pxPerMeter)} px';
+        },
+      );
+      out = out.replaceAllMapped(
+        RegExp(r'\b(\d+(?:\.\d+)?)\s*m/s\b', caseSensitive: false),
+        (m) {
+          final n = double.tryParse(m.group(1) ?? '') ?? 0;
+          return '${_formatCleanNum(n * pxPerMeter)} px/s';
+        },
+      );
+      out = out.replaceAllMapped(
+        RegExp(r'(?<=^|[\s(~])(\d+(?:\.\d+)?)\s*m(?=$|[\s.,;:)!?])',
+            caseSensitive: false),
+        (m) {
+          final n = double.tryParse(m.group(1) ?? '') ?? 0;
+          return '${_formatCleanNum(n * pxPerMeter)} px';
+        },
+      );
+    } else {
+      out = out.replaceAllMapped(
+        RegExp(r'(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*px(?=$|[\s.,;:)!?])',
+            caseSensitive: false),
+        (m) {
+          final a = double.tryParse(m.group(1) ?? '') ?? 0;
+          final b = double.tryParse(m.group(2) ?? '') ?? 0;
+          return '${_formatCleanNum(a / pxPerMeter)}x${_formatCleanNum(b / pxPerMeter)} m';
+        },
+      );
+      out = out.replaceAllMapped(
+        RegExp(r'\b(\d+(?:\.\d+)?)\s*px/s\b', caseSensitive: false),
+        (m) {
+          final n = double.tryParse(m.group(1) ?? '') ?? 0;
+          return '${_formatCleanNum(n / pxPerMeter)} m/s';
+        },
+      );
+      out = out.replaceAllMapped(
+        RegExp(r'(?<=^|[\s(~])(\d+(?:\.\d+)?)\s*px(?=$|[\s.,;:)!?])',
+            caseSensitive: false),
+        (m) {
+          final n = double.tryParse(m.group(1) ?? '') ?? 0;
+          return '${_formatCleanNum(n / pxPerMeter)} m';
+        },
+      );
+    }
+
+    for (final (fromPhrase, toPhrase) in _bannedPhraseReplacements) {
+      out = out.replaceAllMapped(
+        RegExp('\\b${RegExp.escape(fromPhrase)}\\b', caseSensitive: false),
+        (m) {
+          final matched = m.group(0) ?? '';
+          if (matched.isNotEmpty &&
+              matched[0] == matched[0].toUpperCase() &&
+              matched[0] != matched[0].toLowerCase()) {
+            return '${toPhrase[0].toUpperCase()}${toPhrase.substring(1)}';
+          }
+          return toPhrase;
+        },
+      );
+    }
+
+    out = out.replaceAllMapped(
+      RegExp(r'(?<![/._A-Za-z0-9])staging(?![/._A-Za-z0-9])',
+          caseSensitive: false),
+      (m) {
+        final matched = m.group(0) ?? '';
+        if (matched.isNotEmpty &&
+            matched[0] == matched[0].toUpperCase() &&
+            matched[0] != matched[0].toLowerCase()) {
+          return 'Layout';
+        }
+        return 'layout';
       },
     );
 
@@ -412,6 +539,39 @@ class GodotSpecGuard {
           ),
       ];
 
+  static String scaleTuningValue(
+    String rawValue,
+    String rawUnit, {
+    required GodotProjectDimension dimension,
+  }) {
+    final cleanVal = rawValue.trim();
+    final unit = rawUnit.trim().toLowerCase();
+    final numVal = double.tryParse(cleanVal);
+    if (numVal == null) return cleanVal;
+    const pxPerMeter = 40.0;
+    if (dimension == GodotProjectDimension.dim3d) {
+      if (unit == 'cm' || unit == 'cm/s' || unit == 'uu' || unit == 'uu/s') {
+        return _formatCleanNum(numVal / 100.0);
+      }
+      if (unit == 'px' ||
+          unit == 'pixel' ||
+          unit == 'pixels' ||
+          unit == 'px/s' ||
+          unit == 'pixels/s') {
+        return _formatCleanNum(numVal / pxPerMeter);
+      }
+    } else {
+      if (unit == 'm' ||
+          unit == 'meter' ||
+          unit == 'meters' ||
+          unit == 'mps' ||
+          unit == 'm/s') {
+        return _formatCleanNum(numVal * pxPerMeter);
+      }
+    }
+    return cleanVal;
+  }
+
   static List<EpicTuningParam> _sanitizeTuning(
     List<EpicTuningParam> items,
     GodotProjectDimension dim,
@@ -423,15 +583,11 @@ class GodotSpecGuard {
               items[i].key,
               fallback: 'param_${i + 1}',
             );
-            final rawUnit = items[i].unit.trim().toLowerCase();
-            var cleanVal = items[i].value.trim();
-            if (dim == GodotProjectDimension.dim3d &&
-                (rawUnit == 'cm' || rawUnit == 'cm/s')) {
-              final numVal = double.tryParse(cleanVal);
-              if (numVal != null) {
-                cleanVal = _formatCleanNum(numVal / 100.0);
-              }
-            }
+            final cleanVal = scaleTuningValue(
+              items[i].value,
+              items[i].unit,
+              dimension: dim,
+            );
             return EpicTuningParam(
               key: cleanKey,
               value: cleanVal,

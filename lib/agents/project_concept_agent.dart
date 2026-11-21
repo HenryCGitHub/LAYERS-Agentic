@@ -466,6 +466,115 @@ class ProjectConceptAgent {
     }
   }
 
+  static String _swapDimensionLabelsOutsidePaths(
+    String text, {
+    required bool to2d,
+  }) {
+    if (text.isEmpty) return text;
+    final resPathRx = RegExp(r'res://\S+');
+    String transformChunk(String chunk) {
+      if (to2d) {
+        return chunk
+            .replaceAll(RegExp(r'\b3D\b'), '2D')
+            .replaceAll(
+              RegExp(r'\bXZ\s+ground[- ]plane\b', caseSensitive: false),
+              '2D XY plane',
+            )
+            .replaceAll(
+              RegExp(r'\bXZ\s+plane\b', caseSensitive: false),
+              'XY plane',
+            )
+            .replaceAll(RegExp(r'\bXZ\b'), 'XY');
+      }
+      return chunk
+          .replaceAll(RegExp(r'\b2D\b'), '3D')
+          .replaceAll(
+            RegExp(r'\bXY\s+plane\b', caseSensitive: false),
+            'XZ plane',
+          )
+          .replaceAll(RegExp(r'\bXY\b'), 'XZ');
+    }
+
+    final buf = StringBuffer();
+    int cursor = 0;
+    for (final m in resPathRx.allMatches(text)) {
+      if (m.start > cursor) {
+        buf.write(transformChunk(text.substring(cursor, m.start)));
+      }
+      buf.write(m.group(0));
+      cursor = m.end;
+    }
+    if (cursor < text.length) {
+      buf.write(transformChunk(text.substring(cursor)));
+    }
+    return buf.toString();
+  }
+
+  static void _convertFeatureDimensionContent(
+    FeatureSpec feat,
+    GodotProjectDimension prevDim,
+    GodotProjectDimension targetDim,
+  ) {
+    final to2d = targetDim == GodotProjectDimension.dim2d;
+    String conv(String s) => _swapDimensionLabelsOutsidePaths(s, to2d: to2d);
+    feat.title = conv(feat.title);
+    feat.goal = conv(feat.goal);
+    feat.releaseDelta = conv(feat.releaseDelta);
+    feat.inScope = [for (final s in feat.inScope) conv(s)];
+    feat.doneWhen = [for (final s in feat.doneWhen) conv(s)];
+    feat.controls = [
+      for (final c in feat.controls)
+        EpicControlBinding(
+          action: c.action,
+          trigger: conv(c.trigger),
+          rule: conv(c.rule),
+        ),
+    ];
+    _convertTuningListDimension(feat.tuning, prevDim, targetDim);
+    feat.cues = [for (final c in feat.cues) conv(c)];
+    feat.checks = [
+      for (final chk in feat.checks)
+        chk.copyWith(text: conv(chk.text)),
+    ];
+    feat.releaseDeltaChecks = [
+      for (final chk in feat.releaseDeltaChecks)
+        chk.copyWith(text: conv(chk.text)),
+    ];
+  }
+
+  static void _convertEpicDimensionContent(
+    EpicSpec ep,
+    GodotProjectDimension prevDim,
+    GodotProjectDimension targetDim,
+  ) {
+    final to2d = targetDim == GodotProjectDimension.dim2d;
+    String conv(String s) => _swapDimensionLabelsOutsidePaths(s, to2d: to2d);
+    ep.title = conv(ep.title);
+    ep.coreLoopBeat = conv(ep.coreLoopBeat);
+    ep.goal = conv(ep.goal);
+    ep.inScope = [for (final s in ep.inScope) conv(s)];
+    ep.doneWhen = [for (final s in ep.doneWhen) conv(s)];
+    ep.sceneOwnership = [
+      for (final o in ep.sceneOwnership)
+        EpicSceneOwnership(path: o.path, role: conv(o.role)),
+    ];
+    ep.states = [for (final s in ep.states) conv(s)];
+    ep.interrupts = [for (final s in ep.interrupts) conv(s)];
+    ep.outOfScope = [for (final s in ep.outOfScope) conv(s)];
+    ep.links = [for (final s in ep.links) conv(s)];
+    ep.feedback = [for (final s in ep.feedback) conv(s)];
+    ep.levelStaging = conv(ep.levelStaging);
+    ep.checks = [
+      for (final chk in ep.checks) chk.copyWith(text: conv(chk.text)),
+    ];
+    ep.baselineSummary = [for (final s in ep.baselineSummary) conv(s)];
+    ep.upgradeDeltas = [for (final s in ep.upgradeDeltas) conv(s)];
+    _convertTuningListDimension(ep.tuning, prevDim, targetDim);
+    for (final feat in ep.features) {
+      _convertFeatureDimensionContent(feat, prevDim, targetDim);
+    }
+  }
+
   /// Converts an active [ProjectConceptBlueprint] between Godot 4 `3D` (`m`, `m/s`)
   /// and `2D` (`px`, `px/s`), updating §02 camera/scale contracts, Epics, and Features cleanly.
   static ProjectConceptBlueprint convertBlueprintDimension(
@@ -478,6 +587,17 @@ class ProjectConceptAgent {
     next.dimension = targetDim;
 
     final is2d = targetDim == GodotProjectDimension.dim2d;
+    String conv(String s) => _swapDimensionLabelsOutsidePaths(s, to2d: is2d);
+    next.pitch = conv(next.pitch);
+    next.coreLoop = [for (final b in next.coreLoop) conv(b)];
+    next.pillars = [for (final p in next.pillars) conv(p)];
+    next.tradeOffs = [
+      for (final t in next.tradeOffs)
+        TradeOffRule(prefer: conv(t.prefer), avoid: conv(t.avoid)),
+    ];
+    next.outOfScope = [for (final s in next.outOfScope) conv(s)];
+    next.releaseDoneWhen = conv(next.releaseDoneWhen);
+
     next.cameraDecisionOptions = is2d
         ? List<ConceptSectionOption>.from(
             ProjectConceptBlueprint.defaultCamera2dOptions,
@@ -501,16 +621,30 @@ class ProjectConceptAgent {
     }
 
     for (final ep in [...next.initialEpics, ...next.v02NewPool]) {
-      _convertTuningListDimension(ep.tuning, prevDim, targetDim);
-      for (final feat in ep.features) {
-        _convertTuningListDimension(feat.tuning, prevDim, targetDim);
-      }
+      _convertEpicDimensionContent(ep, prevDim, targetDim);
     }
     for (final list in next.v02NewFeaturesByLineageKey.values) {
       for (final feat in list) {
-        _convertTuningListDimension(feat.tuning, prevDim, targetDim);
+        _convertFeatureDimensionContent(feat, prevDim, targetDim);
       }
     }
+    next.v02Presets = [
+      for (final p in next.v02Presets)
+        ReleaseDirectionPreset(
+          id: p.id,
+          label: conv(p.label),
+          description: conv(p.description),
+          upgradeIds: List<String>.from(p.upgradeIds),
+          newEpicIds: List<String>.from(p.newEpicIds),
+        ),
+    ];
+    next.v02UpgradesByLineageKey = {
+      for (final entry in next.v02UpgradesByLineageKey.entries)
+        entry.key: [
+          for (final u in entry.value)
+            u.copyWith(text: conv(u.text)),
+        ],
+    };
 
     syncEpicCameraFraming(
       next,

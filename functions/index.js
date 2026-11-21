@@ -238,7 +238,7 @@ function extractResPathsListJs(rawText, extFilter = "") {
 function sanitizeGodotLineJs(raw, dimension = "dim3d") {
   let out = String(raw || "")
     .trim()
-    .replace(/^[-*•]+\s+/, "")
+    .replace(/^(?:[-*]\s+|\u2022\s*)+/, "")
     .trim();
   if (!out) return "";
   const is2d = resolveDimensionMetaJs(dimension).id === "dim2d";
@@ -280,10 +280,41 @@ function sanitizeGodotLineJs(raw, dimension = "dim3d") {
     [/\bPrimaryDataAsset\b/gi, "Resource (.tres)"],
     [/\bUDataAsset\b/gi, "Resource (.tres)"],
     [/\.uasset\b/gi, ".tscn"],
+    [/\b[A-Za-z0-9_]+\.uproject\b/gi, "project.godot"],
     [/\.uproject\b/gi, "project.godot"],
     [/\.prefab\b/gi, ".tscn"],
     [/\bPrefabs\b/gi, "PackedScenes"],
     [/\bPrefab\b/gi, "PackedScene"],
+    [/\bCSG2D\b/gi, "Polygon2D"],
+    ...(is2d
+      ? [
+          [/\bCharacterBody3D\b/g, "CharacterBody2D"],
+          [/\bArea3D\b/g, "Area2D"],
+          [/\bNode3D\b/g, "Node2D"],
+          [/\bMarker3D\b/g, "Marker2D"],
+          [/\bCollisionShape3D\b/g, "CollisionShape2D"],
+          [/\bRayCast3D\b/g, "RayCast2D"],
+          [/\bGPUParticles3D\b/g, "GPUParticles2D"],
+          [/\bCPUParticles3D\b/g, "CPUParticles2D"],
+          [/\bSpringArm3D\b/g, "Camera2D"],
+          [/\bCamera3D\b/g, "Camera2D"],
+          [
+            /\b(?:CSGBox3D|CSGCylinder3D|CSGShape3D|MeshInstance3D)\b/g,
+            "Polygon2D",
+          ],
+          [/\bStandardMaterial3D\b/g, "CanvasItemMaterial"],
+        ]
+      : [
+          [/\bCharacterBody2D\b/g, "CharacterBody3D"],
+          [/\bArea2D\b/g, "Area3D"],
+          [/\bNode2D\b/g, "Node3D"],
+          [/\bMarker2D\b/g, "Marker3D"],
+          [/\bCollisionShape2D\b/g, "CollisionShape3D"],
+          [/\bRayCast2D\b/g, "RayCast3D"],
+          [/\bGPUParticles2D\b/g, "GPUParticles3D"],
+          [/\bCPUParticles2D\b/g, "CPUParticles3D"],
+          [/\bCamera2D\b/g, "Camera3D"],
+        ]),
   ];
   for (const [re, target] of replacements) {
     out = out.replace(re, target);
@@ -294,34 +325,103 @@ function sanitizeGodotLineJs(raw, dimension = "dim3d") {
   out = out.replace(/\b(?:BP|BPI|WBP|DA)_([A-Za-z0-9_]+)\b/g, (_, grp) =>
     toSnakeCaseTokenJs(grp || "entity")
   );
-  out = out.replace(/\bL_([A-Za-z0-9_]+)\b/g, (_, grp) =>
-    `${toSnakeCaseTokenJs(grp || "arena")}.tscn`
+  out = out.replace(
+    /\bL_([A-Za-z0-9_]+)(?:\.[Uu][Mm][Aa][Pp]|\.[Uu][Aa][Ss][Ss][Ee][Tt]|\.[Tt][Ss][Cc][Nn])?\b/g,
+    (_, grp) => `${toSnakeCaseTokenJs(grp || "arena")}.tscn`
   );
   out = out.replace(/\b([A-Za-z_][A-Za-z0-9_]*)\.(?:cpp|hpp)\b/gi, (_, grp) =>
     `${toSnakeCaseTokenJs(grp || "script")}.gd`
   );
-  out = out.replace(/\b(\d+(?:\.\d+)?)\s*cm\/s\b/gi, (_, numStr) => {
+  out = out.replace(/\b(\d+(?:\.\d+)?)\s*(?:cm|uu)\/s\b/gi, (_, numStr) => {
     const rawNum = Number(numStr) || 0;
-    return is2d ? `${formatCleanNumJs(rawNum)} px/s` : `${formatCleanNumJs(rawNum / 100)} m/s`;
+    return is2d
+      ? `${formatCleanNumJs(rawNum)} px/s`
+      : `${formatCleanNumJs(rawNum / 100)} m/s`;
   });
-  out = out.replace(/\b(\d+(?:\.\d+)?)\s*cm\b/gi, (_, numStr) => {
+  out = out.replace(/\b(\d+(?:\.\d+)?)\s*(?:cm|uu)\b/gi, (_, numStr) => {
     const rawNum = Number(numStr) || 0;
-    return is2d ? `${formatCleanNumJs(rawNum)} px` : `${formatCleanNumJs(rawNum / 100)} m`;
+    return is2d
+      ? `${formatCleanNumJs(rawNum)} px`
+      : `${formatCleanNumJs(rawNum / 100)} m`;
   });
+  out = out.replace(/\buu\b/gi, is2d ? "px" : "m");
+
+  const pxPerMeter = 40;
+  if (is2d) {
+    out = out.replace(
+      /(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*m(?=$|[\s.,;:)!?])/gi,
+      (_, aStr, bStr) =>
+        `${formatCleanNumJs((Number(aStr) || 0) * pxPerMeter)}x${formatCleanNumJs((Number(bStr) || 0) * pxPerMeter)} px`
+    );
+    out = out.replace(/\b(\d+(?:\.\d+)?)\s*m\/s\b/gi, (_, numStr) =>
+      `${formatCleanNumJs((Number(numStr) || 0) * pxPerMeter)} px/s`
+    );
+    out = out.replace(
+      /(?<=^|[\s(~])(\d+(?:\.\d+)?)\s*m(?=$|[\s.,;:)!?])/gi,
+      (_, numStr) => `${formatCleanNumJs((Number(numStr) || 0) * pxPerMeter)} px`
+    );
+  } else {
+    out = out.replace(
+      /(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)\s*px(?=$|[\s.,;:)!?])/gi,
+      (_, aStr, bStr) =>
+        `${formatCleanNumJs((Number(aStr) || 0) / pxPerMeter)}x${formatCleanNumJs((Number(bStr) || 0) / pxPerMeter)} m`
+    );
+    out = out.replace(/\b(\d+(?:\.\d+)?)\s*px\/s\b/gi, (_, numStr) =>
+      `${formatCleanNumJs((Number(numStr) || 0) / pxPerMeter)} m/s`
+    );
+    out = out.replace(
+      /(?<=^|[\s(~])(\d+(?:\.\d+)?)\s*px(?=$|[\s.,;:)!?])/gi,
+      (_, numStr) => `${formatCleanNumJs((Number(numStr) || 0) / pxPerMeter)} m`
+    );
+  }
+
+  const phraseMap = [
+    ["end-to-end loop", "core loop"],
+    ["end-to-end", "full"],
+    ["unified pipeline", "pipeline"],
+  ];
+  for (const [fromPhrase, toPhrase] of phraseMap) {
+    out = out.replace(
+      new RegExp(`\\b${fromPhrase.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&")}\\b`, "gi"),
+      (matched) =>
+        matched &&
+        matched[0] === matched[0].toUpperCase() &&
+        matched[0] !== matched[0].toLowerCase()
+          ? `${toPhrase[0].toUpperCase()}${toPhrase.slice(1)}`
+          : toPhrase
+    );
+  }
+
+  out = out.replace(
+    /(?<![/._A-Za-z0-9])staging(?![/._A-Za-z0-9])/gi,
+    (matched) =>
+      matched &&
+      matched[0] === matched[0].toUpperCase() &&
+      matched[0] !== matched[0].toLowerCase()
+        ? "Layout"
+        : "layout"
+  );
+
   const jargonMap = [
     ["leveraging", "using"],
+    ["leveraged", "used"],
     ["leverages", "uses"],
     ["leverage", "use"],
+    ["validating", "checking"],
     ["validates", "checks"],
     ["validated", "checked"],
     ["validate", "check"],
     ["verified", "checked"],
     ["delivering", "producing"],
+    ["delivered", "produced"],
     ["delivers", "produces"],
     ["deliver", "produce"],
     ["husbandry", "breeding"],
+    ["homesteads", "bases"],
     ["homestead", "base"],
+    ["expeditions", "runs"],
     ["expedition", "run"],
+    ["ordinances", "weapons"],
     ["ordinance", "weaponry"],
   ];
   for (const [fromWord, toLower] of jargonMap) {
@@ -336,7 +436,14 @@ function sanitizeGodotLineJs(raw, dimension = "dim3d") {
       return toLower;
     });
   }
-  return out.replace(/\s{2,}/g, " ").trim();
+  for (const filler of ["unified", "seamlessly", "synergistic", "synergy"]) {
+    out = out.replace(new RegExp(`\\b${filler}\\b`, "gi"), "");
+  }
+  return out
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+(?:and|or)\s*([.,;:])/gi, "$1")
+    .replace(/\s+([.,;:])/g, "$1")
+    .trim();
 }
 
 function parseRootSpecJs(projectDoc) {
@@ -378,7 +485,7 @@ function parseRootSpecJs(projectDoc) {
     assetPolicy: String(
       parsed.assetPolicy ||
         (dimMeta.id === "dim2d"
-          ? "Prototype ColorRect/Polygon2D/CSG2D geometry + Resource (.tres) config + typed GDScript 2.0"
+          ? "Prototype ColorRect/Polygon2D/Line2D geometry + Resource (.tres) config + typed GDScript 2.0"
           : "Prototype CSGBox3D/CSGCylinder3D greybox geometry + StandardMaterial3D + Resource (.tres) + typed GDScript 2.0")
     ).trim(),
     feelChoiceId: coreFeel.id,
@@ -535,7 +642,7 @@ function parseFeatureSpecJs(raw, indexHint = 0, dimension = "dim3d", fallbackRel
           const cleanKey = sanitizeGodotTuningKeyJs(t.key, "tuning_param");
           return {
             key: cleanKey,
-            value: String(t.value ?? "0").trim() || "0",
+            value: scaleGodotTuningValueJs(t.value ?? "0", t.unit, dimension),
             unit: normalizeGodotUnitJs(cleanKey, t.unit, dimension),
           };
         })
@@ -619,6 +726,40 @@ function sanitizeGodotTuningKeyJs(rawKey, fallback = "tuning_param") {
   const snake = toSnakeCaseTokenJs(clean);
   if (!snake) return fallback;
   return /^[0-9]/.test(snake) ? `param_${snake}` : snake;
+}
+
+function scaleGodotTuningValueJs(rawValue, rawUnit, dimension = "dim3d") {
+  const cleanVal = String(rawValue ?? "0").trim() || "0";
+  const unit = String(rawUnit || "").trim().toLowerCase();
+  const parsed = Number(cleanVal);
+  if (!Number.isFinite(parsed)) return cleanVal;
+  const is2d = resolveDimensionMetaJs(dimension).id === "dim2d";
+  const pxPerMeter = 40;
+  if (!is2d) {
+    if (unit === "cm" || unit === "cm/s" || unit === "uu" || unit === "uu/s") {
+      return formatCleanNumJs(parsed / 100);
+    }
+    if (
+      unit === "px" ||
+      unit === "pixel" ||
+      unit === "pixels" ||
+      unit === "px/s" ||
+      unit === "pixels/s"
+    ) {
+      return formatCleanNumJs(parsed / pxPerMeter);
+    }
+  } else {
+    if (
+      unit === "m" ||
+      unit === "meter" ||
+      unit === "meters" ||
+      unit === "mps" ||
+      unit === "m/s"
+    ) {
+      return formatCleanNumJs(parsed * pxPerMeter);
+    }
+  }
+  return cleanVal;
 }
 
 function normalizeGodotUnitJs(key, rawUnit, dimension = "dim3d") {
@@ -817,7 +958,7 @@ function parseEpicSpecJs(epicDoc, indexHint = 0, dimension = "dim3d") {
           const cleanKey = sanitizeGodotTuningKeyJs(t.key, "tuning_param");
           return {
             key: cleanKey,
-            value: String(t.value ?? "0").trim() || "0",
+            value: scaleGodotTuningValueJs(t.value ?? "0", t.unit, dimension),
             unit: normalizeGodotUnitJs(cleanKey, t.unit, dimension),
           };
         })
@@ -4433,6 +4574,7 @@ exports._testHelpers = {
   resolveDimensionMetaJs,
   sanitizeGodotLineJs,
   sanitizeGodotTuningKeyJs,
+  scaleGodotTuningValueJs,
   normalizeGodotUnitJs,
   inferGodotPropertyTypeJs,
   sanitizeGodotLiveContextJs,

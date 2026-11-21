@@ -2229,5 +2229,112 @@ console.log(JSON.stringify({
         }
       },
     );
+
+    test(
+      '22. GodotSpecGuard regex safety, m<->px & uu tuning scaling, and full 3D<->2D blueprint prose conversion',
+      () {
+        expect(
+          GodotSpecGuard.sanitizeLine('-52 deg pitch'),
+          equals('-52 deg pitch'),
+        );
+        expect(
+          GodotSpecGuard.sanitizeLine('- Bullet line'),
+          equals('Bullet line'),
+        );
+
+        final pathLine = GodotSpecGuard.sanitizeLine(
+          'Open res://scenes/L_Arena_Proto.tscn in MyGame.uproject',
+        );
+        expect(pathLine, contains('res://scenes/arena_proto.tscn'));
+        expect(pathLine, isNot(contains('.tscn.tscn')));
+        expect(pathLine, contains('project.godot'));
+        expect(pathLine, isNot(contains('MyGameproject.godot')));
+
+        final uuLine = GodotSpecGuard.sanitizeLine(
+          'Dash 550 uu at 1200 uu/s',
+          dimension: GodotProjectDimension.dim3d,
+        );
+        expect(uuLine, equals('Dash 5.5 m at 12 m/s'));
+        expect(GodotSpecGuard.containsEngineLeakage(uuLine), isFalse);
+
+        expect(
+          GodotSpecGuard.sanitizeLine('Complete the end-to-end loop'),
+          equals('Complete the core loop'),
+        );
+        final jargonClean = GodotSpecGuard.sanitizeLine(
+          'Leveraged arena staging while validating delivered hits',
+        );
+        expect(jargonClean.toLowerCase(), isNot(contains('leveraged')));
+        expect(jargonClean.toLowerCase(), isNot(contains('staging')));
+        expect(jargonClean.toLowerCase(), isNot(contains('validating')));
+        expect(jargonClean.toLowerCase(), isNot(contains('delivered')));
+        expect(jargonClean.toLowerCase(), contains('used'));
+        expect(jargonClean.toLowerCase(), contains('layout'));
+        expect(jargonClean.toLowerCase(), contains('checking'));
+        expect(jargonClean.toLowerCase(), contains('produced'));
+
+        final feat2d = GodotSpecGuard.sanitizeFeatureSpec(
+          FeatureSpec(
+            id: 'f_scale_2d',
+            code: 'F01',
+            title: 'Dash',
+            goal: 'Dash cleanly.',
+            tuning: [
+              EpicTuningParam(key: 'move_speed', value: '6.4', unit: 'm/s'),
+              EpicTuningParam(key: 'dash_dist', value: '5.5', unit: 'm'),
+            ],
+          ),
+          dimension: GodotProjectDimension.dim2d,
+        );
+        expect(feat2d.tuning[0].value, equals('256'));
+        expect(feat2d.tuning[0].unit, equals('px/s'));
+        expect(feat2d.tuning[1].value, equals('220'));
+        expect(feat2d.tuning[1].unit, equals('px'));
+
+        final feat3d = GodotSpecGuard.sanitizeFeatureSpec(
+          FeatureSpec(
+            id: 'f_scale_3d',
+            code: 'F02',
+            title: 'Move',
+            goal: 'Move cleanly.',
+            tuning: [
+              EpicTuningParam(key: 'move_speed', value: '240', unit: 'px/s'),
+              EpicTuningParam(key: 'dash_speed', value: '600', unit: 'uu/s'),
+            ],
+          ),
+          dimension: GodotProjectDimension.dim3d,
+        );
+        expect(feat3d.tuning[0].value, equals('6'));
+        expect(feat3d.tuning[0].unit, equals('m/s'));
+        expect(feat3d.tuning[1].value, equals('6'));
+        expect(feat3d.tuning[1].unit, equals('m/s'));
+
+        final sb = GodotSparkPresets.byId('shellbreaker');
+        final sbAs2d = ProjectConceptAgent.convertBlueprintDimension(
+          sb,
+          GodotProjectDimension.dim2d,
+        );
+        final wb2d = WorkbenchProvider(enableAutoLoad: false);
+        wb2d.loadPresetSpark('shellbreaker');
+        wb2d.setProjectDimension(GodotProjectDimension.dim2d);
+        final fullMd2d = wb2d.buildFullProjectMarkdownExport().content;
+        expect(fullMd2d, isNot(contains('CharacterBody3D')));
+        expect(fullMd2d, isNot(contains('SpringArm3D')));
+        expect(fullMd2d, isNot(contains('m/s')));
+        expect(sbAs2d.initialEpics.first.inScope.join(' '), contains('px'));
+
+        final ek = GodotSparkPresets.byId('emberkeep');
+        final ekAs3d = ProjectConceptAgent.convertBlueprintDimension(
+          ek,
+          GodotProjectDimension.dim3d,
+        );
+        expect(
+          ekAs3d.initialEpics.first.features.first.tuning.first.unit,
+          equals('m/s'),
+        );
+        expect(ekAs3d.initialEpics.first.goal, isNot(contains('CharacterBody2D')));
+        expect(ekAs3d.initialEpics.first.goal, isNot(contains('px/s')));
+      },
+    );
   });
 }
