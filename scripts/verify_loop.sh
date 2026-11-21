@@ -19,7 +19,9 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 echo "=== [1/4] Cloud Functions syntax check ==="
-node --check functions/index.js
+for js_file in functions/*.js; do
+  node --check "$js_file"
+done
 
 echo "=== [2/4] Godot 4 plugin zip byte-parity check ==="
 check_zip_parity() {

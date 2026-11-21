@@ -215,7 +215,7 @@ def _scan_monolith_hotspots(min_lines: int = 350, limit: int = 6) -> list[dict[s
   candidates = _iter_source_files(
       [
           REPO_ROOT / "lib",
-          REPO_ROOT / "functions" / "index.js",
+          REPO_ROOT / "functions",
           REPO_ROOT / "godot_plugin" / "addons" / "layers",
       ],
       (".dart", ".js", ".gd"),
@@ -339,7 +339,7 @@ def _scan_todo_markers(limit: int = 15) -> list[str]:
   candidates = _iter_source_files(
       [
           REPO_ROOT / "godot_plugin" / "addons" / "layers",
-          REPO_ROOT / "functions" / "index.js",
+          REPO_ROOT / "functions",
           REPO_ROOT / "lib",
       ],
       (".gd", ".cfg", ".js", ".dart", ".md"),

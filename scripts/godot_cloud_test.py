@@ -1018,6 +1018,21 @@ assert.throws(
   (err) => err && err.statusCode === 409
 );
 
+const fs = require("fs");
+const indexLines = fs
+  .readFileSync(path.resolve(process.argv[1], "functions", "index.js"), "utf8")
+  .split(/\r?\n/).length;
+assert(
+  indexLines <= 1300,
+  `Expected functions/index.js <= 1300 lines after modularization, got ${indexLines}`
+);
+const specCtxMod = require(path.resolve(process.argv[1], "functions", "godot_spec_context.js"));
+const linkSyncMod = require(path.resolve(process.argv[1], "functions", "godot_link_sync.js"));
+const agentRunnerMod = require(path.resolve(process.argv[1], "functions", "godot_agent_runner.js"));
+assert.strictEqual(typeof specCtxMod.renderServerGodotFeatureContextJs, "function");
+assert.strictEqual(typeof linkSyncMod.applyGodotEpicMutationJs, "function");
+assert.strictEqual(typeof agentRunnerMod.runGodotMultiTurnStepWithGemini, "function");
+
 console.log("GODOT_CLOUD_TEST_OK");
 """
 
