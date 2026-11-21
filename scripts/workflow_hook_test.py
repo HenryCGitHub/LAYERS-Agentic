@@ -93,6 +93,27 @@ def _verify_skills_and_discovery() -> None:
   assert isinstance(report.get("untestedModules"), list), "Expected untestedModules list"
   assert report.get("unrealLeakageHits") == [], f"Unexpected unrealLeakageHits: {report.get('unrealLeakageHits')}"
 
+  proc_audit = subprocess.run(
+      [sys.executable, str(DISCOVER_PATH), "--no-test", "audit codebase"],
+      cwd=str(REPO_ROOT),
+      capture_output=True,
+      text=True,
+      timeout=20,
+      env=env,
+  )
+  assert proc_audit.returncode == 0, f"discover_signals.py audit failed: {proc_audit.stderr}"
+  audit_report = json.loads(proc_audit.stdout)
+  assert all("node_modules/" not in p for p in audit_report.get("focusMatches", [])), (
+      f"Unexpected node_modules focusMatches: {audit_report.get('focusMatches')}"
+  )
+  untested = set(audit_report.get("untestedModules", []))
+  for covered_part in (
+      "lib/providers/workbench_storage_mixin.dart",
+      "lib/screens/shell_dialogs_part.dart",
+      "lib/utils/markdown_exporter_stub.dart",
+  ):
+    assert covered_part not in untested, f"Expected transitive part/export module covered: {covered_part}"
+
 
 def _verify_non_trigger_guards() -> None:
   with tempfile.TemporaryDirectory() as td:

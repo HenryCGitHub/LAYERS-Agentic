@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
+import 'package:layers_agentic/constants/text_style_guide.dart';
 import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
@@ -15,8 +16,10 @@ import 'package:layers_agentic/screens/widgets/godot_bridge_modals.dart';
 import 'package:layers_agentic/services/firestore_vault_service.dart';
 import 'package:layers_agentic/services/local_vault_service.dart';
 import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
+import 'package:layers_agentic/services/storage/vault_storage_web.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
 import 'package:layers_agentic/utils/godot_context_builder.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('Platform, Vault, Auth, Invite & Model Failover Regression Suite', () {
@@ -2118,6 +2121,151 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(wb.savedProjects, isEmpty);
+      },
+    );
+
+    test(
+      'LayersTextStyleGuide helpers & VaultStorageWebImpl persistence prune legacy feature/task entries cleanly',
+      () async {
+        expect(
+          LayersTextStyleGuide.compactStoredTradeOff(
+            'snappy response over simulation',
+          ),
+          equals('snappy response OVER simulation'),
+        );
+        expect(
+          LayersTextStyleGuide.compactStoredExclusion('• multiplayer lobbies'),
+          equals('No multiplayer lobbies'),
+        );
+        expect(
+          LayersTextStyleGuide.compactStoredExclusion('No co-op'),
+          equals('No co-op'),
+        );
+        expect(
+          LayersTextStyleGuide.stripExclusionPrefixes(
+            '• Out of Scope: Crafting',
+          ),
+          equals('Crafting'),
+        );
+        expect(
+          LayersTextStyleGuide.formatConciseTaskTitle(
+            'Implement the Claw Dash (v0.1)',
+          ),
+          equals('Claw Dash'),
+        );
+        expect(
+          LayersTextStyleGuide.formatTelegraphicSpecValue(
+            'Camera: Fixed Iso 45 deg',
+          ),
+          equals('Fixed Iso 45 deg'),
+        );
+        expect(
+          LayersTextStyleGuide.isLegacyTemplateTaskTitle(
+            'Step 1: BP_Mech.uasset',
+          ),
+          isTrue,
+        );
+        expect(
+          LayersTextStyleGuide.isLegacyTemplateTaskTitle('Armored Claw Dash'),
+          isFalse,
+        );
+
+        SharedPreferences.setMockInitialValues(<String, Object>{
+          'tier_pm_doc_ids': <String>[
+            'proj_1',
+            'legacy_feat_1',
+            'missing_doc',
+          ],
+          'tier_pm_doc_legacy_feat_1': jsonEncode(<String, dynamic>{
+            'id': 'legacy_feat_1',
+            'title': 'Old Feature',
+            'tier': 'feature',
+          }),
+        });
+
+        final webVault = VaultStorageWebImpl();
+        await webVault.saveDocument(
+          TierDocument(
+            id: 'proj_1',
+            title: 'SHELLBREAKER',
+            tier: TierType.project,
+          ),
+        );
+        await webVault.saveSettings(
+          activeDocumentId: 'proj_1',
+          themeMode: 'light',
+        );
+
+        final loaded = await webVault.loadVaultData();
+        expect(loaded.documents.keys, equals(<String>{'proj_1'}));
+        expect(loaded.activeDocumentId, equals('proj_1'));
+        expect(loaded.themeMode, equals('light'));
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(prefs.getStringList('tier_pm_doc_ids'), equals(['proj_1']));
+        expect(prefs.getString('tier_pm_doc_legacy_feat_1'), isNull);
+
+        await webVault.deleteDocument('proj_1');
+        expect((await webVault.loadVaultData()).documents, isEmpty);
+      },
+    );
+
+    testWidgets(
+      'LayersAgenticApp preserves external WorkbenchProvider across unmount & top-bar switcher delete requires confirmation',
+      (tester) async {
+        tester.view.physicalSize = const Size(1400, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final pid = wb.activeProjectId!;
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(const ValueKey('project_switcher_dropdown_btn')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey('switcher_delete_$pid')));
+        await tester.pumpAndSettle();
+
+        expect(wb.savedProjects.length, equals(1));
+        expect(
+          find.byKey(const ValueKey('cancel_delete_project_btn')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('cancel_delete_project_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(wb.savedProjects.length, equals(1));
+
+        await tester.tap(
+          find.byKey(const ValueKey('project_switcher_dropdown_btn')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(ValueKey('switcher_delete_$pid')));
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('confirm_delete_project_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(wb.savedProjects, isEmpty);
+
+        // Unmounting LayersAgenticApp must NOT dispose caller-owned WorkbenchProvider
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+
+        final wasDark = wb.isDark;
+        wb.toggleTheme();
+        expect(wb.isDark, equals(!wasDark));
+        wb.dispose();
       },
     );
   });

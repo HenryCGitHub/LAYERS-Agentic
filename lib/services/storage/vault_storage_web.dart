@@ -36,17 +36,34 @@ class VaultStorageWebImpl implements VaultStorageBackend {
 
       final docIds = prefs.getStringList(_keyDocIds) ?? [];
       final docsMap = <String, TierDocument>{};
+      final validDocIds = <String>[];
+      final staleDocIds = <String>[];
 
       for (final id in docIds) {
         final raw = prefs.getString('$_keyDocPrefix$id');
-        if (raw != null) {
-          try {
-            final json = jsonDecode(raw) as Map<String, dynamic>;
-            if (TierDocument.isLegacyIgnoredTier(json)) continue;
-            final doc = TierDocument.fromJson(json);
-            docsMap[doc.id] = doc;
-          } catch (_) {}
+        if (raw == null) {
+          staleDocIds.add(id);
+          continue;
         }
+        try {
+          final json = jsonDecode(raw) as Map<String, dynamic>;
+          if (TierDocument.isLegacyIgnoredTier(json)) {
+            staleDocIds.add(id);
+            continue;
+          }
+          final doc = TierDocument.fromJson(json);
+          docsMap[doc.id] = doc;
+          validDocIds.add(id);
+        } catch (_) {
+          staleDocIds.add(id);
+        }
+      }
+
+      if (staleDocIds.isNotEmpty) {
+        for (final staleId in staleDocIds) {
+          await prefs.remove('$_keyDocPrefix$staleId');
+        }
+        await prefs.setStringList(_keyDocIds, validDocIds);
       }
 
       return VaultLoadResult(

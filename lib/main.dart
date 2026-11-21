@@ -41,19 +41,26 @@ class LayersAgenticApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final consumer = Consumer<WorkbenchProvider>(
+      builder: (context, workbench, _) {
+        final isDark = workbench.isDark;
+        return MaterialApp(
+          title: 'LAYERS-Agentic',
+          debugShowCheckedModeBanner: false,
+          theme: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
+          home: WorkbenchShell(workbench: workbench),
+        );
+      },
+    );
+    if (provider != null) {
+      return ChangeNotifierProvider<WorkbenchProvider>.value(
+        value: provider!,
+        child: consumer,
+      );
+    }
     return ChangeNotifierProvider<WorkbenchProvider>(
-      create: (_) => provider ?? WorkbenchProvider(enableAutoLoad: true),
-      child: Consumer<WorkbenchProvider>(
-        builder: (context, workbench, _) {
-          final isDark = workbench.isDark;
-          return MaterialApp(
-            title: 'LAYERS-Agentic',
-            debugShowCheckedModeBanner: false,
-            theme: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
-            home: WorkbenchShell(workbench: workbench),
-          );
-        },
-      ),
+      create: (_) => WorkbenchProvider(enableAutoLoad: true),
+      child: consumer,
     );
   }
 }
@@ -151,7 +158,11 @@ class WorkbenchShell extends StatelessWidget {
                         workbench.duplicateProject(projId);
                       } else if (val.startsWith(_prefixDelete)) {
                         final projId = val.substring(_prefixDelete.length);
-                        workbench.deleteProject(projId);
+                        final proj = savedProjects.where((p) => p.id == projId).firstOrNull;
+                        if (proj == null) return;
+                        if (await _confirmDeleteProjectDialog(context, proj)) {
+                          workbench.deleteProject(projId);
+                        }
                       } else {
                         workbench.switchProject(val);
                       }
@@ -247,12 +258,16 @@ class WorkbenchShell extends StatelessWidget {
                           children: [
                             Icon(Icons.add_circle_outline_rounded, size: 13, color: textPrimary),
                             const SizedBox(width: 8),
-                            Text(
-                              '+ New Project',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: textPrimary,
+                            Expanded(
+                              child: Text(
+                                '+ New Project',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: textPrimary,
+                                ),
                               ),
                             ),
                           ],
@@ -266,12 +281,16 @@ class WorkbenchShell extends StatelessWidget {
                           children: [
                             Icon(Icons.file_download_outlined, size: 13, color: textSecondary),
                             const SizedBox(width: 8),
-                            Text(
-                              'Export Project (.json)',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: textSecondary,
+                            Expanded(
+                              child: Text(
+                                'Export Project (.json)',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: textSecondary,
+                                ),
                               ),
                             ),
                           ],
@@ -284,12 +303,16 @@ class WorkbenchShell extends StatelessWidget {
                           children: [
                             Icon(Icons.file_upload_outlined, size: 13, color: textSecondary),
                             const SizedBox(width: 8),
-                            Text(
-                              'Import Project (.json)',
-                              style: GoogleFonts.inter(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: textSecondary,
+                            Expanded(
+                              child: Text(
+                                'Import Project (.json)',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: textSecondary,
+                                ),
                               ),
                             ),
                           ],

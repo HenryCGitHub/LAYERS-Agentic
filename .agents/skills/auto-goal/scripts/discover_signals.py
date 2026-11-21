@@ -25,6 +25,25 @@ UNREAL_LEAKAGE_ALLOWLIST = {
     "lib/utils/godot_spec_guard.dart",
     "lib/constants/text_style_guide.dart",
 }
+EXCLUDED_DIR_NAMES = {
+    "__pycache__",
+    "node_modules",
+    ".dart_tool",
+    "build",
+    ".git",
+    ".firebase",
+    "ios",
+    "android",
+    "macos",
+    "linux",
+    "windows",
+}
+PART_OF_RE = re.compile(r"^\s*part\s+of\s+['\"]([^'\"]+\.dart)['\"]\s*;", re.MULTILINE)
+CONDITIONAL_DART_RE = re.compile(
+    r"(?:import|export)\s+['\"]([^'\"]+\.dart)['\"][^;]*?\bif\s*\([^)]+\)\s*['\"]([^'\"]+\.dart)['\"]",
+    re.DOTALL,
+)
+IMPORT_DART_RE = re.compile(r"(?:import|export)\s+['\"]([^'\"]+\.dart)['\"]", re.MULTILINE)
 
 
 def _run(
@@ -143,11 +162,14 @@ def _iter_source_files(roots: list[Path], suffixes: tuple[str, ...]) -> list[Pat
       if root.suffix in suffixes:
         results.append(root)
     elif root.is_dir():
-      for fpath in sorted(root.rglob("*")):
-        if not fpath.is_file() or "__pycache__" in fpath.parts:
-          continue
-        if fpath.suffix in suffixes:
-          results.append(fpath)
+      for base, dirs, files in os.walk(root):
+        dirs[:] = sorted(
+            d for d in dirs if d not in EXCLUDED_DIR_NAMES and not d.startswith(".")
+        )
+        for name in sorted(files):
+          fpath = Path(base) / name
+          if fpath.suffix in suffixes:
+            results.append(fpath)
   return results
 
 
@@ -230,19 +252,62 @@ def _scan_untested_modules() -> list[str]:
   test_corpus = "\n".join(test_corpus_parts)
 
   modules: list[Path] = []
-  for fpath in _iter_source_files([REPO_ROOT / "lib"], (".dart",)):
+  dart_lib_files = _iter_source_files([REPO_ROOT / "lib"], (".dart",))
+  parent_paths: dict[Path, set[Path]] = {}
+  conditional_gateways: set[Path] = set()
+  for fpath in dart_lib_files:
     if fpath.name.endswith(".g.dart") or fpath.name.endswith(".freezed.dart"):
       continue
     modules.append(fpath)
+    try:
+      text = fpath.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+      continue
+    resolved = fpath.resolve()
+    for m in PART_OF_RE.finditer(text):
+      target = (fpath.parent / m.group(1)).resolve()
+      if target.is_file():
+        parent_paths.setdefault(resolved, set()).add(target)
+    for m in CONDITIONAL_DART_RE.finditer(text):
+      conditional_gateways.add(resolved)
+      for rel_target in (m.group(1), m.group(2)):
+        target = (fpath.parent / rel_target).resolve()
+        if target.is_file():
+          parent_paths.setdefault(target, set()).add(resolved)
+
+  if conditional_gateways:
+    for fpath in dart_lib_files:
+      try:
+        text = fpath.read_text(encoding="utf-8", errors="replace")
+      except OSError:
+        continue
+      resolved = fpath.resolve()
+      for m in IMPORT_DART_RE.finditer(text):
+        target = (fpath.parent / m.group(1)).resolve()
+        if target in conditional_gateways and target != resolved:
+          parent_paths.setdefault(target, set()).add(resolved)
 
   gd_dir = REPO_ROOT / "godot_plugin" / "addons" / "layers"
   for fpath in _iter_source_files([gd_dir], (".gd",)):
     modules.append(fpath)
 
+  def _related_stems(fpath: Path) -> set[str]:
+    stems = {fpath.stem}
+    seen_paths = {fpath.resolve()}
+    queue = [fpath.resolve()]
+    while queue:
+      cur = queue.pop()
+      for p in parent_paths.get(cur, ()):
+        stems.add(p.stem)
+        if p not in seen_paths:
+          seen_paths.add(p)
+          queue.append(p)
+    return stems
+
   untested: list[str] = []
   for fpath in modules:
-    stem = fpath.stem
-    if not re.search(rf"\b{re.escape(stem)}\b", test_corpus):
+    stems = _related_stems(fpath)
+    if not any(re.search(rf"\b{re.escape(stem)}\b", test_corpus) for stem in stems):
       untested.append(fpath.relative_to(REPO_ROOT).as_posix())
   return sorted(untested)
 
