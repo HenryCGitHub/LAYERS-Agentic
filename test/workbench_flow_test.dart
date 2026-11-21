@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -215,6 +216,195 @@ void main() {
         await tester.pumpAndSettle();
         expect(wb.totalEstimatedCostUsd, equals(0.0));
         expect(wb.tokenUsageCompactLabel, equals('0 tok · \$0.000'));
+      },
+    );
+
+    test(
+      'Round 1/10: bindHostedProxyAuth, thoughtsTokenCount billing, patch_* unwrap, pendingInvites invited & fast 404/timeout failover',
+      () async {
+        final prevIsAuth = GeminiAgentClient.isProxyAuthenticated;
+        final prevTokenProvider = GeminiAgentClient.authTokenProvider;
+        final prevHttpPost = GeminiAgentClient.testHttpPost;
+        final prevMockResponder = GeminiAgentClient.testMockResponder;
+        final prevProxyOverride = GeminiAgentClient.proxyBaseUrlOverride;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.resetUsage();
+        GeminiAgentClient.resetCapabilityCacheForTest();
+        addTearDown(GeminiAgentClient.resetUsage);
+
+        try {
+          GeminiAgentClient.testMockResponder = null;
+          GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+          GeminiAgentClient.proxyBaseUrlOverride =
+              'https://proxy.example.com/geminiProxy';
+
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          wb.setAiAccessRecordsForTest(
+            const [
+              AiAccessRecord(
+                email: 'approved@studio.dev',
+                status: 'approved',
+              ),
+              AiAccessRecord(
+                email: 'teammate@studio.dev',
+                status: 'invited',
+              ),
+            ],
+            overrideEmail: 'approved@studio.dev',
+          );
+          expect(wb.pendingInvites.length, equals(1));
+          expect(wb.pendingInvites.first.email, equals('teammate@studio.dev'));
+
+          wb.bindHostedProxyAuth(
+            tokenProvider: ({bool forceRefresh = false}) async => 'id-tok-xyz',
+          );
+          expect(GeminiAgentClient.canUseAuthenticatedProxy, isTrue);
+          expect(GeminiAgentClient.hasKey(''), isTrue);
+
+          Uri? capturedUri;
+          Map<String, String>? capturedHeaders;
+          GeminiAgentClient.testHttpPost = (
+            uri, {
+            headers,
+            body,
+          }) async {
+            capturedUri = uri;
+            capturedHeaders = headers;
+            return http.Response(
+              jsonEncode({
+                'usageMetadata': {
+                  'promptTokenCount': 800,
+                  'toolUsePromptTokenCount': 200,
+                  'candidatesTokenCount': 400,
+                  'thoughtsTokenCount': 600,
+                },
+                'candidates': [
+                  {
+                    'content': {
+                      'parts': [
+                        {
+                          'text':
+                              '{"patch_godot_root_spec": {"args": {"gameTitle": "SHELL"}}}',
+                        },
+                      ],
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          };
+
+          final patchRes = await GeminiAgentClient.generateJson(
+            prompt: 'patch test',
+            apiKey: '',
+          );
+          expect(
+            capturedUri.toString(),
+            equals(
+              'https://proxy.example.com/geminiProxy/v1beta/models/gemini-4-hydrogen:generateContent',
+            ),
+          );
+          expect(capturedHeaders?['Authorization'], equals('Bearer id-tok-xyz'));
+          expect(capturedHeaders?.containsKey('x-goog-api-key'), isFalse);
+          expect(patchRes, equals({'gameTitle': 'SHELL'}));
+          expect(GeminiAgentClient.totalInputTokens, equals(1000));
+          expect(GeminiAgentClient.totalOutputTokens, equals(1000));
+          expect(GeminiAgentClient.totalThinkingTokens, equals(600));
+          expect(GeminiAgentClient.totalEstimatedCostUsd, closeTo(0.009, 1e-6));
+
+          // 404 on gemini-4-hydrogen must fail over immediately without same-model JSON retry
+          final attemptedModels = <String>[];
+          GeminiAgentClient.testHttpPost = (
+            uri, {
+            headers,
+            body,
+          }) async {
+            final urlStr = uri.toString();
+            if (urlStr.contains('gemini-4-hydrogen')) {
+              attemptedModels.add('gemini-4-hydrogen');
+              return http.Response('{"error":{"message":"Not found"}}', 404);
+            }
+            attemptedModels.add('gemini-flash-latest');
+            return http.Response(
+              jsonEncode({
+                'candidates': [
+                  {
+                    'content': {
+                      'parts': [
+                        {'text': '{"ok": true}'},
+                      ],
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          };
+
+          final failoverRes = await GeminiAgentClient.generateJson(
+            prompt: 'tool call 404 failover',
+            apiKey: '',
+            functionDeclarations: [
+              {
+                'name': 'patch_godot_root_spec',
+                'parameters': {'type': 'object'},
+              },
+            ],
+          );
+          expect(failoverRes, equals({'ok': true}));
+          expect(
+            attemptedModels,
+            equals(['gemini-4-hydrogen', 'gemini-flash-latest']),
+          );
+
+          // TimeoutException populates lastErrorStatus and resets cleanly on HTTP 200
+          GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+            throw TimeoutException('timed out');
+          };
+          final timedOutRes = await GeminiAgentClient.generateJson(
+            prompt: 'timeout test',
+            apiKey: '',
+          );
+          expect(timedOutRes, isNull);
+          expect(GeminiAgentClient.lastErrorStatus, isNotNull);
+          expect(
+            GeminiAgentClient.lastErrorStatus!,
+            contains('TimeoutException'),
+          );
+
+          GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+            return http.Response(
+              jsonEncode({
+                'candidates': [
+                  {
+                    'content': {
+                      'parts': [
+                        {'text': '{"recovered": true}'},
+                      ],
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          };
+          final okAfterTimeout = await GeminiAgentClient.generateJson(
+            prompt: 'recover test',
+            apiKey: '',
+          );
+          expect(okAfterTimeout, equals({'recovered': true}));
+          expect(GeminiAgentClient.lastErrorStatus, isNull);
+        } finally {
+          GeminiAgentClient.isProxyAuthenticated = prevIsAuth;
+          GeminiAgentClient.authTokenProvider = prevTokenProvider;
+          GeminiAgentClient.testHttpPost = prevHttpPost;
+          GeminiAgentClient.testMockResponder = prevMockResponder;
+          GeminiAgentClient.proxyBaseUrlOverride = prevProxyOverride;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+          GeminiAgentClient.lastErrorStatus = null;
+          GeminiAgentClient.resetCapabilityCacheForTest();
+        }
       },
     );
 

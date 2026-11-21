@@ -66,8 +66,9 @@ class WorkbenchProvider extends ChangeNotifier {
   List<AiAccessRecord> _aiAccessRecords = const [];
   List<AiAccessRecord> get aiAccessRecords =>
       List.unmodifiable(_aiAccessRecords);
-  List<AiAccessRecord> get pendingInvites =>
-      _aiAccessRecords.where((r) => r.status == 'pending').toList();
+  List<AiAccessRecord> get pendingInvites => _aiAccessRecords
+      .where((r) => r.status == 'invited' || r.status == 'pending')
+      .toList();
   List<AiAccessRecord> get activeApprovedMembers =>
       _aiAccessRecords.where((r) => r.status == 'approved').toList();
   List<AiAccessRecord> get revokedMembers =>
@@ -273,12 +274,20 @@ class WorkbenchProvider extends ChangeNotifier {
     });
   }
 
+  void bindHostedProxyAuth({
+    Future<String?> Function({bool forceRefresh})? tokenProvider,
+  }) {
+    GeminiAgentClient.authTokenProvider = tokenProvider ??
+        ({bool forceRefresh = false}) =>
+            _authService.getValidIdToken(forceRefresh: forceRefresh);
+    GeminiAgentClient.isProxyAuthenticated =
+        () => isUserLoggedIn && isSessionApprovedForAi;
+  }
+
   WorkbenchProvider({this.enableAutoLoad = true}) {
     _authService.addListener(_onAuthStateChanged);
     if (enableAutoLoad) {
-      GeminiAgentClient.authTokenProvider =
-          ({bool forceRefresh = false}) =>
-              _authService.getValidIdToken(forceRefresh: forceRefresh);
+      bindHostedProxyAuth();
       initVault();
     }
   }

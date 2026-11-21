@@ -403,14 +403,18 @@ class GeminiAgentClient {
       if (rawUsage is Map) {
         final promptTokens =
             (rawUsage['promptTokenCount'] as num?)?.toInt() ?? 0;
+        final toolPromptTokens =
+            (rawUsage['toolUsePromptTokenCount'] as num?)?.toInt() ?? 0;
         final candidateTokens =
             (rawUsage['candidatesTokenCount'] as num?)?.toInt() ?? 0;
         final thoughtsTokens =
             (rawUsage['thoughtsTokenCount'] as num?)?.toInt() ?? 0;
-        if (promptTokens > 0 || candidateTokens > 0) {
+        final billedInput = promptTokens + toolPromptTokens;
+        final billedOutput = candidateTokens + thoughtsTokens;
+        if (billedInput > 0 || billedOutput > 0) {
           recordUsage(
-            inputTokens: promptTokens,
-            outputTokens: candidateTokens,
+            inputTokens: billedInput,
+            outputTokens: billedOutput,
             thinkingTokens: thoughtsTokens,
           );
         }
@@ -480,6 +484,7 @@ class GeminiAgentClient {
                 key.startsWith('update_') ||
                 key.startsWith('propose_') ||
                 key.startsWith('mutate_') ||
+                key.startsWith('patch_') ||
                 key == 'args' ||
                 key == 'parameters' ||
                 key == 'arguments')) {
@@ -556,6 +561,8 @@ class GeminiAgentClient {
 
     int? lastNon200Status;
     String? lastPolicyErrorMessage;
+    Object? lastCaughtError;
+    lastErrorStatus = null;
     lastFallbackReason = null;
     bool refreshedProxyTokenOnce = false;
 
@@ -715,16 +722,19 @@ class GeminiAgentClient {
           }
         }
       } catch (err) {
+        lastCaughtError = err;
         if (model == pinnedLiveFlashModel) {
           lastFallbackReason = '$err';
         }
-        // Proceed to JSON-mode fallback if tools were active, or next model
+        // Proceed to JSON-mode fallback only if a non-404 HTTP response arrived
       }
 
-      // If a deeply nested function-calling schema timed out or returned MALFORMED_FUNCTION_CALL
-      // (and this model endpoint is NOT actively returning 429/503), retry once in direct JSON mode.
+      // If a deeply nested function-calling schema returned HTTP 200 (unparseable) or 400
+      // (and this model endpoint is NOT 404, 429/503, or timed out/offline), retry once in direct JSON mode.
       if (hasTools &&
-          (modelLastStatus == null || !_isTransientStatus(modelLastStatus))) {
+          modelLastStatus != null &&
+          modelLastStatus != 404 &&
+          !_isTransientStatus(modelLastStatus)) {
         try {
           final rawToolParams = functionDeclarations.first['parameters'];
           final effectiveFallbackSchema = responseSchema ??
@@ -799,6 +809,7 @@ class GeminiAgentClient {
             }
           }
         } catch (err) {
+          lastCaughtError = err;
           if (model == pinnedLiveFlashModel) {
             lastFallbackReason = '$err';
           }
@@ -811,6 +822,8 @@ class GeminiAgentClient {
           (lastPolicyErrorMessage != null && lastPolicyErrorMessage.isNotEmpty)
               ? 'HTTP $lastNon200Status: $lastPolicyErrorMessage'
               : 'HTTP $lastNon200Status';
+    } else if (lastCaughtError != null) {
+      lastErrorStatus = '$lastCaughtError';
     }
     return null;
   }
