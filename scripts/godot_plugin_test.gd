@@ -48,6 +48,11 @@ func _run_test() -> void:
 	# 1. Strict Godot 4.7.2 load/compile check across all plugin scripts
 	var plugin_scripts: PackedStringArray = PackedStringArray([
 		"res://addons/layers/layers_step_executor.gd",
+		"res://addons/layers/layers_readonly_tools.gd",
+		"res://addons/layers/layers_script_input_ops.gd",
+		"res://addons/layers/layers_scene_ops.gd",
+		"res://addons/layers/layers_project_diagnostics.gd",
+		"res://addons/layers/layers_agent_controller.gd",
 		"res://addons/layers/layers_sync_client.gd",
 		"res://addons/layers/layers_dock.gd",
 		"res://addons/layers/layers_plugin.gd",
@@ -60,6 +65,10 @@ func _run_test() -> void:
 		var gds := scr as GDScript
 		if not sp.ends_with("layers_plugin.gd") and not gds.can_instantiate():
 			_fail("Plugin script cannot instantiate: %s" % sp)
+			return
+		var line_count: int = FileAccess.get_file_as_string(sp).split("\n").size()
+		if line_count > 1350:
+			_fail("Plugin script exceeds 1350 lines (%d): %s" % [line_count, sp])
 			return
 
 	var exec_scr: GDScript = ResourceLoader.load("res://addons/layers/layers_step_executor.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
@@ -1391,6 +1400,52 @@ func _physics_process(_delta: float) -> void:
 		t14_cleanup_guard_dir.call()
 
 	mock_ed_4t.base_ctrl.free()
+
+	# 15. Standalone Module Contracts (zero-arg instantiation & core helper APIs)
+	var ro_scr := ResourceLoader.load("res://addons/layers/layers_readonly_tools.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+	var sio_scr := ResourceLoader.load("res://addons/layers/layers_script_input_ops.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+	var sc_scr := ResourceLoader.load("res://addons/layers/layers_scene_ops.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+	var diag_scr := ResourceLoader.load("res://addons/layers/layers_project_diagnostics.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+	var ac_scr := ResourceLoader.load("res://addons/layers/layers_agent_controller.gd", "", ResourceLoader.CACHE_MODE_IGNORE) as GDScript
+
+	var ro_mod: RefCounted = ro_scr.new()
+	var sio_mod: RefCounted = sio_scr.new()
+	var sc_mod: RefCounted = sc_scr.new()
+	var diag_mod: RefCounted = diag_scr.new()
+	var ac_mod: RefCounted = ac_scr.new()
+
+	var ro_res: Dictionary = ro_mod.call("tool_read_autoloads_and_layers", {}) as Dictionary
+	if not bool(ro_res.get("ok", false)):
+		_fail("Test15: layers_readonly_tools standalone call failed: %s" % str(ro_res))
+		return
+
+	var sio_res: Dictionary = sio_mod.call("apply_script_patches", "var a: int = 1\n", [{"find": "var a: int = 1", "replace": "var a: int = 2"}]) as Dictionary
+	if not bool(sio_res.get("ok", false)):
+		_fail("Test15: layers_script_input_ops standalone patch failed: %s" % str(sio_res))
+		return
+
+	var sc_ext: String = str(sc_mod.call("extract_script_extends", "extends CharacterBody3D\n"))
+	if sc_ext != "CharacterBody3D":
+		_fail("Test15: layers_scene_ops extract_script_extends failed: %s" % sc_ext)
+		return
+
+	var diag_chk: Dictionary = diag_mod.call("check_gdscript_compiles", "extends Node\nfunc _ready() -> void:\n\tpass\n") as Dictionary
+	if not bool(diag_chk.get("ok", false)):
+		_fail("Test15: layers_project_diagnostics standalone compile check failed: %s" % str(diag_chk))
+		return
+
+	var ac_sum: String = str(ac_mod.call("format_agent_completion_summary", {
+		"mode": "build_feature",
+		"scriptUpdates": [{"patches": [{"find": "a", "replace": "b"}]}],
+	}, {"applied_ops": 2}, {
+		"action": "build_feature",
+		"target_code": "F01",
+		"steps_used": 2,
+		"tool_reads_count": 1,
+	}))
+	if not ("Built F01 in 2 steps" in ac_sum):
+		_fail("Test15: layers_agent_controller standalone summary failed: %s" % ac_sum)
+		return
 
 	print("GODOT_PLUGIN_TEST_OK")
 	quit(0)
