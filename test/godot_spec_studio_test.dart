@@ -2442,5 +2442,103 @@ console.log(JSON.stringify({
         expect(wb.isSelectedFeatureLockedBaseline, isFalse);
       },
     );
+
+    test(
+      '24. Stage 1 core models & ProjectConceptAgent stay modular (< 1150 lines) with zero dead ReleaseScope bloat while preserving preset/fallback parity',
+      () async {
+        expect(
+          File('lib/constants/tiers.dart').readAsLinesSync().length,
+          lessThanOrEqualTo(120),
+        );
+        expect(
+          File('lib/constants/tiers.dart').readAsStringSync(),
+          isNot(contains('enum ReleaseScope')),
+        );
+        expect(
+          File('lib/models/tier_document.dart').readAsLinesSync().length,
+          lessThanOrEqualTo(260),
+        );
+        expect(
+          File('lib/models/agent_blueprints.dart').readAsLinesSync().length,
+          lessThanOrEqualTo(1050),
+        );
+        expect(File('lib/models/spark_presets_part.dart').existsSync(), isTrue);
+        expect(
+          File('lib/agents/project_concept_agent.dart')
+              .readAsLinesSync()
+              .length,
+          lessThanOrEqualTo(1150),
+        );
+        expect(
+          File('lib/agents/project_concept_schemas_part.dart').existsSync(),
+          isTrue,
+        );
+        expect(
+          File('lib/agents/project_concept_sync_part.dart').existsSync(),
+          isTrue,
+        );
+        expect(
+          File('lib/agents/project_concept_fallback_part.dart').existsSync(),
+          isTrue,
+        );
+
+        for (final id in const ['shellbreaker', 'railjack', 'emberkeep']) {
+          final bp = GodotSparkPresets.byId(id);
+          expect(bp.initialEpics, isNotEmpty, reason: '$id initialEpics');
+          expect(bp.v02Presets, isNotEmpty, reason: '$id v02Presets');
+        }
+
+        final puzzleOut = await ProjectConceptAgent.draftSpecWithStatus(
+          sparkPrompt: 'Push mirrors to unlock exit door',
+          apiKey: '',
+          dimensionOverride: GodotProjectDimension.dim2d,
+        );
+        expect(puzzleOut.usedOfflineFallback, isTrue);
+        expect(puzzleOut.blueprint, isNotNull);
+        expect(
+          puzzleOut.blueprint!.dimension,
+          equals(GodotProjectDimension.dim2d),
+        );
+        expect(puzzleOut.blueprint!.initialEpics, isNotEmpty);
+
+        final racerOut = await ProjectConceptAgent.draftSpecWithStatus(
+          sparkPrompt: 'High-speed hover track racer with nitro boost pads',
+          apiKey: '',
+          dimensionOverride: GodotProjectDimension.dim3d,
+        );
+        expect(racerOut.blueprint, isNotNull);
+        ProjectConceptAgent.syncEpicCameraFraming(
+          racerOut.blueprint!,
+          optionId: 'fps',
+          contractValue: 'Camera3D EyeHeight 1.6 m · 90 deg FOV',
+        );
+        ProjectConceptAgent.syncEpicCoreFeel(
+          racerOut.blueprint!,
+          feelId: 'heavy',
+        );
+        expect(racerOut.blueprint!.feelChoiceId, equals('heavy'));
+
+        expect(DurationHelper.normalizeToHours('90 min'), equals('1.5h'));
+        final origDoc = TierDocument(
+          id: 'doc_1',
+          title: 'SHELLBREAKER',
+          tier: TierType.project,
+          estimatedDuration: '90 min',
+          subtasks: [
+            Subtask(
+              id: 'st_1',
+              text: 'Top step',
+              completed: true,
+              children: [Subtask(id: 'st_2', text: 'Nested step')],
+            ),
+          ],
+        );
+        final roundTripped = TierDocument.fromJson(origDoc.toJson());
+        expect(roundTripped.estimatedDuration, equals('1.5h'));
+        expect(roundTripped.subtasks.length, equals(1));
+        expect(roundTripped.subtasks.first.completed, isTrue);
+        expect(roundTripped.subtasks.first.children.length, equals(1));
+      },
+    );
   });
 }
