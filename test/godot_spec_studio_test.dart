@@ -1743,5 +1743,207 @@ console.log(JSON.stringify({
         expect(featCountAfterUndo, equals(featCountBeforeRemove));
       },
     );
+
+    test(
+      '20. Unique Feature IDs, cross-release F## codes & non-colliding lineageKeys',
+      () async {
+        // 1) Multi-Epic JSON without feature IDs yields unique Feature IDs & F01..F04 codes
+        final bp = ProjectConceptBlueprint.fromJson({
+          'gameTitle': 'ID GUARD TEST',
+          'dimension': 'dim3d',
+          'pitch': 'Arena test — Clean 3D slices.',
+          'initialEpics': [
+            {
+              'title': 'Player Movement',
+              'goal': 'Walk cleanly.',
+              'features': [
+                {'id': 'feat_1', 'title': 'Walk', 'goal': 'Move around'},
+                {'title': 'Sprint', 'goal': 'Move faster'},
+              ],
+            },
+            {
+              'title': 'Combat Attacks',
+              'goal': 'Swing cleanly.',
+              'features': [
+                {'id': 'feat_1', 'title': 'Light Hit', 'goal': 'Fast swing'},
+                {'title': 'Heavy Slam', 'goal': 'Armored slam'},
+              ],
+            },
+          ],
+        });
+        ProjectConceptAgent.normalizeSequentialEpicAndFeatureCodes(bp);
+        final allFeats = [for (final ep in bp.initialEpics) ...ep.features];
+        final allIds = allFeats.map((f) => f.id).toSet();
+        expect(allFeats.length, equals(4));
+        expect(
+          allIds.length,
+          equals(4),
+          reason: 'Expected distinct Feature IDs across Epics: ${allFeats.map((f) => f.id).toList()}',
+        );
+        expect(
+          allFeats.map((f) => f.code).toList(),
+          equals(['F01', 'F02', 'F03', 'F04']),
+        );
+
+        // 2) Removing F01 in Stage 1 and re-approving does not match F02 against old F01 by 'feat_1'
+        final wbRe = WorkbenchProvider(enableAutoLoad: false);
+        wbRe.loadPresetSpark('shellbreaker');
+        // Replace initialEpics features with positional 'feat_1'/'feat_2' to test reconciliation guard
+        final reEp = wbRe.conceptDraft!.initialEpics.first;
+        reEp.features = [
+          FeatureSpec(
+            id: 'feat_1',
+            code: 'F01',
+            title: 'Base Walk',
+            goal: '8-way walk.',
+            checks: [EpicPieCheck(id: 'c_w1', text: 'Walks cleanly')],
+          ),
+          FeatureSpec(
+            id: 'feat_2',
+            code: 'F02',
+            title: 'Armored Claw Dash',
+            goal: 'Forward 4 m dash.',
+            checks: [EpicPieCheck(id: 'c_d1', text: 'Dashes cleanly')],
+          ),
+        ];
+        wbRe.approveRootSpecAndLaunchWorkbench();
+        final v01Ep = wbRe.activeReleaseEpics.first;
+        final f02Id = v01Ep.features[1].id;
+        wbRe.toggleFeatureCheck(v01Ep.id, f02Id, 'c_d1', true);
+        expect(wbRe.passFeature(v01Ep.id, f02Id), isTrue);
+
+        // Return to Stage 1, drop F01, and simulate an AI re-draft whose remaining Dash has fallback id 'feat_1'
+        wbRe.setStage(WorkbenchStage.projectPitch);
+        wbRe.removeStage1FeatureSlice(0, wbRe.conceptDraft!.initialEpics.first.features.first.id);
+        wbRe.conceptDraft!.initialEpics.first.features[0] = wbRe
+            .conceptDraft!.initialEpics.first.features[0]
+            .deepCopy(idOverride: 'feat_1');
+        wbRe.approveRootSpecAndLaunchWorkbench();
+        final mergedEp = wbRe.activeReleaseEpics.first;
+        final mergedIds = mergedEp.features.map((f) => f.id).toSet();
+        final mergedCodes = mergedEp.features.map((f) => f.code).toSet();
+        expect(mergedIds.length, equals(mergedEp.features.length));
+        expect(mergedCodes.length, equals(mergedEp.features.length));
+        final keptWalk =
+            mergedEp.features.where((f) => f.title == 'Base Walk').toList();
+        expect(keptWalk.length, equals(1));
+        expect(keptWalk.first.isPassed, isFalse);
+        final keptDash = mergedEp.features.firstWhere(
+          (f) => f.title == 'Armored Claw Dash',
+        );
+        expect(keptDash.isPassed, isTrue);
+
+        // 3) Deleting E01 in Stage 1 + v0.2 [+NEW] Feature with omitted/'feat_1' id + 2 [NEW] Epics
+        final prevMock = GeminiAgentClient.testMockResponder;
+        try {
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          wb.loadPresetSpark('shellbreaker');
+          wb.removeInitialEpicAt(0); // leaves 2 Epics including 'e02', 'e03'
+          wb.approveRootSpecAndLaunchWorkbench();
+          final v01Id = wb.activeReleaseId!;
+          final v01FirstEpic = wb.activeReleaseEpics.first;
+
+          GeminiAgentClient.testMockResponder = (prompt, model) async => {
+                'presets': [
+                  {
+                    'id': 'preset_juice',
+                    'label': 'Combat Juice Pass',
+                    'desc': 'Add reel & boss escalation.',
+                    'upgrades': [],
+                    'newEpics': ['cand_new_1', 'cand_new_2'],
+                  },
+                ],
+                'upgrades': [],
+                'newFeatures': [
+                  {
+                    'lineageKey': v01FirstEpic.lineageKey,
+                    'features': [
+                      {
+                        'id': 'feat_1',
+                        'code': 'F01',
+                        'title': 'Grapple Hook Reel',
+                        'goal': 'Pull player to target cleanly.',
+                        'checks': ['Press E -> Pulls to crate'],
+                      },
+                    ],
+                  },
+                ],
+                'newEpics': [
+                  {
+                    'title': 'Boss Phase System',
+                    'goal': 'Run multi-phase boss loop.',
+                    'chosen': true,
+                    'features': [
+                      {'title': 'Slam Telegraph', 'goal': 'Warn before slam'},
+                    ],
+                  },
+                  {
+                    'title': 'Arena Hazard Spawner',
+                    'goal': 'Spawn timed floor vents.',
+                    'chosen': true,
+                    'features': [
+                      {'title': 'Vent Burst', 'goal': 'Knock back player'},
+                    ],
+                  },
+                ],
+              };
+
+          final draftV02 = await wb.openProgressiveReleaseCopilot();
+          expect(draftV02, isNotNull);
+          final candNewFeats =
+              draftV02!.candidateNewFeaturesByLineageKey[v01FirstEpic.lineageKey] ??
+                  const [];
+          expect(candNewFeats.length, equals(1));
+          expect(candNewFeats.first.id, isNot(equals('feat_1')));
+          wb.toggleProgressiveNewFeature(
+            v01FirstEpic.lineageKey,
+            candNewFeats.first.id,
+          );
+          expect(draftV02.chosenNewFeatureIds.contains(candNewFeats.first.id), isTrue);
+          for (final candEp in draftV02.candidateNewEpics) {
+            candEp.chosenForNextRelease = true;
+          }
+
+          final v02Id = wb.commitProgressiveReleaseDraft();
+          expect(v02Id, isNotNull);
+          final v02Epics = wb.activeReleaseEpics;
+          final v02FirstEpic = v02Epics.firstWhere(
+            (e) => e.lineageKey == v01FirstEpic.lineageKey,
+          );
+          expect(
+            v02FirstEpic.features.any((f) => f.title == 'Grapple Hook Reel'),
+            isTrue,
+            reason: '[+NEW] Feature in v0.2 must not be dropped when prior features exist',
+          );
+          final v02LineageKeys =
+              v02Epics.map((e) => e.lineageKey.toLowerCase()).toSet();
+          expect(
+            v02LineageKeys.length,
+            equals(v02Epics.length),
+            reason: 'v0.2 Epic lineageKeys must stay unique: ${v02Epics.map((e) => e.lineageKey).toList()}',
+          );
+
+          // 4) Switching back to v0.1 and adding a Feature slice must avoid codes used in v0.2
+          final v02CodesLower = {
+            for (final ep in v02Epics)
+              for (final f in ep.features) f.code.trim().toLowerCase(),
+          };
+          wb.selectActiveRelease(v01Id);
+          final addedInV01 = wb.addFeatureSlice(
+            v01FirstEpic.id,
+            title: 'Extra Proto Slice',
+            goal: 'Verify cross-release F-code uniqueness.',
+          );
+          expect(addedInV01, isNotNull);
+          expect(
+            v02CodesLower.contains(addedInV01!.code.trim().toLowerCase()),
+            isFalse,
+            reason: 'addFeatureSlice allocated ${addedInV01.code} which collides with v0.2 codes $v02CodesLower',
+          );
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+        }
+      },
+    );
   });
 }

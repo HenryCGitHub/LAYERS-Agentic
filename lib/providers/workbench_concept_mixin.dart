@@ -623,7 +623,16 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final epicIds = <String>[];
     final existingDocs = epicDocsForRelease(relId);
 
+    final reservedCodesLower = <String>{
+      for (final rel in projectReleases)
+        if (rel.id != relId)
+          for (final epDoc in epicDocsForRelease(rel.id))
+            for (final f in EpicSpec.fromDocument(epDoc).features)
+              if (f.code.trim().isNotEmpty) f.code.trim().toLowerCase(),
+    };
+
     if (v01Rel == null || existingDocs.isEmpty) {
+      final createdSpecs = <EpicSpec>[];
       for (int i = 0; i < draft.initialEpics.length; i++) {
         final rawEpic = draft.initialEpics[i];
         final epId = '${relId}_epic_${i + 1}';
@@ -637,13 +646,20 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         cleanEpic.lineageKey = rawEpic.lineageKey.trim().isEmpty
             ? EpicSpec.formatLineageKey(i + 1)
             : rawEpic.lineageKey.trim();
+        createdSpecs.add(cleanEpic);
+      }
+      _assignUniqueFeatureIdsAndCodes(
+        createdSpecs,
+        reservedCodesLower: reservedCodesLower,
+      );
+      for (final cleanEpic in createdSpecs) {
         final epDoc = cleanEpic.toTierDocument(
-          docId: epId,
+          docId: cleanEpic.id,
           parentReleaseId: relId,
         );
-        documents[epId] = epDoc;
+        documents[cleanEpic.id] = epDoc;
         _persistDocument(epDoc);
-        epicIds.add(epId);
+        epicIds.add(cleanEpic.id);
       }
     } else {
       final existingSpecs = [
@@ -760,12 +776,20 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       }
 
       bool assignedActive = false;
+      final usedLineageKeys = <String>{};
+      int nextLineageOrd = 1;
       for (int i = 0; i < reconciledSpecs.length; i++) {
         final spec = reconciledSpecs[i];
         spec.code = 'E${(i + 1).toString().padLeft(2, '0')}';
-        if (spec.lineageKey.trim().isEmpty) {
-          spec.lineageKey = EpicSpec.formatLineageKey(i + 1);
+        var lk = spec.lineageKey.trim().toLowerCase();
+        if (lk.isEmpty || usedLineageKeys.contains(lk)) {
+          while (usedLineageKeys.contains(EpicSpec.formatLineageKey(nextLineageOrd))) {
+            nextLineageOrd++;
+          }
+          lk = EpicSpec.formatLineageKey(nextLineageOrd);
         }
+        spec.lineageKey = lk;
+        usedLineageKeys.add(lk);
         if (!spec.isPassed &&
             spec.lifecycle != EpicLifecycle.upgrading &&
             spec.lifecycle != EpicLifecycle.newEpic) {
@@ -776,7 +800,14 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
             spec.lifecycle = EpicLifecycle.queued;
           }
         }
+      }
 
+      _assignUniqueFeatureIdsAndCodes(
+        reconciledSpecs,
+        reservedCodesLower: reservedCodesLower,
+      );
+      for (int i = 0; i < reconciledSpecs.length; i++) {
+        final spec = reconciledSpecs[i];
         final baseDoc = reconciledBaseDocs[i];
         final updatedDoc = baseDoc != null
             ? spec.applyToDocument(baseDoc)
@@ -867,6 +898,61 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     return relId;
   }
 
+  void _assignUniqueFeatureIdsAndCodes(
+    List<EpicSpec> specs, {
+    Set<String> reservedCodesLower = const {},
+  }) {
+    final usedCodesLower = Set<String>.from(reservedCodesLower);
+    final usedIds = <String>{};
+    int maxNum = 0;
+    final codeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
+    for (final cLower in usedCodesLower) {
+      final m = codeRx.firstMatch(cLower);
+      final n = int.tryParse(m?.group(1) ?? '') ?? 0;
+      if (n > maxNum) maxNum = n;
+    }
+    for (final spec in specs) {
+      for (final f in spec.features) {
+        final m = codeRx.firstMatch(f.code.trim());
+        final n = int.tryParse(m?.group(1) ?? '') ?? 0;
+        if (n > maxNum) maxNum = n;
+      }
+    }
+    String nextUnusedCode() {
+      do {
+        maxNum++;
+      } while (usedCodesLower
+          .contains(FeatureSpec.formatCode(maxNum).toLowerCase()));
+      final next = FeatureSpec.formatCode(maxNum);
+      usedCodesLower.add(next.toLowerCase());
+      return next;
+    }
+
+    for (final spec in specs) {
+      for (int i = 0; i < spec.features.length; i++) {
+        var feat = spec.features[i];
+        final cClean = feat.code.trim();
+        if (cClean.isEmpty || !usedCodesLower.add(cClean.toLowerCase())) {
+          feat.code = nextUnusedCode();
+        }
+        final fid = feat.id.trim();
+        if (fid.isEmpty ||
+            FeatureSpec.isPositionalFallbackFeatureId(fid) ||
+            !usedIds.add(fid)) {
+          var candId = '${spec.id}_${feat.code.toLowerCase()}';
+          var sfx = 2;
+          while (usedIds.contains(candId)) {
+            candId = '${spec.id}_${feat.code.toLowerCase()}_$sfx';
+            sfx++;
+          }
+          feat = feat.deepCopy(idOverride: candId);
+          spec.features[i] = feat;
+          usedIds.add(feat.id);
+        }
+      }
+    }
+  }
+
   List<FeatureSpec> _reconcileFeatureSlices({
     required List<FeatureSpec> incoming,
     required List<FeatureSpec> existing,
@@ -874,16 +960,10 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (existing.isEmpty) return [for (final f in incoming) f.deepCopy()];
     final matched = List<bool>.filled(existing.length, false);
     int? findMatch(FeatureSpec inc) {
-      for (int i = 0; i < existing.length; i++) {
-        if (!matched[i] && existing[i].id == inc.id) return i;
-      }
-      final incCode = inc.code.trim().toLowerCase();
-      if (incCode.isNotEmpty) {
+      if (inc.id.isNotEmpty &&
+          !FeatureSpec.isPositionalFallbackFeatureId(inc.id)) {
         for (int i = 0; i < existing.length; i++) {
-          if (!matched[i] &&
-              existing[i].code.trim().toLowerCase() == incCode) {
-            return i;
-          }
+          if (!matched[i] && existing[i].id == inc.id) return i;
         }
       }
       final incTitle = inc.title.trim().toLowerCase();
@@ -891,6 +971,15 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         for (int i = 0; i < existing.length; i++) {
           if (!matched[i] &&
               existing[i].title.trim().toLowerCase() == incTitle) {
+            return i;
+          }
+        }
+      }
+      final incCode = inc.code.trim().toLowerCase();
+      if (incCode.isNotEmpty) {
+        for (int i = 0; i < existing.length; i++) {
+          if (!matched[i] &&
+              existing[i].code.trim().toLowerCase() == incCode) {
             return i;
           }
         }

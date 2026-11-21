@@ -472,6 +472,7 @@ class ProjectConceptBlueprint {
                 FeatureSpec.fromJson(
                   Map<String, dynamic>.from(list[i] as Map),
                   indexHint: i,
+                  idPrefixHint: '${entry.key.toString().trim().toLowerCase()}_v02',
                 ),
           ];
         }

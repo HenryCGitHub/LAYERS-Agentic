@@ -400,18 +400,31 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
     int maxNum = 0;
     int totalCount = 0;
+    final usedCodesLower = <String>{};
     final codeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
-    for (final ep in activeReleaseEpics) {
+    final allEpics = <EpicSpec>[
+      for (final rel in projectReleases)
+        for (final epDoc in epicDocsForRelease(rel.id))
+          EpicSpec.fromDocument(epDoc),
+    ];
+    for (final ep in (allEpics.isNotEmpty ? allEpics : activeReleaseEpics)) {
       for (final f in ep.features) {
         totalCount++;
-        final m = codeRx.firstMatch(f.code.trim());
+        final cClean = f.code.trim();
+        if (cClean.isNotEmpty) {
+          usedCodesLower.add(cClean.toLowerCase());
+        }
+        final m = codeRx.firstMatch(cClean);
         if (m != null) {
           final parsed = int.tryParse(m.group(1) ?? '') ?? 0;
           if (parsed > maxNum) maxNum = parsed;
         }
       }
     }
-    final nextNum = (maxNum > 0 ? maxNum : totalCount) + 1;
+    var nextNum = (maxNum > 0 ? maxNum : totalCount) + 1;
+    while (usedCodesLower.contains(FeatureSpec.formatCode(nextNum).toLowerCase())) {
+      nextNum++;
+    }
     final nextCode = FeatureSpec.formatCode(nextNum);
     final relVer = activeReleaseVersionTag;
     final featId = '${epicId}_f_${DateTime.now().microsecondsSinceEpoch}';

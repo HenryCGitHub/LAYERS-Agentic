@@ -625,6 +625,9 @@ class FeatureSpec {
     );
   }
 
+  static bool isPositionalFallbackFeatureId(String id) =>
+      RegExp(r'^feat_\d+$', caseSensitive: false).hasMatch(id.trim());
+
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'code': code,
@@ -647,9 +650,19 @@ class FeatureSpec {
   factory FeatureSpec.fromJson(
     Map<String, dynamic> json, {
     int indexHint = 0,
+    String idPrefixHint = '',
   }) {
     final fallbackCode = formatCode(indexHint + 1);
     final rawCode = (json['code'] ?? fallbackCode).toString().trim();
+    final rawId = (json['id'] ?? '').toString().trim();
+    final cleanPrefix = idPrefixHint.trim();
+    final resolvedId =
+        rawId.isEmpty ||
+                (cleanPrefix.isNotEmpty && isPositionalFallbackFeatureId(rawId))
+            ? (cleanPrefix.isNotEmpty
+                ? '${cleanPrefix}_feat_${indexHint + 1}'
+                : 'feat_${indexHint + 1}')
+            : rawId;
     final rawControls = json['controls'] as List? ?? const [];
     final rawTuning = json['tuning'] as List? ?? const [];
     final rawChecks = json['checks'] as List? ?? const [];
@@ -674,7 +687,7 @@ class FeatureSpec {
     }
 
     return FeatureSpec(
-      id: (json['id'] ?? 'feat_${indexHint + 1}').toString().trim(),
+      id: resolvedId,
       code: rawCode.isEmpty ? fallbackCode : rawCode,
       title: (json['title'] ?? 'Untitled Feature').toString().trim(),
       introducedIn: (json['introducedIn'] ?? 'v0.1').toString().trim(),
@@ -1054,6 +1067,7 @@ class EpicSpec {
             FeatureSpec.fromJson(
               Map<String, dynamic>.from(rawFeatures[i] as Map),
               indexHint: i,
+              idPrefixHint: epicId,
             ),
       ];
     } else if (parsedControls.isNotEmpty ||

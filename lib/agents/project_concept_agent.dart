@@ -525,13 +525,22 @@ class ProjectConceptAgent {
   static void normalizeSequentialEpicAndFeatureCodes(
     ProjectConceptBlueprint bp,
   ) {
+    final usedLineageKeys = <String>{};
+    final usedFeatIds = <String>{};
     int nextFeatNum = 1;
+    int lineageOrd = 1;
     for (int i = 0; i < bp.initialEpics.length; i++) {
       final ep = bp.initialEpics[i];
       ep.code = EpicSpec.formatCode(i + 1);
-      if (ep.lineageKey.trim().isEmpty) {
-        ep.lineageKey = EpicSpec.formatLineageKey(i + 1);
+      var lk = ep.lineageKey.trim().toLowerCase();
+      if (lk.isEmpty || usedLineageKeys.contains(lk)) {
+        while (usedLineageKeys.contains(EpicSpec.formatLineageKey(lineageOrd))) {
+          lineageOrd++;
+        }
+        lk = EpicSpec.formatLineageKey(lineageOrd);
       }
+      ep.lineageKey = lk;
+      usedLineageKeys.add(lk);
       ep.releaseVersion = 'v0.1';
       if (i == 0 && ep.lifecycle == EpicLifecycle.queued) {
         ep.lifecycle = EpicLifecycle.active;
@@ -539,12 +548,20 @@ class ProjectConceptAgent {
       bool activatedFirstOpen = false;
       for (int fIdx = 0; fIdx < ep.features.length; fIdx++) {
         var feat = ep.features[fIdx];
-        if (feat.id.trim().isEmpty) {
-          feat = feat.deepCopy(
-            idOverride: '${ep.id}_f${nextFeatNum.toString().padLeft(2, '0')}',
-          );
+        final rawFeatId = feat.id.trim();
+        if (rawFeatId.isEmpty ||
+            FeatureSpec.isPositionalFallbackFeatureId(rawFeatId) ||
+            usedFeatIds.contains(rawFeatId)) {
+          var nextId = '${ep.id}_f${nextFeatNum.toString().padLeft(2, '0')}';
+          var suffix = 2;
+          while (usedFeatIds.contains(nextId)) {
+            nextId = '${ep.id}_f${nextFeatNum.toString().padLeft(2, '0')}_$suffix';
+            suffix++;
+          }
+          feat = feat.deepCopy(idOverride: nextId);
           ep.features[fIdx] = feat;
         }
+        usedFeatIds.add(feat.id);
         feat.code = FeatureSpec.formatCode(nextFeatNum);
         feat.introducedIn = 'v0.1';
         if (i == 0 && !activatedFirstOpen && !feat.isPassed) {
@@ -1038,27 +1055,43 @@ CRITICAL CONSTRAINTS:
     final syncedFeatures = <FeatureSpec>[];
     for (int fIdx = 0; fIdx < reconciled.features.length; fIdx++) {
       final incFeat = reconciled.features[fIdx];
-      FeatureSpec? matchedPrev;
-      for (int pIdx = 0; pIdx < prev.features.length; pIdx++) {
-        if (usedFeat[pIdx]) continue;
-        final pf = prev.features[pIdx];
-        if ((incFeat.id.isNotEmpty && pf.id == incFeat.id) ||
-            (incFeat.code.isNotEmpty &&
-                pf.code.trim().toLowerCase() ==
-                    incFeat.code.trim().toLowerCase()) ||
-            pf.title.trim().toLowerCase() ==
-                incFeat.title.trim().toLowerCase()) {
-          usedFeat[pIdx] = true;
-          matchedPrev = pf;
-          break;
+      int? matchIdx;
+      if (incFeat.id.isNotEmpty &&
+          !FeatureSpec.isPositionalFallbackFeatureId(incFeat.id)) {
+        for (int pIdx = 0; pIdx < prev.features.length; pIdx++) {
+          if (!usedFeat[pIdx] && prev.features[pIdx].id == incFeat.id) {
+            matchIdx = pIdx;
+            break;
+          }
         }
       }
-      if (matchedPrev == null &&
+      final incTitle = incFeat.title.trim().toLowerCase();
+      if (matchIdx == null && incTitle.isNotEmpty) {
+        for (int pIdx = 0; pIdx < prev.features.length; pIdx++) {
+          if (!usedFeat[pIdx] &&
+              prev.features[pIdx].title.trim().toLowerCase() == incTitle) {
+            matchIdx = pIdx;
+            break;
+          }
+        }
+      }
+      final incCode = incFeat.code.trim().toLowerCase();
+      if (matchIdx == null && incCode.isNotEmpty) {
+        for (int pIdx = 0; pIdx < prev.features.length; pIdx++) {
+          if (!usedFeat[pIdx] &&
+              prev.features[pIdx].code.trim().toLowerCase() == incCode) {
+            matchIdx = pIdx;
+            break;
+          }
+        }
+      }
+      if (matchIdx == null &&
           fIdx < prev.features.length &&
           !usedFeat[fIdx]) {
-        usedFeat[fIdx] = true;
-        matchedPrev = prev.features[fIdx];
+        matchIdx = fIdx;
       }
+      final matchedPrev = matchIdx != null ? prev.features[matchIdx] : null;
+      if (matchIdx != null) usedFeat[matchIdx] = true;
       syncedFeatures.add(_reconcileStage1Feature(incFeat, matchedPrev));
     }
     reconciled.features = syncedFeatures;

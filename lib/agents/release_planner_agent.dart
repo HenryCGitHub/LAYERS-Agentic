@@ -473,10 +473,21 @@ CRITICAL RULES:
 
       final newFeaturesByKey = <String, List<FeatureSpec>>{};
       final rawNewFeatures = res['newFeatures'] as List? ?? const [];
-      int nextFeatureOrdinal = currentEpics.fold<int>(
-        1,
-        (sum, ep) => sum + ep.features.length,
-      );
+      final usedFeatCodesLower = <String>{
+        for (final ep in currentEpics)
+          for (final f in ep.features)
+            if (f.code.trim().isNotEmpty) f.code.trim().toLowerCase(),
+      };
+      final featCodeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
+      int nextFeatureOrdinal = 1;
+      for (final ep in currentEpics) {
+        for (final f in ep.features) {
+          final m = featCodeRx.firstMatch(f.code.trim());
+          final numVal = int.tryParse(m?.group(1) ?? '') ?? 0;
+          if (numVal >= nextFeatureOrdinal) nextFeatureOrdinal = numVal + 1;
+        }
+      }
+      final verSlug = targetVersion.replaceAll(RegExp(r'[^A-Za-z0-9]'), '').toLowerCase();
       for (final entry in rawNewFeatures) {
         if (entry is! Map) continue;
         final m = Map<String, dynamic>.from(entry);
@@ -489,14 +500,21 @@ CRITICAL RULES:
         final parsedList = <FeatureSpec>[];
         for (int i = 0; i < rawList.length; i++) {
           if (rawList[i] is! Map) continue;
-          final feat = FeatureSpec.fromJson(
+          var feat = FeatureSpec.fromJson(
             Map<String, dynamic>.from(rawList[i] as Map),
             indexHint: nextFeatureOrdinal - 1,
+            idPrefixHint: '${resolvedKey}_$verSlug',
           );
           feat.introducedIn = targetVersion;
-          if (feat.code.trim().isEmpty) {
+          while (usedFeatCodesLower.contains(
+              FeatureSpec.formatCode(nextFeatureOrdinal).toLowerCase())) {
+            nextFeatureOrdinal++;
+          }
+          if (feat.code.trim().isEmpty ||
+              usedFeatCodesLower.contains(feat.code.trim().toLowerCase())) {
             feat.code = FeatureSpec.formatCode(nextFeatureOrdinal);
           }
+          usedFeatCodesLower.add(feat.code.trim().toLowerCase());
           nextFeatureOrdinal++;
           parsedList.add(
             GodotSpecGuard.sanitizeFeatureSpec(
@@ -513,6 +531,11 @@ CRITICAL RULES:
         }
       }
 
+      final usedLineageKeys = <String>{
+        for (final ep in currentEpics)
+          if (ep.lineageKey.trim().isNotEmpty) ep.lineageKey.trim().toLowerCase(),
+      };
+      int nextLineageOrd = currentEpics.length + 1;
       final rawNewEpics = res['newEpics'] as List? ?? const [];
       final candidateNew = <EpicSpec>[];
       for (int i = 0; i < rawNewEpics.length; i++) {
@@ -524,7 +547,11 @@ CRITICAL RULES:
         final oneBased = currentEpics.length + i + 1;
         final code = EpicSpec.formatCode(oneBased);
         parsed.code = code;
-        parsed.lineageKey = code.toLowerCase();
+        while (usedLineageKeys.contains(EpicSpec.formatLineageKey(nextLineageOrd))) {
+          nextLineageOrd++;
+        }
+        parsed.lineageKey = EpicSpec.formatLineageKey(nextLineageOrd);
+        usedLineageKeys.add(parsed.lineageKey);
         parsed.releaseVersion = targetVersion;
         parsed.lifecycle = EpicLifecycle.newEpic;
         for (final feat in parsed.features) {

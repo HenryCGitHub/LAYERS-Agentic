@@ -159,9 +159,37 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     String? firstFocusFeatureId;
 
     final existingEpics = latestReleaseEpics;
+    final usedLineageKeys = <String>{
+      for (final ep in existingEpics)
+        if (ep.lineageKey.trim().isNotEmpty) ep.lineageKey.trim().toLowerCase(),
+    };
+    final usedFeatureIds = <String>{
+      for (final ep in existingEpics)
+        for (final f in ep.features) f.id,
+    };
     final usedFeatureCodesLower = <String>{};
     int maxFeatureNum = 0;
     final featCodeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
+    for (final rel in projectReleases) {
+      for (final epDoc in epicDocsForRelease(rel.id)) {
+        final ep = EpicSpec.fromDocument(epDoc);
+        if (ep.lineageKey.trim().isNotEmpty) {
+          usedLineageKeys.add(ep.lineageKey.trim().toLowerCase());
+        }
+        for (final f in ep.features) {
+          usedFeatureIds.add(f.id);
+          final codeLower = f.code.trim().toLowerCase();
+          if (codeLower.isNotEmpty) {
+            usedFeatureCodesLower.add(codeLower);
+            final m = featCodeRx.firstMatch(f.code.trim());
+            if (m != null) {
+              final numVal = int.tryParse(m.group(1) ?? '') ?? 0;
+              if (numVal > maxFeatureNum) maxFeatureNum = numVal;
+            }
+          }
+        }
+      }
+    }
     for (final ep in existingEpics) {
       for (final f in ep.features) {
         final codeLower = f.code.trim().toLowerCase();
@@ -298,12 +326,26 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       for (final newFeat in chosenNewFeats) {
         final dupExists = nextEpic.features.any(
           (f) =>
-              f.id == newFeat.id ||
+              (!FeatureSpec.isPositionalFallbackFeatureId(newFeat.id) &&
+                  f.id == newFeat.id) ||
               f.title.trim().toLowerCase() == newFeat.title.trim().toLowerCase(),
         );
         if (dupExists) continue;
-        final attached = newFeat.deepCopy();
-        attached.code = allocateFeatureCode(attached.code);
+        final newCode = allocateFeatureCode(newFeat.code);
+        var attached = newFeat.deepCopy();
+        if (attached.id.trim().isEmpty ||
+            FeatureSpec.isPositionalFallbackFeatureId(attached.id) ||
+            usedFeatureIds.contains(attached.id)) {
+          var nextId = '${clonedId}_${newCode.toLowerCase()}';
+          var sfx = 2;
+          while (usedFeatureIds.contains(nextId)) {
+            nextId = '${clonedId}_${newCode.toLowerCase()}_$sfx';
+            sfx++;
+          }
+          attached = attached.deepCopy(idOverride: nextId);
+        }
+        usedFeatureIds.add(attached.id);
+        attached.code = newCode;
         attached.introducedIn = nextVer;
         attached.status = FeatureStatus.active;
         attached.releaseDelta = '';
@@ -380,10 +422,32 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         lifecycleOverride: EpicLifecycle.newEpic,
       );
       clonedNew.code = newCode;
-      clonedNew.lineageKey = newCode.toLowerCase();
+      var lkOrd = nextEpicDocIds.length + 1;
+      var nextLk = EpicSpec.formatLineageKey(lkOrd);
+      while (usedLineageKeys.contains(nextLk)) {
+        lkOrd++;
+        nextLk = EpicSpec.formatLineageKey(lkOrd);
+      }
+      usedLineageKeys.add(nextLk);
+      clonedNew.lineageKey = nextLk;
       clonedNew.upgradeDeltas = <String>[];
-      for (final feat in clonedNew.features) {
-        feat.code = allocateFeatureCode(feat.code);
+      for (int fIdx = 0; fIdx < clonedNew.features.length; fIdx++) {
+        var feat = clonedNew.features[fIdx];
+        final allocatedCode = allocateFeatureCode(feat.code);
+        if (feat.id.trim().isEmpty ||
+            FeatureSpec.isPositionalFallbackFeatureId(feat.id) ||
+            usedFeatureIds.contains(feat.id)) {
+          var nextId = '${newId}_${allocatedCode.toLowerCase()}';
+          var sfx = 2;
+          while (usedFeatureIds.contains(nextId)) {
+            nextId = '${newId}_${allocatedCode.toLowerCase()}_$sfx';
+            sfx++;
+          }
+          feat = feat.deepCopy(idOverride: nextId);
+          clonedNew.features[fIdx] = feat;
+        }
+        usedFeatureIds.add(feat.id);
+        feat.code = allocatedCode;
         feat.introducedIn = nextVer;
         feat.status = FeatureStatus.active;
         feat.fixes = <EpicPieFix>[];
