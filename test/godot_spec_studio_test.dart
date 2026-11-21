@@ -16,8 +16,11 @@ import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/project_pitch_screen.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/screens/widgets/godot_bridge_modals.dart';
+import 'package:layers_agentic/services/cloud_invite_deep_link_service.dart';
 import 'package:layers_agentic/services/local_vault_service.dart';
+import 'package:layers_agentic/services/project_archive_codec.dart';
 import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
+import 'package:layers_agentic/services/v01_release_seeder.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
 import 'package:layers_agentic/utils/godot_context_builder.dart';
 import 'package:layers_agentic/utils/godot_spec_guard.dart';
@@ -2643,6 +2646,84 @@ console.log(JSON.stringify({
               lessThanOrEqualTo(950),
               reason: '$normalizedPath has $lineCount lines',
             );
+          }
+        }
+      },
+    );
+
+    test(
+      '26. Provider domain services (ProjectArchiveCodec, CloudInviteDeepLinkService, V01ReleaseSeeder) stay modular (<= 950 lines across lib/providers & lib/services)',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        final relId = wb.approveRootSpecAndLaunchWorkbench();
+        expect(relId, isNotNull);
+
+        // Export -> Import collision remap + Duplicate + Deep-link parity
+        final origProjId = wb.activeProjectId;
+        final exported = wb.exportProjectToJson();
+        expect(exported, contains('layers-agentic-project-v3'));
+        final importedId = wb.importProjectFromJson(exported);
+        expect(importedId, isNotNull);
+        expect(importedId, isNot(equals(origProjId)));
+        final dupId = wb.duplicateProject(importedId!);
+        expect(dupId, isNotNull);
+        wb.applyDeepLinkParams({
+          'project': importedId,
+          'epic': 'e01',
+        });
+        expect(wb.activeProjectId, equals(importedId));
+        // Direct service unit checks
+        final treeIds = ProjectArchiveCodec.collectProjectTreeIds(
+          wb.documents,
+          importedId,
+        );
+        expect(treeIds, contains(importedId));
+        final parsedQuery = CloudInviteDeepLinkService.parseDeepLinkQuery({
+          'godot_auth': '1',
+          'port': '49152',
+          'state': 'nonce_12345678',
+          'project_name': 'Shellbreaker',
+          'project': importedId,
+          'epic': 'e01',
+        });
+        expect(parsedQuery.hasGodotAuth, isTrue);
+        expect(parsedQuery.godotPort, equals(49152));
+        expect(parsedQuery.projectId, equals(importedId));
+        final seeded = V01ReleaseSeeder.buildOrReconcileV01Release(
+          projectId: 'unit_proj',
+          draft: wb.conceptDraft!,
+          existingDocs: const [],
+          reservedCodesLower: const {'f01'},
+        );
+        expect(seeded.epicDocsToSave, isNotEmpty);
+        final firstFeatCode =
+            EpicSpec.fromDocument(seeded.epicDocsToSave.first).features.first.code;
+        expect(firstFeatCode.toLowerCase(), isNot(equals('f01')));
+
+        wb.dispose();
+
+        const expectedServices = <String>[
+          'lib/services/project_archive_codec.dart',
+          'lib/services/cloud_invite_deep_link_service.dart',
+          'lib/services/v01_release_seeder.dart',
+        ];
+        for (final path in expectedServices) {
+          final f = File(path);
+          expect(f.existsSync(), isTrue, reason: '$path should exist');
+          expect(f.readAsLinesSync().length, greaterThan(50));
+        }
+
+        for (final dirPath in const ['lib/providers', 'lib/services']) {
+          for (final entity in Directory(dirPath).listSync(recursive: true)) {
+            if (entity is File && entity.path.endsWith('.dart')) {
+              final lineCount = entity.readAsLinesSync().length;
+              expect(
+                lineCount,
+                lessThanOrEqualTo(950),
+                reason: '${entity.path} has $lineCount lines',
+              );
+            }
           }
         }
       },

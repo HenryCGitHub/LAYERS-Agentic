@@ -9,11 +9,17 @@ import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
 import '../models/tier_document.dart';
 import '../services/auth_service.dart';
+import '../services/cloud_invite_deep_link_service.dart';
 import '../services/firestore_vault_service.dart';
 import '../services/local_vault_service.dart';
+import '../services/project_archive_codec.dart';
+import '../services/v01_release_seeder.dart';
 import '../utils/markdown_exporter.dart';
 import '../utils/godot_context_builder.dart';
 import '../utils/godot_spec_guard.dart';
+
+export '../services/cloud_invite_deep_link_service.dart'
+    show shouldPreferRemoteDocumentOnSync;
 
 part 'workbench_storage_mixin.dart';
 part 'workbench_concept_mixin.dart';
