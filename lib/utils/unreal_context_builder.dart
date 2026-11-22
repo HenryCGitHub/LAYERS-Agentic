@@ -475,6 +475,44 @@ class UnrealContextBuilder {
     return b.toString().trimRight();
   }
 
+  static void _writeReleaseEpicsAndFeatures({
+    required StringBuffer buffer,
+    required ProjectConceptBlueprint rootSpec,
+    required String relVer,
+    required List<EpicSpec> epics,
+    required List<String> releaseOrder,
+    required UnrealArchitectureMode mode,
+  }) {
+    final effectiveOrder =
+        releaseOrder.isEmpty ? const ['v0.1', 'v0.2'] : releaseOrder;
+    for (final epic in epics) {
+      buffer.writeln();
+      buffer.writeln(
+        buildEpicArchitectureContext(
+          rootSpec: rootSpec,
+          epic: epic,
+          releaseVersion: relVer,
+          releaseOrder: effectiveOrder,
+          mode: mode,
+          includeRootContext: false,
+        ),
+      );
+      for (final feat in epic.featuresForRelease(relVer, effectiveOrder)) {
+        buffer.writeln();
+        buffer.writeln(
+          buildCoPilotFeaturePrompt(
+            rootSpec: rootSpec,
+            epic: epic,
+            feature: feat,
+            releaseVersion: relVer,
+            releaseOrder: effectiveOrder,
+            mode: mode,
+          ),
+        );
+      }
+    }
+  }
+
   /// Builds the full project Markdown export (`PROJECT_SPEC.md` across all releases, Epics & Features).
   static String buildFullProjectSpecMarkdown({
     required ProjectConceptBlueprint rootSpec,
@@ -501,33 +539,41 @@ class UnrealContextBuilder {
       final relVer = _extractReleaseVersion(entry.key);
       b.writeln();
       b.writeln('## Release ${entry.key}');
-      for (final epic in entry.value) {
-        b.writeln();
-        b.writeln(
-          buildEpicArchitectureContext(
-            rootSpec: rootSpec,
-            epic: epic,
-            releaseVersion: relVer,
-            releaseOrder: releaseOrder,
-            mode: mode,
-            includeRootContext: false,
-          ),
-        );
-        for (final feat in epic.featuresForRelease(relVer, releaseOrder)) {
-          b.writeln();
-          b.writeln(
-            buildCoPilotFeaturePrompt(
-              rootSpec: rootSpec,
-              epic: epic,
-              feature: feat,
-              releaseVersion: relVer,
-              releaseOrder: releaseOrder,
-              mode: mode,
-            ),
-          );
-        }
-      }
+      _writeReleaseEpicsAndFeatures(
+        buffer: b,
+        rootSpec: rootSpec,
+        relVer: relVer,
+        epics: entry.value,
+        releaseOrder: releaseOrder,
+        mode: mode,
+      );
     }
+    return b.toString().trimRight();
+  }
+
+  /// Builds a Release bundle (`ROOT_UNREAL_CONTEXT` + all Epics and Features in one release).
+  static String buildReleaseContextBundle({
+    required ProjectConceptBlueprint rootSpec,
+    required String releaseLabel,
+    required List<EpicSpec> releaseEpics,
+    List<String> releaseOrder = const ['v0.1', 'v0.2'],
+    UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
+  }) {
+    final relVer = _extractReleaseVersion(releaseLabel);
+    final b = StringBuffer();
+    b.writeln(buildRootUnrealContext(rootSpec, mode: mode));
+    b.writeln();
+    b.writeln('---');
+    b.writeln();
+    b.writeln('# RELEASE BUNDLE · $releaseLabel');
+    _writeReleaseEpicsAndFeatures(
+      buffer: b,
+      rootSpec: rootSpec,
+      relVer: relVer,
+      epics: releaseEpics,
+      releaseOrder: releaseOrder,
+      mode: mode,
+    );
     return b.toString().trimRight();
   }
 }

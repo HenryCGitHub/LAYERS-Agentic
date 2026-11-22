@@ -1,6 +1,9 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
+import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/utils/unreal_context_builder.dart';
 import 'package:layers_agentic/utils/unreal_spec_guard.dart';
 
@@ -532,6 +535,76 @@ void main() {
         expect(fullMd, contains('# ROOT_UNREAL_CONTEXT · SHELLBREAKER'));
         expect(fullMd, contains('C++ & BP Hybrid'));
         expect(UnrealSpecGuard.containsEngineLeakage(fullMd), isFalse);
+      },
+    );
+
+    testWidgets(
+      '4. WorkbenchCopilotMixin, Top Bar GDD Export & Stage 2 Copy / Preview CoPilot Prompt workflow',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        expect(
+          wb.unrealArchitectureMode,
+          equals(UnrealArchitectureMode.blueprint),
+        );
+        final gddExport = wb.buildCoPilotGddExport();
+        expect(gddExport.filename, equals('shellbreaker_copilot_gdd.md'));
+        expect(gddExport.content, contains('# PROJECT GDD · SHELLBREAKER'));
+
+        final e01 = wb.activeReleaseEpics.first;
+        final f02 = e01.features.firstWhere((f) => f.code == 'F02');
+        wb.selectFeature(e01.id, f02.id);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('copy_copilot_prompt_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('preview_copilot_prompt_btn')),
+          findsOneWidget,
+        );
+        expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey('preview_copilot_prompt_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('ULTIMATE ENGINE COPILOT — BUILD FEATURE · F02'),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('dialog_copy_copilot_prompt_btn')),
+          findsOneWidget,
+        );
+        await tester.tap(
+          find.byKey(const ValueKey('close_copilot_preview_btn')),
+        );
+        await tester.pumpAndSettle();
+
+        wb.flagFeatureFix(e01.id, f02.id, 'Dash clips corner ramp');
+        await tester.pumpAndSettle();
+        expect(find.text('🔧 Copy CoPilot [FIX] Prompt (1)'), findsOneWidget);
+        expect(
+          wb.activeCoPilotPrompt(),
+          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'),
+        );
       },
     );
   });

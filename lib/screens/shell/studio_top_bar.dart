@@ -477,9 +477,47 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (draft != null) ...[
+                      Builder(
+                        builder: (ctx) {
+                          final isNarrowTopBar =
+                              MediaQuery.sizeOf(ctx).width < 1040;
+                          final accentCyan = AppTheme.accentCyanFor(isDark);
+                          return Tooltip(
+                            message:
+                                'Export & Copy Ultimate Engine CoPilot GDD (*_copilot_gdd.md)',
+                            child: InkWell(
+                              key: const ValueKey('top_bar_copilot_gdd_btn'),
+                              borderRadius: BorderRadius.circular(5),
+                              onTap: () => exportCoPilotGdd(context, workbench),
+                              child: Container(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: isNarrowTopBar ? 6 : 8,
+                                  vertical: 3.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: bgSurface,
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: accentCyan.withValues(alpha: 0.45),
+                                  ),
+                                ),
+                                child: Text(
+                                  isNarrowTopBar ? '⚡ GDD' : '⚡ CoPilot GDD',
+                                  style: GoogleFonts.jetBrainsMono(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: accentCyan,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      const SizedBox(width: 4),
                       PopupMenuButton<String>(
                         key: const ValueKey('global_export_spec_btn'),
-                        tooltip: 'Export Project Spec or Backup (.md / .layers.json)',
+                        tooltip: 'Export CoPilot GDD, Spec or Backup (.md / .layers.json)',
                         constraints: const BoxConstraints(
                           minWidth: 280,
                           maxWidth: 340,
@@ -490,7 +528,9 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                           side: BorderSide(color: borderColor),
                         ),
                         onSelected: (val) {
-                          if (val == 'spec') {
+                          if (val == 'copilot_gdd') {
+                            exportCoPilotGdd(context, workbench);
+                          } else if (val == 'spec') {
                             exportFullProjectSpec(context, workbench);
                           } else if (val == 'json_export') {
                             exportActiveProjectJson(context, workbench);
@@ -499,6 +539,13 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                           }
                         },
                         itemBuilder: (ctx) => [
+                          _buildExportMenuItem(
+                            value: 'copilot_gdd',
+                            icon: Icons.bolt_rounded,
+                            iconColor: AppTheme.accentCyanFor(isDark),
+                            label: 'Export CoPilot GDD (.md)',
+                            textColor: textPrimary,
+                          ),
                           _buildExportMenuItem(
                             value: 'spec',
                             icon: Icons.copy_rounded,

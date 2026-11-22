@@ -69,7 +69,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'No Godot Epics planned yet.',
+                'No Unreal Epics planned yet.',
                 style: AppTheme.displayFont(
                   fontSize: 20,
                   fontWeight: FontWeight.w700,
@@ -353,7 +353,22 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                       spacing: 8,
                       runSpacing: 6,
                       children: [
-                        if (feature == null)
+                        if (feature == null) ...[
+                          OutlinedButton.icon(
+                            key: const ValueKey('copy_epic_brief_btn'),
+                            onPressed: () => copyPromptWithToast(
+                              context,
+                              promptText: wb.activeEpicArchitecturePrompt(epic),
+                              toastMessage:
+                                  'Copied ${epic.code} Epic Architecture Brief',
+                              isDark: isDark,
+                            ),
+                            icon: const Icon(Icons.copy_rounded, size: 14),
+                            label: const Text(
+                              'Copy Epic Brief',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
                           ElevatedButton(
                             key: const ValueKey(
                               'epic_inspect_first_feature_btn',
@@ -368,58 +383,102 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               'Inspect Child Feature →',
                               style: TextStyle(fontSize: 12),
                             ),
-                          )
-                        else if (!isLockedBaseline) ...[
-                          if (feature.isPassed)
-                            OutlinedButton.icon(
-                              key: const ValueKey('reopen_feature_btn'),
-                              onPressed: () =>
-                                  wb.reopenFeature(epic.id, feature.id),
-                              icon: const Icon(Icons.replay, size: 15),
-                              label: const Text(
-                                'Reopen Feature',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            )
-                          else
-                            ElevatedButton.icon(
-                              key: const ValueKey('pass_feature_btn'),
-                              onPressed: () {
-                                final passed = wb.passFeature(
-                                  epic.id,
-                                  feature.id,
-                                );
-                                if (!passed) {
-                                  setState(() {
-                                    _passGateHint = feature.openFixes.isNotEmpty
-                                        ? 'Resolve all open [FIX] notes before passing this Feature.'
-                                        : 'Check every Playtest Gate item before passing this Feature.';
-                                  });
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    wb.canPassFeature(feature)
+                          ),
+                        ] else ...[
+                          ElevatedButton.icon(
+                            key: const ValueKey('copy_copilot_prompt_btn'),
+                            onPressed: () => copyPromptWithToast(
+                              context,
+                              promptText:
+                                  wb.activeFeatureBuildPrompt(epic, feature),
+                              toastMessage:
+                                  'Copied ${feature.code} CoPilot prompt to clipboard',
+                              isDark: isDark,
+                            ),
+                            icon: Icon(
+                              feature.openFixesCount > 0
+                                  ? Icons.build_rounded
+                                  : Icons.bolt_rounded,
+                              size: 15,
+                            ),
+                            label: Text(
+                              feature.openFixesCount > 0
+                                  ? '🔧 Copy CoPilot [FIX] Prompt (${feature.openFixesCount})'
+                                  : (relVer != 'v0.1' &&
+                                          feature.releaseDelta.trim().isNotEmpty
+                                      ? '⚡ Copy CoPilot Delta Prompt'
+                                      : '⚡ Copy CoPilot Prompt'),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            key: const ValueKey('preview_copilot_prompt_btn'),
+                            onPressed: () => showCoPilotPromptPreviewDialog(
+                              context,
+                              title:
+                                  '${feature.code} · ${feature.title} — CoPilot Prompt',
+                              promptText:
+                                  wb.activeFeatureBuildPrompt(epic, feature),
+                              isDark: isDark,
+                            ),
+                            icon: const Icon(Icons.visibility_outlined, size: 14),
+                            label: const Text(
+                              'Preview',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          if (!isLockedBaseline) ...[
+                            if (feature.isPassed)
+                              OutlinedButton.icon(
+                                key: const ValueKey('reopen_feature_btn'),
+                                onPressed: () =>
+                                    wb.reopenFeature(epic.id, feature.id),
+                                icon: const Icon(Icons.replay, size: 15),
+                                label: const Text(
+                                  'Reopen Feature',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              )
+                            else
+                              ElevatedButton.icon(
+                                key: const ValueKey('pass_feature_btn'),
+                                onPressed: () {
+                                  final passed = wb.passFeature(
+                                    epic.id,
+                                    feature.id,
+                                  );
+                                  if (!passed) {
+                                    setState(() {
+                                      _passGateHint = feature.openFixes.isNotEmpty
+                                          ? 'Resolve all open [FIX] notes before passing this Feature.'
+                                          : 'Check every Playtest Gate item before passing this Feature.';
+                                    });
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor:
+                                      wb.canPassFeature(feature)
+                                          ? green
+                                          : AppTheme.bgSurfaceRaisedFor(isDark),
+                                  foregroundColor: wb.canPassFeature(feature)
+                                      ? Colors.black
+                                      : muted,
+                                  side: BorderSide(
+                                    color: wb.canPassFeature(feature)
                                         ? green
-                                        : AppTheme.bgSurfaceRaisedFor(isDark),
-                                foregroundColor: wb.canPassFeature(feature)
-                                    ? Colors.black
-                                    : muted,
-                                side: BorderSide(
-                                  color: wb.canPassFeature(feature)
-                                      ? green
-                                      : border,
+                                        : border,
+                                  ),
+                                ),
+                                icon: const Icon(
+                                  Icons.check_circle_outline,
+                                  size: 15,
+                                ),
+                                label: const Text(
+                                  'Pass Feature ✓',
+                                  style: TextStyle(fontSize: 12),
                                 ),
                               ),
-                              icon: const Icon(
-                                Icons.check_circle_outline,
-                                size: 15,
-                              ),
-                              label: const Text(
-                                'Pass Feature ✓',
-                                style: TextStyle(fontSize: 12),
-                              ),
-                            ),
+                          ],
                         ],
                       ],
                     ),

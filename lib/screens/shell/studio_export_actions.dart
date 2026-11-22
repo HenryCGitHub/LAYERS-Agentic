@@ -6,11 +6,15 @@ import '../../theme/app_theme.dart';
 import '../../utils/markdown_exporter.dart';
 import 'project_manage_dialogs.dart';
 
-/// Exports the complete Stage 1 + Stage 2 project markdown (`*_project_spec.md`).
-Future<void> exportFullProjectSpec(BuildContext context, WorkbenchProvider workbench) async {
-  final wb = workbench;
-  final isDark = wb.isDark;
-  final rootSpec = wb.conceptDraft;
+/// Shared Markdown bundle download + clipboard copy + toast feedback helper.
+Future<void> _exportMarkdownBundle(
+  BuildContext context, {
+  required WorkbenchProvider workbench,
+  required ({String filename, String content}) Function() buildBundle,
+  required String fallbackCopiedLabel,
+}) async {
+  final isDark = workbench.isDark;
+  final rootSpec = workbench.conceptDraft;
   if (rootSpec == null || !rootSpec.hasSpec) {
     AppToast.show(
       context,
@@ -21,7 +25,7 @@ Future<void> exportFullProjectSpec(BuildContext context, WorkbenchProvider workb
     return;
   }
 
-  final bundle = wb.buildFullProjectMarkdownExport();
+  final bundle = buildBundle();
   await Clipboard.setData(ClipboardData(text: bundle.content));
   final downloaded = triggerMarkdownFileDownload(
     filename: bundle.filename,
@@ -32,10 +36,34 @@ Future<void> exportFullProjectSpec(BuildContext context, WorkbenchProvider workb
     context,
     downloaded
         ? 'Downloaded ${bundle.filename} & copied to clipboard'
-        : 'Copied full PROJECT_SPEC.md to clipboard',
+        : fallbackCopiedLabel,
     isDark: isDark,
   );
 }
+
+/// Exports the Ultimate Engine CoPilot GDD (`*_copilot_gdd.md`).
+Future<void> exportCoPilotGdd(
+  BuildContext context,
+  WorkbenchProvider workbench,
+) =>
+    _exportMarkdownBundle(
+      context,
+      workbench: workbench,
+      buildBundle: workbench.buildCoPilotGddExport,
+      fallbackCopiedLabel: 'Copied CoPilot GDD (.md) to clipboard',
+    );
+
+/// Exports the complete Stage 1 + Stage 2 project markdown (`*_project_spec.md`).
+Future<void> exportFullProjectSpec(
+  BuildContext context,
+  WorkbenchProvider workbench,
+) =>
+    _exportMarkdownBundle(
+      context,
+      workbench: workbench,
+      buildBundle: workbench.buildFullProjectMarkdownExport,
+      fallbackCopiedLabel: 'Copied full PROJECT_SPEC.md to clipboard',
+    );
 
 /// Exports a portable `.layers.json` backup of the active project tree.
 Future<void> exportActiveProjectJson(BuildContext context, WorkbenchProvider workbench) async {

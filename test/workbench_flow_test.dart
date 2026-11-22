@@ -17,7 +17,7 @@ import 'package:layers_agentic/services/local_vault_service.dart';
 import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
 import 'package:layers_agentic/services/storage/vault_storage_web.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
-import 'package:layers_agentic/utils/godot_context_builder.dart';
+import 'package:layers_agentic/utils/unreal_context_builder.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -715,7 +715,7 @@ void main() {
         expect(wb.selectedFeatureSpec?.code, equals('F02'));
         expect(
           wb.selectedBuildPrompt,
-          contains('# ACTIVE FEATURE SPEC · F02 · Armored Claw Dash'),
+          contains('ULTIMATE ENGINE COPILOT — BUILD FEATURE · F02 · Armored Claw Dash'),
         );
 
         // Toggle outliner expansion & open Epic Domain Sheet (selectedFeatureId == null)
@@ -727,7 +727,7 @@ void main() {
         expect(wb.isInspectingEpicDomain, isTrue);
         expect(
           wb.selectedBuildPrompt,
-          contains('# GODOT 4 EPIC ARCHITECTURE BRIEF · E01'),
+          contains('# UE5 EPIC ARCHITECTURE BRIEF · E01'),
         );
 
         // Select F02, mutate live @export tuning & add parameter
@@ -743,11 +743,11 @@ void main() {
         );
         expect(
           wb.selectedBuildPrompt,
-          contains('@export var dash_distance: float = 7.25 # m'),
+          contains('float DashDistance = 725 cm'),
         );
         expect(
           wb.selectedBuildPrompt,
-          contains('@export var dash_trail_fade_s: float = 0.22 # s'),
+          contains('float DashTrailFadeS = 0.22 s'),
         );
 
         // Log [FIX] -> switches prompt mode & blocks passFeature even after checking Playtest Gate
@@ -755,7 +755,7 @@ void main() {
         expect(wb.selectedFeatureSpec!.openFixesCount, equals(1));
         expect(
           wb.selectedBuildPrompt,
-          contains('FOCUSED [FIX] PASS (1 OPEN [FIX])'),
+          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'),
         );
         final f02CheckId = wb.selectedFeatureSpec!.checks.first.id;
         wb.toggleFeatureCheck(e01.id, 'sb_f02', f02CheckId, true);
@@ -969,7 +969,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(wb.isInspectingEpicDomain, isTrue);
         expect(
-          find.textContaining('Shared Scene & Script Ownership'),
+          find.textContaining('Shared Blueprint, Level & Class Ownership'),
           findsOneWidget,
         );
         expect(
@@ -1022,12 +1022,12 @@ void main() {
         await tester.pump(const Duration(milliseconds: 350));
 
         expect(
-          wb.activeGodotSyncContext(),
-          contains('@export var dash_distance: float = 6.8 # m'),
+          wb.activeCoPilotPrompt(),
+          contains('float DashDistance = 680 cm'),
         );
-        expect(find.text('Live-synced to Godot 4 Cloud AI'), findsOneWidget);
+        expect(find.text('Included in CoPilot Feature Prompt'), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_tab_raw')), findsNothing);
-        expect(find.byKey(const ValueKey('copy_build_prompt_btn')), findsNothing);
+        expect(find.byKey(const ValueKey('copy_copilot_prompt_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('ai_build_prompt_text')), findsNothing);
 
         // Log [FIX] -> Pass Feature blocked with hint -> resolve & check -> Pass advances to F07
@@ -1237,21 +1237,21 @@ void main() {
         expect(migratedEpic.features.first.openFixesCount, equals(1));
         expect(migratedEpic.sceneOwnership, isNotEmpty);
 
-        // Legacy Cloud/Dock Epic payload remains intact for functions/index.js
+        // Legacy Epic payload remains intact under UnrealContextBuilder
         expect(
-          wb.activeEpicGodotContext(migratedEpic),
-          contains('ACTIVE EPIC SPEC · E01 · Hover Thruster Core'),
+          wb.activeEpicArchitecturePrompt(migratedEpic),
+          contains('UE5 EPIC ARCHITECTURE BRIEF · E01 · Hover Thruster Core'),
         );
 
-        // Sync context adapts cleanly across Feature Sheet, Epic Domain Sheet & explicit empty-feature Epics
+        // CoPilot context adapts cleanly across Feature Sheet, Epic Domain Sheet & explicit empty-feature Epics
         expect(
-          wb.activeGodotSyncContext(),
-          contains('# ACTIVE FEATURE SPEC · F01 · Hover Thruster Core'),
+          wb.activeCoPilotPrompt(),
+          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F01 · Hover Thruster Core'),
         );
         wb.selectEpic(migratedEpic.id);
         expect(
-          wb.activeGodotSyncContext(),
-          contains('# GODOT 4 EPIC ARCHITECTURE BRIEF · E01'),
+          wb.activeCoPilotPrompt(),
+          contains('# UE5 EPIC ARCHITECTURE BRIEF · E01'),
         );
 
         final explicitEmptyEpic = EpicSpec(
@@ -1261,8 +1261,8 @@ void main() {
           goal: 'Preserve legacy payload when features list is explicitly empty.',
         );
         expect(
-          wb.activeGodotSyncContext(epicOverride: explicitEmptyEpic),
-          contains('ACTIVE EPIC SPEC · E02 · Raw Dock Fallback'),
+          wb.activeCoPilotPrompt(epicOverride: explicitEmptyEpic),
+          contains('UE5 EPIC ARCHITECTURE BRIEF · E02 · Raw Dock Fallback'),
         );
       },
     );
@@ -1308,19 +1308,21 @@ void main() {
           findsNothing,
         );
         expect(find.text('Connect Godot 4 Editor Plugin'), findsNothing);
+        expect(find.text('Export CoPilot GDD (.md)'), findsOneWidget);
         expect(find.text('Copy Full Project Spec (.md)'), findsOneWidget);
         expect(find.text('Export Project Vault (.layers.json)'), findsOneWidget);
         expect(find.text('Import Project Backup (.layers.json)'), findsOneWidget);
         expect(tester.takeException(), isNull);
 
-        // 2D preset (emberkeep) exports px/px/s with zero 3D m/s leakage
+        // Preset (emberkeep) exports Unreal cm/s with zero px/s or m/s leakage
         wb.createNewProject();
         wb.loadPresetSpark('emberkeep');
         wb.approveRootSpecAndLaunchWorkbench();
         final ekExport = wb.buildFullProjectMarkdownExport();
         expect(ekExport.filename, equals('ember_keep_project_spec.md'));
-        expect(ekExport.content, contains('px/s'));
-        expect(ekExport.content, isNot(contains('m/s')));
+        expect(ekExport.content, contains('cm/s'));
+        expect(ekExport.content, isNot(contains('px/s')));
+        expect(ekExport.content, isNot(contains(RegExp(r'(?<!c)m/s'))));
       },
     );
 
@@ -1920,10 +1922,10 @@ void main() {
         expect(md, contains('Core Loop Beat:'));
         expect(
           wb.selectedBuildPrompt,
-          contains('## 2. PARENT EPIC ARCHITECTURE'),
+          contains('## 1. Parent Epic Architecture Guardrails (Read-Only)'),
         );
 
-        final relBundle = GodotContextBuilder.buildReleaseContextBundle(
+        final relBundle = UnrealContextBuilder.buildReleaseContextBundle(
           rootSpec: wb.conceptDraft!,
           releaseLabel: 'v0.1.2 · Patch',
           releaseEpics: wb.epicsForRelease(v01Id),

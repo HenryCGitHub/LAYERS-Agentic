@@ -187,14 +187,14 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
         ),
         const SizedBox(height: 14),
 
-        // §02 Input Actions (InputMap)
+        // §02 Input Actions (Enhanced Input)
         EpicSectionCard(
           isDark: isDark,
           code: '§02',
           title: 'Input Actions (${target.inputContractLabel})',
           child: feat.controls.isEmpty
               ? Text(
-                  'Signal/system-driven slice — uses parent Epic InputMap triggers.',
+                  'Event/system-driven slice — uses parent Epic Enhanced Input triggers.',
                   style: TextStyle(fontSize: 12.5, color: muted),
                 )
               : Table(
@@ -254,7 +254,7 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
         ),
         const SizedBox(height: 14),
 
-        // §03 Exposed Tuning (@export GDScript Vars)
+        // §03 Exposed Tuning
         EpicSectionCard(
           isDark: isDark,
           code: '§03',
@@ -262,12 +262,12 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
           trailing: Text(
             isLockedBaseline
                 ? 'Locked baseline'
-                : 'Live-synced to Godot 4 Cloud AI',
+                : 'Included in CoPilot Feature Prompt',
             style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: muted),
           ),
           child: feat.tuning.isEmpty
               ? Text(
-                  'No exposed @export variables on this slice.',
+                  'No exposed tuning variables on this slice.',
                   style: TextStyle(fontSize: 12.5, color: muted),
                 )
               : Wrap(

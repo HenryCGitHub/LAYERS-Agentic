@@ -167,6 +167,7 @@ class UnrealSpecGuard {
         (m) => '${_formatCleanNum((double.tryParse(m.group(1) ?? '') ?? 0) * factor)} cm',
       );
     }
+    out = out.replaceAll(RegExp(r'\b(?:m|px)/s\b', caseSensitive: false), 'cm/s');
 
     for (final (fromPhrase, toPhrase) in _bannedPhraseReplacements) {
       out = _replaceCaseAware(out, RegExp.escape(fromPhrase), toPhrase);

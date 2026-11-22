@@ -182,11 +182,11 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
         ),
         const SizedBox(height: 14),
 
-        // §02 Shared Scene & Script Ownership
+        // §02 Shared Blueprint, Level & Class Ownership
         EpicSectionCard(
           isDark: isDark,
           code: '§02',
-          title: 'Shared Scene & Script Ownership',
+          title: 'Shared Blueprint, Level & Class Ownership',
           child: ownershipList.isNotEmpty
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,

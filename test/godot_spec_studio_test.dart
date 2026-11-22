@@ -18,9 +18,9 @@ import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/services/cloud_invite_deep_link_service.dart';
 import 'package:layers_agentic/services/project_archive_codec.dart';
 import 'package:layers_agentic/services/v01_release_seeder.dart';
-import 'package:layers_agentic/utils/godot_context_builder.dart';
 import 'package:layers_agentic/utils/godot_spec_guard.dart';
 import 'package:layers_agentic/utils/markdown_exporter.dart';
+import 'package:layers_agentic/utils/unreal_context_builder.dart';
 
 void main() {
   group('Godot 4 (3D + 2D) Epic-Only Studio & 1-Click In-Dock Builder Tests', () {
@@ -127,96 +127,85 @@ void main() {
     );
 
     test(
-      '3. GodotContextBuilder renders 3D/2D context, roadmap, v0.2 deltas, live snapshot & [FIX] revision switch',
+      '3. UnrealContextBuilder renders CoPilot GDD, Epic Architecture Brief & [FIX] revision switch',
       () {
         final spec3d = GodotSparkPresets.byId('shellbreaker');
         final e01 = spec3d.initialEpics.first;
-        final full = GodotContextBuilder.buildEpicGodotContext(
+        final full = UnrealContextBuilder.buildCoPilotGddMarkdown(
           rootSpec: spec3d,
-          epic: e01,
-          releaseEpics: spec3d.initialEpics,
-          liveGodotContext: {
-            'project_name': 'ShellbreakerGodot',
-            'main_scene': 'res://scenes/shellbreaker_proto.tscn',
-            'input_actions': ['move_left', 'claw_dash'],
-            'scene_files': ['res://scenes/shellbreaker_proto.tscn'],
-            'script_files': ['res://scripts/player_mech.gd'],
-          },
+          epicsByReleaseLabel: {'v0.1 · Prototype': spec3d.initialEpics},
+          mode: UnrealArchitectureMode.blueprint,
         );
-        expect(full, contains('# ROOT_GODOT_CONTEXT · SHELLBREAKER'));
-        expect(
-          full,
-          contains('## Live Godot Project Snapshot (project.godot via Dock)'),
-        );
-        expect(full, contains('ShellbreakerGodot'));
-        expect(full, contains('## Release Epic Roadmap (v0.1 · 0/3 Passed)'));
-        expect(full, contains('### FULL-EPIC AUTONOMOUS BUILD & SELF-CHECK'));
+        expect(full, contains('# PROJECT GDD · SHELLBREAKER'));
+        expect(full, contains('Blueprint-First'));
+        expect(full, contains('/Game/Maps/Lvl_ShellbreakerProto.umap'));
 
-        e01.fixes.add(
+        e01.features.first.fixes.add(
           EpicPieFix(
             id: 'fx1',
             text: 'Dash stops short at wall corner',
             resolved: false,
           ),
         );
-        final fixCtx = GodotContextBuilder.buildEpicGodotContext(
+        final fixCtx = UnrealContextBuilder.buildCoPilotFeaturePrompt(
           rootSpec: spec3d,
           epic: e01,
+          feature: e01.features.first,
+          mode: UnrealArchitectureMode.blueprint,
         );
-        expect(fixCtx, contains('## Open Playtest Revisions ([FIX])'));
-        expect(fixCtx, contains('### FOCUSED PLAYTEST REVISION PASS (1 OPEN [FIX])'));
+        expect(fixCtx, contains('## Open [FIX] Revisions to Resolve Now'));
+        expect(fixCtx, contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS'));
         expect(fixCtx, contains('Dash stops short at wall corner'));
       },
     );
 
     test(
-      '4. Dart GodotContextBuilder renders deterministic 3D, 2D, v0.2 Deltas & [FIX] contexts cleanly',
+      '4. UnrealContextBuilder renders deterministic Blueprint-First, C++ & BP Hybrid, v0.2 Deltas & [FIX] prompts cleanly',
       () {
         final wb = WorkbenchProvider(enableAutoLoad: false);
         wb.loadPresetSpark('shellbreaker');
-        final root3d = wb.conceptDraft!;
-        final e01 = root3d.initialEpics[0].deepCopy();
-        final e02 = root3d.initialEpics[1].deepCopy();
+        final root = wb.conceptDraft!;
+        final e01 = root.initialEpics[0].deepCopy();
+        final e02 = root.initialEpics[1].deepCopy();
 
-        // Scenario A: 3D v0.1 + [FIX] revision pass + sibling roadmap
-        e01.lifecycle = EpicLifecycle.stable;
-        for (final chk in e01.checks) {
-          chk.passed = true;
-        }
-        e02.fixes.add(
+        // Scenario A: v0.1 + [FIX] revision pass in C++ & BP Hybrid mode
+        e02.features.first.fixes.add(
           EpicPieFix(id: 'fx_a', text: 'Recoil pushes off floor', resolved: false),
         );
-        final dartA = GodotContextBuilder.buildEpicGodotContext(
-          rootSpec: root3d,
+        final dartA = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: root,
           epic: e02,
-          releaseEpics: [e01, e02],
+          feature: e02.features.first,
+          mode: UnrealArchitectureMode.cppHybrid,
         );
-        expect(dartA, contains('# ROOT_GODOT_CONTEXT'));
-        expect(dartA, contains('FOCUSED PLAYTEST REVISION PASS (1 OPEN [FIX])'));
-        expect(dartA, contains('[BUILT ✓] ${e01.code}'));
+        expect(dartA, contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS'));
+        expect(dartA, contains('C++ & BP Hybrid'));
         expect(dartA, contains('Recoil pushes off floor'));
 
-        // Scenario B: 2D preset (emberkeep)
-        final root2d = GodotSparkPresets.byId('emberkeep');
-        final e2d = root2d.initialEpics.first.deepCopy();
-        final dartB = GodotContextBuilder.buildEpicGodotContext(
-          rootSpec: root2d,
-          epic: e2d,
-          releaseEpics: root2d.initialEpics,
+        // Scenario B: emberkeep converted cleanly to cm/s with 0 px/m leakage
+        final ekRoot = GodotSparkPresets.byId('emberkeep');
+        final eEk = ekRoot.initialEpics.first.deepCopy();
+        final dartB = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: ekRoot,
+          epic: eEk,
+          feature: eEk.features.first,
+          mode: UnrealArchitectureMode.blueprint,
         );
-        expect(dartB, contains('2D (px, px/s)'));
+        expect(dartB, contains('cm/s'));
         expect(dartB, isNot(contains(' m/s')));
+        expect(dartB, isNot(contains(' px/s')));
 
-        // Scenario C: v0.2 upgraded Epic with baselineSummary + upgradeDeltas
+        // Scenario C: v0.2 upgraded Epic brief with baselineSummary + upgradeDeltas
         final v02Epic = e01.deepCopy()
           ..releaseVersion = 'v0.2'
           ..lifecycle = EpicLifecycle.upgrading
           ..baselineSummary = ['v0.1 Walk & Claw Dash checked']
           ..upgradeDeltas = ['Chain second dash on armor break'];
-        final dartC = GodotContextBuilder.buildEpicGodotContext(
-          rootSpec: root3d,
+        final dartC = UnrealContextBuilder.buildEpicArchitectureContext(
+          rootSpec: root,
           epic: v02Epic,
-          releaseEpics: [v02Epic],
+          releaseVersion: 'v0.2',
+          mode: UnrealArchitectureMode.blueprint,
         );
         expect(dartC, contains('(v0.2)'));
         expect(dartC, contains('Chain second dash on armor break'));
@@ -254,17 +243,17 @@ void main() {
         expect(find.byKey(const ValueKey('stage1_tab_raw')), findsNothing);
         expect(find.text('Copy Context'), findsNothing);
         expect(
-          wb.activeRootGodotMarkdown,
-          contains('Godot 4 2D (.tscn + GDScript .gd)'),
+          wb.activeRootUnrealMarkdown,
+          contains('# ROOT_UNREAL_CONTEXT'),
         );
 
-        // Toggle explicitly back to 3D and see context update immediately
+        // Toggle explicitly back to 3D and verify CoPilot context renders cleanly
         await tester.tap(find.byKey(const ValueKey('stage1_dim_3d')));
         await tester.pumpAndSettle();
         expect(wb.projectDimension, equals(GodotProjectDimension.dim3d));
         expect(
-          wb.activeRootGodotMarkdown,
-          contains('Godot 4 3D (.tscn + GDScript .gd)'),
+          wb.activeRootUnrealMarkdown,
+          contains('Unreal Engine 5 Blueprint-First'),
         );
 
         await tester.tap(find.byKey(const ValueKey('approve_launch_workbench_btn')));
@@ -272,7 +261,7 @@ void main() {
 
         expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_tab_raw')), findsNothing);
-        expect(find.byKey(const ValueKey('copy_build_prompt_btn')), findsNothing);
+        expect(find.byKey(const ValueKey('copy_copilot_prompt_btn')), findsOneWidget);
       },
     );
 
@@ -308,7 +297,7 @@ void main() {
         await tester.pump(const Duration(milliseconds: 350));
         expect(
           wb.selectedBuildPrompt,
-          contains('@export var dash_distance: float = 8.5 # m'),
+          contains('DashDistance = 850 cm'),
         );
 
         // Flag [FIX] switches Feature Build Prompt to FOCUSED [FIX] PASS
@@ -326,7 +315,7 @@ void main() {
         expect(wb.selectedFeatureSpec!.openFixesCount, equals(1));
         expect(
           wb.selectedBuildPrompt,
-          contains('FOCUSED [FIX] PASS (1 OPEN [FIX])'),
+          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'),
         );
 
         // Resolve [FIX], check Playtest Gate, and Pass Feature -> advances to E02 / F03
@@ -637,7 +626,7 @@ void main() {
     );
 
     test(
-      '14. GodotContextBuilder.buildFeatureContext & buildEpicArchitectureContext bundle 3D/2D context, v0.2 deltas & [FIX] mode',
+      '14. UnrealContextBuilder.buildCoPilotFeaturePrompt & buildEpicArchitectureContext bundle UE5 context, v0.2 deltas & [FIX] mode',
       () {
         final spec3d = GodotSparkPresets.byId('shellbreaker');
         final f01 = FeatureSpec(
@@ -727,43 +716,47 @@ void main() {
           features: [f01, f02, f03],
         );
 
-        final ctxV01 = GodotContextBuilder.buildFeatureContext(
+        final ctxV01 = UnrealContextBuilder.buildCoPilotFeaturePrompt(
           rootSpec: spec3d,
           epic: e01,
           feature: f02,
           releaseVersion: 'v0.1',
+          mode: UnrealArchitectureMode.blueprint,
         );
-        expect(ctxV01, contains('# ROOT_GODOT_CONTEXT · SHELLBREAKER'));
         expect(
           ctxV01,
-          contains('## 2. PARENT EPIC ARCHITECTURE (E01 · Player Movement & Camera)'),
+          contains('# ULTIMATE ENGINE COPILOT — BUILD FEATURE · F02 · Armored Claw Dash (v0.1)'),
         );
-        expect(ctxV01, contains('res://scenes/player_mech.tscn'));
+        expect(
+          ctxV01,
+          contains('## 1. Parent Epic Architecture Guardrails (Read-Only)'),
+        );
+        expect(ctxV01, contains('/Game/Blueprints/BP_PlayerMech'));
         expect(ctxV01, contains('Idle -> Walk -> ClawDash -> Recovery'));
         expect(ctxV01, contains('No stamina bar in v0.1'));
+        expect(ctxV01, contains('[PASSED — DO NOT REGRESS] F01'));
+        expect(ctxV01, contains('[ACTIVE TARGET ->] F02'));
+        expect(ctxV01, contains('| IA_ClawDash | Space / L-Trigger | 0.65 s cooldown |'));
+        expect(ctxV01, contains('Exposed Blueprint Var `float DashDistanceM = 400 cm`'));
+        expect(ctxV01, contains('Exposed Blueprint Var `int32 MaxChains = 3 count`'));
+        expect(ctxV01, contains('## §05 PIE Playtest Gate'));
+        expect(ctxV01, contains('- [x] Tap Space -> Mech crosses 400 cm'));
         expect(
           ctxV01,
-          contains('# ACTIVE FEATURE SPEC · F02 · Armored Claw Dash (v0.1 · 60 min)'),
-        );
-        expect(ctxV01, contains('Execution Mode: FULL FEATURE BUILD'));
-        expect(ctxV01, contains('| InputMap Action | Binding | Trigger Rule |'));
-        expect(ctxV01, contains('| claw_dash | Space / L-Trigger | 0.65 s cooldown |'));
-        expect(ctxV01, contains('```gdscript'));
-        expect(ctxV01, contains('@export var dash_distance_m: float = 4.0 # m'));
-        expect(ctxV01, contains('@export var max_chains: int = 3 # count'));
-        expect(ctxV01, contains('## §05 Playtest Gate'));
-        expect(ctxV01, contains('- [x] Tap Space -> Mech crosses 4 m'));
-        expect(
-          ctxV01,
-          contains('- [ ] Collide with cracked shell -> Enemy staggers 1.5 m'),
+          contains('- [ ] Collide with cracked shell -> Enemy staggers 150 cm'),
         );
 
         // v0.2 delta & delta check
-        final ctxV02 = GodotContextBuilder.buildFeatureContext(
+        final ctxV02 = UnrealContextBuilder.buildCoPilotFeaturePrompt(
           rootSpec: spec3d,
           epic: e01,
           feature: f02,
           releaseVersion: 'v0.2',
+          mode: UnrealArchitectureMode.blueprint,
+        );
+        expect(
+          ctxV02,
+          contains('# ULTIMATE ENGINE COPILOT — UPGRADE FEATURE DELTA · F02'),
         );
         expect(ctxV02, contains('## v0.2 Upgrade Delta'));
         expect(ctxV02, contains('Reset dash cooldown when breaking cracked shell'));
@@ -776,57 +769,60 @@ void main() {
         f02.fixes.add(
           EpicPieFix(id: 'fx_dash', text: 'Dash clips pillar edge'),
         );
-        final ctxFix = GodotContextBuilder.buildFeatureContext(
+        final ctxFix = UnrealContextBuilder.buildCoPilotFeaturePrompt(
           rootSpec: spec3d,
           epic: e01,
           feature: f02,
           releaseVersion: 'v0.1',
+          mode: UnrealArchitectureMode.cppHybrid,
         );
-        expect(ctxFix, contains('FOCUSED [FIX] PASS (1 OPEN [FIX])'));
-        expect(ctxFix, contains('## Open Playtest Revisions ([FIX])'));
+        expect(ctxFix, contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'));
+        expect(ctxFix, contains('UPROPERTY(EditAnywhere, BlueprintReadWrite) `float DashDistanceM = 400 cm`'));
+        expect(ctxFix, contains('## Open [FIX] Revisions to Resolve Now'));
         expect(ctxFix, contains('Dash clips pillar edge'));
 
         // Epic domain architecture brief (v0.1 vs v0.2 rollups)
-        final archV02 = GodotContextBuilder.buildEpicArchitectureContext(
+        final archV02 = UnrealContextBuilder.buildEpicArchitectureContext(
           rootSpec: spec3d,
           epic: e01,
           releaseVersion: 'v0.2',
         );
         expect(
           archV02,
-          contains('# GODOT 4 EPIC ARCHITECTURE BRIEF · E01 · Player Movement & Camera (v0.2)'),
+          contains('# UE5 EPIC ARCHITECTURE BRIEF · E01 · Player Movement & Camera (v0.2)'),
         );
         expect(archV02, contains('Progress: 1/3 Features Passed | 1 Open [FIX]'));
         expect(archV02, contains('[v0.1 ✓ BASELINE]'));
         expect(archV02, contains('[+v0.2 NEW]'));
 
-        // 2D Feature context check
-        final spec2d = GodotSparkPresets.byId('emberkeep');
-        final f2d = FeatureSpec(
+        // C++ Hybrid Feature context check
+        final specHybrid = GodotSparkPresets.byId('emberkeep');
+        final fHybrid = FeatureSpec(
           id: 'f2d',
           code: 'F01',
           title: 'Roll Dash',
           goal: 'Move 128 px across spike floor.',
           tuning: [EpicTuningParam(key: 'dash_speed_px', value: '480', unit: 'px/s')],
         );
-        final ctx2d = GodotContextBuilder.buildFeatureContext(
-          rootSpec: spec2d,
+        final ctxHybrid = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: specHybrid,
           epic: e01,
-          feature: f2d,
+          feature: fHybrid,
           releaseVersion: 'v0.1',
+          mode: UnrealArchitectureMode.cppHybrid,
         );
-        expect(ctx2d, contains('2D (px, px/s)'));
-        expect(ctx2d, contains('@export var dash_speed_px: float = 480 # px/s'));
+        expect(ctxHybrid, contains('C++ & BP Hybrid'));
+        expect(ctxHybrid, contains('float DashSpeedPx = 1200 cm/s'));
 
         // buildFullProjectSpecMarkdown includes Feature slices when present
-        final fullMd = GodotContextBuilder.buildFullProjectSpecMarkdown(
+        final fullMd = UnrealContextBuilder.buildFullProjectSpecMarkdown(
           rootSpec: spec3d,
           epicsByReleaseLabel: {
             'v0.1 · Arena Prototype': [e01],
           },
         );
-        expect(fullMd, contains('GODOT 4 EPIC ARCHITECTURE BRIEF'));
-        expect(fullMd, contains('ACTIVE FEATURE SPEC · F02 · Armored Claw Dash'));
+        expect(fullMd, contains('UE5 EPIC ARCHITECTURE BRIEF'));
+        expect(fullMd, contains('F02 · Armored Claw Dash'));
       },
     );
 
@@ -2052,7 +2048,8 @@ void main() {
         final fullMd2d = wb2d.buildFullProjectMarkdownExport().content;
         expect(fullMd2d, isNot(contains('CharacterBody3D')));
         expect(fullMd2d, isNot(contains('SpringArm3D')));
-        expect(fullMd2d, isNot(contains('m/s')));
+        expect(fullMd2d, contains('cm/s'));
+        expect(fullMd2d, isNot(contains(RegExp(r'(?<!c)m/s'))));
         expect(sbAs2d.initialEpics.first.inScope.join(' '), contains('px'));
 
         final ek = GodotSparkPresets.byId('emberkeep');

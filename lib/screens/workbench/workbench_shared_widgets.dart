@@ -1,7 +1,122 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/epic_spec.dart';
 import '../../theme/app_theme.dart';
+
+/// Copies [promptText] to the system clipboard and surfaces a studio toast.
+Future<void> copyPromptWithToast(
+  BuildContext context, {
+  required String promptText,
+  required String toastMessage,
+  required bool isDark,
+}) async {
+  await Clipboard.setData(ClipboardData(text: promptText));
+  if (!context.mounted) return;
+  AppToast.show(context, toastMessage, isDark: isDark);
+}
+
+/// Opens a scrollable modal inspecting the exact CoPilot prompt Markdown before copying.
+Future<void> showCoPilotPromptPreviewDialog(
+  BuildContext context, {
+  required String title,
+  required String promptText,
+  required bool isDark,
+}) async {
+  final border = AppTheme.borderFor(isDark);
+  final primary = AppTheme.textPrimaryFor(isDark);
+  final muted = AppTheme.textMutedFor(isDark);
+  final cyan = AppTheme.accentCyanFor(isDark);
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogCtx) => Dialog(
+      backgroundColor: AppTheme.bgSurfaceRaisedFor(isDark),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        side: BorderSide(color: border),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 760, maxHeight: 640),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.bolt_rounded, size: 18, color: cyan),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: AppTheme.displayFont(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: primary,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    key: const ValueKey('close_copilot_preview_btn'),
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
+                    icon: Icon(Icons.close, color: muted),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.bgSurfaceRecessedFor(isDark),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                    border: Border.all(color: border),
+                  ),
+                  child: SingleChildScrollView(
+                    child: SelectableText(
+                      promptText,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11.5,
+                        height: 1.45,
+                        color: primary,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(dialogCtx).pop(),
+                    child: const Text('Close'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    key: const ValueKey('dialog_copy_copilot_prompt_btn'),
+                    onPressed: () async {
+                      await copyPromptWithToast(
+                        dialogCtx,
+                        promptText: promptText,
+                        toastMessage: 'Copied CoPilot prompt to clipboard',
+                        isDark: isDark,
+                      );
+                    },
+                    icon: const Icon(Icons.copy_rounded, size: 15),
+                    label: const Text('Copy Prompt'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
 class OutlinerReleasePill extends StatelessWidget {
   final String label;

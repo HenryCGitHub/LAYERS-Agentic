@@ -15,7 +15,7 @@ import '../services/local_vault_service.dart';
 import '../services/project_archive_codec.dart';
 import '../services/v01_release_seeder.dart';
 import '../utils/markdown_exporter.dart';
-import '../utils/godot_context_builder.dart';
+import '../utils/unreal_context_builder.dart';
 import '../utils/godot_spec_guard.dart';
 
 export '../services/cloud_invite_deep_link_service.dart'
@@ -25,7 +25,7 @@ part 'workbench_storage_mixin.dart';
 part 'workbench_concept_mixin.dart';
 part 'workbench_release_mixin.dart';
 part 'workbench_progressive_planner_mixin.dart';
-part 'workbench_godot_mixin.dart';
+part 'workbench_copilot_mixin.dart';
 
 /// Pure 2-Stage Antigravity Studio Workflow:
 /// - [projectPitch]: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`, Spark Onboarding, Co-Designer).
@@ -501,12 +501,13 @@ class WorkbenchProvider extends ChangeNotifier {
         ProjectConceptBlueprint(
           gameTitle: activeProject?.title ?? 'LAYERS PROJECT',
         );
-    return GodotContextBuilder.buildFeatureContext(
+    return UnrealContextBuilder.buildCoPilotFeaturePrompt(
       rootSpec: spec,
       epic: epic,
       feature: feature,
       releaseVersion: activeReleaseVersionTag,
       releaseOrder: projectReleaseOrder,
+      mode: unrealArchitectureMode,
     );
   }
 
@@ -515,11 +516,12 @@ class WorkbenchProvider extends ChangeNotifier {
         ProjectConceptBlueprint(
           gameTitle: activeProject?.title ?? 'LAYERS PROJECT',
         );
-    return GodotContextBuilder.buildEpicArchitectureContext(
+    return UnrealContextBuilder.buildEpicArchitectureContext(
       rootSpec: spec,
       epic: epic,
       releaseVersion: activeReleaseVersionTag,
       releaseOrder: projectReleaseOrder,
+      mode: unrealArchitectureMode,
     );
   }
 
@@ -532,7 +534,7 @@ class WorkbenchProvider extends ChangeNotifier {
     if (epic != null) {
       return activeEpicArchitecturePrompt(epic);
     }
-    return activeRootGodotMarkdown;
+    return activeRootUnrealMarkdown;
   }
 
   List<TierDocument> get savedProjects {
