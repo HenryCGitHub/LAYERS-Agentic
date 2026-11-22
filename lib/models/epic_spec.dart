@@ -985,7 +985,10 @@ class EpicSpec {
   }
 
   /// Writes this [EpicSpec] cleanly back into a [TierDocument] for local/Cloud sync.
-  TierDocument applyToDocument(TierDocument existing) {
+  TierDocument applyToDocument(
+    TierDocument existing, {
+    bool preserveTimestamp = false,
+  }) {
     final nextSections = Map<String, String>.from(existing.sections);
     final payloadSpec = EpicSpec(
       id: existing.id,
@@ -1021,8 +1024,10 @@ class EpicSpec {
     nextSections['lifecycle'] = lifecycle.name;
     nextSections['goal'] = goal;
     nextSections['epic_spec_json'] = jsonEncode(payloadSpec.toJson());
-    nextSections['updated_at_ms'] =
-        DateTime.now().millisecondsSinceEpoch.toString();
+    if (!preserveTimestamp) {
+      nextSections['updated_at_ms'] =
+          DateTime.now().millisecondsSinceEpoch.toString();
+    }
 
     return existing.copyWith(
       title: title,

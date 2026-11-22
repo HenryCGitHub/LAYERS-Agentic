@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/concept/project_concept_schemas.dart';
+import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/release_planner_agent.dart';
 import 'package:layers_agentic/constants/text_style_guide.dart';
@@ -10,7 +11,10 @@ import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
+import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
+import 'package:layers_agentic/services/local_vault_service.dart';
+import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
 import 'package:layers_agentic/utils/unreal_context_builder.dart';
 import 'package:layers_agentic/utils/unreal_spec_guard.dart';
 
@@ -852,5 +856,317 @@ void main() {
         );
       },
     );
+
+    test(
+      '8. Round 8/10: Legacy .layers.json archives, initVault LocalStorage docs, and Cloud snapshots auto-migrate to Unreal Engine 5',
+      () async {
+        // 1) importProjectFromJson auto-migrates legacy archive docs & strips retired metadata
+        final legacyBundle = <String, dynamic>{
+          'format': 'layers_project_v1',
+          'projectId': 'mig_proj_1',
+          'documents': [
+            {
+              'id': 'mig_proj_1',
+              'title': 'CLAW MECH LEGACY',
+              'tier': 'project',
+              'childrenIds': ['mig_rel_1'],
+              'sections': {
+                'dimension': 'dim3d',
+                'last_godot_sync_ms': '1700000000000',
+                'current_stage': 'releaseWorkbench',
+                'active_release_id': 'mig_rel_1',
+                'selected_epic_id': 'mig_ep_1',
+                'concept_blueprint_json': jsonEncode({
+                  'gameTitle': 'CLAW MECH LEGACY',
+                  'dimension': 'dim3d',
+                  'pitch': 'Dash combat in res://scenes/arena_proto.tscn seamlessly.',
+                  'cameraContract': 'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV',
+                  'characterScale': 'CharacterBody3D 0.42 m radius moving at 6.2 m/s',
+                  'inputContract': 'InputMap (claw_dash, move_axis)',
+                  'initialEpics': [
+                    {
+                      'id': 'mig_ep_1',
+                      'code': 'E01',
+                      'title': 'Player Movement',
+                      'goal': 'Dash 5.5 m using InputMap claw_dash.',
+                      'sceneOwnership': [
+                        {'path': 'res://scenes/arena_proto.tscn', 'role': 'Arena level'},
+                      ],
+                      'features': [
+                        {
+                          'id': 'f01',
+                          'code': 'F01',
+                          'title': 'Claw Dash',
+                          'controls': [
+                            {'action': 'claw_dash', 'trigger': 'Space', 'rule': 'Dash 5.5 m'},
+                          ],
+                          'tuning': [
+                            {'key': 'dash_speed', 'value': '18.5', 'unit': 'm/s'},
+                            {'key': 'dash_range', 'value': '5.5', 'unit': 'm'},
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                  'approved': true,
+                }),
+              },
+            },
+            {
+              'id': 'mig_rel_1',
+              'title': 'v0.1 · Prototype',
+              'tier': 'release',
+              'parentId': 'mig_proj_1',
+              'childrenIds': ['mig_ep_1'],
+              'sections': {
+                'release_version': 'v0.1',
+                'dimension': 'dim3d',
+              },
+            },
+            {
+              'id': 'mig_ep_1',
+              'title': 'Player Movement',
+              'tier': 'epic',
+              'parentId': 'mig_rel_1',
+              'childrenIds': [],
+              'sections': {
+                'code': 'E01',
+                'release_version': 'v0.1',
+                'last_godot_sync_ms': '1700000000000',
+                'epic_spec_json': jsonEncode({
+                  'id': 'mig_ep_1',
+                  'code': 'E01',
+                  'title': 'Player Movement',
+                  'releaseVersion': 'v0.1',
+                  'goal': 'Dash 5.5 m using InputMap in res://scenes/player_mech.tscn.',
+                  'sceneOwnership': [
+                    {'path': 'res://scenes/player_mech.tscn', 'role': 'CharacterBody3D root'},
+                  ],
+                  'features': [
+                    {
+                      'id': 'mig_f01',
+                      'code': 'F01',
+                      'title': 'Claw Dash',
+                      'goal': 'Launch forward 5.5 m with @export dash_speed.',
+                      'controls': [
+                        {'action': 'claw_dash', 'trigger': 'Space', 'rule': 'Dash 5.5 m'},
+                      ],
+                      'tuning': [
+                        {'key': 'dash_speed', 'value': '18.5', 'unit': 'm/s'},
+                        {'key': 'dash_range', 'value': '5.5', 'unit': 'm'},
+                      ],
+                      'checks': [
+                        {'id': 'c1', 'text': 'Tap Space -> Dash 5.5 m at 18.5 m/s', 'passed': false},
+                      ],
+                    },
+                  ],
+                }),
+              },
+            },
+            {
+              'id': 'mig_retired_gf',
+              'title': 'Legacy File Doc',
+              'tier': 'godot_file',
+              'parentId': 'mig_ep_1',
+              'childrenIds': [],
+              'sections': {},
+            },
+          ],
+        };
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        final importedId = wb.importProjectFromJson(jsonEncode(legacyBundle));
+        expect(importedId, isNotNull);
+        final projDoc = wb.documents[importedId!]!;
+        expect(projDoc.sections.containsKey('dimension'), isFalse);
+        expect(projDoc.sections.containsKey('last_godot_sync_ms'), isFalse);
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(jsonEncode(wb.conceptDraft!.toJson())),
+          isFalse,
+        );
+
+        final impEpic = wb.selectedEpicSpec!;
+        expect(impEpic.sceneOwnership.first.path, startsWith('/Game/'));
+        expect(impEpic.features.first.controls.first.action, equals('IA_ClawDash'));
+        expect(impEpic.features.first.tuning[0].key, equals('DashSpeed'));
+        expect(impEpic.features.first.tuning[0].value, equals('1850'));
+        expect(impEpic.features.first.tuning[0].unit, equals('cm/s'));
+        expect(impEpic.features.first.tuning[1].key, equals('DashRange'));
+        expect(impEpic.features.first.tuning[1].value, equals('550'));
+        expect(impEpic.features.first.tuning[1].unit, equals('cm'));
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(wb.buildCoPilotGddExport().content),
+          isFalse,
+        );
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(wb.activeCoPilotPrompt()),
+          isFalse,
+        );
+
+        // 2) initVault() auto-migrates persisted LocalStorage docs on startup & writes clean docs back
+        final vaultProj = TierDocument(
+          id: 'vault_p1',
+          title: 'VAULT MIGRATOR',
+          tier: TierType.project,
+          childrenIds: ['vault_r1'],
+          sections: {
+            'dimension': 'dim2d',
+            'active_release_id': 'vault_r1',
+            'selected_epic_id': 'vault_e1',
+            'current_stage': 'releaseWorkbench',
+            'concept_blueprint_json': jsonEncode({
+              'gameTitle': 'VAULT MIGRATOR',
+              'dimension': 'dim2d',
+              'cameraContract': 'Camera2D follow at 320 px/s',
+              'approved': true,
+            }),
+          },
+        );
+        final vaultRel = TierDocument(
+          id: 'vault_r1',
+          title: 'v0.1 · Prototype',
+          tier: TierType.release,
+          parentId: 'vault_p1',
+          childrenIds: ['vault_e1'],
+          sections: {'release_version': 'v0.1'},
+        );
+        final vaultEp = TierDocument(
+          id: 'vault_e1',
+          title: 'Vault Move Domain',
+          tier: TierType.epic,
+          parentId: 'vault_r1',
+          sections: {
+            'code': 'E01',
+            'release_version': 'v0.1',
+            'epic_spec_json': jsonEncode({
+              'id': 'vault_e1',
+              'code': 'E01',
+              'title': 'Vault Move Domain',
+              'releaseVersion': 'v0.1',
+              'sceneOwnership': [
+                {'path': 'res://scenes/room.tscn', 'role': 'Room scene'},
+              ],
+              'features': [
+                {
+                  'id': 'vf1',
+                  'code': 'F01',
+                  'title': 'Planar Move',
+                  'tuning': [
+                    {'key': 'move_speed', 'value': '320', 'unit': 'px/s'},
+                  ],
+                },
+              ],
+            }),
+          },
+        );
+        final fakeBackend = _FakeVaultBackend(
+          VaultLoadResult(
+            documents: {
+              vaultProj.id: vaultProj,
+              vaultRel.id: vaultRel,
+              vaultEp.id: vaultEp,
+            },
+            activeDocumentId: vaultProj.id,
+            modelName: GeminiAgentClient.pinnedLiveFlashModel,
+            planningModel: GeminiAgentClient.pinnedLiveFlashModel,
+            thinkingLevel: 'LOW',
+          ),
+        );
+        final prevBackend = LocalVaultService.testBackendOverride;
+        LocalVaultService.testBackendOverride = fakeBackend;
+        try {
+          final wb2 = WorkbenchProvider(enableAutoLoad: false);
+          await wb2.initVault();
+          expect(wb2.documents[vaultProj.id]!.sections.containsKey('dimension'), isFalse);
+          final migVaultEp = wb2.selectedEpicSpec!;
+          expect(migVaultEp.sceneOwnership.first.path, startsWith('/Game/'));
+          expect(migVaultEp.features.first.tuning.first.key, equals('MoveSpeed'));
+          expect(migVaultEp.features.first.tuning.first.value, equals('800'));
+          expect(migVaultEp.features.first.tuning.first.unit, equals('cm/s'));
+          expect(fakeBackend.savedDocs.containsKey(vaultProj.id), isTrue);
+          expect(fakeBackend.savedDocs.containsKey(vaultEp.id), isTrue);
+        } finally {
+          LocalVaultService.testBackendOverride = prevBackend;
+        }
+
+        // 3) applyRemoteDocumentSnapshot() migrates incoming Cloud Firestore Epic in cppHybrid mode & preserves updated_at_ms
+        wb.setArchitectureMode(UnrealArchitectureMode.cppHybrid);
+        await Future<void>.delayed(Duration.zero);
+        final targetEpId = wb.selectedEpicId!;
+        final remoteEpDoc = wb.documents[targetEpId]!.copyWith(
+          sections: {
+            ...wb.documents[targetEpId]!.sections,
+            'updated_at_ms': '9999999999999',
+            'epic_spec_json': jsonEncode({
+              'id': targetEpId,
+              'code': 'E01',
+              'title': 'Turret Domain',
+              'releaseVersion': 'v0.1',
+              'goal': 'Fire bolts with @export bolt_speed at 24.0 m/s.',
+              'sceneOwnership': [
+                {'path': 'res://scenes/turret.tscn', 'role': 'Turret actor'},
+              ],
+              'features': [
+                {
+                  'id': 'tf1',
+                  'code': 'F01',
+                  'title': 'Bolt Burst',
+                  'goal': 'Spawn projectile using @export bolt_speed.',
+                  'controls': [
+                    {'action': 'fire_burst', 'trigger': 'LMB', 'rule': 'Fire at 24.0 m/s'},
+                  ],
+                  'tuning': [
+                    {'key': 'bolt_speed', 'value': '24.0', 'unit': 'm/s'},
+                  ],
+                },
+              ],
+            }),
+          },
+        );
+        final remoteSnap = <String, TierDocument>{
+          for (final entry in wb.documents.entries) entry.key: entry.value,
+          targetEpId: remoteEpDoc,
+        };
+        expect(wb.applyRemoteDocumentSnapshot(remoteSnap), isTrue);
+        expect(wb.documents[targetEpId]!.sections['updated_at_ms'], equals('9999999999999'));
+        final syncedEp = wb.selectedEpicSpec!;
+        expect(syncedEp.sceneOwnership.first.path, startsWith('/Game/'));
+        expect(syncedEp.goal, contains('UPROPERTY(EditAnywhere)'));
+        expect(syncedEp.features.first.controls.first.action, equals('IA_FireBurst'));
+        expect(syncedEp.features.first.tuning.first.key, equals('BoltSpeed'));
+        expect(syncedEp.features.first.tuning.first.value, equals('2400'));
+        expect(syncedEp.features.first.tuning.first.unit, equals('cm/s'));
+      },
+    );
   });
+}
+
+class _FakeVaultBackend implements VaultStorageBackend {
+  final VaultLoadResult initial;
+  final Map<String, TierDocument> savedDocs = <String, TierDocument>{};
+
+  _FakeVaultBackend(this.initial);
+
+  @override
+  Future<VaultLoadResult> loadVaultData() async => initial;
+
+  @override
+  Future<void> saveSettings({
+    required String activeDocumentId,
+    String? apiKey,
+    String? modelName,
+    String? planningModel,
+    String? thinkingLevel,
+    String? themeMode,
+  }) async {}
+
+  @override
+  Future<void> saveDocument(TierDocument doc) async {
+    savedDocs[doc.id] = doc;
+  }
+
+  @override
+  Future<void> deleteDocument(String id) async {
+    savedDocs.remove(id);
+  }
 }

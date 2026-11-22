@@ -518,6 +518,11 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         }
         documents[doc.id] = doc;
       }
+      for (final migId
+          in ProjectArchiveCodec.migrateDocumentMapToUnreal(documents)) {
+        final migDoc = documents[migId];
+        if (migDoc != null) await LocalVaultService.saveDocument(migDoc);
+      }
       if (loaded.themeMode != null) {
         _isDark = loaded.themeMode != 'light';
       }

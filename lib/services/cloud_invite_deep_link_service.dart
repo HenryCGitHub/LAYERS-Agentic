@@ -106,6 +106,19 @@ bool shouldPreferRemoteDocumentOnSync(
 /// Pure Cloud invite, allowlist, remote sync merge, and URL deep-link helper methods
 /// extracted from `WorkbenchStorageMixin`.
 class CloudInviteDeepLinkService {
+  static Map<String, TierDocument> _normalizeRemoteDocs(
+    Map<String, TierDocument> documents,
+    Map<String, TierDocument> remoteDocs,
+  ) {
+    if (remoteDocs.isEmpty) return remoteDocs;
+    final combined = <String, TierDocument>{...documents, ...remoteDocs};
+    final changed = ProjectArchiveCodec.migrateDocumentMapToUnreal(combined);
+    if (changed.isEmpty) return remoteDocs;
+    return <String, TierDocument>{
+      for (final key in remoteDocs.keys) key: combined[key]!,
+    };
+  }
+
   /// Computes non-destructive local winners and pending pushes when merging [remoteDocs].
   static ({
     List<TierDocument> docsToSaveLocally,
@@ -114,10 +127,12 @@ class CloudInviteDeepLinkService {
     required Map<String, TierDocument> documents,
     required Map<String, TierDocument>? remoteDocs,
   }) {
+    final cleanRemote =
+        remoteDocs != null ? _normalizeRemoteDocs(documents, remoteDocs) : null;
     final docsToSaveLocally = <TierDocument>[];
     final docsToPush = <TierDocument>[];
-    if (remoteDocs != null && remoteDocs.isNotEmpty) {
-      for (final entry in remoteDocs.entries) {
+    if (cleanRemote != null && cleanRemote.isNotEmpty) {
+      for (final entry in cleanRemote.entries) {
         final docId = entry.key;
         final remoteDoc = entry.value;
         final localDoc = documents[docId];
@@ -148,7 +163,7 @@ class CloudInviteDeepLinkService {
         }
       }
       for (final localDoc in documents.values) {
-        if (!remoteDocs.containsKey(localDoc.id)) {
+        if (!cleanRemote.containsKey(localDoc.id)) {
           docsToPush.add(localDoc);
         }
       }
@@ -440,15 +455,16 @@ class CloudInviteDeepLinkService {
     required Map<String, TierDocument> remoteDocs,
     required Set<String> activePersistTimerIds,
   }) {
+    final cleanRemote = _normalizeRemoteDocs(documents, remoteDocs);
     final removedIds = <String>[
-      if (remoteDocs.isNotEmpty)
+      if (cleanRemote.isNotEmpty)
         for (final localId in documents.keys)
-          if (!remoteDocs.containsKey(localId) &&
+          if (!cleanRemote.containsKey(localId) &&
               !activePersistTimerIds.contains(localId))
             localId,
     ];
     final docsToApply = <TierDocument>[];
-    for (final entry in remoteDocs.entries) {
+    for (final entry in cleanRemote.entries) {
       if (activePersistTimerIds.contains(entry.key)) continue;
       final localDoc = documents[entry.key];
       if (localDoc != null &&

@@ -1233,7 +1233,11 @@ void main() {
         final migratedEpic = wb.selectedEpicSpec!;
         expect(migratedEpic.features.length, equals(1));
         expect(migratedEpic.features.first.code, equals('F01'));
-        expect(migratedEpic.features.first.tuning.first.key, equals('cruise_speed'));
+        expect(migratedEpic.features.first.controls.first.action, equals('IA_BoostDash'));
+        expect(migratedEpic.features.first.tuning.first.key, equals('CruiseSpeed'));
+        expect(migratedEpic.features.first.tuning.first.value, equals('1800'));
+        expect(migratedEpic.features.first.tuning.first.unit, equals('cm/s'));
+        expect(migratedEpic.features.first.checks.first.text, equals('Hold W -> Hover craft cruises at 1800 cm/s'));
         expect(migratedEpic.features.first.checks.first.passed, isTrue);
         expect(migratedEpic.features.first.openFixesCount, equals(1));
         expect(migratedEpic.sceneOwnership, isNotEmpty);

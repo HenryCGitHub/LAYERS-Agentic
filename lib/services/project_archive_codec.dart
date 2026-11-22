@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
+import '../models/epic_spec.dart';
 import '../models/tier_document.dart';
+import '../utils/unreal_spec_guard.dart';
 
 /// Pure project-tree collector and portable `.layers.json` archive codec
 /// for multi-tier (`Project -> Release -> Epic`) vaults.
@@ -56,6 +58,7 @@ class ProjectArchiveCodec {
     required bool clearSyncMetadata,
   }) {
     if (clearSyncMetadata) {
+      sections.remove('dimension');
       sections.remove('last_godot_sync_ms');
       sections.remove('godot_live_context_json');
       sections.remove('collaborators_json');
@@ -72,6 +75,113 @@ class ProjectArchiveCodec {
         } catch (_) {}
       }
     }
+  }
+
+  /// Auto-migrates legacy archive or vault documents in-place into clean Unreal Engine 5 specs
+  /// while preserving existing timestamps (`updated_at_ms`) and returns migrated document IDs.
+  static Set<String> migrateDocumentMapToUnreal(Map<String, TierDocument> docs) {
+    final migratedIds = <String>{};
+    final projectModes = <String, UnrealArchitectureMode>{};
+
+    // Pass 1: Sanitize Project blueprints, strip legacy dimension/sync keys, and track mode.
+    for (final id in docs.keys.toList()) {
+      final doc = docs[id];
+      if (doc == null || doc.tier != TierType.project) continue;
+      final rawConcept = doc.sections['concept_blueprint_json'];
+      var mode = UnrealArchitectureMode.fromString(doc.sections['dimension']);
+      Map<String, dynamic>? decodedConcept;
+      if (rawConcept != null && rawConcept.trim().isNotEmpty) {
+        try {
+          final raw = jsonDecode(rawConcept);
+          if (raw is Map) {
+            decodedConcept = Map<String, dynamic>.from(raw);
+            mode = ProjectConceptBlueprint.fromJson(decodedConcept).architectureMode;
+          }
+        } catch (_) {}
+      }
+      projectModes[id] = mode;
+
+      final needsMig = doc.sections.containsKey('dimension') ||
+          doc.sections.containsKey('last_godot_sync_ms') ||
+          doc.sections.containsKey('godot_live_context_json') ||
+          UnrealSpecGuard.containsEngineLeakage(doc.title) ||
+          (rawConcept != null &&
+              (rawConcept.contains('"dimension"') ||
+                  UnrealSpecGuard.containsEngineLeakage(rawConcept)));
+      if (!needsMig) continue;
+
+      final nextSections = Map<String, String>.from(doc.sections)
+        ..remove('dimension')
+        ..remove('last_godot_sync_ms')
+        ..remove('godot_live_context_json');
+      if (decodedConcept != null) {
+        try {
+          final bp = ProjectConceptBlueprint.fromJson(decodedConcept);
+          final cleanBp = UnrealSpecGuard.sanitizeConceptBlueprint(raw: bp);
+          mode = cleanBp.architectureMode;
+          projectModes[id] = mode;
+          nextSections['concept_blueprint_json'] = jsonEncode(cleanBp.toJson());
+        } catch (_) {}
+      }
+      final cleanTitle = UnrealSpecGuard.sanitizeLine(doc.title, mode: mode).trim();
+      docs[id] = doc.copyWith(
+        title: cleanTitle.isEmpty ? doc.title : cleanTitle,
+        sections: nextSections,
+      );
+      migratedIds.add(id);
+    }
+
+    final epicModes = <String, UnrealArchitectureMode>{};
+    for (final entry in projectModes.entries) {
+      for (final treeId in collectProjectTreeIds(docs, entry.key)) {
+        epicModes[treeId] = entry.value;
+      }
+    }
+
+    // Pass 2: Strip legacy metadata from Release documents.
+    for (final id in docs.keys.toList()) {
+      final doc = docs[id];
+      if (doc == null || doc.tier != TierType.release) continue;
+      if (!doc.sections.containsKey('dimension') &&
+          !doc.sections.containsKey('last_godot_sync_ms') &&
+          !doc.sections.containsKey('godot_live_context_json')) {
+        continue;
+      }
+      final nextSections = Map<String, String>.from(doc.sections)
+        ..remove('dimension')
+        ..remove('last_godot_sync_ms')
+        ..remove('godot_live_context_json');
+      docs[id] = doc.copyWith(sections: nextSections);
+      migratedIds.add(id);
+    }
+
+    // Pass 3: Sanitize Epic & embedded Feature specs while preserving existing updated_at_ms.
+    for (final id in docs.keys.toList()) {
+      final doc = docs[id];
+      if (doc == null || doc.tier != TierType.epic) continue;
+      final rawSpec = doc.sections['epic_spec_json'];
+      final rawGoal = doc.sections['goal'];
+      final needsMig = doc.sections.containsKey('dimension') ||
+          doc.sections.containsKey('last_godot_sync_ms') ||
+          doc.sections.containsKey('godot_live_context_json') ||
+          UnrealSpecGuard.containsEngineLeakage(doc.title) ||
+          (rawSpec != null && UnrealSpecGuard.containsEngineLeakage(rawSpec)) ||
+          (rawGoal != null && UnrealSpecGuard.containsEngineLeakage(rawGoal));
+      if (!needsMig) continue;
+
+      final mode = epicModes[id] ?? UnrealArchitectureMode.blueprint;
+      final parsed = EpicSpec.fromDocument(doc);
+      final cleanSpec = UnrealSpecGuard.sanitizeEpicSpec(parsed, mode: mode);
+      final updated = cleanSpec.applyToDocument(doc, preserveTimestamp: true);
+      final cleanedSections = Map<String, String>.from(updated.sections)
+        ..remove('dimension')
+        ..remove('last_godot_sync_ms')
+        ..remove('godot_live_context_json');
+      docs[id] = updated.copyWith(sections: cleanedSections);
+      migratedIds.add(id);
+    }
+
+    return migratedIds;
   }
 
   /// Deep-clones an existing 3-tier project tree without mutating [documents].
@@ -332,9 +442,13 @@ class ProjectArchiveCodec {
         );
       }
 
+      final migratedMap = <String, TierDocument>{
+        for (final d in docsToSave) d.id: d,
+      };
+      migrateDocumentMapToUnreal(migratedMap);
       return (
         importedProjectId: remapId(rootProj.id),
-        docsToSave: docsToSave,
+        docsToSave: [for (final d in docsToSave) migratedMap[d.id]!],
       );
     } catch (e) {
       debugPrint('decodeProjectJson error: $e');
