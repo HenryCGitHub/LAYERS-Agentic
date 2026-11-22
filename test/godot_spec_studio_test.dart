@@ -1709,7 +1709,7 @@ void main() {
                       'parts': [
                         {
                           'functionCall': {
-                            'name': 'propose_progressive_godot_release',
+                            'name': 'propose_progressive_unreal_release',
                             'args': {
                               'presets': [],
                               'upgrades': [],

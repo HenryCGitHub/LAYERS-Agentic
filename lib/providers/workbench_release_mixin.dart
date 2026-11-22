@@ -300,16 +300,14 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     required String value,
     required String unit,
   }) {
-    final cleanKey = GodotSpecGuard.sanitizeTuningKey(key, fallback: '');
+    final cleanKey = UnrealSpecGuard.sanitizeTuningKey(key, fallback: '');
     if (cleanKey.isEmpty) return;
-    final dim = projectDimension;
     _updateAndPersistFeature(epicId, featureId, (spec, feat, _) {
-      final nextVal = value.trim().isEmpty ? '0' : value.trim();
-      final nextUnit = GodotSpecGuard.normalizeGodotUnit(
-        cleanKey,
+      final nextVal = UnrealSpecGuard.scaleTuningValue(
+        value.trim().isEmpty ? '0' : value.trim(),
         unit,
-        dimension: dim,
       );
+      final nextUnit = UnrealSpecGuard.normalizeUnrealUnit(cleanKey, unit);
       final existingIdx = feat.tuning.indexWhere(
         (t) => t.key.trim().toLowerCase() == cleanKey.toLowerCase(),
       );
@@ -342,16 +340,16 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     String? goal,
     String? sliceTime,
   }) {
-    final dim = projectDimension;
+    final mode = unrealArchitectureMode;
     _updateAndPersistFeature(
       epicId,
       featureId,
       (_, feat, __) {
         if (title != null && title.trim().isNotEmpty) {
-          feat.title = GodotSpecGuard.sanitizeLine(title, dimension: dim);
+          feat.title = UnrealSpecGuard.sanitizeLine(title, mode: mode);
         }
         if (goal != null) {
-          feat.goal = GodotSpecGuard.sanitizeLine(goal, dimension: dim);
+          feat.goal = UnrealSpecGuard.sanitizeLine(goal, mode: mode);
         }
         if (sliceTime != null && sliceTime.trim().isNotEmpty) {
           feat.sliceTime = sliceTime.trim();
@@ -390,12 +388,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void flagFeatureFix(String epicId, String featureId, String fixText) {
     final clean = fixText.trim();
     if (clean.isEmpty) return;
-    final dim = projectDimension;
+    final mode = unrealArchitectureMode;
     _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
       feat.fixes.add(
         EpicPieFix(
           id: 'fix_${DateTime.now().microsecondsSinceEpoch}',
-          text: GodotSpecGuard.sanitizeLine(clean, dimension: dim),
+          text: UnrealSpecGuard.sanitizeLine(clean, mode: mode),
           resolved: false,
         ),
       );
@@ -440,9 +438,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   }) {
     final doc = documents[epicId];
     if (doc == null || doc.tier != TierType.epic) return null;
-    final dim = projectDimension;
-    final cleanTitle = GodotSpecGuard.sanitizeLine(title, dimension: dim);
-    final cleanGoal = GodotSpecGuard.sanitizeLine(goal, dimension: dim);
+    final mode = unrealArchitectureMode;
+    final cleanTitle = UnrealSpecGuard.sanitizeLine(title, mode: mode);
+    final cleanGoal = UnrealSpecGuard.sanitizeLine(goal, mode: mode);
     if (cleanTitle.isEmpty || cleanGoal.isEmpty) return null;
 
     int maxNum = 0;
@@ -475,7 +473,6 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final nextCode = FeatureSpec.formatCode(nextNum);
     final relVer = activeReleaseVersionTag;
     final featId = '${epicId}_f_${DateTime.now().microsecondsSinceEpoch}';
-    final is2d = dim == GodotProjectDimension.dim2d;
     final rawCreated = FeatureSpec(
       id: featId,
       code: nextCode,
@@ -486,34 +483,33 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       goal: cleanGoal,
       inScope: [cleanTitle],
       doneWhen: [
-        'Trigger $cleanTitle in playtest -> Expected scene response runs cleanly',
+        'Trigger $cleanTitle in PIE -> Expected response runs cleanly',
       ],
       controls: [
         EpicControlBinding(
-          action: 'primary_action',
-          trigger: 'Just Pressed (Space / LMB)',
+          action: 'IA_PrimaryAction',
+          trigger: 'Started (Space / LMB)',
           rule: 'Triggers $cleanTitle cleanly',
         ),
       ],
       tuning: [
         EpicTuningParam(
-          key: 'slice_magnitude',
-          value: is2d ? '80' : '2.5',
-          unit: dim.distanceUnit,
+          key: 'SliceMagnitude',
+          value: '250',
+          unit: 'cm',
         ),
       ],
-      cues: ['Visual feedback pulse + crisp activation audio cue'],
+      cues: ['Niagara visual feedback pulse + crisp activation audio cue'],
       checks: [
         EpicPieCheck(
           id: '${featId}_c1',
-          text:
-              'Activate $cleanTitle -> Observable response behaves cleanly in playtest',
+          text: 'Activate $cleanTitle -> Observable response behaves cleanly in PIE',
         ),
       ],
     );
-    final sanitized = GodotSpecGuard.sanitizeFeatureSpec(
+    final sanitized = UnrealSpecGuard.sanitizeFeatureSpec(
       rawCreated,
-      dimension: dim,
+      mode: mode,
       forceCode: nextCode,
     );
     sanitized.code = nextCode;
@@ -694,32 +690,27 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     required String value,
     required String unit,
   }) {
-    final cleanKey = GodotSpecGuard.sanitizeTuningKey(key, fallback: '');
+    final cleanKey = UnrealSpecGuard.sanitizeTuningKey(key, fallback: '');
     if (cleanKey.isEmpty) return;
-    final dim = projectDimension;
     _updateAndPersistEpic(epicId, (spec) {
-      final nextVal = value.trim().isEmpty ? '0' : value.trim();
+      final nextVal = UnrealSpecGuard.scaleTuningValue(
+        value.trim().isEmpty ? '0' : value.trim(),
+        unit,
+      );
+      final nextUnit = UnrealSpecGuard.normalizeUnrealUnit(cleanKey, unit);
       final existingIdx = spec.tuning.indexWhere(
         (t) => t.key.trim().toLowerCase() == cleanKey.toLowerCase(),
       );
       if (existingIdx >= 0) {
         final existing = spec.tuning[existingIdx];
         existing.value = nextVal;
-        existing.unit = GodotSpecGuard.normalizeGodotUnit(
-          existing.key,
-          unit.trim().isEmpty ? existing.unit : unit,
-          dimension: dim,
-        );
+        existing.unit = unit.trim().isEmpty ? existing.unit : nextUnit;
       } else {
         spec.tuning.add(
           EpicTuningParam(
             key: cleanKey,
             value: nextVal,
-            unit: GodotSpecGuard.normalizeGodotUnit(
-              cleanKey,
-              unit,
-              dimension: dim,
-            ),
+            unit: nextUnit,
           ),
         );
       }
@@ -732,20 +723,20 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     String? goal,
     String? levelStaging,
   }) {
-    final dim = projectDimension;
+    final mode = unrealArchitectureMode;
     _updateAndPersistEpic(
       epicId,
       (spec) {
         if (title != null && title.trim().isNotEmpty) {
-          spec.title = GodotSpecGuard.sanitizeLine(title, dimension: dim);
+          spec.title = UnrealSpecGuard.sanitizeLine(title, mode: mode);
         }
         if (goal != null) {
-          spec.goal = GodotSpecGuard.sanitizeLine(goal, dimension: dim);
+          spec.goal = UnrealSpecGuard.sanitizeLine(goal, mode: mode);
         }
         if (levelStaging != null) {
-          spec.levelStaging = GodotSpecGuard.sanitizeLine(
+          spec.levelStaging = UnrealSpecGuard.sanitizeLine(
             levelStaging,
-            dimension: dim,
+            mode: mode,
           );
         }
       },
@@ -756,12 +747,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void flagEpicFix(String epicId, String fixText) {
     final clean = fixText.trim();
     if (clean.isEmpty) return;
-    final dim = projectDimension;
+    final mode = unrealArchitectureMode;
     _updateAndPersistEpic(epicId, (spec) {
       spec.fixes.add(
         EpicPieFix(
           id: 'fix_${DateTime.now().microsecondsSinceEpoch}',
-          text: GodotSpecGuard.sanitizeLine(clean, dimension: dim),
+          text: UnrealSpecGuard.sanitizeLine(clean, mode: mode),
           resolved: false,
         ),
       );

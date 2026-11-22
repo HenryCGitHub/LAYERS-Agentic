@@ -1,7 +1,7 @@
 import '../constants/text_style_guide.dart';
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
-import '../utils/godot_spec_guard.dart';
+import '../utils/unreal_spec_guard.dart';
 
 bool hasRootV02Cache(ProjectConceptBlueprint rootSpec) {
   return rootSpec.v02NewPool.isNotEmpty ||
@@ -100,9 +100,7 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
 
   final upgradesByKey = <String, List<EpicUpgradeOption>>{};
   final newFeaturesByKey = <String, List<FeatureSpec>>{};
-  final is2d = rootSpec.dimension == GodotProjectDimension.dim2d;
-  final distUnit = rootSpec.dimension.distanceUnit;
-  final speedUnit = rootSpec.dimension.speedUnit;
+  final archMode = rootSpec.architectureMode;
   final featureCodes = FeatureCodeAllocator(currentEpics);
 
   if (currentEpics.isNotEmpty) {
@@ -122,11 +120,11 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
       EpicUpgradeOption(
         id: 'up_${firstKey}_vfx',
         targetFeatureCode: firstFeatCode,
-        text: '+Emissive trail burst during primary movement action',
+        text: '+Emissive Niagara trail burst during primary movement action',
       ),
     ];
     newFeaturesByKey[firstKey] = [
-      GodotSpecGuard.sanitizeFeatureSpec(
+      UnrealSpecGuard.sanitizeFeatureSpec(
         FeatureSpec(
           id: '${firstKey}_${targetVersion}_chain',
           code: newFeatCode,
@@ -137,16 +135,16 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
           goal:
               'Grant a brief $targetVersion follow-up dash refund inside ${firstEpic.code} when landing clean counters.',
           tuning: [
-            EpicTuningParam(key: 'chain_window_s', value: '0.35', unit: 's'),
+            EpicTuningParam(key: 'ChainWindowS', value: '0.35', unit: 's'),
             EpicTuningParam(
-              key: 'counter_burst_speed',
-              value: is2d ? '380' : '9.5',
-              unit: speedUnit,
+              key: 'CounterBurstSpeed',
+              value: '950',
+              unit: 'cm/s',
             ),
             EpicTuningParam(
-              key: 'shockwave_radius',
-              value: is2d ? '96' : '2.4',
-              unit: distUnit,
+              key: 'ShockwaveRadius',
+              value: '240',
+              unit: 'cm',
             ),
           ],
           checks: [
@@ -157,7 +155,7 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
             ),
           ],
         ),
-        dimension: rootSpec.dimension,
+        mode: archMode,
       ),
     ];
   }
@@ -176,6 +174,9 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
       ? LayersTextStyleGuide.formatConciseTaskTitle(directionPrompt.trim())
       : 'Round & Score Escalation';
   final newEpicFeatCode = featureCodes.allocate();
+  final directorPath = archMode == UnrealArchitectureMode.cppHybrid
+      ? 'Source/RoundDirector.cpp'
+      : '/Game/Blueprints/BP_RoundDirector';
   final newEpic = EpicSpec(
     id: 'ep_${targetVersion}_1',
     code: nextCode,
@@ -188,18 +189,18 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
         : 'Loop Escalation',
     chosenForNextRelease: true,
     goal:
-        'Expand $targetVersion loop continuity with round pacing, Control HUD counter readout, and instant quick-restart.',
+        'Expand $targetVersion loop continuity with round pacing, UMG Widget HUD counter readout, and instant quick-restart.',
     inScope: const [
       '3-stage round progression timer',
-      'Top-center HUD round counter & R quick reset',
+      'Top-center WBP HUD round counter & R quick reset',
     ],
     doneWhen: const [
-      'Complete Stage 1 objective -> HUD counter updates and Stage 2 starts after 2.0 s',
+      'Complete Stage 1 objective -> UMG HUD updates and Stage 2 starts after 2.0 s',
     ],
     sceneOwnership: [
       EpicSceneOwnership(
-        path: 'res://scripts/round_director.gd',
-        role: 'Stage timer progression, HUD signal & R quick reset',
+        path: directorPath,
+        role: 'Stage timer progression, HUD delegate & R quick reset',
       ),
     ],
     outOfScope: const [
@@ -220,16 +221,16 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
         sliceTime: '45 min',
         status: FeatureStatus.queued,
         goal:
-            'Advance 3 timed gameplay stages and update top-center Control HUD banner.',
+            'Advance 3 timed gameplay stages and update top-center WBP HUD banner.',
         tuning: [
-          EpicTuningParam(key: 'round_stage_count', value: '3', unit: 'count'),
-          EpicTuningParam(key: 'stage_delay', value: '2.0', unit: 's'),
+          EpicTuningParam(key: 'RoundStageCount', value: '3', unit: 'count'),
+          EpicTuningParam(key: 'StageDelay', value: '2.0', unit: 's'),
         ],
         checks: [
           EpicPieCheck(
             id: 'ep_${targetVersion}_f01_c1',
             text:
-                'Complete Stage 1 objective -> HUD updates and Stage 2 starts after 2.0 s',
+                'Complete Stage 1 objective -> UMG HUD updates and Stage 2 starts after 2.0 s',
           ),
         ],
       ),
@@ -237,9 +238,9 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
   );
 
   final candidateList = [
-    GodotSpecGuard.sanitizeEpicSpec(
+    UnrealSpecGuard.sanitizeEpicSpec(
       newEpic,
-      dimension: rootSpec.dimension,
+      mode: archMode,
       forceReleaseVersion: targetVersion,
     ),
   ];

@@ -419,7 +419,8 @@ class UnrealSpecGuard {
     UnrealArchitectureMode? modeOverride,
   }) {
     final out = raw.deepCopy();
-    final mode = modeOverride ?? UnrealArchitectureMode.blueprint;
+    final mode = modeOverride ?? out.architectureMode;
+    out.architectureMode = mode;
     out.pitch = sanitizeLine(out.pitch, mode: mode);
     out.coreLoop = _sanitizeList(out.coreLoop, mode);
     out.cameraContract = sanitizeLine(out.cameraContract, mode: mode);

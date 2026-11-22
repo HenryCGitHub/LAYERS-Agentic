@@ -1,38 +1,38 @@
-/// Single Source of Truth for LAYERS Studio formatting & Godot 4 spec schema rules.
+/// Single Source of Truth for LAYERS Studio formatting & Unreal Engine 5 spec schema rules.
 /// Preserves [compactStyleRules] for `GeminiAgentClient` while standardizing on
-/// high-level Godot 4 design specs (`3D`: `1 unit = 1 m` | `2D`: `px`, `§01–§06`, `v0.1`-first).
+/// high-level Unreal Engine 5 specs (`Blueprint-First` | `C++ & BP Hybrid`, `cm`/`cm/s`, `§01–§05`, `v0.1`-first).
 class LayersTextStyleGuide {
   const LayersTextStyleGuide._();
 
   /// Shared compact style rules injected into Gemini system/user prompts by `GeminiAgentClient`.
   static const String compactStyleRules = '''
-LAYERS CANONICAL GODOT 4 SPEC STYLE RULES:
-1. 4-TIER GODOT 4 ARCHITECTURE (`Project -> Release -> Epic -> Feature`, ZERO Tasks/Steps): Never emit implementation step checklists or Unreal/Unity terms (Blueprint, .uasset, ACharacter, AActor, UMG, GameObject, Prefab). Epics own large domain architecture (shared `.tscn`/`.gd` files, state & interrupt rules, domain cuts); Features own sittable 30-90 min playable slices (inputs, `@export` tuning, cues, Playtest Gate).
+LAYERS CANONICAL UNREAL ENGINE 5 SPEC STYLE RULES:
+1. 4-TIER UNREAL ENGINE 5 ARCHITECTURE (`Project -> Release -> Epic -> Feature`, ZERO Tasks/Steps): Never emit implementation step checklists or non-Unreal engine terms. Epics own large domain architecture (shared `/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, or `Source/*.h`/`*.cpp` assets, state & interrupt rules, domain cuts); Features own sittable 30-90 min playable slices (Enhanced Input `IA_*` bindings, Exposed BP / `UPROPERTY(EditAnywhere)` tuning, viewport/UMG/Niagara/audio cues, PIE Playtest Gate).
 2. BLUF FORMAT: "[2-4 Word Payoff] — [Scope]" for Project Vision / Pitch and Epic summaries.
-3. CAUSAL PLAYTEST GATES (<= 14 words): "[Player Action] -> [Observable Playtest Screen Result]" for checks & Done When gates.
+3. CAUSAL PIE PLAYTEST GATES (<= 14 words): "[Player Action] -> [Observable PIE Viewport Result]" for checks & Done When gates.
 4. CHANGELOG DELTAS (+Delta, 5-10 words): Progressive release upgrades describe "+mechanic delta" atop locked v0.1 baselines inside permanent Epics without duplicating cards.
-5. GODOT 4 SCALE: Use 1 unit = 1 m (`m`, `m/s`) for 3D projects, or pixels (`px`, `px/s`) for 2D projects, plus `deg`, `s`, `hp`, `count`. Never use `cm` or `cm/s`.
+5. UNREAL UNITS: Use centimeters (`cm`, `cm/s`) for distances and speeds, plus `deg`, `s`, `hp`, `x`, `%`, `count`, `bool`. Never emit metric meters or pixel units.
 6. LITERAL GAME-DEV LANGUAGE: Plain everyday gameplay terms. Ban corporate filler ("seamlessly", "leverage", "synergy", "unified", "validate").
-7. PURE GDSCRIPT 2.0 + SCENE TREE POLICY: Reference Godot 4 `res://scenes/*.tscn`, `res://scripts/*.gd`, `snake_case` `@export` variables, and `project.godot` `InputMap` actions.
+7. BLUEPRINT / C++ HYBRID POLICY: Reference `/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, `/Game/Data/DA_*`, `PascalCase` Exposed BP or `UPROPERTY(EditAnywhere)` variables, and Enhanced Input `IA_*` / `IMC_*` actions.
 ''';
 
   static const String epicTitleSchemaDesc =
-      '2-5 word plain Godot domain title covering multiple child Features (e.g. "Player Movement & Camera", "Claw Combat & Hitstop"). Never use corporate buzzwords or implementation steps.';
+      '2-5 word plain Unreal Engine 5 domain title covering multiple child Features (e.g. "Player Movement & Camera", "Claw Combat & Hitstop"). Never use corporate buzzwords or implementation steps.';
 
   static const String featureTitleSchemaDesc =
       '2-5 word plain playable Feature slice title (30-90 min scope, e.g. "Armored Claw Dash", "8-Way Walk & Iso Camera").';
 
   static const String sceneOwnershipSchemaDesc =
-      'Concrete Godot `.tscn` or `.gd` asset owned by this Epic domain (`path` + concise `role`).';
+      'Concrete Unreal Engine 5 `/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, or `Source/*.h`/`*.cpp` asset owned by this Epic domain (`path` + concise `role`).';
 
   static const String blufVisionSchemaDesc =
-      'BLUF 1-line pitch: "[2-4 Word Payoff] — [Compact Godot 4 scope]". Literal game-dev phrasing.';
+      'BLUF 1-line pitch: "[2-4 Word Payoff] — [Compact Unreal Engine 5 scope]". Literal game-dev phrasing.';
 
   static const String coreLoopStepSchemaDesc =
       '2-4 word concrete player verb beat in chronological order (e.g. "Move & Cursor Aim").';
 
-  static const String godotContractSchemaDesc =
-      'Exact Godot 4 camera spec (`SpringArm3D` / `Camera3D` distances in `m` for 3D, or `Camera2D` zoom & smoothing for 2D).';
+  static const String unrealContractSchemaDesc =
+      'Exact Unreal Engine 5 camera spec (`USpringArmComponent` `TargetArmLength` in `cm`, pitch/FOV in `deg`, `CameraLagSpeed`, or `UCameraComponent` setup).';
 
   static const String pillarSchemaDesc =
       'Design pillar naming player experience first ("Pillar Name: experiential reason"), not a raw feature checklist.';
@@ -41,25 +41,19 @@ LAYERS CANONICAL GODOT 4 SPEC STYLE RULES:
       'Hard scope cut starting with "No [2-5 word system]" (e.g. "No main menu or save slots").';
 
   static const String causalPlaytestCheckSchemaDesc =
-      'Observable playtest condition in causal format: "[Player Action] -> [Screen Result]" (<= 14 words).';
+      'Observable PIE playtest condition in causal format: "[Player Action] -> [Screen Result]" (<= 14 words).';
 
-  static const String godotControlRuleSchemaDesc =
-      'Concise input response rule matching active 3D (`m`, `m/s`) or 2D (`px`, `px/s`) dimension and explicit interrupt behavior.';
+  static const String unrealControlRuleSchemaDesc =
+      'Concise Enhanced Input response rule in `cm` / `cm/s` with explicit interrupt behavior.';
 
-  static const String godotTuningUnitSchemaDesc =
-      'Canonical Godot unit ("m", "m/s" for 3D; "px", "px/s" for 2D; plus "deg", "s", "hp", "x", "%", "count", "bool"). Never use cm.';
+  static const String unrealTuningUnitSchemaDesc =
+      'Canonical Unreal unit ("cm", "cm/s", "deg", "s", "hp", "x", "%", "count", "bool"). Never use metric meters or px.';
 
   static const String changelogDeltaSchemaDesc =
       '5-10 word additive delta starting with "+" (e.g. "+55ms hitstop freeze & radial shockwave ring").';
 
-  static const String godotSceneLinkSchemaDesc =
-      'Concrete Godot asset/signal links (`res://scenes/*.tscn`, `res://scripts/*.gd`, `res://data/*.tres`, groups, signals — zero Unreal assets).';
-
-  static const String godotTuningKeySchemaDesc =
-      'snake_case GDScript @export variable identifier (e.g. "max_walk_speed", "wave_1_count", "allow_air_dash"). Never use spaces, hyphens, or PascalCase.';
-
-  static const String godotSceneStagingSchemaDesc =
-      'Target Godot test scene (`res://scenes/*.tscn`) and greybox node placement needed to playtest this Epic.';
+  static const String unrealTuningKeySchemaDesc =
+      'PascalCase Exposed BP or UPROPERTY(EditAnywhere) variable identifier (e.g. "MaxWalkSpeed", "Wave1Count", "bAllowAirDash"). Never use spaces or hyphens.';
 
   static String compactStoredTradeOff(String raw) {
     final cleaned = raw.trim().replaceFirst(RegExp(r'^[•\-\*\s]+'), '');
@@ -106,8 +100,7 @@ LAYERS CANONICAL GODOT 4 SPEC STYLE RULES:
   }
 
   static bool isLegacyTemplateTaskTitle(String raw) {
-    return RegExp(r'\bstep\s+\d+|micro[- ]?task|\.uasset\b|\.uproject\b',
-            caseSensitive: false)
+    return RegExp(r'\bstep\s+\d+|micro[- ]?task', caseSensitive: false)
         .hasMatch(raw);
   }
 }

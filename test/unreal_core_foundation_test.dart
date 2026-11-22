@@ -1,5 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:layers_agentic/agents/concept/project_concept_schemas.dart';
+import 'package:layers_agentic/agents/release_planner_agent.dart';
+import 'package:layers_agentic/constants/text_style_guide.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
@@ -605,6 +610,139 @@ void main() {
           wb.activeCoPilotPrompt(),
           contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'),
         );
+      },
+    );
+
+    test(
+      '5. Round 4 Unreal Migration: TextStyleGuide, Schemas, Blueprint.architectureMode, ReleasePlanner & Stage 2 Edits',
+      () async {
+        // 1) LayersTextStyleGuide emits canonical Unreal Engine 5 rules with 0 off-engine leakage
+        expect(LayersTextStyleGuide.compactStyleRules, contains('UNREAL ENGINE 5'));
+        expect(LayersTextStyleGuide.compactStyleRules, contains('PascalCase'));
+        expect(LayersTextStyleGuide.compactStyleRules, contains('Enhanced Input'));
+        expect(LayersTextStyleGuide.compactStyleRules, contains('cm/s'));
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(
+            LayersTextStyleGuide.compactStyleRules,
+          ),
+          isFalse,
+        );
+
+        // 2) Stage 1 tool schemas use commit_unreal_root_spec & patch_unreal_root_spec with architectureMode
+        expect(rootSpecToolSchema['name'], equals('commit_unreal_root_spec'));
+        expect(
+          patchRootSpecToolSchema['name'],
+          equals('patch_unreal_root_spec'),
+        );
+        final rootProps = (rootSpecToolSchema['parameters']
+            as Map<String, dynamic>)['properties'] as Map<String, dynamic>;
+        expect(rootProps.containsKey('architectureMode'), isTrue);
+        expect(
+          (rootProps['architectureMode'] as Map)['enum'],
+          equals(['blueprint', 'cppHybrid']),
+        );
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(jsonEncode(rootSpecToolSchema)),
+          isFalse,
+        );
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(
+            jsonEncode(patchRootSpecToolSchema),
+          ),
+          isFalse,
+        );
+
+        // 3) ProjectConceptBlueprint supports architectureMode round-trip & sanitization preservation
+        final bp = ProjectConceptBlueprint(
+          gameTitle: 'IRONCLAW',
+          architectureMode: UnrealArchitectureMode.cppHybrid,
+          pitch: 'Tight brawler — Dash in compact arena',
+          coreLoop: ['Move', 'Dash'],
+          initialEpics: [
+            EpicSpec(
+              id: 'ep1',
+              code: 'E01',
+              title: 'Player Movement',
+              goal: 'Move in arena.',
+              sceneOwnership: [
+                EpicSceneOwnership(
+                  path: 'Source/PlayerPawn.cpp',
+                  role: 'C++ ACharacter movement base',
+                ),
+              ],
+            ),
+          ],
+        );
+        final roundTripped = ProjectConceptBlueprint.fromJson(bp.toJson());
+        expect(
+          roundTripped.architectureMode,
+          equals(UnrealArchitectureMode.cppHybrid),
+        );
+        final sanitizedBp = UnrealSpecGuard.sanitizeConceptBlueprint(raw: bp);
+        expect(
+          sanitizedBp.architectureMode,
+          equals(UnrealArchitectureMode.cppHybrid),
+        );
+
+        // 4) Stage 2 addFeatureSlice & addFeatureTuningParam normalize to PascalCase + cm/cm/s + IA_*
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final e01 = wb.activeReleaseEpics.first;
+        final added = wb.addFeatureSlice(
+          e01.id,
+          title: 'Wall Bounce Dash',
+          goal: 'Ricochet cleanly along angled walls.',
+        );
+        expect(added, isNotNull);
+        expect(added!.tuning.first.key, equals('SliceMagnitude'));
+        expect(added.tuning.first.value, equals('250'));
+        expect(added.tuning.first.unit, equals('cm'));
+        expect(added.controls.first.action, equals('IA_PrimaryAction'));
+        wb.addFeatureTuningParam(
+          e01.id,
+          added.id,
+          key: 'dash_trail_fade_s',
+          value: '6.2',
+          unit: 'm/s',
+        );
+        final updatedAdded = wb.activeReleaseEpics.first.features
+            .firstWhere((f) => f.id == added.id);
+        final addedParam = updatedAdded.tuning
+            .firstWhere((t) => t.key == 'DashTrailFadeS');
+        expect(addedParam.value, equals('620'));
+        expect(addedParam.unit, equals('cm/s'));
+
+        // 5) ReleasePlannerAgent offline fallback v0.3 emits clean Unreal /Game/ assets & cm units
+        final v03Draft = await ReleasePlannerAgent.proposeNextReleaseCopilot(
+          rootSpec: bp,
+          currentEpics: bp.initialEpics,
+          targetVersion: 'v0.3',
+          apiKey: '',
+        );
+        expect(v03Draft.candidateNewEpics, isNotEmpty);
+        final cand = v03Draft.candidateNewEpics.first;
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(cand.goal),
+          isFalse,
+        );
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(cand.sceneOwnership.first.path),
+          isFalse,
+        );
+        for (final feat in [
+          ...cand.features,
+          ...(v03Draft.candidateNewFeaturesByLineageKey['e01'] ??
+              const <FeatureSpec>[]),
+        ]) {
+          expect(
+            UnrealSpecGuard.containsEngineLeakage(feat.goal),
+            isFalse,
+          );
+          for (final t in feat.tuning) {
+            expect(['m', 'm/s', 'px', 'px/s'], isNot(contains(t.unit)));
+          }
+        }
       },
     );
   });

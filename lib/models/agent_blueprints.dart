@@ -92,17 +92,20 @@ class CoreFeelOption {
     required this.decelPxPerSec,
   });
 
+  String get decelCmPerSec => decelPxPerSec;
+
   String decelFor(GodotProjectDimension dim) =>
       dim == GodotProjectDimension.dim2d ? decelPxPerSec : decelMPerSec;
 }
 
-/// Stage 1 Godot 4 Root Project Specification (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`).
-/// Pure high-level foundation: 3D (`1 unit = 1 m`) or 2D (`px`), pillars, trade-offs, hard cuts,
-/// and strictly `v0.1` prototype Epics in §05.
+/// Stage 1 Unreal Engine 5 Root Project Specification (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`).
+/// Pure high-level foundation: Blueprint-First or C++ & BP Hybrid, `cm`/`cm/s`, pillars,
+/// trade-offs, hard cuts, and strictly `v0.1` prototype Epics in §05.
 class ProjectConceptBlueprint {
   String sparkPrompt;
   String gameTitle;
   GodotProjectDimension dimension;
+  UnrealArchitectureMode architectureMode;
 
   // §01 Core Fantasy & 30s Loop
   String pitch;
@@ -141,6 +144,7 @@ class ProjectConceptBlueprint {
     this.sparkPrompt = '',
     this.gameTitle = 'UNTITLED GODOT PROJECT',
     this.dimension = GodotProjectDimension.dim3d,
+    this.architectureMode = UnrealArchitectureMode.blueprint,
     String? cameraChoiceId,
     String? cameraContract,
     String? characterScale,
@@ -325,6 +329,7 @@ class ProjectConceptBlueprint {
       sparkPrompt: sparkPrompt,
       gameTitle: gameTitle,
       dimension: dimension,
+      architectureMode: architectureMode,
       pitch: pitch,
       coreLoop: List<String>.from(coreLoop),
       cameraChoiceId: cameraChoiceId,
@@ -360,6 +365,7 @@ class ProjectConceptBlueprint {
         'sparkPrompt': sparkPrompt,
         'gameTitle': gameTitle,
         'dimension': dimension.id,
+        'architectureMode': architectureMode.id,
         'pitch': pitch,
         'coreLoop': coreLoop,
         'cameraChoiceId': cameraChoiceId,
@@ -493,6 +499,10 @@ class ProjectConceptBlueprint {
       (json['dimension'] ?? json['engine'] ?? legacyTechSpec['engine'] ?? 'dim3d')
           .toString(),
     );
+    final archMode = UnrealArchitectureMode.fromString(
+      (json['architectureMode'] ?? json['mode'] ?? json['dimension'] ?? '')
+          .toString(),
+    );
     final is2d = dim == GodotProjectDimension.dim2d;
 
     return ProjectConceptBlueprint(
@@ -504,6 +514,7 @@ class ProjectConceptBlueprint {
           .toString()
           .trim(),
       dimension: dim,
+      architectureMode: archMode,
       pitch: (json['pitch'] ?? json['goal'] ?? '').toString().trim(),
       coreLoop: loop,
       cameraChoiceId: (json['cameraChoiceId'] ??

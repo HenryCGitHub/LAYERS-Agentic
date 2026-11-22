@@ -2,10 +2,13 @@ part of 'workbench_provider.dart';
 
 /// Ultimate Engine CoPilot GDD & Feature / `[FIX]` prompt export helpers.
 extension WorkbenchCopilotMixin on WorkbenchProvider {
-  UnrealArchitectureMode get unrealArchitectureMode =>
-      UnrealArchitectureMode.fromString(
-        activeProject?.sections['unreal_arch_mode'],
-      );
+  UnrealArchitectureMode get unrealArchitectureMode {
+    final raw = activeProject?.sections['unreal_arch_mode'];
+    if (raw != null && raw.trim().isNotEmpty) {
+      return UnrealArchitectureMode.fromString(raw);
+    }
+    return _conceptDraft?.architectureMode ?? UnrealArchitectureMode.blueprint;
+  }
 
   String get activeRootUnrealMarkdown {
     final spec = _conceptDraft;

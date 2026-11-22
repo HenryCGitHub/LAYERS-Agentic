@@ -289,7 +289,7 @@ void main() {
                       'parts': [
                         {
                           'text':
-                              '{"patch_godot_root_spec": {"args": {"gameTitle": "SHELL"}}}',
+                              '{"patch_unreal_root_spec": {"args": {"gameTitle": "SHELL"}}}',
                         },
                       ],
                     },
@@ -352,7 +352,7 @@ void main() {
             apiKey: '',
             functionDeclarations: [
               {
-                'name': 'patch_godot_root_spec',
+                'name': 'patch_unreal_root_spec',
                 'parameters': {'type': 'object'},
               },
             ],
@@ -784,7 +784,7 @@ void main() {
         expect(reopenedE01.isPassed, isFalse);
         expect(wb.epicFeatureRollup(reopenedE01).passed, equals(1));
 
-        // Add Feature slice on E01 -> gets sequential next code F07 & 3D m default unit
+        // Add Feature slice on E01 -> gets sequential next code F07 & Unreal PascalCase cm default
         final added3d = wb.addFeatureSlice(
           e01.id,
           title: 'Dash Wall Bounce',
@@ -792,11 +792,12 @@ void main() {
         );
         expect(added3d, isNotNull);
         expect(added3d!.code, equals('F07'));
-        expect(added3d.tuning.first.unit, equals('m'));
+        expect(added3d.tuning.first.key, equals('SliceMagnitude'));
+        expect(added3d.tuning.first.unit, equals('cm'));
         expect(wb.selectedFeatureId, equals(added3d.id));
         expect(wb.epicFeatureRollup(wb.activeReleaseEpics[0]).total, equals(3));
 
-        // 2D preset (emberkeep) addFeatureSlice seeds px unit
+        // Emberkeep preset addFeatureSlice also emits Unreal cm unit cleanly
         wb.createNewProject();
         wb.loadPresetSpark('emberkeep');
         wb.approveRootSpecAndLaunchWorkbench();
@@ -804,10 +805,10 @@ void main() {
         final added2d = wb.addFeatureSlice(
           ekE01.id,
           title: 'Torch Dash Burst',
-          goal: 'Spark bright ember ring along 2D dash vector.',
+          goal: 'Spark bright ember ring along dash vector.',
         );
         expect(added2d, isNotNull);
-        expect(added2d!.tuning.first.unit, equals('px'));
+        expect(added2d!.tuning.first.unit, equals('cm'));
       },
     );
 

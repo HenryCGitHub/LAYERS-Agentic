@@ -16,6 +16,7 @@ import '../services/project_archive_codec.dart';
 import '../services/v01_release_seeder.dart';
 import '../utils/markdown_exporter.dart';
 import '../utils/unreal_context_builder.dart';
+import '../utils/unreal_spec_guard.dart';
 import '../utils/godot_spec_guard.dart';
 
 export '../services/cloud_invite_deep_link_service.dart'

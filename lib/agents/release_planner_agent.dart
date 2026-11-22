@@ -2,13 +2,13 @@ import 'dart:convert';
 import '../constants/text_style_guide.dart';
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
-import '../utils/godot_spec_guard.dart';
+import '../utils/unreal_spec_guard.dart';
 import 'gemini_agent_client.dart';
 import 'release_planner_fallback.dart';
 
-/// Stage 2 Godot 4 Progressive Release Planner Agent (`v0.1 -> v0.2 -> v0.3+`).
+/// Stage 2 Unreal Engine 5 Progressive Release Planner Agent (`v0.1 -> v0.2 -> v0.3+`).
 /// Generates Co-Pilot release direction presets, `[UPGRADE]` delta checkboxes per baseline Epic,
-/// and candidate `[NEW]` 6-section Godot 4 Epics without ever duplicating cards.
+/// and candidate `[NEW]` Domain Epics without ever duplicating cards.
 class ReleasePlannerAgent {
   static String extractReleaseVersionTag(String? rawTitle) {
     final text = (rawTitle ?? '').trim();
@@ -80,7 +80,7 @@ class ReleasePlannerAgent {
                 'trigger': {'type': 'STRING'},
                 'rule': {
                   'type': 'STRING',
-                  'description': LayersTextStyleGuide.godotControlRuleSchemaDesc,
+                  'description': LayersTextStyleGuide.unrealControlRuleSchemaDesc,
                 },
               },
             },
@@ -93,12 +93,12 @@ class ReleasePlannerAgent {
               'properties': {
                 'key': {
                   'type': 'STRING',
-                  'description': LayersTextStyleGuide.godotTuningKeySchemaDesc,
+                  'description': LayersTextStyleGuide.unrealTuningKeySchemaDesc,
                 },
                 'value': {'type': 'STRING'},
                 'unit': {
                   'type': 'STRING',
-                  'description': LayersTextStyleGuide.godotTuningUnitSchemaDesc,
+                  'description': LayersTextStyleGuide.unrealTuningUnitSchemaDesc,
                 },
               },
             },
@@ -125,9 +125,9 @@ class ReleasePlannerAgent {
       };
 
   static Map<String, dynamic> get _progressiveReleaseSchema => <String, dynamic>{
-        'name': 'propose_progressive_godot_release',
+        'name': 'propose_progressive_unreal_release',
         'description':
-            'Propose next Godot 4 release presets, baseline [UPGRADE] deltas, [NEW] Feature slices inside existing Epics, and candidate [NEW] domain Epics.',
+            'Propose next Unreal Engine 5 release presets, baseline [UPGRADE] deltas, [NEW] Feature slices inside existing Epics, and candidate [NEW] domain Epics.',
         'parameters': <String, dynamic>{
           'type': 'OBJECT',
           'required': ['presets', 'upgrades', 'newFeatures', 'newEpics'],
@@ -204,7 +204,7 @@ class ReleasePlannerAgent {
             'newEpics': {
               'type': 'ARRAY',
               'description':
-                  'Candidate NEW 4-tier Godot 4 Domain Epics (architecture + child playable Feature slices) for this release.',
+                  'Candidate NEW 4-tier Unreal Engine 5 Domain Epics (architecture + child playable Feature slices) for this release.',
               'items': {
                 'type': 'OBJECT',
                 'required': [
@@ -338,16 +338,17 @@ class ReleasePlannerAgent {
         },
     ];
 
-    final unitHint = rootSpec.dimension == GodotProjectDimension.dim2d
-        ? '2D px / px/s'
-        : '3D 1 unit = 1 m / m/s';
+    final archMode = rootSpec.architectureMode;
+    final tuningStyleLabel = archMode == UnrealArchitectureMode.cppHybrid
+        ? 'PascalCase UPROPERTY(EditAnywhere) vars'
+        : 'PascalCase Exposed BP vars';
 
     final prompt = '''
 ${LayersTextStyleGuide.compactStyleRules}
 
-You are planning Godot 4 release `$targetVersion` for project `${rootSpec.normalizedTitle}`.
-Target Architecture: ${rootSpec.dimension.architectureContract}
-Code Policy: ${rootSpec.dimension.codePolicyContract}
+You are planning Unreal Engine 5 release `$targetVersion` for project `${rootSpec.normalizedTitle}`.
+Target Architecture: ${archMode.fullLabel} (${archMode.architectureContract})
+Code Policy: ${archMode.codePolicyContract}
 Vision: ${rootSpec.pitch}
 ${rootSpec.releaseDoneWhen.trim().isNotEmpty ? 'Release Gate (§05): ${rootSpec.releaseDoneWhen.trim()}\n' : ''}Core Loop (§01): ${rootSpec.coreLoop.join(' -> ')}
 Camera Contract (§02): ${rootSpec.cameraContract}
@@ -366,9 +367,9 @@ Generate:
 1. 2 distinct Release Direction Presets (`presets`) matching IDs of upgrades/newEpics.
 2. Small additive `[UPGRADE]` delta options for relevant baseline Epics/Features (`lineageKey` + optional `targetFeatureCode`).
 3. Additive `[+NEW]` 30-90 min Feature slices in `newFeatures` attached inside existing permanent Epics (`lineageKey`) whenever a mechanic extends an existing domain.
-4. 0-2 candidate `[NEW]` large-domain Godot 4 Epics with codes `${EpicSpec.formatCode(currentEpics.length + 1)}` onward (with `sceneOwnership` and child `features`) using $unitHint and snake_case `@export` vars.
+4. 0-2 candidate `[NEW]` large-domain Unreal Engine 5 Epics with codes `${EpicSpec.formatCode(currentEpics.length + 1)}` onward (with `sceneOwnership` and child `features`) using `cm` / `cm/s` units, Enhanced Input `IA_*` actions, and $tuningStyleLabel.
 CRITICAL RULES:
-- Every `[UPGRADE]` delta, `[+NEW]` Feature, and `[NEW]` Epic MUST obey §02 Camera/Scale/InputMap contracts, reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.
+- Every `[UPGRADE]` delta, `[+NEW]` Feature, and `[NEW]` Epic MUST obey §02 Camera/Scale/Enhanced Input contracts, reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.
 - Never duplicate existing baseline Epic cards, and NEVER emit Task/Step micro-checklists.
 ''';
 
@@ -390,16 +391,16 @@ CRITICAL RULES:
               final rawPreset = ReleaseDirectionPreset.fromJson(
                 Map<String, dynamic>.from(item),
               );
-              final cleanLabel = GodotSpecGuard.sanitizeLine(
+              final cleanLabel = UnrealSpecGuard.sanitizeLine(
                 rawPreset.label,
-                dimension: rootSpec.dimension,
+                mode: archMode,
               );
               return ReleaseDirectionPreset(
                 id: rawPreset.id,
                 label: cleanLabel.isEmpty ? 'Release Direction' : cleanLabel,
-                description: GodotSpecGuard.sanitizeLine(
+                description: UnrealSpecGuard.sanitizeLine(
                   rawPreset.description,
-                  dimension: rootSpec.dimension,
+                  mode: archMode,
                 ),
                 upgradeIds: rawPreset.upgradeIds,
                 newEpicIds: rawPreset.newEpicIds,
@@ -425,9 +426,9 @@ CRITICAL RULES:
             Map<String, dynamic>.from(opts[i] as Map),
             i,
           );
-          final cleanText = GodotSpecGuard.sanitizeLine(
+          final cleanText = UnrealSpecGuard.sanitizeLine(
             opt.text,
-            dimension: rootSpec.dimension,
+            mode: archMode,
           );
           if (cleanText.isNotEmpty) {
             opt.text = cleanText;
@@ -465,9 +466,9 @@ CRITICAL RULES:
           feat.introducedIn = targetVersion;
           feat.code = featureCodes.allocate(feat.code);
           parsedList.add(
-            GodotSpecGuard.sanitizeFeatureSpec(
+            UnrealSpecGuard.sanitizeFeatureSpec(
               feat,
-              dimension: rootSpec.dimension,
+              mode: archMode,
             ),
           );
         }
@@ -512,19 +513,19 @@ CRITICAL RULES:
         }
         if (parsed.doneWhen.isEmpty) {
           parsed.doneWhen = [
-            'Run F6 -> ${parsed.title} operates cleanly with 0 Debugger errors',
+            'Run PIE -> ${parsed.title} operates cleanly with 0 Message Log errors',
           ];
         }
         if (parsed.sceneOwnership.isEmpty) {
-          final slug = parsed.title
-              .toLowerCase()
-              .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
-              .replaceAll(RegExp(r'^_+|_+$'), '');
-          final safeSlug =
-              slug.isEmpty ? 'epic_${parsed.code.toLowerCase()}' : slug;
+          final pascalStem = UnrealSpecGuard.toPascalCaseToken(
+            parsed.title.isEmpty ? 'Epic${parsed.code}' : parsed.title,
+          );
+          final ownerPath = archMode == UnrealArchitectureMode.cppHybrid
+              ? 'Source/$pascalStem.cpp'
+              : '/Game/Blueprints/BP_$pascalStem';
           parsed.sceneOwnership = [
             EpicSceneOwnership(
-              path: 'res://scripts/$safeSlug.gd',
+              path: ownerPath,
               role: parsed.title,
             ),
           ];
@@ -560,9 +561,9 @@ CRITICAL RULES:
         parsed.chosenForNextRelease =
             (rawNewEpics[i] as Map)['chosen'] == true || i == 0;
         candidateNew.add(
-          GodotSpecGuard.sanitizeEpicSpec(
+          UnrealSpecGuard.sanitizeEpicSpec(
             parsed,
-            dimension: rootSpec.dimension,
+            mode: archMode,
             forceReleaseVersion: targetVersion,
           ),
         );

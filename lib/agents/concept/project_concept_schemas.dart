@@ -2,14 +2,14 @@ import '../../constants/text_style_guide.dart';
 import '../../models/agent_blueprints.dart';
 
 Map<String, dynamic> get rootSpecToolSchema => <String, dynamic>{
-      'name': 'commit_godot_root_spec',
+      'name': 'commit_unreal_root_spec',
       'description':
-          'Create the Godot 4 Project Spec (PROJECT_SPEC.md -> ROOT_GODOT_CONTEXT) with §01-§04 foundation contracts and strictly v0.1 prototype Epics in §05 using the 4-tier Epic -> Feature hierarchy.',
+          'Create the Unreal Engine 5 Project Spec (PROJECT_SPEC.md -> ROOT_UNREAL_CONTEXT) with §01-§04 foundation contracts and strictly v0.1 prototype Epics in §05 using the 4-tier Epic -> Feature hierarchy.',
       'parameters': <String, dynamic>{
         'type': 'OBJECT',
         'required': [
           'gameTitle',
-          'dimension',
+          'architectureMode',
           'pitch',
           'coreLoop',
           'cameraChoiceId',
@@ -28,10 +28,11 @@ Map<String, dynamic> get rootSpecToolSchema => <String, dynamic>{
             'type': 'STRING',
             'description': '2-3 word plain game title in UPPERCASE.',
           },
-          'dimension': {
+          'architectureMode': {
             'type': 'STRING',
-            'enum': ['dim3d', 'dim2d'],
-            'description': 'Godot 4 spatial mode: dim3d (1 unit = 1 m) or dim2d (px).',
+            'enum': ['blueprint', 'cppHybrid'],
+            'description':
+                'Unreal Engine 5 architecture mode: blueprint (BP_* + WBP_*) or cppHybrid (Source/ UPROPERTY C++ base + thin BP_*).',
           },
           'pitch': {
             'type': 'STRING',
@@ -51,29 +52,27 @@ Map<String, dynamic> get rootSpecToolSchema => <String, dynamic>{
               'topdown',
               'tps',
               'fps',
-              'topdown2d',
-              'sidescroller2d',
-              'fixedarena2d',
+              'sidescroller',
             ],
           },
           'cameraContract': {
             'type': 'STRING',
-            'description': LayersTextStyleGuide.godotContractSchemaDesc,
+            'description': LayersTextStyleGuide.unrealContractSchemaDesc,
           },
           'characterScale': {
             'type': 'STRING',
             'description':
-                'Player CharacterBody3D size/speed in m & m/s (for 3D), or CharacterBody2D size/speed in px & px/s (for 2D).',
+                'Player ACharacter capsule size and MaxWalkSpeed in cm and cm/s.',
           },
           'inputContract': {
             'type': 'STRING',
             'description':
-                'Godot project.godot InputMap snake_case actions (e.g. move_left/right/up/down, dodge, primary_action).',
+                'Unreal Enhanced Input Mapping Context and PascalCase actions (e.g. IMC_Gameplay: IA_Move, IA_Dash, IA_PrimaryAction).',
           },
           'assetPolicy': {
             'type': 'STRING',
             'description':
-                'Greybox prototype policy (CSGBox3D/MeshInstance3D or ColorRect/Polygon2D) + snake_case @export vars / Resource (.tres).',
+                'Greybox prototype policy (/Game/Maps/Lvl_* + /Game/Blueprints/BP_* + /Game/Data/DA_* or Source/ C++ classes) with PascalCase Exposed BP or UPROPERTY(EditAnywhere) variables.',
           },
           'cameraDecisionOptions': {
             'type': 'ARRAY',
@@ -164,7 +163,8 @@ Map<String, dynamic> get featureJsonSchema => <String, dynamic>{
         },
         'goal': {
           'type': 'STRING',
-          'description': '1 plain sentence stating what this playable slice delivers.',
+          'description':
+              '1 plain sentence stating what this playable slice builds in PIE.',
         },
         'inScope': {
           'type': 'ARRAY',
@@ -187,7 +187,7 @@ Map<String, dynamic> get featureJsonSchema => <String, dynamic>{
               'trigger': {'type': 'STRING'},
               'rule': {
                 'type': 'STRING',
-                'description': LayersTextStyleGuide.godotControlRuleSchemaDesc,
+                'description': LayersTextStyleGuide.unrealControlRuleSchemaDesc,
               },
             },
           },
@@ -200,12 +200,12 @@ Map<String, dynamic> get featureJsonSchema => <String, dynamic>{
             'properties': {
               'key': {
                 'type': 'STRING',
-                'description': LayersTextStyleGuide.godotTuningKeySchemaDesc,
+                'description': LayersTextStyleGuide.unrealTuningKeySchemaDesc,
               },
               'value': {'type': 'STRING'},
               'unit': {
                 'type': 'STRING',
-                'description': LayersTextStyleGuide.godotTuningUnitSchemaDesc,
+                'description': LayersTextStyleGuide.unrealTuningUnitSchemaDesc,
               },
             },
           },
@@ -263,11 +263,12 @@ Map<String, dynamic> get epicJsonSchema => <String, dynamic>{
         'coreLoopBeat': {
           'type': 'STRING',
           'description':
-              'Which §01 Core Loop beat(s) this Epic domain proves in Playtest (e.g. "Beat 1: Move & Aim").',
+              'Which §01 Core Loop beat(s) this Epic domain proves in PIE (e.g. "Beat 1: Move & Aim").',
         },
         'goal': {
           'type': 'STRING',
-          'description': '1 plain sentence describing the large-domain Epic architecture.',
+          'description':
+              '1 plain sentence describing the large-domain Unreal Engine 5 Epic architecture.',
         },
         'inScope': {
           'type': 'ARRAY',
@@ -310,16 +311,16 @@ Map<String, dynamic> get epicJsonSchema => <String, dynamic>{
         'features': {
           'type': 'ARRAY',
           'description':
-              '2-3 sittable 30-90 min playable v0.1 Feature slices inside this domain Epic (zero Tasks, zero Steps). Include controls, @export tuning, cues, and Playtest Gate checks here only.',
+              '2-3 sittable 30-90 min playable v0.1 Feature slices inside this domain Epic (zero Tasks, zero Steps). Include Enhanced Input controls, Exposed BP / UPROPERTY tuning in cm & cm/s, cues, and PIE Playtest Gate checks here only.',
           'items': featureJsonSchema,
         },
       },
     };
 
 Map<String, dynamic> get patchRootSpecToolSchema => <String, dynamic>{
-      'name': 'patch_godot_root_spec',
+      'name': 'patch_unreal_root_spec',
       'description':
-          'Apply a scoped partial patch to only the Stage 1 Project Spec sections (§01-§05) affected by the user instruction, leaving untouched sections and Epics intact.',
+          'Apply a scoped partial patch to only the Stage 1 Unreal Engine 5 Project Spec sections (§01-§05) affected by the user instruction, leaving untouched sections and Epics intact.',
       'parameters': <String, dynamic>{
         'type': 'OBJECT',
         'required': ['coDesignNote', 'changedSections'],
@@ -336,9 +337,9 @@ Map<String, dynamic> get patchRootSpecToolSchema => <String, dynamic>{
             },
           },
           'gameTitle': {'type': 'STRING'},
-          'dimension': {
+          'architectureMode': {
             'type': 'STRING',
-            'enum': ['dim3d', 'dim2d'],
+            'enum': ['blueprint', 'cppHybrid'],
           },
           'pitch': {
             'type': 'STRING',
@@ -355,9 +356,7 @@ Map<String, dynamic> get patchRootSpecToolSchema => <String, dynamic>{
               'topdown',
               'tps',
               'fps',
-              'topdown2d',
-              'sidescroller2d',
-              'fixedarena2d',
+              'sidescroller',
             ],
           },
           'cameraContract': {'type': 'STRING'},
