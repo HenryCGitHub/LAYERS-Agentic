@@ -17,7 +17,7 @@ String _swapArchitectureAssetPath(
   }
   if (targetMode == UnrealArchitectureMode.cppHybrid) {
     final m = RegExp(
-      r'^/Game/Blueprints/BP_([A-Za-z0-9_]+)$',
+      r'^/Game/(?:[A-Za-z0-9_]+/)*BP_([A-Za-z0-9_]+)(?:\.uasset)?$',
       caseSensitive: false,
     ).firstMatch(trimmed);
     if (m != null) {
@@ -25,7 +25,7 @@ String _swapArchitectureAssetPath(
     }
   } else {
     final m = RegExp(
-      r'^Source/([A-Za-z0-9_]+)\.(?:cpp|h)$',
+      r'^Source/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_]+)\.(?:cpp|h)$',
       caseSensitive: false,
     ).firstMatch(trimmed);
     if (m != null) {
@@ -33,6 +33,57 @@ String _swapArchitectureAssetPath(
     }
   }
   return trimmed;
+}
+
+String _swapArchitectureRoleOrLink(
+  String rawText,
+  UnrealArchitectureMode targetMode,
+) {
+  var out = rawText.trim();
+  if (out.isEmpty) return out;
+  if (targetMode == UnrealArchitectureMode.cppHybrid) {
+    out = out.replaceAllMapped(
+      RegExp(
+        r'\bBlueprint\s+/Game/(?:[A-Za-z0-9_]+/)*BP_([A-Za-z0-9_]+)(?:\.uasset)?',
+        caseSensitive: false,
+      ),
+      (m) => 'C++ Source/${m.group(1)}.cpp',
+    );
+    out = out.replaceAllMapped(
+      RegExp(
+        r'/Game/(?:[A-Za-z0-9_]+/)*BP_([A-Za-z0-9_]+)(?:\.uasset)?',
+        caseSensitive: false,
+      ),
+      (m) => 'Source/${m.group(1)}.cpp',
+    );
+    out = out.replaceAll(
+      RegExp(r'\bExposed\s+(?:BP|Blueprint)\s+Vars?\b', caseSensitive: false),
+      'UPROPERTY(EditAnywhere) Vars',
+    );
+  } else {
+    out = out.replaceAllMapped(
+      RegExp(
+        r'\bC\+\+\s+Source/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_]+)\.(?:cpp|h)',
+        caseSensitive: false,
+      ),
+      (m) => 'Blueprint /Game/Blueprints/BP_${m.group(1)}',
+    );
+    out = out.replaceAllMapped(
+      RegExp(
+        r'Source/(?:[A-Za-z0-9_]+/)*([A-Za-z0-9_]+)\.(?:cpp|h)',
+        caseSensitive: false,
+      ),
+      (m) => '/Game/Blueprints/BP_${m.group(1)}',
+    );
+    out = out.replaceAll(
+      RegExp(
+        r'UPROPERTY\s*\(\s*EditAnywhere(?:\s*,\s*BlueprintReadWrite)?\s*\)(?:\s*Vars?)?',
+        caseSensitive: false,
+      ),
+      'Exposed BP Var',
+    );
+  }
+  return out;
 }
 
 /// Switches a [ProjectConceptBlueprint] between `Blueprint-First` and `C++ & BP Hybrid`,
@@ -52,8 +103,12 @@ ProjectConceptBlueprint convertBlueprintArchitectureModeImpl(
       for (final own in ep.sceneOwnership)
         EpicSceneOwnership(
           path: _swapArchitectureAssetPath(own.path, targetMode),
-          role: own.role,
+          role: _swapArchitectureRoleOrLink(own.role, targetMode),
         ),
+    ];
+    ep.links = [
+      for (final link in ep.links)
+        _swapArchitectureRoleOrLink(link, targetMode),
     ];
   }
   return UnrealSpecGuard.sanitizeConceptBlueprint(

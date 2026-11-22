@@ -430,7 +430,11 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         nextEpic.checks = lockedBaseChecks;
       }
 
-      final doc = nextEpic.toTierDocument(
+      final cleanNextEpic = UnrealSpecGuard.sanitizeEpicSpec(
+        nextEpic,
+        mode: unrealArchitectureMode,
+      );
+      final doc = cleanNextEpic.toTierDocument(
         docId: clonedId,
         parentReleaseId: relId,
       );
@@ -483,7 +487,11 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         }
       }
 
-      final doc = clonedNew.toTierDocument(
+      final cleanNewEpic = UnrealSpecGuard.sanitizeEpicSpec(
+        clonedNew,
+        mode: unrealArchitectureMode,
+      );
+      final doc = cleanNewEpic.toTierDocument(
         docId: newId,
         parentReleaseId: relId,
       );

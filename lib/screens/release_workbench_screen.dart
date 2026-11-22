@@ -405,7 +405,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               feature.openFixesCount > 0
                                   ? '🔧 Copy CoPilot [FIX] Prompt (${feature.openFixesCount})'
                                   : (relVer != 'v0.1' &&
-                                          feature.releaseDelta.trim().isNotEmpty
+                                          (feature.releaseDelta.trim().isNotEmpty ||
+                                              feature.introducedIn.trim() == relVer)
                                       ? '⚡ Copy CoPilot Delta Prompt'
                                       : '⚡ Copy CoPilot Prompt'),
                               style: const TextStyle(fontSize: 12),

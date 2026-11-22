@@ -21,6 +21,20 @@ class UnrealContextBuilder {
     return cleanFallback.isEmpty ? 'v0.1' : cleanFallback;
   }
 
+  static List<MapEntry<String, List<EpicSpec>>> _sortedReleaseEntries(
+    Map<String, List<EpicSpec>> map,
+  ) {
+    final entries = map.entries.toList();
+    entries.sort(
+      (a, b) => compareReleaseVersions(
+        _extractReleaseVersion(a.key),
+        _extractReleaseVersion(b.key),
+        const [],
+      ),
+    );
+    return entries;
+  }
+
   static void _writeRootSections(
     StringBuffer b,
     ProjectConceptBlueprint rootSpec,
@@ -199,14 +213,15 @@ class UnrealContextBuilder {
                 'v0.1 · Prototype': rootSpec.initialEpics,
               }
             : const <String, List<EpicSpec>>{});
+    final sortedReleases = _sortedReleaseEntries(effectiveReleases);
     final releaseOrder = <String>[
-      for (final key in effectiveReleases.keys) _extractReleaseVersion(key),
+      for (final entry in sortedReleases) _extractReleaseVersion(entry.key),
     ];
 
-    if (effectiveReleases.isEmpty) {
+    if (sortedReleases.isEmpty) {
       b.writeln('- No Epics planned yet.');
     } else {
-      for (final entry in effectiveReleases.entries) {
+      for (final entry in sortedReleases) {
         final relVer = _extractReleaseVersion(entry.key);
         b.writeln();
         b.writeln('### ${entry.key}');
@@ -222,8 +237,11 @@ class UnrealContextBuilder {
           }
           for (final feat in epic.featuresForRelease(relVer, releaseOrder)) {
             final tag = _featureStatusTag(feat, relVer);
+            final deltaNote = relVer != 'v0.1' && feat.releaseDelta.trim().isNotEmpty
+                ? ' (Delta: ${feat.releaseDelta.trim()})'
+                : '';
             b.writeln(
-              '  - ${feat.code} · ${feat.title} [$tag] — ${feat.goal}',
+              '  - ${feat.code} · ${feat.title} [$tag] — ${feat.goal}$deltaNote',
             );
           }
         }
@@ -253,18 +271,28 @@ class UnrealContextBuilder {
     final openFixes = cleanFeat.openFixes;
     final isUpgradeDelta =
         ver != 'v0.1' && cleanFeat.releaseDelta.trim().isNotEmpty;
+    final isLockedBaseline = openFixes.isEmpty &&
+        !isUpgradeDelta &&
+        ver != 'v0.1' &&
+        cleanFeat.isLockedBaselineInRelease(ver);
     final effChecks = cleanFeat.effectiveChecksForRelease(ver);
     final visibleSiblings = cleanEpic.featuresForRelease(ver, effOrder);
     final anySiblingPassed = visibleSiblings.any(
       (s) => s.id != cleanFeat.id && s.isPassedForRelease(ver),
     );
-    final isFirstSliceOwnerScaffold =
-        openFixes.isEmpty && !isUpgradeDelta && !anySiblingPassed;
+    final isFirstSliceOwnerScaffold = openFixes.isEmpty &&
+        !isUpgradeDelta &&
+        !isLockedBaseline &&
+        !anySiblingPassed;
 
     final b = StringBuffer();
     if (openFixes.isNotEmpty) {
       b.writeln(
         '# ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · ${cleanFeat.code} · ${cleanFeat.title}',
+      );
+    } else if (isLockedBaseline) {
+      b.writeln(
+        '# ULTIMATE ENGINE COPILOT — LOCKED BASELINE REFERENCE · ${cleanFeat.code} · ${cleanFeat.title} (Shipped in ${cleanFeat.introducedIn}, Viewing $ver)',
       );
     } else if (isUpgradeDelta) {
       b.writeln(
@@ -393,6 +421,18 @@ class UnrealContextBuilder {
       b.writeln('### CoPilot Execution Instruction');
       b.writeln(
         'Apply targeted edits only to resolve every [FIX] above while keeping all already-passing Feature behavior and [PASSED — DO NOT REGRESS] slices intact. Run PIE and confirm the §05 checks.',
+      );
+    } else if (isLockedBaseline) {
+      b.writeln();
+      b.writeln('### CoPilot Execution Instruction');
+      b.writeln(
+        'Read-only baseline reference (${cleanFeat.introducedIn} ✓): Do not rebuild ${cleanFeat.code} in $ver unless resolving a regression; keep all §02–§05 contracts intact.',
+      );
+    } else if (isUpgradeDelta) {
+      b.writeln();
+      b.writeln('### CoPilot Execution Instruction');
+      b.writeln(
+        'Apply ONLY the $ver Upgrade Delta above to ${cleanFeat.code} inside ${cleanEpic.code} (${mode.fullLabel}) without regressing its locked baseline behavior or [PASSED — DO NOT REGRESS] sibling slices, then check every §05 PIE Playtest Gate item.',
       );
     } else {
       b.writeln();
@@ -532,10 +572,11 @@ class UnrealContextBuilder {
                 'v0.1 · Prototype': rootSpec.initialEpics,
               }
             : const <String, List<EpicSpec>>{});
+    final sortedReleases = _sortedReleaseEntries(effectiveReleases);
     final releaseOrder = <String>[
-      for (final key in effectiveReleases.keys) _extractReleaseVersion(key),
+      for (final entry in sortedReleases) _extractReleaseVersion(entry.key),
     ];
-    for (final entry in effectiveReleases.entries) {
+    for (final entry in sortedReleases) {
       final relVer = _extractReleaseVersion(entry.key);
       b.writeln();
       b.writeln('## Release ${entry.key}');

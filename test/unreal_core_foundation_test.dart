@@ -1138,6 +1138,236 @@ void main() {
         expect(syncedEp.features.first.tuning.first.unit, equals('cm/s'));
       },
     );
+
+    testWidgets(
+      '9. Round 9/10: Multi-release v0.1 -> v0.2 -> v0.3 CoPilot Delta Prompt UI, GDD semver sorting, locked baseline reference, and Blueprint <-> C++ round-trip',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 900);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        // 1) Stage 1 Blueprint <-> C++ round-trip with nested paths & roles
+        final bpRoundTrip = ProjectConceptBlueprint(
+          gameTitle: 'ROUND TRIP TEST',
+          architectureMode: UnrealArchitectureMode.blueprint,
+          initialEpics: [
+            EpicSpec(
+              id: 'rt_e01',
+              code: 'E01',
+              title: 'Dash & Turret',
+              goal: 'Move cleanly.',
+              sceneOwnership: [
+                EpicSceneOwnership(
+                  path: '/Game/Maps/Lvl_Arena.umap',
+                  role: 'Combat arena level',
+                ),
+                EpicSceneOwnership(
+                  path: '/Game/Blueprints/Combat/BP_ClawDash.uasset',
+                  role: 'Dash state & Exposed BP Vars',
+                ),
+                EpicSceneOwnership(
+                  path: 'Source/Shellbreaker/Private/TurretRig.cpp',
+                  role: 'Aim math & UPROPERTY(EditAnywhere) tuning',
+                ),
+              ],
+              links: const [
+                'Blueprint /Game/Blueprints/Combat/BP_ClawDash.uasset',
+              ],
+            ),
+          ],
+        );
+
+        final asCpp = ProjectConceptAgent.convertBlueprintArchitectureMode(
+          bpRoundTrip,
+          UnrealArchitectureMode.cppHybrid,
+        );
+        final cppOwners = asCpp.initialEpics.first.sceneOwnership;
+        expect(cppOwners[0].path, equals('/Game/Maps/Lvl_Arena.umap'));
+        expect(cppOwners[1].path, equals('Source/ClawDash.cpp'));
+        expect(cppOwners[1].role, contains('UPROPERTY(EditAnywhere)'));
+        expect(cppOwners[1].role, isNot(contains('Exposed BP')));
+        expect(
+          asCpp.initialEpics.first.links.first,
+          equals('C++ Source/ClawDash.cpp'),
+        );
+
+        final backToBp = ProjectConceptAgent.convertBlueprintArchitectureMode(
+          asCpp,
+          UnrealArchitectureMode.blueprint,
+        );
+        final bpOwners = backToBp.initialEpics.first.sceneOwnership;
+        expect(bpOwners[1].path, equals('/Game/Blueprints/BP_ClawDash'));
+        expect(bpOwners[1].role, contains('Exposed BP Var'));
+        expect(bpOwners[2].path, equals('/Game/Blueprints/BP_TurretRig'));
+        expect(bpOwners[2].role, contains('Exposed BP Var'));
+        expect(
+          backToBp.initialEpics.first.links.first,
+          equals('Blueprint /Game/Blueprints/BP_ClawDash'),
+        );
+
+        // 2) Chronological semver sorting & delta visibility in GDD and Full Spec Markdown
+        final sortFeat = FeatureSpec(
+          id: 'sf1',
+          code: 'F01',
+          title: 'Claw Dash',
+          introducedIn: 'v0.1',
+          goal: 'Dash forward cleanly.',
+          releaseDelta: '+55ms Hit-Stop freeze',
+        );
+        final sortEpic = EpicSpec(
+          id: 'se1',
+          code: 'E01',
+          title: 'Movement',
+          goal: 'Own movement.',
+          features: [sortFeat],
+        );
+        final outOfOrderMap = <String, List<EpicSpec>>{
+          'v0.3 · Boss': [sortEpic.deepCopy(releaseVersionOverride: 'v0.3')],
+          'v0.1 · Prototype': [
+            sortEpic.deepCopy(releaseVersionOverride: 'v0.1'),
+          ],
+          'v0.2 · Juice': [sortEpic.deepCopy(releaseVersionOverride: 'v0.2')],
+        };
+        final gdd = UnrealContextBuilder.buildCoPilotGddMarkdown(
+          rootSpec: bpRoundTrip,
+          epicsByReleaseLabel: outOfOrderMap,
+        );
+        expect(gdd.indexOf('### v0.1'), lessThan(gdd.indexOf('### v0.2')));
+        expect(gdd.indexOf('### v0.2'), lessThan(gdd.indexOf('### v0.3')));
+        expect(gdd, contains('(Delta: +55ms Hit-Stop freeze)'));
+
+        final fullMd = UnrealContextBuilder.buildFullProjectSpecMarkdown(
+          rootSpec: bpRoundTrip,
+          epicsByReleaseLabel: outOfOrderMap,
+        );
+        expect(
+          fullMd.indexOf('## Release v0.1'),
+          lessThan(fullMd.indexOf('## Release v0.2')),
+        );
+        expect(
+          fullMd.indexOf('## Release v0.2'),
+          lessThan(fullMd.indexOf('## Release v0.3')),
+        );
+
+        // 3) Multi-release v0.1 -> v0.2 -> v0.3 flow + Stage 2 Delta button & Locked Baseline Prompt
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.setArchitectureMode(UnrealArchitectureMode.cppHybrid);
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final draftV02 = await wb.openProgressiveReleaseCopilot();
+        expect(draftV02, isNotNull);
+        expect(draftV02!.targetVersion, equals('v0.2'));
+
+        // Inject metric tuning onto a candidate new Feature to verify sanitization on materialization
+        String? injectedNewFeatId;
+        String? injectedNewFeatKey;
+        if (draftV02.candidateNewFeaturesByLineageKey.isNotEmpty) {
+          final firstEntry = draftV02.candidateNewFeaturesByLineageKey.entries.first;
+          if (firstEntry.value.isNotEmpty) {
+            final candFeat = firstEntry.value.first;
+            candFeat.tuning.add(
+              EpicTuningParam(key: 'shock_radius', value: '4.5', unit: 'm'),
+            );
+            injectedNewFeatKey = firstEntry.key;
+            injectedNewFeatId = candFeat.id;
+            if (!wb.isProgressiveNewFeatureChosen(candFeat.id)) {
+              wb.toggleProgressiveNewFeature(firstEntry.key, candFeat.id);
+            }
+          }
+        }
+        expect(injectedNewFeatId, isNotNull);
+        // Ensure at least one upgrade option is selected as well
+        for (final entry in draftV02.upgradesByLineageKey.entries) {
+          if (entry.value.isNotEmpty && !entry.value.any((u) => u.chosen)) {
+            wb.toggleProgressiveUpgrade(entry.key, entry.value.first.id);
+          }
+        }
+
+        final relV02 = wb.commitProgressiveReleaseDraft();
+        expect(relV02, isNotNull);
+        expect(wb.activeReleaseVersionTag, equals('v0.2'));
+
+        // Verify injected new Feature was sanitized on commit
+        final matNewFeat = wb.activeReleaseEpics
+            .firstWhere((ep) => ep.lineageKey.toLowerCase() == injectedNewFeatKey)
+            .features
+            .firstWhere((f) => f.introducedIn == 'v0.2');
+        final shockParam = matNewFeat.tuning.firstWhere(
+          (t) => t.key == 'ShockRadius',
+        );
+        expect(shockParam.value, equals('450'));
+        expect(shockParam.unit, equals('cm'));
+
+        // Advance v0.2 -> v0.3
+        final draftV03 = await wb.openProgressiveReleaseCopilot();
+        expect(draftV03, isNotNull);
+        expect(draftV03!.targetVersion, equals('v0.3'));
+        if (!wb.hasSelectedProgressiveChanges &&
+            draftV03.candidateNewEpics.isNotEmpty) {
+          wb.toggleProgressiveNewEpic(draftV03.candidateNewEpics.first.id);
+        }
+        final relV03 = wb.commitProgressiveReleaseDraft();
+        expect(relV03, isNotNull);
+        expect(wb.projectReleaseOrder, equals(['v0.1', 'v0.2', 'v0.3']));
+
+        // Switch back to v0.2, verify Delta button & CoPilot Delta execution prompt
+        wb.selectActiveRelease(relV02!);
+        EpicSpec? deltaEpic;
+        FeatureSpec? deltaFeat;
+        EpicSpec? lockedEpic;
+        FeatureSpec? lockedFeat;
+        for (final ep in wb.activeReleaseEpics) {
+          for (final feat in wb.visibleFeaturesForEpic(ep, releaseVersion: 'v0.2')) {
+            if (deltaFeat == null &&
+                feat.releaseDelta.trim().isNotEmpty &&
+                feat.openFixesCount == 0) {
+              deltaEpic = ep;
+              deltaFeat = feat;
+            }
+            if (lockedFeat == null &&
+                feat.isLockedBaselineInRelease('v0.2') &&
+                feat.openFixesCount == 0) {
+              lockedEpic = ep;
+              lockedFeat = feat;
+            }
+          }
+        }
+        expect(deltaEpic, isNotNull);
+        expect(deltaFeat, isNotNull);
+        expect(lockedEpic, isNotNull);
+        expect(lockedFeat, isNotNull);
+
+        wb.selectFeature(deltaEpic!.id, deltaFeat!.id);
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        expect(find.text('⚡ Copy CoPilot Delta Prompt'), findsOneWidget);
+        final deltaPrompt = wb.activeFeatureBuildPrompt(
+          wb.selectedEpicSpec!,
+          wb.selectedFeatureSpec!,
+        );
+        expect(deltaPrompt, contains('Apply ONLY the v0.2 Upgrade Delta above'));
+
+        // Select locked [v0.1] baseline Feature in v0.2 and verify Locked Baseline prompt
+        wb.selectFeature(lockedEpic!.id, lockedFeat!.id);
+        await tester.pumpAndSettle();
+
+        expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+        final lockedPrompt = wb.activeFeatureBuildPrompt(
+          wb.selectedEpicSpec!,
+          wb.selectedFeatureSpec!,
+        );
+        expect(
+          lockedPrompt,
+          contains('# ULTIMATE ENGINE COPILOT — LOCKED BASELINE REFERENCE'),
+        );
+        expect(lockedPrompt, contains('Do not rebuild'));
+      },
+    );
   });
 }
 
