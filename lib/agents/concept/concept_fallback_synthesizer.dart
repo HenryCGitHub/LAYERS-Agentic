@@ -1,58 +1,58 @@
 import '../../models/agent_blueprints.dart';
 import '../../models/epic_spec.dart';
+import '../../utils/unreal_spec_guard.dart';
 import 'project_concept_epic_sync.dart';
+
+String _ownerAsset(String stem, UnrealArchitectureMode mode) =>
+    mode == UnrealArchitectureMode.cppHybrid
+        ? 'Source/$stem.cpp'
+        : '/Game/Blueprints/BP_$stem';
 
 ProjectConceptBlueprint buildSynthesizedFallback(
   String sparkPrompt, {
-  required GodotProjectDimension dimension,
+  GodotProjectDimension dimension = GodotProjectDimension.dim3d,
+  UnrealArchitectureMode? architectureMode,
   String? archetypeId,
   String? viewChoiceId,
   String? prototypeHookId,
 }) {
   final cleaned = sparkPrompt.trim();
   final lower = cleaned.toLowerCase();
-  final is2d = dimension == GodotProjectDimension.dim2d;
-
-  final resolvedCamOptions = is2d
-      ? ProjectConceptBlueprint.defaultCamera2dOptions
-      : ProjectConceptBlueprint.defaultCamera3dOptions;
+  final archMode =
+      architectureMode ?? UnrealArchitectureMode.detectFromSpark(cleaned);
+  final resolvedCamOptions = ProjectConceptBlueprint.defaultCamera3dOptions;
 
   String cameraChoice;
   if (viewChoiceId != null &&
       resolvedCamOptions.any((o) => o.id == viewChoiceId)) {
     cameraChoice = viewChoiceId;
-  } else if (is2d) {
-    final isSideScroller = lower.contains('side-scroller') ||
-        lower.contains('side scroller') ||
-        lower.contains('platformer') ||
-        lower.contains('metroidvania');
-    final isFixedRoom = lower.contains('puzzle') ||
-        lower.contains('sokoban') ||
-        lower.contains('room');
-    cameraChoice = isSideScroller
-        ? 'sidescroller2d'
-        : (isFixedRoom ? 'fixedarena2d' : 'topdown2d');
   } else {
     final isFps = lower.contains('first-person') ||
         lower.contains('first person') ||
         lower.contains('fps');
+    final isSide = !isFps &&
+        (lower.contains('side-scroller') ||
+            lower.contains('side scroller') ||
+            lower.contains('platformer'));
     final isTps = !isFps &&
+        !isSide &&
         (lower.contains('third-person') ||
             lower.contains('third person') ||
             lower.contains('over-shoulder') ||
             lower.contains('over shoulder') ||
             lower.contains('glider') ||
-            lower.contains('wingsuit') ||
             lower.contains('grapple') ||
-            lower.contains('grappling') ||
             lower.contains('racer') ||
             lower.contains('tps'));
-    final isTopDown3d = !isFps &&
+    final isTopDown = !isFps &&
+        !isSide &&
         !isTps &&
         (lower.contains('top-down') || lower.contains('top down'));
     cameraChoice = isFps
         ? 'fps'
-        : (isTps ? 'tps' : (isTopDown3d ? 'topdown' : 'isometric'));
+        : (isSide
+            ? 'sidescroller'
+            : (isTps ? 'tps' : (isTopDown ? 'topdown' : 'isometric')));
   }
 
   final cameraContract = resolvedCamOptions
@@ -103,34 +103,23 @@ ProjectConceptBlueprint buildSynthesizedFallback(
       .toList();
   final title =
       titleWords.isEmpty ? 'PROTOTYPE ZERO' : titleWords.join(' ');
-  final shortSpark = cleaned.isEmpty
-      ? 'Focused Godot 4 vertical prototype testing core player movement and primary interaction'
+  final rawShortSpark = cleaned.isEmpty
+      ? 'Focused Unreal Engine 5 vertical prototype testing core player movement and primary interaction'
       : cleaned;
-
-  final distUnit = dimension.distanceUnit;
-  final speedUnit = dimension.speedUnit;
-  final moveVal = is2d ? '260' : '6.2';
-  final dodgeDist = is2d ? '180' : '5.0';
-  final actionRange = is2d ? '420' : '16.0';
-  final deployDist = is2d ? '72' : '2.0';
-  final arenaExtent = is2d ? '1280x720 px' : '28x28 m';
-  final targetDist = is2d ? '320 px' : '12 m';
-  final reachVal = is2d ? '64' : '2.2';
-  final snapVal = is2d ? '24' : '0.8';
-  final topSpeedVal = is2d ? '520' : '24.0';
-  final gateWidthVal = is2d ? '140' : '5.5';
-  final bodyCls = is2d ? 'CharacterBody2D' : 'CharacterBody3D';
-  final camNote = is2d ? 'Camera2D' : 'SpringArm3D';
+  final shortSpark = UnrealSpecGuard.sanitizeLine(
+    rawShortSpark,
+    mode: archMode,
+  );
 
   final List<String> loop;
   final List<EpicSpec> epics;
-  String testScenePath;
-  String inputSummary;
+  final String testMapPath;
+  final String inputSummary;
 
   if (effectiveArchetype == 'puzzle') {
-    testScenePath = 'res://scenes/room_proto.tscn';
+    testMapPath = '/Game/Maps/Lvl_RoomProto.umap';
     inputSummary =
-        'InputMap (move_left/right/up/down, interact, rotate_or_use, reset_room)';
+        'IMC_Puzzle (IA_Move, IA_Interact, IA_RotateOrUse, IA_ResetRoom)';
     loop = const [
       'Move & Inspect',
       'Manipulate Relay',
@@ -147,31 +136,27 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.active,
         coreLoopBeat: 'Beat 1 · ${loop[0]}',
         goal:
-            'Own player $bodyCls room movement, collision sliding, and locked $camNote framing.',
-        inScope: [
-          'Smooth directional movement at $moveVal $speedUnit inside $arenaExtent puzzle room',
+            'Own ACharacter room movement, collision sliding, and locked USpringArmComponent framing.',
+        inScope: const [
+          'Smooth directional movement at 620 cm/s inside 2800x2800 cm puzzle room',
           'Clean corner sliding along greybox block obstacles',
         ],
-        doneWhen: [
-          'Walk all 4 walls of $arenaExtent -> Zero snagging with clear cursor highlight',
+        doneWhen: const [
+          'Walk all 4 walls of 2800x2800 cm room -> Zero snagging with clear cursor highlight',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/room_proto.tscn',
-            role: '$arenaExtent puzzle room + SpawnPoint + ExitGate',
+            path: testMapPath,
+            role: '2800x2800 cm puzzle room + PlayerStart + ExitGate',
           ),
           EpicSceneOwnership(
-            path: 'res://scenes/player.tscn',
-            role: '$bodyCls + $camNote + InteractionRay',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/player.gd',
-            role: 'Grid/free locomotion & focus probe',
+            path: _ownerAsset('PuzzlePlayerPawn', archMode),
+            role: 'ACharacter + USpringArmComponent + UCameraComponent + LineTrace focus probe',
           ),
         ],
         outOfScope: const ['No sprint stamina or combat dodge states'],
         states: const ['Idle <-> Walk -> Interacting'],
-        interrupts: const ['Press R resets player back to SpawnPoint cleanly'],
+        interrupts: const ['Press R resets player back to PlayerStart cleanly'],
         features: [
           FeatureSpec(
             id: 'ep_01_f01',
@@ -180,18 +165,18 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.active,
-            goal: 'Move player cleanly at $moveVal $speedUnit with crisp $camNote framing.',
+            goal: 'Move player cleanly at 620 cm/s with crisp USpringArmComponent framing.',
             controls: [
               EpicControlBinding(
-                action: 'move_8way',
-                trigger: 'Held (WASD)',
-                rule: 'Moves smoothly at $moveVal $speedUnit across puzzle room',
+                action: 'IA_Move',
+                trigger: 'Triggered (WASD)',
+                rule: 'Moves smoothly at 620 cm/s across puzzle room',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'move_speed', value: moveVal, unit: speedUnit),
+              EpicTuningParam(key: 'MoveSpeed', value: '620', unit: 'cm/s'),
             ],
-            cues: const ['Subtle footstep dust & focus reticle outline'],
+            cues: const ['Subtle footstep dust Niagara puff & focus reticle outline'],
             checks: [
               EpicPieCheck(
                 id: 'ep_01_f01_c1',
@@ -206,22 +191,22 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '30 min',
             status: FeatureStatus.queued,
-            goal: 'Highlight nearest interactable object within $reachVal $distUnit.',
+            goal: 'Highlight nearest interactable object within 220 cm.',
             controls: [
               EpicControlBinding(
-                action: 'interact',
-                trigger: 'Just Pressed (E / LMB)',
-                rule: 'Selects highlighted puzzle node within $reachVal $distUnit',
+                action: 'IA_Interact',
+                trigger: 'Started (E / LMB)',
+                rule: 'Selects highlighted puzzle node within 220 cm',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'interact_reach', value: reachVal, unit: distUnit),
+              EpicTuningParam(key: 'InteractReach', value: '220', unit: 'cm'),
             ],
-            cues: const ['Bright cyan outline glow on active target object'],
+            cues: const ['Bright cyan material outline glow on active target object'],
             checks: [
               EpicPieCheck(
                 id: 'ep_01_f02_c1',
-                text: 'Approach object -> Target highlights crisply at $reachVal $distUnit',
+                text: 'Approach object -> Target highlights crisply at 220 cm',
               ),
             ],
           ),
@@ -236,22 +221,18 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.queued,
         coreLoopBeat: 'Beat 2 · ${loop[1]}',
         goal:
-            'Own movable/rotatable puzzle objects and clean signal state emission to room gates.',
-        inScope: [
-          'Push, pick, or rotate greybox relays snapping within $snapVal $distUnit',
-          'Emit state_changed signal to linked receptors',
+            'Own movable/rotatable puzzle objects and clean signal delegate emission to room gates.',
+        inScope: const [
+          'Push, pick, or rotate greybox relays snapping within 80 cm',
+          'Broadcast OnStateChanged delegate to linked receptors',
         ],
-        doneWhen: [
+        doneWhen: const [
           'Press E near relay -> State toggles visibly and linked signal beam updates immediately',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/puzzle_object.tscn',
-            role: 'Interactive block / relay + trigger collider',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/puzzle_object.gd',
-            role: 'Snap placement & active state signal',
+            path: _ownerAsset('PuzzleRelayObject', archMode),
+            role: 'Interactive block / relay + UBoxComponent trigger',
           ),
         ],
         outOfScope: const ['No physics rope chains or inventory crafting tree'],
@@ -265,16 +246,16 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Interact to move or rotate relay nodes with $snapVal $distUnit snap alignment.',
+            goal: 'Interact to move or rotate relay nodes with 80 cm snap alignment.',
             controls: [
               EpicControlBinding(
-                action: 'rotate_or_use',
-                trigger: 'Just Pressed (R / RMB)',
+                action: 'IA_RotateOrUse',
+                trigger: 'Started (R / RMB)',
                 rule: 'Rotates or toggles held puzzle node state cleanly',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'snap_tolerance', value: snapVal, unit: distUnit),
+              EpicTuningParam(key: 'SnapTolerance', value: '80', unit: 'cm'),
             ],
             cues: const ['Soft chime pitch increment on each snap step'],
             checks: [
@@ -293,9 +274,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             status: FeatureStatus.queued,
             goal: 'Propagate active signal from aligned relays to the exit receptor.',
             tuning: [
-              EpicTuningParam(key: 'signal_delay_s', value: '0.1', unit: 's'),
+              EpicTuningParam(key: 'SignalDelayS', value: '0.1', unit: 's'),
             ],
-            cues: const ['Green signal line lights up between relay and gate'],
+            cues: const ['Green Niagara beam lights up between relay and gate'],
             checks: [
               EpicPieCheck(
                 id: 'ep_02_f02_c1',
@@ -314,17 +295,17 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.queued,
         coreLoopBeat: 'Beat 4 · ${loop[3]}',
         goal:
-            'Own room completion state detection, exit gate opening, HUD status, and instant reset.',
-        inScope: [
+            'Own room completion state detection, exit gate opening, WBP HUD status, and instant reset.',
+        inScope: const [
           'Exit gate unlocks automatically when required relays stay active',
-          'Instant room state reset on R without scene reload flicker',
+          'Instant room state reset on R without map reload flicker',
         ],
-        doneWhen: [
+        doneWhen: const [
           'Solve room relays and enter ExitGate -> Victory banner shows and R resets room cleanly',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/room_controller.gd',
+            path: _ownerAsset('RoomController', archMode),
             role: 'Signal aggregator + R reset snapshot',
           ),
         ],
@@ -339,11 +320,11 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '30 min',
             status: FeatureStatus.queued,
-            goal: 'Unlock ExitGate within $reachVal $distUnit trigger zone when solved.',
+            goal: 'Unlock ExitGate within 220 cm trigger zone when solved.',
             tuning: [
-              EpicTuningParam(key: 'goal_gate_radius', value: reachVal, unit: distUnit),
+              EpicTuningParam(key: 'GoalGateRadius', value: '220', unit: 'cm'),
             ],
-            cues: const ['Gate slides open with subtle green glow and solved banner'],
+            cues: const ['Gate slides open with subtle green glow and solved WBP HUD banner'],
             checks: [
               EpicPieCheck(
                 id: 'ep_03_f01_c1',
@@ -358,16 +339,16 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '30 min',
             status: FeatureStatus.queued,
-            goal: 'Restore initial relay positions and SpawnPoint in < 0.2 s on R.',
+            goal: 'Restore initial relay positions and PlayerStart in < 0.2 s on R.',
             controls: [
               EpicControlBinding(
-                action: 'reset_room',
-                trigger: 'Just Pressed (R)',
+                action: 'IA_ResetRoom',
+                trigger: 'Started (R)',
                 rule: 'Restores player and all puzzle objects cleanly',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'reset_fade_s', value: '0.15', unit: 's'),
+              EpicTuningParam(key: 'ResetFadeS', value: '0.15', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -380,9 +361,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
       ),
     ];
   } else if (effectiveArchetype == 'racer') {
-    testScenePath = 'res://scenes/track_proto.tscn';
+    testMapPath = '/Game/Maps/Lvl_TrackProto.umap';
     inputSummary =
-        'InputMap (throttle, brake, steer_left/steer_right, drift_boost, reset_track)';
+        'IMC_Racer (IA_Throttle, IA_Brake, IA_Steer, IA_DriftBoost, IA_ResetTrack)';
     loop = const [
       'Throttle & Steer',
       'Drift Through Apex',
@@ -399,26 +380,22 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.active,
         coreLoopBeat: 'Beat 1 · ${loop[0]}',
         goal:
-            'Own responsive craft throttle, steering, drift slip banking, and follow $camNote rig.',
-        inScope: [
-          'Forward acceleration up to $topSpeedVal $speedUnit with wall slide bounce',
-          'Speed-reactive FOV/zoom pull on high velocity corners',
+            'Own responsive craft throttle, steering, drift slip banking, and follow USpringArmComponent rig.',
+        inScope: const [
+          'Forward acceleration up to 2400 cm/s with wall slide bounce',
+          'Speed-reactive FOV pull on high velocity corners',
         ],
-        doneWhen: [
-          'Hold W + A/D along track -> Craft holds corner line at $topSpeedVal $speedUnit cleanly',
+        doneWhen: const [
+          'Hold W + A/D along track -> Craft holds corner line at 2400 cm/s cleanly',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/track_proto.tscn',
-            role: 'Looping greybox test circuit + guardrails + SpawnPoint',
+            path: testMapPath,
+            role: 'Looping greybox test circuit + guardrails + PlayerStart',
           ),
           EpicSceneOwnership(
-            path: 'res://scenes/racer.tscn',
-            role: '$bodyCls craft + $camNote follow camera',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/racer.gd',
-            role: 'Acceleration, steer banking & drift state machine',
+            path: _ownerAsset('RacerPawn', archMode),
+            role: 'APawn craft + USpringArmComponent follow camera',
           ),
         ],
         outOfScope: const ['No AI rubber-banding opponents or vehicle garage'],
@@ -432,16 +409,16 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.active,
-            goal: 'Drive craft smoothly up to $topSpeedVal $speedUnit with banked follow cam.',
+            goal: 'Drive craft smoothly up to 2400 cm/s with banked follow cam.',
             controls: [
               EpicControlBinding(
-                action: 'throttle',
-                trigger: 'Held (W / Up)',
-                rule: 'Accelerates craft smoothly up to $topSpeedVal $speedUnit',
+                action: 'IA_Throttle',
+                trigger: 'Triggered (W / Up)',
+                rule: 'Accelerates craft smoothly up to 2400 cm/s',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'top_speed', value: topSpeedVal, unit: speedUnit),
+              EpicTuningParam(key: 'TopSpeed', value: '2400', unit: 'cm/s'),
             ],
             checks: [
               EpicPieCheck(
@@ -457,16 +434,16 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Hold tight drift angle on Space with sparks trail feedback.',
+            goal: 'Hold tight drift angle on Space with Niagara sparks trail feedback.',
             controls: [
               EpicControlBinding(
-                action: 'drift_boost',
-                trigger: 'Held / Released (Space)',
+                action: 'IA_DriftBoost',
+                trigger: 'Triggered / Completed (Space)',
                 rule: 'Enters drift slide and triggers exit surge on straight',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'drift_grip', value: '0.65', unit: 'x'),
+              EpicTuningParam(key: 'DriftGrip', value: '0.65', unit: 'x'),
             ],
             checks: [
               EpicPieCheck(
@@ -487,26 +464,22 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         coreLoopBeat: 'Beat 3 · ${loop[2]}',
         goal:
             'Own track boost gates, surge speed impulses, and thruster heat buildup.',
-        inScope: [
-          '$gateWidthVal $distUnit boost gates adding temporary speed surge',
-          'HUD speed + thruster heat gauge bar',
+        inScope: const [
+          '550 cm boost gates adding temporary speed surge',
+          'UMG Widget speed + thruster heat gauge bar',
         ],
-        doneWhen: [
-          'Pass through gate -> Craft surges briefly and HUD heat bar updates smoothly',
+        doneWhen: const [
+          'Pass through gate -> Craft surges briefly and WBP HUD heat bar updates smoothly',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/boost_pad.tscn',
-            role: 'Track trigger gate + glowing chevron mesh',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/boost_pad.gd',
-            role: 'Area overlap boost impulse & cooldown lock',
+            path: _ownerAsset('BoostGate', archMode),
+            role: 'Track UBoxComponent trigger gate + glowing chevron mesh',
           ),
         ],
         outOfScope: const ['No item boxes or weapon pickups'],
         states: const ['Normal -> Boosting (0.9s) -> Cooling'],
-        interrupts: const ['Exceeding 100% heat triggers 1.2s forced vent slowdown'],
+        interrupts: const ['Exceeding 100% heat triggers 1.2 s forced vent slowdown'],
         features: [
           FeatureSpec(
             id: 'ep_02_f01',
@@ -515,10 +488,10 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Pass $gateWidthVal $distUnit gate to gain +$moveVal $speedUnit boost.',
+            goal: 'Pass 550 cm gate to gain +620 cm/s boost.',
             tuning: [
-              EpicTuningParam(key: 'boost_bonus_speed', value: moveVal, unit: speedUnit),
-              EpicTuningParam(key: 'gate_width', value: gateWidthVal, unit: distUnit),
+              EpicTuningParam(key: 'BoostBonusSpeed', value: '620', unit: 'cm/s'),
+              EpicTuningParam(key: 'GateWidth', value: '550', unit: 'cm'),
             ],
             checks: [
               EpicPieCheck(
@@ -534,9 +507,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '30 min',
             status: FeatureStatus.queued,
-            goal: 'Track 0-100% heat meter on CanvasLayer HUD with red overheat warning.',
+            goal: 'Track 0-100% heat meter on WBP HUD with red overheat warning.',
             tuning: [
-              EpicTuningParam(key: 'overheat_vent_s', value: '1.2', unit: 's'),
+              EpicTuningParam(key: 'OverheatVentS', value: '1.2', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -556,23 +529,23 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.queued,
         coreLoopBeat: 'Beat 4 · ${loop[3]}',
         goal:
-            'Own sequential track checkpoints, live lap stopwatch HUD, and R instant reset.',
-        inScope: [
+            'Own sequential track checkpoints, live lap stopwatch UMG HUD, and R instant reset.',
+        inScope: const [
           'Ordered checkpoint zones preventing reverse-lap skip',
           'Live lap time + best lap readout + R restart',
         ],
-        doneWhen: [
+        doneWhen: const [
           'Finish 1 lap and press R -> Best lap records cleanly and craft resets to start line',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/lap_timer.gd',
-            role: 'Checkpoint sequence tracker & CanvasLayer HUD timer',
+            path: '/Game/UI/WBP_LapTimer',
+            role: 'Checkpoint sequence tracker & UMG HUD timer',
           ),
         ],
         outOfScope: const ['No online leaderboards or ghost replay saving'],
         states: const ['Countdown -> Racing -> LapFinish'],
-        interrupts: const ['Press R resets lap clock and transforms craft to SpawnPoint'],
+        interrupts: const ['Press R resets lap clock and snaps craft to PlayerStart'],
         features: [
           FeatureSpec(
             id: 'ep_03_f01',
@@ -581,9 +554,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '30 min',
             status: FeatureStatus.queued,
-            goal: 'Require passing $gateWidthVal $distUnit checkpoints before start gate counts.',
+            goal: 'Require passing 550 cm checkpoints before start gate counts.',
             tuning: [
-              EpicTuningParam(key: 'checkpoint_width', value: gateWidthVal, unit: distUnit),
+              EpicTuningParam(key: 'CheckpointWidth', value: '550', unit: 'cm'),
             ],
             checks: [
               EpicPieCheck(
@@ -602,13 +575,13 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             goal: 'Display millisecond lap timer and reset track cleanly on R.',
             controls: [
               EpicControlBinding(
-                action: 'reset_track',
-                trigger: 'Just Pressed (R)',
+                action: 'IA_ResetTrack',
+                trigger: 'Started (R)',
                 rule: 'Zeroes velocity and places craft at starting gate',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'reset_fade_s', value: '0.15', unit: 's'),
+              EpicTuningParam(key: 'ResetFadeS', value: '0.15', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -621,9 +594,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
       ),
     ];
   } else if (effectiveArchetype == 'movement') {
-    testScenePath = 'res://scenes/course_proto.tscn';
+    testMapPath = '/Game/Maps/Lvl_CourseProto.umap';
     inputSummary =
-        'InputMap (move_left/right/up/down, jump, air_dash, reset_course)';
+        'IMC_Course (IA_Move, IA_Jump, IA_AirDash, IA_ResetCourse)';
     loop = const [
       'Run & Jump',
       'Chain Air Dash',
@@ -640,26 +613,22 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.active,
         coreLoopBeat: 'Beat 1 · ${loop[0]}',
         goal:
-            'Own responsive $bodyCls run/jump physics with coyote time and smooth $camNote follow.',
-        inScope: [
-          'Run speed $moveVal $speedUnit + crisp jump arc across obstacle platforms',
-          '$dodgeDist $distUnit air dash / grapple burst resetting on landing',
+            'Own responsive ACharacter run/jump physics with coyote time and smooth USpringArmComponent follow.',
+        inScope: const [
+          'Run speed 620 cm/s + crisp jump arc across obstacle platforms',
+          '500 cm air dash burst resetting on landing',
         ],
-        doneWhen: [
+        doneWhen: const [
           'Run and jump across greybox gaps -> Zero missed edges during coyote window',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/course_proto.tscn',
-            role: 'Obstacle course test level + SpawnPoint + FinishGate',
+            path: testMapPath,
+            role: 'Obstacle course test map + PlayerStart + FinishGate',
           ),
           EpicSceneOwnership(
-            path: 'res://scenes/player.tscn',
-            role: '$bodyCls + $camNote follow rig',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/player.gd',
-            role: 'Run, jump buffer, coyote window & air dash state machine',
+            path: _ownerAsset('RunnerCharacter', archMode),
+            role: 'ACharacter + coyote jump buffer + USpringArmComponent follow rig',
           ),
         ],
         outOfScope: const ['No wall-climb stamina bars or weapon combat'],
@@ -673,17 +642,17 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.active,
-            goal: 'Run at $moveVal $speedUnit with crisp 0.12 s coyote jump grace.',
+            goal: 'Run at 620 cm/s with crisp 0.12 s coyote jump grace.',
             controls: [
               EpicControlBinding(
-                action: 'jump',
-                trigger: 'Just Pressed (Space)',
+                action: 'IA_Jump',
+                trigger: 'Started (Space)',
                 rule: 'Jumps cleanly with coyote & pre-land input buffer',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'move_speed', value: moveVal, unit: speedUnit),
-              EpicTuningParam(key: 'coyote_time_s', value: '0.12', unit: 's'),
+              EpicTuningParam(key: 'MoveSpeed', value: '620', unit: 'cm/s'),
+              EpicTuningParam(key: 'CoyoteTimeS', value: '0.12', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -699,21 +668,21 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Burst $dodgeDist $distUnit mid-air along input vector before falling.',
+            goal: 'Burst 500 cm mid-air along input vector before falling.',
             controls: [
               EpicControlBinding(
-                action: 'air_dash',
-                trigger: 'Just Pressed (Shift)',
-                rule: 'Surges $dodgeDist $distUnit mid-air once per airborne jump',
+                action: 'IA_AirDash',
+                trigger: 'Started (Shift)',
+                rule: 'Surges 500 cm mid-air once per airborne jump',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'dash_distance', value: dodgeDist, unit: distUnit),
+              EpicTuningParam(key: 'DashDistance', value: '500', unit: 'cm'),
             ],
             checks: [
               EpicPieCheck(
                 id: 'ep_01_f02_c1',
-                text: 'Press Shift mid-jump -> Traverses $dodgeDist $distUnit cleanly with trail',
+                text: 'Press Shift mid-jump -> Traverses 500 cm cleanly with trail',
               ),
             ],
           ),
@@ -728,22 +697,18 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.queued,
         coreLoopBeat: 'Beat 3 · ${loop[2]}',
         goal:
-            'Own greybox moving/crumbling platforms, fall reset plane, and course checkpoints.',
-        inScope: [
-          'Checkpoints within $reachVal $distUnit capture safe respawn coordinates',
+            'Own greybox moving platforms, fall reset volume, and course checkpoints.',
+        inScope: const [
+          'Checkpoints within 220 cm capture safe respawn coordinates',
           'Out-of-bounds trigger teleports cleanly to active checkpoint',
         ],
-        doneWhen: [
+        doneWhen: const [
           'Touch checkpoint then miss jump -> Player respawns at checkpoint in < 0.2 s',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/checkpoint.tscn',
-            role: 'Checkpoint pad + Area flag trigger',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/course_hazards.gd',
-            role: 'Fall plane & checkpoint respawn manager',
+            path: _ownerAsset('CheckpointPad', archMode),
+            role: 'Checkpoint pad + UBoxComponent flag trigger & fall reset',
           ),
         ],
         outOfScope: const ['No branching skill upgrades or collectible shop'],
@@ -757,9 +722,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Capture spawn point within $reachVal $distUnit pad radius on overlap.',
+            goal: 'Capture spawn point within 220 cm pad radius on overlap.',
             tuning: [
-              EpicTuningParam(key: 'checkpoint_radius', value: reachVal, unit: distUnit),
+              EpicTuningParam(key: 'CheckpointRadius', value: '220', unit: 'cm'),
             ],
             checks: [
               EpicPieCheck(
@@ -775,9 +740,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Boost upward jump velocity cleanly when crossing spring pad nodes.',
+            goal: 'Boost upward jump velocity cleanly when crossing launch pad actors.',
             tuning: [
-              EpicTuningParam(key: 'spring_boost_mult', value: '1.6', unit: 'x'),
+              EpicTuningParam(key: 'SpringBoostMult', value: '1.6', unit: 'x'),
             ],
             checks: [
               EpicPieCheck(
@@ -797,18 +762,18 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.queued,
         coreLoopBeat: 'Beat 4 · ${loop[3]}',
         goal:
-            'Own speedrun stopwatch HUD, finish banner detection, and R instant course restart.',
-        inScope: [
-          'CanvasLayer stopwatch timer stopping on FinishGate contact',
+            'Own speedrun stopwatch UMG HUD, finish banner detection, and R instant course restart.',
+        inScope: const [
+          'WBP stopwatch timer stopping on FinishGate overlap',
           'Instant R full-course restart',
         ],
-        doneWhen: [
-          'Reach FinishGate -> Timer freezes cleanly and R restarts run from SpawnPoint',
+        doneWhen: const [
+          'Reach FinishGate -> Timer freezes cleanly and R restarts run from PlayerStart',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/course_timer.gd',
-            role: 'Run timer & FinishGate HUD banner',
+            path: '/Game/UI/WBP_CourseTimer',
+            role: 'Run timer & FinishGate UMG Widget banner',
           ),
         ],
         outOfScope: const ['No ghost race replays or unlock menus'],
@@ -822,9 +787,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '30 min',
             status: FeatureStatus.queued,
-            goal: 'Stop stopwatch and display clear time when crossing $gateWidthVal $distUnit finish gate.',
+            goal: 'Stop stopwatch and display clear time when crossing 550 cm finish gate.',
             tuning: [
-              EpicTuningParam(key: 'finish_gate_width', value: gateWidthVal, unit: distUnit),
+              EpicTuningParam(key: 'FinishGateWidth', value: '550', unit: 'cm'),
             ],
             checks: [
               EpicPieCheck(
@@ -840,16 +805,16 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '30 min',
             status: FeatureStatus.queued,
-            goal: 'Reset player to SpawnPoint and zero timer in < 0.2 s on R.',
+            goal: 'Reset player to PlayerStart and zero timer in < 0.2 s on R.',
             controls: [
               EpicControlBinding(
-                action: 'reset_course',
-                trigger: 'Just Pressed (R)',
+                action: 'IA_ResetCourse',
+                trigger: 'Started (R)',
                 rule: 'Restarts course run immediately',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'reset_fade_s', value: '0.15', unit: 's'),
+              EpicTuningParam(key: 'ResetFadeS', value: '0.15', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -867,9 +832,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lower.contains('turret') ||
         lower.contains('build') ||
         lower.contains('beacon');
-    testScenePath = 'res://scenes/arena_proto.tscn';
+    testMapPath = '/Game/Maps/Lvl_ArenaProto.umap';
     inputSummary =
-        'InputMap (move_left/right/up/down, dodge, primary_action, reset_proto)';
+        'IMC_Combat (IA_Move, IA_Dodge, IA_PrimaryAction, IA_ResetProto)';
     loop = <String>[
       'Move & Orient',
       'Trigger Primary Action',
@@ -886,26 +851,22 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         lifecycle: EpicLifecycle.active,
         coreLoopBeat: 'Beat 1 · ${loop[0]}',
         goal:
-            'Own player $bodyCls locomotion, dash evasion impulse, and locked $camNote framing.',
-        inScope: [
-          'WASD movement at $moveVal $speedUnit inside $arenaExtent playtest room',
-          'Forward $dodgeDist $distUnit dodge dash on 1.0 s cooldown',
+            'Own ACharacter locomotion, dash evasion impulse, and locked USpringArmComponent framing.',
+        inScope: const [
+          'WASD movement at 620 cm/s inside 2800x2800 cm playtest room',
+          'Forward 500 cm dodge dash on 1.0 s cooldown',
         ],
-        doneWhen: [
-          'Move and dodge cleanly inside $arenaExtent -> Zero snagging against walls',
+        doneWhen: const [
+          'Move and dodge cleanly inside 2800x2800 cm -> Zero snagging against walls',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/arena_proto.tscn',
-            role: '$arenaExtent greybox test room + SpawnPoint',
+            path: testMapPath,
+            role: '2800x2800 cm greybox test room + PlayerStart',
           ),
           EpicSceneOwnership(
-            path: 'res://scenes/player.tscn',
-            role: '$bodyCls + $camNote follow rig',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/player.gd',
-            role: 'Movement state machine & @export physics',
+            path: _ownerAsset('PlayerCharacter', archMode),
+            role: 'ACharacter + USpringArmComponent follow rig',
           ),
         ],
         outOfScope: const [
@@ -915,7 +876,7 @@ ProjectConceptBlueprint buildSynthesizedFallback(
           'Idle / Move -> DodgeImpulse (0.16s) -> Recover -> Idle / Move',
         ],
         interrupts: const [
-          'DodgeImpulse grants temporary collision mask bypass on enemy bodies',
+          'DodgeImpulse grants temporary collision channel bypass on enemy actors',
         ],
         features: [
           FeatureSpec(
@@ -925,22 +886,22 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.active,
-            goal: 'Control player movement at $moveVal $speedUnit with smooth $camNote follow.',
+            goal: 'Control player movement at 620 cm/s with smooth USpringArmComponent follow.',
             controls: [
               EpicControlBinding(
-                action: 'move_8way',
-                trigger: 'Held (WASD)',
-                rule: 'Moves smoothly at $moveVal $speedUnit across floor',
+                action: 'IA_Move',
+                trigger: 'Triggered (WASD)',
+                rule: 'Moves smoothly at 620 cm/s across floor',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'move_speed', value: moveVal, unit: speedUnit),
+              EpicTuningParam(key: 'MoveSpeed', value: '620', unit: 'cm/s'),
             ],
             cues: const ['Subtle movement lean matching travel vector'],
             checks: [
               EpicPieCheck(
                 id: 'ep_01_f01_c1',
-                text: 'Hold WASD -> Player moves at $moveVal $speedUnit cleanly',
+                text: 'Hold WASD -> Player moves at 620 cm/s cleanly',
               ),
             ],
           ),
@@ -951,27 +912,23 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Execute $dodgeDist $distUnit forward dodge impulse on 1.0 s cooldown.',
+            goal: 'Execute 500 cm forward dodge impulse on 1.0 s cooldown.',
             controls: [
               EpicControlBinding(
-                action: 'dodge',
-                trigger: 'Just Pressed (Space)',
-                rule: 'Dashes $dodgeDist $distUnit forward over 0.16 s',
+                action: 'IA_Dodge',
+                trigger: 'Started (Space)',
+                rule: 'Dashes 500 cm forward over 0.16 s',
               ),
             ],
             tuning: [
-              EpicTuningParam(
-                key: 'dodge_distance',
-                value: dodgeDist,
-                unit: distUnit,
-              ),
-              EpicTuningParam(key: 'dodge_cooldown', value: '1.0', unit: 's'),
+              EpicTuningParam(key: 'DodgeDistance', value: '500', unit: 'cm'),
+              EpicTuningParam(key: 'DodgeCooldown', value: '1.0', unit: 's'),
             ],
-            cues: const ['Bright debug trail ribbon during DodgeImpulse'],
+            cues: const ['Bright cyan Niagara trail ribbon during DodgeImpulse'],
             checks: [
               EpicPieCheck(
                 id: 'ep_01_f02_c1',
-                text: 'Press Space -> Travels $dodgeDist $distUnit cleanly with cooldown ring',
+                text: 'Press Space -> Travels 500 cm cleanly with cooldown ring',
               ),
             ],
           ),
@@ -987,17 +944,17 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         coreLoopBeat: 'Beat 2 · ${loop[1]}',
         goal:
             'Own primary offensive actions along aim direction, impact damage, and cooldown cadence.',
-        inScope: [
-          '$actionRange $distUnit aimed strike with 25 hp base hit damage',
+        inScope: const [
+          '1600 cm aimed strike with 25 hp base hit damage',
           'Brief screen impulse and impact flash on hit',
         ],
-        doneWhen: [
-          'Click LMB toward target -> Hit registers out to $actionRange $distUnit cleanly',
+        doneWhen: const [
+          'Click LMB toward target -> Hit registers out to 1600 cm cleanly',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/primary_action.gd',
-            role: 'Input trace / projectile spawn & 0.25 s cooldown lock',
+            path: _ownerAsset('PrimaryCombatComponent', archMode),
+            role: 'LineTrace / projectile spawn & 0.25 s cooldown lock',
           ),
         ],
         outOfScope: const [
@@ -1017,26 +974,22 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Execute $actionRange $distUnit strike toward aim vector dealing 25 hp.',
+            goal: 'Execute 1600 cm strike toward aim vector dealing 25 hp.',
             controls: [
               EpicControlBinding(
-                action: 'primary_action',
-                trigger: 'Just Pressed (LMB)',
-                rule: 'Fires active projectile or melee trace out to $actionRange $distUnit',
+                action: 'IA_PrimaryAction',
+                trigger: 'Started (LMB)',
+                rule: 'Fires active projectile or melee trace out to 1600 cm',
               ),
             ],
             tuning: [
-              EpicTuningParam(
-                key: 'action_range',
-                value: actionRange,
-                unit: distUnit,
-              ),
-              EpicTuningParam(key: 'action_damage', value: '25', unit: 'hp'),
+              EpicTuningParam(key: 'ActionRange', value: '1600', unit: 'cm'),
+              EpicTuningParam(key: 'ActionDamage', value: '25', unit: 'hp'),
             ],
             checks: [
               EpicPieCheck(
                 id: 'ep_02_f01_c1',
-                text: 'Click LMB -> Strikes cleanly out to $actionRange $distUnit',
+                text: 'Click LMB -> Strikes cleanly out to 1600 cm',
               ),
             ],
           ),
@@ -1049,9 +1002,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             status: FeatureStatus.queued,
             goal: 'Enforce 0.25 s strike cadence and emit white impact flash plus camera pulse.',
             tuning: [
-              EpicTuningParam(key: 'action_cooldown', value: '0.25', unit: 's'),
+              EpicTuningParam(key: 'ActionCooldown', value: '0.25', unit: 's'),
             ],
-            cues: const ['Emissive impact flash on hit + micro camera kick'],
+            cues: const ['Emissive impact flash on hit + micro camera shake'],
             checks: [
               EpicPieCheck(
                 id: 'ep_02_f02_c1',
@@ -1066,37 +1019,33 @@ ProjectConceptBlueprint buildSynthesizedFallback(
           id: 'ep_03_util',
           code: 'E03',
           lineageKey: 'e03_util',
-          title: 'Field Utility & Nodes',
+          title: 'Field Utility & Actors',
           releaseVersion: 'v0.1',
           lifecycle: EpicLifecycle.queued,
           coreLoopBeat: 'Beat 3 · ${loop[2]}',
           goal:
-              'Own deployable utility instances placed ahead of the player to shape arena space.',
-          inScope: [
-            'Spawn utility $deployDist $distUnit ahead on 3.0 s cooldown',
+              'Own deployable utility actors placed ahead of the player to shape arena space.',
+          inScope: const [
+            'Spawn utility 200 cm ahead on 3.0 s cooldown',
             'Cap max 2 concurrent deployed instances cleanly',
           ],
-          doneWhen: [
-            'Press E -> Utility node deploys $deployDist $distUnit ahead and activates on overlap',
+          doneWhen: const [
+            'Press E -> Utility actor deploys 200 cm ahead and activates on overlap',
           ],
           sceneOwnership: [
             EpicSceneOwnership(
-              path: 'res://scenes/field_utility.tscn',
-              role: 'Deployed utility node + trigger area',
-            ),
-            EpicSceneOwnership(
-              path: 'res://scripts/field_utility.gd',
-              role: 'Placement distance, cooldown & max count queue',
+              path: _ownerAsset('FieldUtility', archMode),
+              role: 'Deployed utility AActor + UBoxComponent trigger',
             ),
           ],
           outOfScope: const [
             'No multi-tier building upgrade grid',
           ],
-          states: [
-            'Ready -> DeployActive ($deployDist $distUnit offset) -> Cooldown (3.0s)',
+          states: const [
+            'Ready -> DeployActive (200 cm offset) -> Cooldown (3.0s)',
           ],
           interrupts: const [
-            'Max 2 active utility instances free oldest node automatically',
+            'Max 2 active utility instances destroy oldest actor automatically',
           ],
           features: [
             FeatureSpec(
@@ -1106,26 +1055,22 @@ ProjectConceptBlueprint buildSynthesizedFallback(
               introducedIn: 'v0.1',
               sliceTime: '45 min',
               status: FeatureStatus.queued,
-              goal: 'Place utility $deployDist $distUnit ahead on E with cyan ring indicator.',
+              goal: 'Place utility 200 cm ahead on E with cyan ring decal.',
               controls: [
                 EpicControlBinding(
-                  action: 'secondary_action',
-                  trigger: 'Just Pressed (E / RMB)',
-                  rule: 'Deploys utility node $deployDist $distUnit ahead on a 3.0s cooldown',
+                  action: 'IA_SecondaryAction',
+                  trigger: 'Started (E / RMB)',
+                  rule: 'Deploys utility actor 200 cm ahead on a 3.0 s cooldown',
                 ),
               ],
               tuning: [
-                EpicTuningParam(
-                  key: 'deploy_distance',
-                  value: deployDist,
-                  unit: distUnit,
-                ),
-                EpicTuningParam(key: 'deploy_cooldown', value: '3.0', unit: 's'),
+                EpicTuningParam(key: 'DeployDistance', value: '200', unit: 'cm'),
+                EpicTuningParam(key: 'DeployCooldown', value: '3.0', unit: 's'),
               ],
               checks: [
                 EpicPieCheck(
                   id: 'ep_03_util_f01_c1',
-                  text: 'Press E -> Utility appears $deployDist $distUnit ahead',
+                  text: 'Press E -> Utility appears 200 cm ahead',
                 ),
               ],
             ),
@@ -1136,14 +1081,14 @@ ProjectConceptBlueprint buildSynthesizedFallback(
               introducedIn: 'v0.1',
               sliceTime: '30 min',
               status: FeatureStatus.queued,
-              goal: 'Keep at most 2 active utilities by freeing oldest instance on third deploy.',
+              goal: 'Keep at most 2 active utilities by destroying oldest actor on third deploy.',
               tuning: [
-                EpicTuningParam(key: 'max_deployed', value: '2', unit: 'count'),
+                EpicTuningParam(key: 'MaxDeployed', value: '2', unit: 'count'),
               ],
               checks: [
                 EpicPieCheck(
                   id: 'ep_03_util_f02_c1',
-                  text: 'Deploy third utility -> Oldest node despawns cleanly',
+                  text: 'Deploy third utility -> Oldest actor despawns cleanly',
                 ),
               ],
             ),
@@ -1159,21 +1104,17 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         coreLoopBeat: 'Beat ${loop.length} · ${loop.last}',
         goal:
             'Own interactive target enemies, readable threat telegraphs, HP tracking, and arena quick reset.',
-        inScope: [
-          '100 hp target entities stationed $targetDist from SpawnPoint',
+        inScope: const [
+          '100 hp target entities stationed 1200 cm from PlayerStart',
           '0.50 s telegraph warning before strike + R arena reset',
         ],
-        doneWhen: [
+        doneWhen: const [
           'Defeat targets and press R -> HUD updates cleanly and arena resets in < 0.2 s',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/target_enemy.tscn',
-            role: 'Target body + floating HP bar + telegraph indicator',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/target_enemy.gd',
-            role: 'Patrol / 0.50 s telegraph / Stagger loop',
+            path: _ownerAsset('TargetEnemy', archMode),
+            role: 'Target ACharacter + UWidgetComponent HP bar + telegraph cue',
           ),
         ],
         outOfScope: const [
@@ -1183,7 +1124,7 @@ ProjectConceptBlueprint buildSynthesizedFallback(
           'Patrol -> Telegraph (0.50s) -> Execute -> Stagger / Defeated',
         ],
         interrupts: const [
-          'Heavy hit triggers 0.40s brief knockback stagger without freezing player movement',
+          'Heavy hit triggers 0.40 s brief knockback stagger without freezing player movement',
         ],
         features: [
           FeatureSpec(
@@ -1195,17 +1136,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             status: FeatureStatus.queued,
             goal: 'Broadcast 0.50 s crimson telegraph before strike and track 100 hp.',
             tuning: [
-              EpicTuningParam(key: 'target_hp', value: '100', unit: 'hp'),
-              EpicTuningParam(
-                key: 'aggro_range',
-                value: is2d ? '320' : '12.0',
-                unit: distUnit,
-              ),
-              EpicTuningParam(
-                key: 'telegraph_duration',
-                value: '0.50',
-                unit: 's',
-              ),
+              EpicTuningParam(key: 'TargetHp', value: '100', unit: 'hp'),
+              EpicTuningParam(key: 'AggroRange', value: '1200', unit: 'cm'),
+              EpicTuningParam(key: 'TelegraphDuration', value: '0.50', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -1224,13 +1157,13 @@ ProjectConceptBlueprint buildSynthesizedFallback(
             goal: 'Update remaining target counter on defeat and reset arena in < 0.2 s on R.',
             controls: [
               EpicControlBinding(
-                action: 'reset_proto',
-                trigger: 'Just Pressed (R)',
-                rule: 'Respawns targets and resets player HP to 100 in < 0.2s',
+                action: 'IA_ResetProto',
+                trigger: 'Started (R)',
+                rule: 'Respawns targets and resets player HP to 100 in < 0.2 s',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'reset_fade_s', value: '0.15', unit: 's'),
+              EpicTuningParam(key: 'ResetFadeS', value: '0.15', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -1248,11 +1181,13 @@ ProjectConceptBlueprint buildSynthesizedFallback(
     sparkPrompt: cleaned,
     gameTitle: title,
     dimension: dimension,
+    architectureMode: archMode,
     pitch: '$title — $shortSpark',
     coreLoop: loop,
     cameraChoiceId: cameraChoice,
     cameraContract: cameraContract,
     inputContract: inputSummary,
+    assetPolicy: archMode.architectureContract,
     feelChoiceId: feelId,
     pillars: const [
       'Instant Frame-1 Control: Player movement and actions respond immediately without sluggish inertia',
@@ -1260,11 +1195,11 @@ ProjectConceptBlueprint buildSynthesizedFallback(
     ],
     tradeOffs: const [
       TradeOffRule(
-        prefer: 'Tight single-scene greybox playtest room',
+        prefer: 'Tight single-map greybox playtest room',
         avoid: 'Multi-level streaming worlds',
       ),
       TradeOffRule(
-        prefer: 'Readable debug geometry & Control HUD',
+        prefer: 'Readable debug geometry & UMG Widget HUD',
         avoid: 'Premature final art pipelines',
       ),
     ],
@@ -1274,7 +1209,7 @@ ProjectConceptBlueprint buildSynthesizedFallback(
       'No inventory UI or equipment loadouts',
     ],
     releaseDoneWhen:
-        'Run F6 on $testScenePath -> complete full 30s core loop cleanly with 0 Debugger errors',
+        'Run PIE on $testMapPath -> complete full 30s core loop cleanly with 0 Message Log errors',
     initialEpics: epics,
   );
   normalizeSequentialEpicAndFeatureCodesImpl(bp);
@@ -1284,5 +1219,8 @@ ProjectConceptBlueprint buildSynthesizedFallback(
     contractValue: cameraContract,
   );
   syncEpicCoreFeelImpl(bp, feelId: feelId);
-  return bp;
+  return UnrealSpecGuard.sanitizeConceptBlueprint(
+    raw: bp,
+    modeOverride: archMode,
+  );
 }

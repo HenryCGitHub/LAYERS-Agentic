@@ -1,231 +1,77 @@
 import '../../models/agent_blueprints.dart';
 import '../../models/epic_spec.dart';
-import '../../utils/godot_spec_guard.dart';
+import '../../utils/unreal_spec_guard.dart';
 
-String _fmtScaleNum(double v) {
-  if ((v - v.roundToDouble()).abs() < 0.01) {
-    return v.round().toString();
-  }
-  return v.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '');
-}
-
-void _convertTuningListDimension(
-  List<EpicTuningParam> tuning,
-  GodotProjectDimension prevDim,
-  GodotProjectDimension targetDim,
+String _swapArchitectureAssetPath(
+  String rawPath,
+  UnrealArchitectureMode targetMode,
 ) {
-  const pxPerMeter = 40.0;
-  final is2d = targetDim == GodotProjectDimension.dim2d;
-  for (final param in tuning) {
-    final rawUnit = param.unit.trim().toLowerCase();
-    final parsed = double.tryParse(param.value.trim());
-    if (prevDim == GodotProjectDimension.dim3d && is2d) {
-      if (rawUnit == 'm') {
-        if (parsed != null) param.value = _fmtScaleNum(parsed * pxPerMeter);
-        param.unit = 'px';
-      } else if (rawUnit == 'm/s') {
-        if (parsed != null) param.value = _fmtScaleNum(parsed * pxPerMeter);
-        param.unit = 'px/s';
-      }
-    } else if (prevDim == GodotProjectDimension.dim2d && !is2d) {
-      if (rawUnit == 'px') {
-        if (parsed != null) param.value = _fmtScaleNum(parsed / pxPerMeter);
-        param.unit = 'm';
-      } else if (rawUnit == 'px/s') {
-        if (parsed != null) param.value = _fmtScaleNum(parsed / pxPerMeter);
-        param.unit = 'm/s';
-      }
+  final trimmed = rawPath.trim();
+  if (trimmed.isEmpty) return trimmed;
+  final lower = trimmed.toLowerCase();
+  if (lower.endsWith('.umap') ||
+      lower.contains('/game/maps/') ||
+      lower.contains('/game/ui/') ||
+      lower.contains('/game/data/')) {
+    return trimmed;
+  }
+  if (targetMode == UnrealArchitectureMode.cppHybrid) {
+    final m = RegExp(
+      r'^/Game/Blueprints/BP_([A-Za-z0-9_]+)$',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (m != null) {
+      return 'Source/${m.group(1)}.cpp';
+    }
+  } else {
+    final m = RegExp(
+      r'^Source/([A-Za-z0-9_]+)\.(?:cpp|h)$',
+      caseSensitive: false,
+    ).firstMatch(trimmed);
+    if (m != null) {
+      return '/Game/Blueprints/BP_${m.group(1)}';
     }
   }
+  return trimmed;
 }
 
-String _swapDimensionLabelsOutsidePaths(
-  String text, {
-  required bool to2d,
-}) {
-  if (text.isEmpty) return text;
-  final resPathRx = RegExp(r'res://\S+');
-  String transformChunk(String chunk) {
-    if (to2d) {
-      return chunk
-          .replaceAll(RegExp(r'\b3D\b'), '2D')
-          .replaceAll(
-            RegExp(r'\bXZ\s+ground[- ]plane\b', caseSensitive: false),
-            '2D XY plane',
-          )
-          .replaceAll(
-            RegExp(r'\bXZ\s+plane\b', caseSensitive: false),
-            'XY plane',
-          )
-          .replaceAll(RegExp(r'\bXZ\b'), 'XY');
-    }
-    return chunk
-        .replaceAll(RegExp(r'\b2D\b'), '3D')
-        .replaceAll(
-          RegExp(r'\bXY\s+plane\b', caseSensitive: false),
-          'XZ plane',
-        )
-        .replaceAll(RegExp(r'\bXY\b'), 'XZ');
-  }
-
-  final buf = StringBuffer();
-  int cursor = 0;
-  for (final m in resPathRx.allMatches(text)) {
-    if (m.start > cursor) {
-      buf.write(transformChunk(text.substring(cursor, m.start)));
-    }
-    buf.write(m.group(0));
-    cursor = m.end;
-  }
-  if (cursor < text.length) {
-    buf.write(transformChunk(text.substring(cursor)));
-  }
-  return buf.toString();
-}
-
-void _convertFeatureDimensionContent(
-  FeatureSpec feat,
-  GodotProjectDimension prevDim,
-  GodotProjectDimension targetDim,
+/// Switches a [ProjectConceptBlueprint] between `Blueprint-First` and `C++ & BP Hybrid`,
+/// updating `§02` Asset Policy and non-map `EpicSceneOwnership` paths while keeping `cm` values intact.
+ProjectConceptBlueprint convertBlueprintArchitectureModeImpl(
+  ProjectConceptBlueprint current,
+  UnrealArchitectureMode targetMode,
 ) {
-  final to2d = targetDim == GodotProjectDimension.dim2d;
-  String conv(String s) => _swapDimensionLabelsOutsidePaths(s, to2d: to2d);
-  feat.title = conv(feat.title);
-  feat.goal = conv(feat.goal);
-  feat.releaseDelta = conv(feat.releaseDelta);
-  feat.inScope = [for (final s in feat.inScope) conv(s)];
-  feat.doneWhen = [for (final s in feat.doneWhen) conv(s)];
-  feat.controls = [
-    for (final c in feat.controls)
-      EpicControlBinding(
-        action: c.action,
-        trigger: conv(c.trigger),
-        rule: conv(c.rule),
-      ),
-  ];
-  _convertTuningListDimension(feat.tuning, prevDim, targetDim);
-  feat.cues = [for (final c in feat.cues) conv(c)];
-  feat.checks = [
-    for (final chk in feat.checks)
-      chk.copyWith(text: conv(chk.text)),
-  ];
-  feat.releaseDeltaChecks = [
-    for (final chk in feat.releaseDeltaChecks)
-      chk.copyWith(text: conv(chk.text)),
-  ];
-}
+  final next = current.deepCopy();
+  next.architectureMode = targetMode;
+  next.assetPolicy = targetMode == UnrealArchitectureMode.cppHybrid
+      ? 'Source/ ACharacter & UActorComponent UPROPERTY(EditAnywhere) C++ Base + Thin /Game/Blueprints/BP_* & /Game/Data/DA_*'
+      : 'UStaticMeshComponent Greybox + UMaterialInstanceDynamic Tints; /Game/Data/DA_GameTuning & Exposed BP Vars';
 
-void _convertEpicDimensionContent(
-  EpicSpec ep,
-  GodotProjectDimension prevDim,
-  GodotProjectDimension targetDim,
-) {
-  final to2d = targetDim == GodotProjectDimension.dim2d;
-  String conv(String s) => _swapDimensionLabelsOutsidePaths(s, to2d: to2d);
-  ep.title = conv(ep.title);
-  ep.coreLoopBeat = conv(ep.coreLoopBeat);
-  ep.goal = conv(ep.goal);
-  ep.inScope = [for (final s in ep.inScope) conv(s)];
-  ep.doneWhen = [for (final s in ep.doneWhen) conv(s)];
-  ep.sceneOwnership = [
-    for (final o in ep.sceneOwnership)
-      EpicSceneOwnership(path: o.path, role: conv(o.role)),
-  ];
-  ep.states = [for (final s in ep.states) conv(s)];
-  ep.interrupts = [for (final s in ep.interrupts) conv(s)];
-  ep.outOfScope = [for (final s in ep.outOfScope) conv(s)];
-  ep.links = [for (final s in ep.links) conv(s)];
-  ep.feedback = [for (final s in ep.feedback) conv(s)];
-  ep.levelStaging = conv(ep.levelStaging);
-  ep.checks = [
-    for (final chk in ep.checks) chk.copyWith(text: conv(chk.text)),
-  ];
-  ep.baselineSummary = [for (final s in ep.baselineSummary) conv(s)];
-  ep.upgradeDeltas = [for (final s in ep.upgradeDeltas) conv(s)];
-  _convertTuningListDimension(ep.tuning, prevDim, targetDim);
-  for (final feat in ep.features) {
-    _convertFeatureDimensionContent(feat, prevDim, targetDim);
+  for (final ep in [...next.initialEpics, ...next.v02NewPool]) {
+    ep.sceneOwnership = [
+      for (final own in ep.sceneOwnership)
+        EpicSceneOwnership(
+          path: _swapArchitectureAssetPath(own.path, targetMode),
+          role: own.role,
+        ),
+    ];
   }
+  return UnrealSpecGuard.sanitizeConceptBlueprint(
+    raw: next,
+    modeOverride: targetMode,
+  );
 }
 
-/// Converts an active [ProjectConceptBlueprint] between Godot 4 `3D` (`m`, `m/s`)
-/// and `2D` (`px`, `px/s`), updating §02 camera/scale contracts, Epics, and Features cleanly.
+/// Compatibility shim keeping legacy `convertBlueprintDimensionImpl` callers compiling until Round 6.
 ProjectConceptBlueprint convertBlueprintDimensionImpl(
   ProjectConceptBlueprint current,
   GodotProjectDimension targetDim,
 ) {
-  final next = current.deepCopy();
-  if (next.dimension == targetDim) return next;
-  final prevDim = next.dimension;
-  next.dimension = targetDim;
-
-  final is2d = targetDim == GodotProjectDimension.dim2d;
-  String conv(String s) => _swapDimensionLabelsOutsidePaths(s, to2d: is2d);
-  next.pitch = conv(next.pitch);
-  next.coreLoop = [for (final b in next.coreLoop) conv(b)];
-  next.pillars = [for (final p in next.pillars) conv(p)];
-  next.tradeOffs = [
-    for (final t in next.tradeOffs)
-      TradeOffRule(prefer: conv(t.prefer), avoid: conv(t.avoid)),
-  ];
-  next.outOfScope = [for (final s in next.outOfScope) conv(s)];
-  next.releaseDoneWhen = conv(next.releaseDoneWhen);
-
-  next.cameraDecisionOptions = is2d
-      ? List<ConceptSectionOption>.from(
-          ProjectConceptBlueprint.defaultCamera2dOptions,
-        )
-      : List<ConceptSectionOption>.from(
-          ProjectConceptBlueprint.defaultCamera3dOptions,
-        );
-  next.cameraChoiceId = is2d ? 'topdown2d' : 'isometric';
-  next.cameraContract = next.cameraDecisionOptions.first.contractValue;
-
-  if (is2d) {
-    next.characterScale =
-        'CharacterBody2D CollisionShape 32x48 px · move_speed 260 px/s';
-    next.assetPolicy =
-        'ColorRect / Polygon2D Greybox Prototypes + Solid Tint Materials; @export vars & Resource (.tres)';
-  } else {
-    next.characterScale =
-        'CharacterBody3D CapsuleRadius 0.42 m · Height 1.84 m · move_speed 6.2 m/s';
-    next.assetPolicy =
-        'CSGBox3D / PrimitiveMesh Greybox + StandardMaterial3D Tints; @export vars & Resource (.tres)';
-  }
-
-  for (final ep in [...next.initialEpics, ...next.v02NewPool]) {
-    _convertEpicDimensionContent(ep, prevDim, targetDim);
-  }
-  for (final list in next.v02NewFeaturesByLineageKey.values) {
-    for (final feat in list) {
-      _convertFeatureDimensionContent(feat, prevDim, targetDim);
-    }
-  }
-  next.v02Presets = [
-    for (final p in next.v02Presets)
-      ReleaseDirectionPreset(
-        id: p.id,
-        label: conv(p.label),
-        description: conv(p.description),
-        upgradeIds: List<String>.from(p.upgradeIds),
-        newEpicIds: List<String>.from(p.newEpicIds),
-      ),
-  ];
-  next.v02UpgradesByLineageKey = {
-    for (final entry in next.v02UpgradesByLineageKey.entries)
-      entry.key: [
-        for (final u in entry.value)
-          u.copyWith(text: conv(u.text)),
-      ],
-  };
-
-  syncEpicCameraFramingImpl(
-    next,
-    optionId: next.cameraChoiceId,
-    contractValue: next.cameraContract,
+  final next = current.deepCopy()..dimension = targetDim;
+  return UnrealSpecGuard.sanitizeConceptBlueprint(
+    raw: next,
+    modeOverride: next.architectureMode,
   );
-  syncEpicCoreFeelImpl(next, feelId: next.feelChoiceId);
-  return GodotSpecGuard.sanitizeConceptBlueprint(next);
 }
 
 /// Keeps `E01..EN` and `F01..FM` strictly sequential across `initialEpics` without gaps or duplicate codes.
@@ -282,12 +128,9 @@ void normalizeSequentialEpicAndFeatureCodesImpl(
   }
 }
 
-/// Resolves the locomotion/camera Epic by `lineageKey` or domain keywords even after queue reordering.
 EpicSpec _findLocomotionEpic(ProjectConceptBlueprint draft) {
   for (final ep in draft.initialEpics) {
-    if (ep.lineageKey.trim().toLowerCase() == 'e01') {
-      return ep;
-    }
+    if (ep.lineageKey.trim().toLowerCase() == 'e01') return ep;
   }
   for (final ep in draft.initialEpics) {
     final text =
@@ -339,11 +182,7 @@ void _upsertAimControl(
     controls[aimIdx].rule = aimRule;
   } else {
     controls.add(
-      EpicControlBinding(
-        action: aimAction,
-        trigger: aimTrigger,
-        rule: aimRule,
-      ),
+      EpicControlBinding(action: aimAction, trigger: aimTrigger, rule: aimRule),
     );
   }
 }
@@ -358,8 +197,9 @@ void _upsertCameraCheck(
     return t.contains('cursor') ||
         t.contains('reticle') ||
         t.contains('springarm') ||
+        t.contains('uspringarm') ||
         t.contains('camera') ||
-        t.contains('visualrig') ||
+        t.contains('turret') ||
         t.contains('first-person') ||
         t.contains('aim');
   });
@@ -370,8 +210,24 @@ void _upsertCameraCheck(
   }
 }
 
-/// Synchronizes locomotion Epic & first Feature's aim/look controls, tail tuning, and playtest check
-/// whenever the Stage 1 Camera Decision (`§02`) changes, without shifting `tuning[0]`.
+String? _extractCmFromContract(String contract, RegExp cmRx, RegExp meterRx) {
+  final cmMatch = cmRx.firstMatch(contract);
+  if (cmMatch != null) return cmMatch.group(1);
+  final mMatch = meterRx.firstMatch(contract);
+  if (mMatch != null) {
+    final v = double.tryParse(mMatch.group(1) ?? '');
+    if (v != null) {
+      final cm = v * 100.0;
+      return (cm - cm.roundToDouble()).abs() < 0.01
+          ? cm.round().toString()
+          : cm.toStringAsFixed(1);
+    }
+  }
+  return null;
+}
+
+/// Synchronizes locomotion Epic & first Feature's aim/look controls, tail tuning,
+/// and playtest check whenever the Stage 1 Camera Decision (`§02`) changes, without shifting `tuning[0]`.
 void syncEpicCameraFramingImpl(
   ProjectConceptBlueprint draft, {
   required String optionId,
@@ -381,15 +237,12 @@ void syncEpicCameraFramingImpl(
   final locoEpic = _findLocomotionEpic(draft);
   final lowerId = optionId.toLowerCase();
   final lowerContract = contractValue.toLowerCase();
-  final is2d = draft.dimension == GodotProjectDimension.dim2d ||
-      lowerId.endsWith('2d') ||
-      lowerContract.contains('camera2d');
-  final isTps = !is2d &&
-      (lowerId.contains('tps') ||
-          lowerId.contains('shoulder') ||
-          lowerId.contains('third') ||
-          lowerContract.contains('offset'));
-  final isFps = !is2d && (lowerId.contains('fps') || lowerId.contains('first'));
+  final isTps = lowerId.contains('tps') ||
+      lowerId.contains('shoulder') ||
+      lowerId.contains('third') ||
+      lowerContract.contains('offset');
+  final isFps = lowerId.contains('fps') || lowerId.contains('first');
+  final isSide = lowerId.contains('side');
 
   void upsertTailTuning(String key, String value, String unit) {
     if (locoEpic.tuning.isNotEmpty || locoEpic.features.isEmpty) {
@@ -411,58 +264,46 @@ void syncEpicCameraFramingImpl(
     }
   }
 
-  if (is2d) {
-    removeTuning('spring_arm_length');
-    removeTuning('eye_height');
-    removeTuning('camera_fov');
-    final zoomMatch = RegExp(
-      r'Zoom\s+(\d+(?:\.\d+)?)x',
-      caseSensitive: false,
-    ).firstMatch(contractValue);
-    if (zoomMatch != null) {
-      upsertTailTuning('camera_zoom', zoomMatch.group(1)!, 'x');
-    }
-  } else {
-    removeTuning('camera_zoom');
-    final springArmMatch = RegExp(
-      r'SpringArm3D\s+(\d+(?:\.\d+)?)\s*m',
-      caseSensitive: false,
-    ).firstMatch(contractValue);
-    final eyeHeightMatch = RegExp(
-      r'EyeHeight\s+(\d+(?:\.\d+)?)\s*m',
-      caseSensitive: false,
-    ).firstMatch(contractValue);
-    if (springArmMatch != null) {
-      removeTuning('eye_height');
-      upsertTailTuning('spring_arm_length', springArmMatch.group(1)!, 'm');
-    } else if (isFps) {
-      removeTuning('spring_arm_length');
-      if (eyeHeightMatch != null) {
-        upsertTailTuning('eye_height', eyeHeightMatch.group(1)!, 'm');
-      }
-    }
-    final fovMatch = RegExp(
-      r'(\d+(?:\.\d+)?)\s*deg\s*FOV',
-      caseSensitive: false,
-    ).firstMatch(contractValue);
-    if (fovMatch != null) {
-      upsertTailTuning('camera_fov', fovMatch.group(1)!, 'deg');
+  final springCm = _extractCmFromContract(
+    contractValue,
+    RegExp(r'(?:TargetArmLength|USpringArmComponent)\s+(\d+(?:\.\d+)?)\s*cm',
+        caseSensitive: false),
+    RegExp(r'SpringArm3D\s+(\d+(?:\.\d+)?)\s*m', caseSensitive: false),
+  );
+  final eyeCm = _extractCmFromContract(
+    contractValue,
+    RegExp(r'EyeHeight\s+(\d+(?:\.\d+)?)\s*cm', caseSensitive: false),
+    RegExp(r'EyeHeight\s+(\d+(?:\.\d+)?)\s*m', caseSensitive: false),
+  );
+
+  if (springCm != null) {
+    removeTuning('EyeHeight');
+    upsertTailTuning('SpringArmLength', springCm, 'cm');
+  } else if (isFps) {
+    removeTuning('SpringArmLength');
+    if (eyeCm != null) {
+      upsertTailTuning('EyeHeight', eyeCm, 'cm');
     }
   }
+  final fovMatch = RegExp(
+    r'(\d+(?:\.\d+)?)\s*deg\s*FOV',
+    caseSensitive: false,
+  ).firstMatch(contractValue);
+  if (fovMatch != null) {
+    upsertTailTuning('CameraFOV', fovMatch.group(1)!, 'deg');
+  }
 
-  final aimAction = is2d
-      ? 'mouse_aim'
-      : ((isTps || isFps) ? 'look_axis' : 'mouse_aim');
+  final aimAction = (isTps || isFps) ? 'IA_LookAxis' : 'IA_MouseAim';
   final aimTrigger = (isTps || isFps)
-      ? 'InputEventMouseMotion'
-      : (is2d ? 'Cursor 2D Global Pos' : 'Physics Tick XZ Raycast');
-  final aimRule = is2d
-      ? 'Rotates player Sprite2D/WeaponPivot toward get_global_mouse_position() cleanly'
-      : isTps
-          ? 'Orbits over-shoulder SpringArm3D yaw/pitch and aligns center reticle'
-          : isFps
-              ? 'Direct 1:1 first-person Camera3D yaw/pitch rotation'
-              : 'Projects cursor ray onto ground XZ-plane to orient VisualRig aim';
+      ? 'Triggered (Mouse XY 2D-Axis)'
+      : 'Tick GetHitResultUnderCursor';
+  final aimRule = isTps
+      ? 'Orbits over-shoulder USpringArmComponent yaw/pitch and aligns center reticle'
+      : isFps
+          ? 'Direct 1:1 first-person UCameraComponent yaw/pitch rotation'
+          : isSide
+              ? 'Tracks locked side-view USpringArmComponent along forward travel plane'
+              : 'Projects cursor trace onto ground XY plane to orient TurretVisual aim';
 
   if (locoEpic.controls.isNotEmpty || locoEpic.features.isEmpty) {
     _upsertAimControl(locoEpic.controls, aimAction, aimTrigger, aimRule);
@@ -476,13 +317,13 @@ void syncEpicCameraFramingImpl(
     );
   }
 
-  final expectedCheck = is2d
-      ? 'Move cursor across 2D viewport -> player aim indicator tracks cursor immediately'
-      : isTps
-          ? 'Move mouse -> over-shoulder SpringArm3D orbits smoothly with center reticle alignment'
-          : isFps
-              ? 'Move mouse -> first-person Camera3D turns smoothly with center reticle alignment'
-              : 'Move cursor across floor -> VisualRig tracks ground XZ aim smoothly';
+  final expectedCheck = isTps
+      ? 'Move mouse -> over-shoulder USpringArmComponent orbits smoothly with center reticle alignment'
+      : isFps
+          ? 'Move mouse -> first-person UCameraComponent turns smoothly with center reticle alignment'
+          : isSide
+              ? 'Run left/right -> side-scroller camera tracks smoothly with clear jump lookahead'
+              : 'Move cursor across floor -> TurretVisual tracks ground XY aim smoothly';
 
   if (locoEpic.checks.isNotEmpty || locoEpic.features.isEmpty) {
     _upsertCameraCheck(
@@ -501,7 +342,7 @@ void syncEpicCameraFramingImpl(
   }
 }
 
-/// Synchronizes `feelChoiceId`, primary §03 feel `TradeOffRule`, and locomotion Epic tail tuning (`braking_decel`)
+/// Synchronizes `feelChoiceId`, primary §03 feel `TradeOffRule`, and locomotion Epic tail tuning (`BrakingDeceleration`)
 /// without disturbing `tuning[0]`.
 void syncEpicCoreFeelImpl(
   ProjectConceptBlueprint draft, {
@@ -532,17 +373,16 @@ void syncEpicCoreFeelImpl(
 
   if (draft.initialEpics.isEmpty) return;
   final locoEpic = _findLocomotionEpic(draft);
-  final decelVal = opt.decelFor(draft.dimension);
-  final speedUnit = draft.dimension.speedUnit;
+  final decelVal = opt.decelCmPerSec;
   if (locoEpic.tuning.isNotEmpty || locoEpic.features.isEmpty) {
-    _upsertTuningParam(locoEpic.tuning, 'braking_decel', decelVal, speedUnit);
+    _upsertTuningParam(locoEpic.tuning, 'BrakingDeceleration', decelVal, 'cm/s');
   }
   if (locoEpic.features.isNotEmpty) {
     _upsertTuningParam(
       locoEpic.features.first.tuning,
-      'braking_decel',
+      'BrakingDeceleration',
       decelVal,
-      speedUnit,
+      'cm/s',
     );
   }
 }

@@ -730,10 +730,10 @@ void main() {
           contains('# UE5 EPIC ARCHITECTURE BRIEF · E01'),
         );
 
-        // Select F02, mutate live @export tuning & add parameter
+        // Select F02, mutate live Exposed BP tuning & add parameter
         wb.selectFeature(e01.id, 'sb_f02');
         expect(wb.selectedFeatureSpec?.code, equals('F02'));
-        wb.updateFeatureTuningParam(e01.id, 'sb_f02', 0, '7.25');
+        wb.updateFeatureTuningParam(e01.id, 'sb_f02', 0, '725');
         wb.addFeatureTuningParam(
           e01.id,
           'sb_f02',
@@ -1018,7 +1018,7 @@ void main() {
         );
         await tester.enterText(
           find.byKey(const ValueKey('tuning_input_sb_f02_0')),
-          '6.8',
+          '680',
         );
         await tester.pump(const Duration(milliseconds: 350));
 

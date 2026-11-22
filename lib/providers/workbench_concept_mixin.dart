@@ -77,7 +77,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       existing?.sections ?? const <String, String>{},
     );
     nextSections['concept_blueprint_json'] = jsonEncode(bp.toJson());
-    nextSections['engine'] = bp.dimension.shortLabel;
+    nextSections['unreal_arch_mode'] = bp.architectureMode.id;
+    nextSections['engine'] = bp.architectureMode.shortLabel;
     nextSections['dimension'] = bp.dimension.id;
     nextSections['current_stage'] = _currentStage.name;
 
@@ -99,7 +100,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   void loadPresetSpark(String presetId) {
-    final preset = GodotSparkPresets.byId(presetId);
+    final preset = UnrealSparkPresets.byId(presetId);
     _userPinnedDimension = false;
     _clearStage1TransientState();
     _offlineErrorMessage = null;
@@ -196,7 +197,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (cleanPrompt.isEmpty) return null;
 
     _isAgentBusy = true;
-    _agentProgressStep = 'Drafting Godot 4 Root Spec (PROJECT_SPEC.md)...';
+    _agentProgressStep = 'Drafting Unreal Engine 5 Root Spec (PROJECT_SPEC.md)...';
     _offlineErrorMessage = null;
     _stage1InlineError = null;
     notifyListeners();
@@ -252,7 +253,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (draft == null || clean.isEmpty) return null;
 
     _isAgentBusy = true;
-    _agentProgressStep = 'Co-Designer updating ROOT_GODOT_CONTEXT...';
+    _agentProgressStep = 'Co-Designer updating ROOT_UNREAL_CONTEXT...';
     _offlineErrorMessage = null;
     _stage1InlineError = null;
     notifyListeners();
@@ -457,62 +458,62 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final draft = _conceptDraft;
     if (draft == null) return;
     _pushStage1UndoSnapshot();
-    final dim = draft.dimension;
+    final mode = draft.architectureMode;
     final changed = <String>{};
     if (gameTitle != null && gameTitle.trim().isNotEmpty) {
       draft.gameTitle = gameTitle.trim().toUpperCase();
       changed.add('s01');
     }
     if (pitch != null && pitch.trim().isNotEmpty) {
-      draft.pitch = GodotSpecGuard.sanitizeLine(pitch, dimension: dim);
+      draft.pitch = UnrealSpecGuard.sanitizeLine(pitch, mode: mode);
       changed.add('s01');
     }
     if (cameraContract != null) {
       draft.cameraContract =
-          GodotSpecGuard.sanitizeLine(cameraContract, dimension: dim);
+          UnrealSpecGuard.sanitizeLine(cameraContract, mode: mode);
       changed.add('s02');
     }
     if (characterScale != null) {
       draft.characterScale =
-          GodotSpecGuard.sanitizeLine(characterScale, dimension: dim);
+          UnrealSpecGuard.sanitizeLine(characterScale, mode: mode);
       changed.add('s02');
     }
     if (inputContract != null) {
       draft.inputContract =
-          GodotSpecGuard.sanitizeLine(inputContract, dimension: dim);
+          UnrealSpecGuard.sanitizeLine(inputContract, mode: mode);
       changed.add('s02');
     }
     if (assetPolicy != null) {
       draft.assetPolicy =
-          GodotSpecGuard.sanitizeLine(assetPolicy, dimension: dim);
+          UnrealSpecGuard.sanitizeLine(assetPolicy, mode: mode);
       changed.add('s02');
     }
     if (releaseDoneWhen != null) {
       draft.releaseDoneWhen =
-          GodotSpecGuard.sanitizeLine(releaseDoneWhen, dimension: dim);
+          UnrealSpecGuard.sanitizeLine(releaseDoneWhen, mode: mode);
       changed.add('s05');
     }
     if (coreLoop != null) {
       draft.coreLoop = [
         for (final b in coreLoop)
-          if (GodotSpecGuard.sanitizeLine(b, dimension: dim).isNotEmpty)
-            GodotSpecGuard.sanitizeLine(b, dimension: dim),
+          if (UnrealSpecGuard.sanitizeLine(b, mode: mode).isNotEmpty)
+            UnrealSpecGuard.sanitizeLine(b, mode: mode),
       ];
       changed.add('s01');
     }
     if (pillars != null) {
       draft.pillars = [
         for (final p in pillars)
-          if (GodotSpecGuard.sanitizeLine(p, dimension: dim).isNotEmpty)
-            GodotSpecGuard.sanitizeLine(p, dimension: dim),
+          if (UnrealSpecGuard.sanitizeLine(p, mode: mode).isNotEmpty)
+            UnrealSpecGuard.sanitizeLine(p, mode: mode),
       ];
       changed.add('s03');
     }
     if (outOfScope != null) {
       draft.outOfScope = [
         for (final cut in outOfScope)
-          if (GodotSpecGuard.sanitizeExclusion(cut, dimension: dim).isNotEmpty)
-            GodotSpecGuard.sanitizeExclusion(cut, dimension: dim),
+          if (UnrealSpecGuard.sanitizeExclusion(cut, mode: mode).isNotEmpty)
+            UnrealSpecGuard.sanitizeExclusion(cut, mode: mode),
       ];
       changed.add('s04');
     }
@@ -527,9 +528,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   void addStage1OutOfScopeCut(String rawCut) {
     final draft = _conceptDraft;
     if (draft == null) return;
-    final item = GodotSpecGuard.sanitizeExclusion(
+    final item = UnrealSpecGuard.sanitizeExclusion(
       rawCut,
-      dimension: draft.dimension,
+      mode: draft.architectureMode,
     );
     if (item.isEmpty || draft.outOfScope.contains(item)) return;
     _pushStage1UndoSnapshot();
@@ -566,9 +567,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         epicIndex >= draft.initialEpics.length) {
       return;
     }
-    final clean = GodotSpecGuard.sanitizeLine(
+    final clean = UnrealSpecGuard.sanitizeLine(
       newTitle,
-      dimension: draft.dimension,
+      mode: draft.architectureMode,
     );
     if (clean.isEmpty) return;
     final ep = draft.initialEpics[epicIndex];
@@ -604,11 +605,14 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   /// Approves `PROJECT_SPEC.md` and materializes or non-destructively reconciles `v0.1 · Prototype` Epics,
-  /// transitioning straight to Stage 2 (`2. Epic Specs`).
+  /// transitioning straight to Stage 2 (`2. Release Workbench`).
   String? approveRootSpecAndLaunchWorkbench() {
     var draft = _conceptDraft;
     if (draft == null) return null;
-    draft = GodotSpecGuard.sanitizeConceptBlueprint(draft);
+    draft = UnrealSpecGuard.sanitizeConceptBlueprint(
+      raw: draft,
+      modeOverride: draft.architectureMode,
+    );
     draft.approved = true;
     _conceptDraft = draft;
 

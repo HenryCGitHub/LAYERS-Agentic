@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:layers_agentic/agents/concept/project_concept_schemas.dart';
+import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/release_planner_agent.dart';
 import 'package:layers_agentic/constants/text_style_guide.dart';
 import 'package:layers_agentic/main.dart';
@@ -742,6 +743,79 @@ void main() {
           for (final t in feat.tuning) {
             expect(['m', 'm/s', 'px', 'px/s'], isNot(contains(t.unit)));
           }
+        }
+      },
+    );
+
+    test(
+      '6. Round 5 Starter Presets & All 4 Genre Fallback Archetypes emit 0 off-engine leakage in native Unreal',
+      () async {
+        expect(
+          [for (final e in UnrealSparkPresets.entries) e.label],
+          equals(['Shellbreaker', 'Railjack Drift', 'Ember Keep']),
+        );
+
+        final expectedModes = <String, UnrealArchitectureMode>{
+          'shellbreaker': UnrealArchitectureMode.blueprint,
+          'railjack': UnrealArchitectureMode.cppHybrid,
+          'emberkeep': UnrealArchitectureMode.blueprint,
+        };
+        for (final id in const ['shellbreaker', 'railjack', 'emberkeep']) {
+          final bp = UnrealSparkPresets.byId(id);
+          expect(bp.architectureMode, equals(expectedModes[id]), reason: id);
+          final jsonMap = bp.toJson()..remove('dimension');
+          expect(
+            UnrealSpecGuard.containsEngineLeakage(jsonEncode(jsonMap)),
+            isFalse,
+            reason: '$id raw preset leaked off-engine tokens',
+          );
+          final summary = Stage1ScopeSummary.fromBlueprint(bp);
+          expect(summary.isLean, isTrue, reason: '$id scope warnings: ${summary.warnings}');
+          expect(
+            summary.firstTestScenePath,
+            endsWith('.umap'),
+            reason: id,
+          );
+        }
+
+        final sb = UnrealSparkPresets.byId('shellbreaker');
+        final sbAsCpp = ProjectConceptAgent.convertBlueprintArchitectureMode(
+          sb,
+          UnrealArchitectureMode.cppHybrid,
+        );
+        expect(sbAsCpp.architectureMode, equals(UnrealArchitectureMode.cppHybrid));
+        expect(sbAsCpp.assetPolicy, contains('C++'));
+        expect(
+          sbAsCpp.initialEpics.first.features.first.tuning.first.value,
+          equals('640'),
+        );
+        expect(
+          sbAsCpp.initialEpics.first.features.first.tuning.first.unit,
+          equals('cm/s'),
+        );
+
+        for (final prompt in const [
+          'Slide mirror relays in puzzle room',
+          'Hover skiff canyon drift racer',
+          'Parkour air-dash obstacle course',
+          'Twin-stick arena brawler with deployable turret',
+        ]) {
+          final off = await ProjectConceptAgent.draftSpecFromSpark(
+            sparkPrompt: prompt,
+            apiKey: '',
+          );
+          final jsonMap = off.toJson()..remove('dimension');
+          expect(
+            UnrealSpecGuard.containsEngineLeakage(jsonEncode(jsonMap)),
+            isFalse,
+            reason: 'Fallback leaked on "$prompt"',
+          );
+          final summary = Stage1ScopeSummary.fromBlueprint(off);
+          expect(
+            summary.firstTestScenePath,
+            endsWith('.umap'),
+            reason: prompt,
+          );
         }
       },
     );

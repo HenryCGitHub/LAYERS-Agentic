@@ -3,13 +3,13 @@ import 'emberkeep_preset.dart';
 import 'railjack_preset.dart';
 import 'shellbreaker_preset.dart';
 
-class GodotSparkPresetInfo {
+class UnrealSparkPresetInfo {
   final String id;
   final String label;
   final String subtitle;
   final String sparkPrompt;
 
-  const GodotSparkPresetInfo({
+  const UnrealSparkPresetInfo({
     required this.id,
     required this.label,
     required this.subtitle,
@@ -17,28 +17,28 @@ class GodotSparkPresetInfo {
   });
 }
 
-class GodotSparkPresets {
-  static const List<GodotSparkPresetInfo> entries = [
-    GodotSparkPresetInfo(
+class UnrealSparkPresets {
+  static const List<UnrealSparkPresetInfo> entries = [
+    UnrealSparkPresetInfo(
       id: 'shellbreaker',
-      label: 'Shellbreaker (3D)',
-      subtitle: 'Top-down 3D crustacean mech arena shooter',
+      label: 'Shellbreaker',
+      subtitle: 'Top-down twin-stick mech arena shooter',
       sparkPrompt:
           'Top-down twin-stick crustacean mech arena shooter with claw dash armor breaks, heavy burst cannon recoil, and 3-wave combat.',
     ),
-    GodotSparkPresetInfo(
+    UnrealSparkPresetInfo(
       id: 'railjack',
-      label: 'Railjack Drift (3D)',
+      label: 'Railjack Drift',
       subtitle: 'Third-person hover-skiff canyon racer with boost & gates',
       sparkPrompt:
           'Third-person hover-skiff canyon time-trial racer with apex drift banking, thruster heat gauges, and plasma gate boosts.',
     ),
-    GodotSparkPresetInfo(
+    UnrealSparkPresetInfo(
       id: 'emberkeep',
-      label: 'Ember Keep (2D)',
-      subtitle: '2D pixel-art torchlight survival & axe cleave defense',
+      label: 'Ember Keep',
+      subtitle: 'Top-down torchlight survival & axe cleave defense',
       sparkPrompt:
-          '2D top-down survival skirmisher where you chop shadow stalkers, plant brazier light pylons, and hold safe ground as light radius shrinks.',
+          'Top-down survival skirmisher where you chop shadow stalkers, plant brazier light pylons, and hold safe ground as light radius shrinks.',
     ),
   ];
 
@@ -67,5 +67,7 @@ class GodotSparkPresets {
       _ => buildShellbreakerPreset(entries[0].sparkPrompt),
     };
   }
-
 }
+
+typedef GodotSparkPresetInfo = UnrealSparkPresetInfo;
+typedef GodotSparkPresets = UnrealSparkPresets;

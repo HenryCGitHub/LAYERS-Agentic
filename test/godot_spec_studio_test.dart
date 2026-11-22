@@ -40,29 +40,31 @@ void main() {
           equals(GodotProjectDimension.dim3d),
         );
 
-        final shellbreaker = GodotSparkPresets.byId('shellbreaker');
-        expect(shellbreaker.dimension, equals(GodotProjectDimension.dim3d));
+        final shellbreaker = UnrealSparkPresets.byId('shellbreaker');
+        expect(shellbreaker.architectureMode, equals(UnrealArchitectureMode.blueprint));
         expect(
-          shellbreaker.dimension.pillLabel,
-          equals('3D (m, m/s)'),
+          shellbreaker.architectureMode.pillLabel,
+          equals('Blueprint-First'),
         );
 
-        final emberkeep = GodotSparkPresets.byId('emberkeep');
-        expect(emberkeep.dimension, equals(GodotProjectDimension.dim2d));
-        expect(emberkeep.dimension.pillLabel, equals('2D (px, px/s)'));
+        final railjack = UnrealSparkPresets.byId('railjack');
+        expect(railjack.architectureMode, equals(UnrealArchitectureMode.cppHybrid));
+        expect(railjack.architectureMode.pillLabel, equals('C++ & BP Hybrid'));
+
+        final emberkeep = UnrealSparkPresets.byId('emberkeep');
+        expect(emberkeep.architectureMode, equals(UnrealArchitectureMode.blueprint));
         expect(
           emberkeep.initialEpics.first.tuning.first.unit,
-          equals('px/s'),
+          equals('cm/s'),
         );
 
-        final converted2d = ProjectConceptAgent.convertBlueprintDimension(
+        final convertedCpp = ProjectConceptAgent.convertBlueprintArchitectureMode(
           shellbreaker,
-          GodotProjectDimension.dim2d,
+          UnrealArchitectureMode.cppHybrid,
         );
-        expect(converted2d.dimension, equals(GodotProjectDimension.dim2d));
-        expect(converted2d.cameraContract, contains('Camera2D'));
-        expect(converted2d.characterScale, contains('CharacterBody2D'));
-        expect(converted2d.initialEpics.first.tuning.first.unit, equals('px/s'));
+        expect(convertedCpp.architectureMode, equals(UnrealArchitectureMode.cppHybrid));
+        expect(convertedCpp.assetPolicy, contains('C++'));
+        expect(convertedCpp.initialEpics.first.tuning.first.unit, equals('cm/s'));
       },
     );
 
@@ -286,13 +288,13 @@ void main() {
         expect(e01.code, equals('E01'));
         expect(wb.selectedFeatureSpec?.code, equals('F02'));
 
-        // Live Feature @export tuning edit updates Build Prompt immediately
+        // Live Feature tuning edit updates Build Prompt immediately
         await tester.ensureVisible(
           find.byKey(const ValueKey('tuning_input_sb_f02_0')),
         );
         await tester.enterText(
           find.byKey(const ValueKey('tuning_input_sb_f02_0')),
-          '8.5',
+          '850',
         );
         await tester.pump(const Duration(milliseconds: 350));
         expect(
@@ -935,10 +937,10 @@ void main() {
           }
         }
 
-        final sb = GodotSparkPresets.byId('shellbreaker');
+        final sb = UnrealSparkPresets.byId('shellbreaker');
         expect(
           sb.initialEpics.first.features.first.tuning.first.unit,
-          equals('m/s'),
+          equals('cm/s'),
         );
         expect(sb.v02NewFeaturesByLineageKey['e01'], isNotEmpty);
         expect(
@@ -946,37 +948,37 @@ void main() {
           equals('v0.2'),
         );
 
-        final ek = GodotSparkPresets.byId('emberkeep');
+        final ek = UnrealSparkPresets.byId('emberkeep');
         expect(
           ek.initialEpics.first.features.first.tuning.first.unit,
-          equals('px/s'),
+          equals('cm/s'),
         );
         expect(ek.v02NewFeaturesByLineageKey['e01'], isNotEmpty);
 
-        final sbAs2d = ProjectConceptAgent.convertBlueprintDimension(
+        final sbAsCpp = ProjectConceptAgent.convertBlueprintArchitectureMode(
           sb,
-          GodotProjectDimension.dim2d,
+          UnrealArchitectureMode.cppHybrid,
         );
         expect(
-          sbAs2d.initialEpics.first.features.first.tuning.first.unit,
-          equals('px/s'),
+          sbAsCpp.initialEpics.first.features.first.tuning.first.unit,
+          equals('cm/s'),
         );
         expect(
-          sbAs2d.v02NewFeaturesByLineageKey['e01']!.first.tuning
-              .any((t) => t.unit == 'px' || t.unit == 'px/s'),
+          sbAsCpp.v02NewFeaturesByLineageKey['e01']!.first.tuning
+              .any((t) => t.unit == 'cm' || t.unit == 'cm/s'),
           isTrue,
         );
 
-        final off2d = await ProjectConceptAgent.draftSpecFromSpark(
-          sparkPrompt: '2D grapple dungeon crawler with lantern dashes',
+        final offCpp = await ProjectConceptAgent.draftSpecFromSpark(
+          sparkPrompt: 'C++ hybrid grapple dungeon crawler with lantern dashes',
           apiKey: '',
         );
-        expect(off2d.dimension, equals(GodotProjectDimension.dim2d));
-        for (final epic in off2d.initialEpics) {
+        expect(offCpp.architectureMode, equals(UnrealArchitectureMode.cppHybrid));
+        for (final epic in offCpp.initialEpics) {
           expect(epic.sceneOwnership, isNotEmpty);
           expect(epic.features.length, greaterThanOrEqualTo(2));
           expect(
-            epic.features.first.tuning.any((t) => t.unit == 'px/s' || t.unit == 'px'),
+            epic.features.first.tuning.any((t) => t.unit == 'cm/s' || t.unit == 'cm'),
             isTrue,
           );
         }
@@ -1141,17 +1143,18 @@ void main() {
           expect(refineErr.errorMessage, isNotEmpty);
           expect(seedSpec.pillars, equals(prevPillars));
 
-          // 6. Scoped patch refine switching to dim2d converts m/s -> px/s scaled by 40,
+          // 6. Scoped patch refine switching to cppHybrid updates assetPolicy & ownership,
           // renumbers F01..FM sequentially, clears stale v0.2 preset data on title/pitch shift,
           // and leaves untouched Epics intact.
           GeminiAgentClient.testMockResponder = (_, __) async => <String, dynamic>{
-                'coDesignNote': 'Switched to 2D side-scroller and added turret cut',
+                'coDesignNote': 'Switched to C++ hybrid side-scroller and added turret cut',
                 'changedSections': ['s01', 's02', 's04'],
                 'gameTitle': 'TIDAL HOP',
-                'pitch': '2D side-scrolling claw dasher — leap across ruins',
-                'dimension': 'dim2d',
-                'cameraChoiceId': 'sidescroller2d',
-                'cameraContract': 'Camera2D Zoom 1.4x · Lookahead 64 px',
+                'pitch': 'Side-scrolling claw dasher — leap across ruins',
+                'architectureMode': 'cppHybrid',
+                'cameraChoiceId': 'sidescroller',
+                'cameraContract':
+                    'USpringArmComponent TargetArmLength 950 cm · Ortho/Locked Track · 55 deg FOV · Lookahead 160 cm',
                 'outOfScope': [
                   ...seedSpec.outOfScope,
                   'No deployable sentry turrets',
@@ -1159,15 +1162,15 @@ void main() {
               };
           final patchOk = await ProjectConceptAgent.applyCoDesignEditWithStatus(
             currentSpec: seedSpec,
-            instruction: 'Switch to a 2D side-scroller called Tidal Hop and cut sentry turrets',
+            instruction: 'Switch to C++ side-scroller called Tidal Hop and cut sentry turrets',
             apiKey: 'test-key-1234',
           );
           expect(patchOk.errorMessage, isNull);
           final updated = patchOk.blueprint!;
-          expect(updated.dimension, equals(GodotProjectDimension.dim2d));
+          expect(updated.architectureMode, equals(UnrealArchitectureMode.cppHybrid));
           final f01Speed = updated.initialEpics.first.features.first.tuning
-              .firstWhere((t) => t.key == 'move_speed');
-          expect(f01Speed.unit, equals('px/s'));
+              .firstWhere((t) => t.key == 'MoveSpeed');
+          expect(f01Speed.unit, equals('cm/s'));
           expect(double.parse(f01Speed.value), greaterThan(100));
           expect(updated.v02Presets, isEmpty);
           expect(updated.v02NewPool, isEmpty);
@@ -1193,7 +1196,7 @@ void main() {
 
         // 7. Reordering E01 to index 1 keeps syncEpicCameraFraming & syncEpicCoreFeel
         // targeting the locomotion Epic (lineageKey == 'e01') and its first FeatureSpec.
-        final reordered = GodotSparkPresets.byId('shellbreaker').deepCopy();
+        final reordered = UnrealSparkPresets.byId('shellbreaker').deepCopy();
         final movedE01 = reordered.initialEpics.removeAt(0);
         reordered.initialEpics.insert(1, movedE01);
         reordered.initialEpics[0].code = 'E01';
@@ -1202,26 +1205,26 @@ void main() {
         ProjectConceptAgent.syncEpicCameraFraming(
           reordered,
           optionId: 'fps',
-          contractValue: 'Camera3D EyeHeight 1.65 m · 90 deg FOV · Captured mouse yaw/pitch',
+          contractValue: 'UCameraComponent EyeHeight 165 cm · 90 deg FOV · Captured mouse yaw/pitch',
         );
         ProjectConceptAgent.syncEpicCoreFeel(reordered, feelId: 'heavy');
 
         final wrongFirstFeat = reordered.initialEpics[0].features.first;
         final locoFeat = reordered.initialEpics[1].features.first;
         expect(
-          wrongFirstFeat.tuning.any((t) => t.key == 'eye_height'),
+          wrongFirstFeat.tuning.any((t) => t.key == 'EyeHeight'),
           isFalse,
         );
         expect(
-          locoFeat.tuning.any((t) => t.key == 'eye_height'),
+          locoFeat.tuning.any((t) => t.key == 'EyeHeight'),
           isTrue,
         );
         expect(
-          locoFeat.tuning.firstWhere((t) => t.key == 'braking_decel').value,
-          equals('14.0'),
+          locoFeat.tuning.firstWhere((t) => t.key == 'BrakingDeceleration').value,
+          equals('1400'),
         );
         expect(
-          locoFeat.controls.any((c) => c.action == 'look_axis'),
+          locoFeat.controls.any((c) => c.action == 'IA_LookAxis'),
           isTrue,
         );
         expect(
@@ -1255,23 +1258,23 @@ void main() {
         );
         expect(
           puzzleOff.initialEpics.first.sceneOwnership
-              .any((s) => s.path.contains('room_proto.tscn')),
+              .any((s) => s.path.contains('Lvl_RoomProto.umap')),
           isTrue,
         );
         expect(
           puzzleOff.initialEpics.any(
-            (e) => e.sceneOwnership.any((s) => s.path.contains('target_enemy')),
+            (e) => e.sceneOwnership.any((s) => s.path.contains('TargetEnemy')),
           ),
           isFalse,
         );
 
         final racerOff = await ProjectConceptAgent.draftSpecFromSpark(
-          sparkPrompt: '3D canyon hover racer with drift boost pads and lap timer',
+          sparkPrompt: 'Canyon hover racer with drift boost pads and lap timer',
           apiKey: '',
         );
         expect(
           racerOff.initialEpics.first.sceneOwnership
-              .any((s) => s.path.contains('track_proto.tscn')),
+              .any((s) => s.path.contains('Lvl_TrackProto.umap')),
           isTrue,
         );
       },
@@ -1882,7 +1885,7 @@ void main() {
           expect(draftV02, isNotNull);
 
           // Prompt includes sceneOwnership and child Feature codes from v0.1 Epics
-          expect(capturedPrompt, contains('res://scripts/player_mech.gd'));
+          expect(capturedPrompt, contains('/Game/Blueprints/BP_PlayerMech'));
           expect(capturedPrompt, contains('F01'));
           expect(capturedPrompt, contains('F02'));
 
@@ -1934,7 +1937,7 @@ void main() {
             }
           }
 
-          // 4) Offline Emberkeep v0.2 parity: keeps ek_f07_roll selected with 2D px/px/s units
+          // 4) Offline Emberkeep v0.2 parity: keeps ek_f07_roll selected with Unreal cm/cm/s units
           final wbEk = WorkbenchProvider(enableAutoLoad: false);
           wbEk.loadPresetSpark('emberkeep');
           wbEk.approveRootSpecAndLaunchWorkbench();
@@ -1946,7 +1949,7 @@ void main() {
           expect(wbEk.isProgressiveNewFeatureChosen('ek_f07_roll'), isTrue);
           expect(
             ekFeats.firstWhere((f) => f.id == 'ek_f07_roll').tuning.any(
-                  (t) => t.unit == 'px' || t.unit == 'px/s',
+                  (t) => t.unit == 'cm' || t.unit == 'cm/s',
                 ),
             isTrue,
           );
@@ -2037,32 +2040,31 @@ void main() {
         expect(feat3d.tuning[1].value, equals('6'));
         expect(feat3d.tuning[1].unit, equals('m/s'));
 
-        final sb = GodotSparkPresets.byId('shellbreaker');
-        final sbAs2d = ProjectConceptAgent.convertBlueprintDimension(
+        final sb = UnrealSparkPresets.byId('shellbreaker');
+        final sbAsCpp = ProjectConceptAgent.convertBlueprintArchitectureMode(
           sb,
-          GodotProjectDimension.dim2d,
+          UnrealArchitectureMode.cppHybrid,
         );
-        final wb2d = WorkbenchProvider(enableAutoLoad: false);
-        wb2d.loadPresetSpark('shellbreaker');
-        wb2d.setProjectDimension(GodotProjectDimension.dim2d);
-        final fullMd2d = wb2d.buildFullProjectMarkdownExport().content;
-        expect(fullMd2d, isNot(contains('CharacterBody3D')));
-        expect(fullMd2d, isNot(contains('SpringArm3D')));
-        expect(fullMd2d, contains('cm/s'));
-        expect(fullMd2d, isNot(contains(RegExp(r'(?<!c)m/s'))));
-        expect(sbAs2d.initialEpics.first.inScope.join(' '), contains('px'));
+        final wbExport = WorkbenchProvider(enableAutoLoad: false);
+        wbExport.loadPresetSpark('shellbreaker');
+        final fullMd = wbExport.buildFullProjectMarkdownExport().content;
+        expect(fullMd, isNot(contains('CharacterBody3D')));
+        expect(fullMd, isNot(contains('SpringArm3D')));
+        expect(fullMd, contains('cm/s'));
+        expect(fullMd, isNot(contains(RegExp(r'(?<!c)m/s'))));
+        expect(sbAsCpp.assetPolicy, contains('Source/'));
 
-        final ek = GodotSparkPresets.byId('emberkeep');
-        final ekAs3d = ProjectConceptAgent.convertBlueprintDimension(
+        final ek = UnrealSparkPresets.byId('emberkeep');
+        final ekAsCpp = ProjectConceptAgent.convertBlueprintArchitectureMode(
           ek,
-          GodotProjectDimension.dim3d,
+          UnrealArchitectureMode.cppHybrid,
         );
         expect(
-          ekAs3d.initialEpics.first.features.first.tuning.first.unit,
-          equals('m/s'),
+          ekAsCpp.initialEpics.first.features.first.tuning.first.unit,
+          equals('cm/s'),
         );
-        expect(ekAs3d.initialEpics.first.goal, isNot(contains('CharacterBody2D')));
-        expect(ekAs3d.initialEpics.first.goal, isNot(contains('px/s')));
+        expect(ekAsCpp.initialEpics.first.goal, isNot(contains('CharacterBody2D')));
+        expect(ekAsCpp.initialEpics.first.goal, isNot(contains('px/s')));
       },
     );
 

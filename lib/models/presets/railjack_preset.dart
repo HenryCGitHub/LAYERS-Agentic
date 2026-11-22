@@ -5,9 +5,9 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
   return ProjectConceptBlueprint(
     sparkPrompt: sparkPrompt,
     gameTitle: 'RAILJACK DRIFT',
-    dimension: GodotProjectDimension.dim3d,
+    architectureMode: UnrealArchitectureMode.cppHybrid,
     pitch:
-        'High-speed 3D canyon hover-skiff racer — carve long drift arcs through boost gates to beat par time',
+        'High-speed canyon hover-skiff racer — carve long drift arcs through boost gates to beat par time',
     coreLoop: const [
       'Carve Canyon Line',
       'Hold Apex Drift',
@@ -16,18 +16,18 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
     ],
     cameraChoiceId: 'tps',
     cameraContract:
-        'SpringArm3D 4.4 m @ -12 deg pitch · Dynamic FOV 74->92 deg by speed · CameraLag 12.0',
+        'USpringArmComponent TargetArmLength 440 cm @ -12 deg pitch · Dynamic FOV 74->92 deg by speed · CameraLagSpeed 12.0',
     characterScale:
-        'CharacterBody3D Hull 3.4x1.6 m · HoverHeight 0.85 m · top_speed 38.0 m/s',
+        'APawn Hull 340x160 cm · HoverHeight 85 cm · BaseTopSpeed 3100 cm/s',
     inputContract:
-        'InputMap (throttle, steer_left, steer_right, drift_hold, boost_hold)',
+        'IMC_SkiffControls (IA_Throttle, IA_Steer, IA_DriftHold, IA_BoostHold, IA_ResetTrack)',
     assetPolicy:
-        'CSG / MeshInstance3D Canyon Track + Emissive Gate Frames; res://data/skiff_physics.tres',
+        'Source/HoverSkiffPawn.cpp UPROPERTY(EditAnywhere) Physics + Thin /Game/Blueprints/BP_HoverSkiff & /Game/Data/DA_SkiffPhysics',
     feelChoiceId: 'physics',
     cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera3dOptions,
     pillars: const [
       'Flow Over Friction: Wall scrapes glance forward cleanly instead of dead-stopping momentum',
-      'Speed Tells Everything: Camera FOV, engine pitch, and wing-tip trails rise smoothly into boost',
+      'Speed Tells Everything: Camera FOV, engine pitch, and wing-tip Niagara trails rise smoothly into boost',
       'Drift-to-Earn Boost: Sustained cornering feeds thruster energy faster than straight coasting',
     ],
     tradeOffs: const [
@@ -46,7 +46,7 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
       'No multiplayer ghost leaderboards',
     ],
     releaseDoneWhen:
-        'Run F6 on res://scenes/canyon_proto.tscn -> complete 1 clean canyon lap with final timer HUD and 0 Debugger errors',
+        'Run PIE on /Game/Maps/Lvl_CanyonProto.umap -> complete 1 clean canyon lap with final timer HUD and 0 Message Log errors',
     initialEpics: [
       EpicSpec(
         id: 'rj_e01',
@@ -59,47 +59,47 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
         goal:
             'Own hover suspension clearance over canyon slopes, banking turns, and drift slip-angle charging.',
         inScope: const [
-          '0.85 m spring hover height stabilization',
+          '85 cm spring hover height stabilization',
           'ApexDrift carving that feeds boost charge',
         ],
         doneWhen: const [
-          'Carve hairpin canyon turn -> Skiff maintains 0.85 m height and exits cleanly on tangent',
+          'Carve hairpin canyon turn -> Skiff maintains 85 cm height and exits cleanly on tangent',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/canyon_proto.tscn',
+            path: '/Game/Maps/Lvl_CanyonProto.umap',
             role: 'Banked greybox canyon track loop',
           ),
           EpicSceneOwnership(
-            path: 'res://scenes/hover_skiff.tscn',
-            role: 'CharacterBody3D skiff hull + Camera3D rig',
+            path: 'Source/HoverSkiffPawn.cpp',
+            role: 'Hover raycast springs + drift slip math (C++ base)',
           ),
           EpicSceneOwnership(
-            path: 'res://scripts/hover_skiff.gd',
-            role: 'Hover raycast springs + drift slip math',
+            path: '/Game/Blueprints/BP_HoverSkiff',
+            role: 'Thin Pawn subclass + USpringArmComponent camera rig',
           ),
         ],
         links: const [
-          'Scene res://scenes/hover_skiff.tscn + res://scripts/hover_skiff.gd',
-          'Exposes speed_ratio & is_drifting signals to E02 Boost & E03 Gate HUD',
+          'Source/HoverSkiffPawn.cpp + /Game/Blueprints/BP_HoverSkiff',
+          'Exposes OnSpeedChanged & OnDriftStateChanged delegates to E02 Boost & E03 Gate HUD',
         ],
         outOfScope: const [
           'No upside-down loop-the-loop gravity shifts',
         ],
         controls: [
           EpicControlBinding(
-            action: 'throttle',
-            trigger: 'Held (W / Up)',
-            rule: 'Accelerates forward velocity smoothly up to base_top_speed 31.0 m/s',
+            action: 'IA_Throttle',
+            trigger: 'Triggered (W / Up)',
+            rule: 'Accelerates forward velocity smoothly up to BaseTopSpeed 3100 cm/s',
           ),
           EpicControlBinding(
-            action: 'steer_left / steer_right',
-            trigger: 'Held (A / D)',
-            rule: 'Banks VisualRig roll +/-26 deg smoothly while turning yaw rate',
+            action: 'IA_Steer',
+            trigger: 'Triggered (A / D)',
+            rule: 'Banks SkiffMesh roll +/-26 deg smoothly while turning yaw rate',
           ),
           EpicControlBinding(
-            action: 'drift_hold',
-            trigger: 'Held (Space / Shift)',
+            action: 'IA_DriftHold',
+            trigger: 'Triggered (Space / Shift)',
             rule: 'Widens lateral slip angle, locks forward carry, and builds drift charge/s',
           ),
         ],
@@ -110,21 +110,21 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
           'Wall glance clamps normal impact speed to 78% and slides hull along tangent safely',
         ],
         tuning: [
-          EpicTuningParam(key: 'hover_height', value: '0.85', unit: 'm'),
-          EpicTuningParam(key: 'base_top_speed', value: '31.0', unit: 'm/s'),
-          EpicTuningParam(key: 'max_bank_angle', value: '26', unit: 'deg'),
-          EpicTuningParam(key: 'drift_charge_rate', value: '35', unit: '%/s'),
+          EpicTuningParam(key: 'HoverHeight', value: '85', unit: 'cm'),
+          EpicTuningParam(key: 'BaseTopSpeed', value: '3100', unit: 'cm/s'),
+          EpicTuningParam(key: 'MaxBankAngle', value: '26', unit: 'deg'),
+          EpicTuningParam(key: 'DriftChargeRate', value: '35', unit: '%/s'),
         ],
         feedback: const [
           'Twin cyan thrusters lengthen with throttle and flare orange during ApexDrift',
-          'Dynamic Camera3D FOV expands smoothly from 74 to 92 deg with forward velocity',
+          'Dynamic UCameraComponent FOV expands smoothly from 74 to 92 deg with forward velocity',
         ],
         levelStaging:
-            'res://scenes/canyon_proto.tscn: wide banked greybox canyon track (~40s loop) with hairpin turn',
+            '/Game/Maps/Lvl_CanyonProto.umap: wide banked greybox canyon track (~40s loop) with hairpin turn',
         checks: [
           EpicPieCheck(
             id: 'rj_e01_c1',
-            text: 'Drive over sloped ramp -> hull holds ~0.85 m clearance without floor clipping',
+            text: 'Drive over sloped ramp -> hull holds ~85 cm clearance without floor clipping',
           ),
           EpicPieCheck(
             id: 'rj_e01_c2',
@@ -139,25 +139,25 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.passed,
-            goal: 'Keep hull hovering at 0.85 m across slopes while cruising up to 31.0 m/s.',
-            inScope: const ['Raycast ground spring', 'W/A/D steer banking +/-26 deg'],
-            doneWhen: const ['Ride canyon slope -> Hull holds 0.85 m clearance without scraping'],
+            goal: 'Keep hull hovering at 85 cm across slopes while cruising up to 3100 cm/s.',
+            inScope: const ['LineTraceSingleByChannel ground spring', 'W/A/D steer banking +/-26 deg'],
+            doneWhen: const ['Ride canyon slope -> Hull holds 85 cm clearance without scraping'],
             controls: [
               EpicControlBinding(
-                action: 'throttle',
-                trigger: 'Held (W / Up)',
-                rule: 'Accelerates smoothly up to 31.0 m/s',
+                action: 'IA_Throttle',
+                trigger: 'Triggered (W / Up)',
+                rule: 'Accelerates smoothly up to 3100 cm/s',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'hover_height', value: '0.85', unit: 'm'),
-              EpicTuningParam(key: 'base_top_speed', value: '31.0', unit: 'm/s'),
+              EpicTuningParam(key: 'HoverHeight', value: '85', unit: 'cm'),
+              EpicTuningParam(key: 'BaseTopSpeed', value: '3100', unit: 'cm/s'),
             ],
-            cues: const ['Twin cyan thrusters scale cleanly with throttle'],
+            cues: const ['Twin cyan Niagara thrusters scale cleanly with throttle'],
             checks: [
               EpicPieCheck(
                 id: 'rj_f01_c1',
-                text: 'Drive across ramp -> Skiff maintains 0.85 m hover gap cleanly',
+                text: 'Drive across ramp -> Skiff maintains 85 cm hover gap cleanly',
                 passed: true,
               ),
             ],
@@ -174,16 +174,16 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
             doneWhen: const ['Hold Space + A/D in hairpin -> Thrusters flare orange and charge rises'],
             controls: [
               EpicControlBinding(
-                action: 'drift_hold',
-                trigger: 'Held (Space / Shift)',
+                action: 'IA_DriftHold',
+                trigger: 'Triggered (Space / Shift)',
                 rule: 'Enters ApexDrift and charges boost meter',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'max_bank_angle', value: '26', unit: 'deg'),
-              EpicTuningParam(key: 'drift_charge_rate', value: '35', unit: '%/s'),
+              EpicTuningParam(key: 'MaxBankAngle', value: '26', unit: 'deg'),
+              EpicTuningParam(key: 'DriftChargeRate', value: '35', unit: '%/s'),
             ],
-            cues: const ['Wing thrusters flare orange with faint tire/air sparks'],
+            cues: const ['Wing thrusters flare orange with faint Niagara edge sparks'],
             checks: [
               EpicPieCheck(
                 id: 'rj_f02_c1',
@@ -203,12 +203,12 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
         coreLoopBeat: 'Beat 3 · Chain Boost & Thruster Surge',
         goal:
             'Spend accumulated boost meter for an immediate velocity surge while managing thruster overheat risk.',
-        inScope: const ['42.0 m/s manual boost surge', '1.5 s overheat lockout vent'],
-        doneWhen: const ['Hold E with boost -> Speed surges to 42.0 m/s and HUD bar responds'],
+        inScope: const ['4200 cm/s manual boost surge', '1.5 s overheat lockout vent'],
+        doneWhen: const ['Hold E with boost -> Speed surges to 4200 cm/s and HUD bar responds'],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/thruster_boost.gd',
-            role: 'Boost drain curve, heat cap & FOV kick emitter',
+            path: 'Source/ThrusterBoostComponent.cpp',
+            role: 'Boost drain curve, heat cap & FOV kick delegate',
           ),
         ],
         links: const [
@@ -219,32 +219,32 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
         ],
         controls: [
           EpicControlBinding(
-            action: 'boost_hold',
-            trigger: 'Held (RMB / E)',
-            rule: 'Pushes target speed to 42.0 m/s while draining boost meter',
+            action: 'IA_BoostHold',
+            trigger: 'Triggered (RMB / E)',
+            rule: 'Pushes target speed to 4200 cm/s while draining boost meter',
           ),
         ],
         states: const [
-          'Normal -> Boosting (Max 42.0 m/s) -> OverheatLockout (1.5s) -> Normal',
+          'Normal -> Boosting (Max 4200 cm/s) -> OverheatLockout (1.5s) -> Normal',
         ],
         interrupts: const [
-          'Touching E03 Boost Gate grants instant +0.8s surge without raising heat',
+          'Touching E03 Boost Gate grants instant +0.8 s surge without raising heat',
         ],
         tuning: [
-          EpicTuningParam(key: 'boost_top_speed', value: '42.0', unit: 'm/s'),
-          EpicTuningParam(key: 'boost_drain_rate', value: '28', unit: '%/s'),
-          EpicTuningParam(key: 'overheat_cooldown', value: '1.5', unit: 's'),
+          EpicTuningParam(key: 'BoostTopSpeed', value: '4200', unit: 'cm/s'),
+          EpicTuningParam(key: 'BoostDrainRate', value: '28', unit: '%/s'),
+          EpicTuningParam(key: 'OverheatCooldown', value: '1.5', unit: 's'),
         ],
         feedback: const [
-          'Edge speed-lines Control overlay + bright white exhaust core while Boosting',
-          'Centered horizontal thruster progress bar shows m/s & Boost %',
+          'Edge speed-lines UMG Widget overlay + bright white exhaust core while Boosting',
+          'Centered horizontal WBP thruster progress bar shows cm/s & Boost %',
         ],
         levelStaging:
-            'res://scenes/canyon_proto.tscn: straightaway run + speed readout HUD overlay',
+            '/Game/Maps/Lvl_CanyonProto.umap: straightaway run + speed readout UMG Widget overlay',
         checks: [
           EpicPieCheck(
             id: 'rj_e02_c1',
-            text: 'Hold E with Boost available -> velocity jumps smoothly to 42.0 m/s with widened FOV',
+            text: 'Hold E with Boost available -> velocity jumps smoothly to 4200 cm/s with widened FOV',
           ),
         ],
         features: [
@@ -255,15 +255,15 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Accelerate top speed to 42.0 m/s when holding E while widening Camera3D FOV.',
+            goal: 'Accelerate top speed to 4200 cm/s when holding E while widening UCameraComponent FOV.',
             tuning: [
-              EpicTuningParam(key: 'boost_top_speed', value: '42.0', unit: 'm/s'),
+              EpicTuningParam(key: 'BoostTopSpeed', value: '4200', unit: 'cm/s'),
             ],
             cues: const ['White exhaust core + widened FOV 92 deg speed-lines'],
             checks: [
               EpicPieCheck(
                 id: 'rj_f03_c1',
-                text: 'Hold E on straightaway -> Velocity surges to 42.0 m/s smoothly',
+                text: 'Hold E on straightaway -> Velocity surges to 4200 cm/s smoothly',
               ),
             ],
           ),
@@ -274,11 +274,11 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Lock thruster after sustained overheat for 1.5 s with centered m/s and % HUD gauge.',
+            goal: 'Lock thruster after sustained overheat for 1.5 s with centered speed and % HUD gauge.',
             tuning: [
-              EpicTuningParam(key: 'overheat_cooldown', value: '1.5', unit: 's'),
+              EpicTuningParam(key: 'OverheatCooldown', value: '1.5', unit: 's'),
             ],
-            cues: const ['Thruster bar flashes red during 1.5 s vent'],
+            cues: const ['WBP thruster bar flashes red during 1.5 s vent'],
             checks: [
               EpicPieCheck(
                 id: 'rj_f04_c1',
@@ -298,44 +298,44 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
         coreLoopBeat: 'Beats 3–4 · Checkpoint Gates & Lap Closure',
         goal:
             'Own sequential canyon gate progression, gate surge triggers, off-course warnings, and lap timer HUD.',
-        inScope: const ['6 sequential boost gate rings', 'Par timer HUD & R instant reset'],
+        inScope: const ['6 sequential boost gate rings', 'Par timer WBP HUD & R instant reset'],
         doneWhen: const ['Pass Gate 1..6 -> Gate 6 posts final mm:ss.ms lap time cleanly'],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/lap_timer_hud.gd',
-            role: 'Gate sequencer, par delta readout & R track reset',
+            path: '/Game/UI/WBP_LapTimerHud',
+            role: 'Gate sequencer UI, par delta readout & R track reset',
           ),
         ],
         links: const [
-          'Connects Area3D body_entered from HoverSkiff (E01) to E02 surge pulse',
+          'Connects UBoxComponent OnComponentBeginOverlap from BP_HoverSkiff (E01) to E02 surge pulse',
         ],
         outOfScope: const [
           'No persistent ghost replay serialization',
         ],
         controls: [
           EpicControlBinding(
-            action: 'reset_track',
-            trigger: 'Just Pressed (R)',
-            rule: 'Snaps skiff cleanly to StartLine Marker3D and resets lap_timer to 0.00s',
+            action: 'IA_ResetTrack',
+            trigger: 'Started (R)',
+            rule: 'Snaps skiff cleanly to StartLine TargetPoint and resets LapTimer to 0.00 s',
           ),
         ],
         states: const [
           'Countdown (0.8s) -> Racing (Gate 1..6) -> LapFinished (Display Final Time)',
         ],
         interrupts: const [
-          'Skipping an ordered gate shows floating OFF-COURSE HUD arrow toward missed gate',
+          'Skipping an ordered gate shows floating OFF-COURSE WBP HUD arrow toward missed gate',
         ],
         tuning: [
-          EpicTuningParam(key: 'gate_half_width', value: '4.8', unit: 'm'),
-          EpicTuningParam(key: 'gate_boost_duration', value: '0.8', unit: 's'),
-          EpicTuningParam(key: 'par_time_seconds', value: '42.0', unit: 's'),
+          EpicTuningParam(key: 'GateHalfWidth', value: '480', unit: 'cm'),
+          EpicTuningParam(key: 'GateBoostDuration', value: '0.8', unit: 's'),
+          EpicTuningParam(key: 'ParTimeSeconds', value: '42.0', unit: 's'),
         ],
         feedback: const [
           'Active next gate glows bright emerald; passed gates turn muted slate',
-          'Top-right Control timer displays mm:ss.ms + green/red delta vs par time',
+          'Top-right WBP_LapTimerHud displays mm:ss.ms + green/red delta vs par time',
         ],
         levelStaging:
-            'res://scenes/canyon_proto.tscn: 6 sequential boost gate Area3D arches ending at Start/Finish',
+            '/Game/Maps/Lvl_CanyonProto.umap: 6 sequential UBoxComponent boost gate arches ending at Start/Finish',
         checks: [
           EpicPieCheck(
             id: 'rj_e03_c1',
@@ -352,8 +352,8 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
             status: FeatureStatus.queued,
             goal: 'Highlight next emerald gate arch and trigger free 0.8 s velocity pulse on pass.',
             tuning: [
-              EpicTuningParam(key: 'gate_half_width', value: '4.8', unit: 'm'),
-              EpicTuningParam(key: 'gate_boost_duration', value: '0.8', unit: 's'),
+              EpicTuningParam(key: 'GateHalfWidth', value: '480', unit: 'cm'),
+              EpicTuningParam(key: 'GateBoostDuration', value: '0.8', unit: 's'),
             ],
             cues: const ['Active gate glows bright emerald; off-course points back on skip'],
             checks: [
@@ -372,9 +372,9 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
             status: FeatureStatus.queued,
             goal: 'Track mm:ss.ms elapsed race clock against 42.0 s par and snap to StartLine on R.',
             tuning: [
-              EpicTuningParam(key: 'par_time_seconds', value: '42.0', unit: 's'),
+              EpicTuningParam(key: 'ParTimeSeconds', value: '42.0', unit: 's'),
             ],
-            cues: const ['Green/red split delta flashes cleanly across top-right HUD'],
+            cues: const ['Green/red split delta flashes cleanly across top-right UMG Widget'],
             checks: [
               EpicPieCheck(
                 id: 'rj_f06_c1',
@@ -408,7 +408,7 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
         EpicUpgradeOption(
           id: 'up_rj_e01_slipstream',
           targetFeatureCode: 'F01',
-          text: '+12% yaw turn-in crispness above 28 m/s cruise speed',
+          text: '+12% yaw turn-in crispness above 2800 cm/s cruise speed',
           chosen: true,
         ),
       ],
@@ -439,7 +439,7 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
           status: FeatureStatus.active,
           goal: 'Preserve 78% tangential velocity during cliff wall touches with directional hull sparks.',
           tuning: [
-            EpicTuningParam(key: 'wall_keep_pct', value: '78', unit: '%'),
+            EpicTuningParam(key: 'WallKeepPct', value: '78', unit: '%'),
           ],
           checks: [
             EpicPieCheck(
@@ -471,7 +471,7 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/ghost_recorder.gd',
+            path: 'Source/GhostRecorderComponent.cpp',
             role: '15 Hz transform sampling & translucent ghost playback',
           ),
         ],
@@ -494,7 +494,7 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
             status: FeatureStatus.queued,
             goal: 'Record 15 Hz skiff transforms and spawn translucent wireframe ghost on subsequent runs.',
             tuning: [
-              EpicTuningParam(key: 'ghost_sample_hz', value: '15', unit: 'count'),
+              EpicTuningParam(key: 'GhostSampleHz', value: '15', unit: 'count'),
             ],
             checks: [
               EpicPieCheck(

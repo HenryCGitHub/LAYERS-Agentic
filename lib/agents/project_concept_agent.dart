@@ -2,17 +2,23 @@ import 'dart:convert';
 import '../constants/text_style_guide.dart';
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
-import '../utils/godot_spec_guard.dart';
+import '../utils/unreal_spec_guard.dart';
 import 'gemini_agent_client.dart';
 
 import 'concept/concept_fallback_synthesizer.dart';
 import 'concept/project_concept_epic_sync.dart';
 import 'concept/project_concept_schemas.dart';
 
-/// Stage 1 Godot 4 Co-Designer Agent (`1. Project Spec` -> `PROJECT_SPEC.md`).
-/// Generates the high-level Godot 4 foundation (`§01–§04`) and strictly `v0.1` Epics (`§05`),
+/// Stage 1 Unreal Engine 5 Co-Designer Agent (`1. Project Spec` -> `PROJECT_SPEC.md`).
+/// Generates the high-level Unreal Engine 5 foundation (`§01–§04`) and strictly `v0.1` Epics (`§05`),
 /// and applies natural-language Co-Designer revisions via scoped JSON patches.
 class ProjectConceptAgent {
+  static ProjectConceptBlueprint convertBlueprintArchitectureMode(
+    ProjectConceptBlueprint source,
+    UnrealArchitectureMode targetMode,
+  ) =>
+      convertBlueprintArchitectureModeImpl(source, targetMode);
+
   static ProjectConceptBlueprint convertBlueprintDimension(
     ProjectConceptBlueprint source,
     GodotProjectDimension targetDim,
@@ -50,6 +56,7 @@ class ProjectConceptAgent {
     required String sparkPrompt,
     required String apiKey,
     GodotProjectDimension? dimensionOverride,
+    UnrealArchitectureMode? architectureModeOverride,
     String? archetypeId,
     String? viewChoiceId,
     String? prototypeHookId,
@@ -60,6 +67,7 @@ class ProjectConceptAgent {
       sparkPrompt: sparkPrompt,
       apiKey: apiKey,
       dimensionOverride: dimensionOverride,
+      architectureModeOverride: architectureModeOverride,
       archetypeId: archetypeId,
       viewChoiceId: viewChoiceId,
       prototypeHookId: prototypeHookId,
@@ -70,11 +78,12 @@ class ProjectConceptAgent {
     throw StateError(outcome.errorMessage ?? 'Failed to draft Project Spec.');
   }
 
-  /// Synthesizes a complete Godot 4 Root Project Spec + `2–4` `v0.1` Epics and surfaces real AI errors.
+  /// Synthesizes a complete Unreal Engine 5 Root Project Spec + `2–4` `v0.1` Epics and surfaces real AI errors.
   static Future<Stage1AgentOutcome> draftSpecWithStatus({
     required String sparkPrompt,
     required String apiKey,
     GodotProjectDimension? dimensionOverride,
+    UnrealArchitectureMode? architectureModeOverride,
     String? archetypeId,
     String? viewChoiceId,
     String? prototypeHookId,
@@ -82,14 +91,24 @@ class ProjectConceptAgent {
     String thinkingLevel = 'LOW',
   }) async {
     final trimmedSpark = sparkPrompt.trim();
-    final matchedPreset = GodotSparkPresets.matchSparkPrompt(trimmedSpark);
+    final matchedPreset = UnrealSparkPresets.matchSparkPrompt(trimmedSpark);
     final effectiveDim = dimensionOverride ??
         matchedPreset?.dimension ??
         GodotProjectDimension.detectFromSpark(trimmedSpark);
+    final effectiveMode = architectureModeOverride ??
+        matchedPreset?.architectureMode ??
+        UnrealArchitectureMode.detectFromSpark(trimmedSpark);
 
     if (!GeminiAgentClient.hasKey(apiKey)) {
       if (matchedPreset != null) {
         var presetCopy = matchedPreset.deepCopy();
+        if (architectureModeOverride != null &&
+            architectureModeOverride != presetCopy.architectureMode) {
+          presetCopy = convertBlueprintArchitectureMode(
+            presetCopy,
+            architectureModeOverride,
+          );
+        }
         if (dimensionOverride != null &&
             dimensionOverride != presetCopy.dimension) {
           presetCopy = convertBlueprintDimension(presetCopy, dimensionOverride);
@@ -97,7 +116,10 @@ class ProjectConceptAgent {
         if (trimmedSpark.isNotEmpty) {
           presetCopy.sparkPrompt = trimmedSpark;
         }
-        final sanitized = GodotSpecGuard.sanitizeConceptBlueprint(presetCopy);
+        final sanitized = UnrealSpecGuard.sanitizeConceptBlueprint(
+          raw: presetCopy,
+          modeOverride: effectiveMode,
+        );
         normalizeSequentialEpicAndFeatureCodes(sanitized);
         return Stage1AgentOutcome(
           blueprint: sanitized,
@@ -108,6 +130,7 @@ class ProjectConceptAgent {
       final fallback = buildSynthesizedFallback(
         trimmedSpark,
         dimension: effectiveDim,
+        architectureMode: effectiveMode,
         archetypeId: archetypeId,
         viewChoiceId: viewChoiceId,
         prototypeHookId: prototypeHookId,
@@ -115,7 +138,10 @@ class ProjectConceptAgent {
       if (trimmedSpark.isNotEmpty) {
         fallback.sparkPrompt = trimmedSpark;
       }
-      var clean = GodotSpecGuard.sanitizeConceptBlueprint(fallback);
+      var clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: fallback,
+        modeOverride: effectiveMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -124,9 +150,9 @@ class ProjectConceptAgent {
       );
     }
 
-    final unitGuide = effectiveDim == GodotProjectDimension.dim2d
-        ? '2D Pixel Space (`px`, `px/s`, `deg`, `s`, `hp`) with CharacterBody2D/Area2D/Camera2D'
-        : '3D 1 unit = 1 meter (`m`, `m/s`, `deg`, `s`, `hp`) with CharacterBody3D/Area3D/SpringArm3D/Camera3D';
+    final tuningStyleGuide = effectiveMode == UnrealArchitectureMode.cppHybrid
+        ? 'Unreal Engine 5 C++ & BP Hybrid (`cm`, `cm/s`, `deg`, `s`, `hp`) with Source/ `ACharacter` `UPROPERTY(EditAnywhere)` classes and thin `BP_*` subclasses'
+        : 'Unreal Engine 5 Blueprint-First (`cm`, `cm/s`, `deg`, `s`, `hp`) with `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, `USpringArmComponent`, and `UCameraComponent`';
     final archetypeHint = archetypeId != null && archetypeId.trim().isNotEmpty
         ? '\nREQUESTED GENRE ARCHETYPE: $archetypeId'
             '${viewChoiceId != null && viewChoiceId.isNotEmpty ? ' · camera=$viewChoiceId' : ''}'
@@ -136,19 +162,19 @@ class ProjectConceptAgent {
     final prompt = '''
 ${LayersTextStyleGuide.compactStyleRules}
 
-You are the LAYERS Godot 4 Project Co-Designer.
-Generate a clean, build-ready Stage 1 Project Spec (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`) for this game idea:
+You are the LAYERS Unreal Engine 5 Project Co-Designer.
+Generate a clean, build-ready Stage 1 Project Spec (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`) for this game idea:
 USER SPARK: "$trimmedSpark"
-TARGET ARCHITECTURE: ${effectiveDim.fullLabel} (${effectiveDim.architectureContract})
-CODE POLICY: ${effectiveDim.codePolicyContract}$archetypeHint
+TARGET ARCHITECTURE: ${effectiveMode.fullLabel} (${effectiveMode.architectureContract})
+CODE POLICY: ${effectiveMode.codePolicyContract}$archetypeHint
 
 CRITICAL CONSTRAINTS:
-- Match the true genre of the spark cleanly: for non-combat ideas (puzzle, racing, cozy, builder, stealth), design native scenes (`room_proto.tscn`, `track_proto.tscn`, `course_proto.tscn`) and domain inputs/verbs instead of forcing enemy combat or arena brawlers.
-- Produce `2–4` Large-Domain `v0.1` Prototype Epics in `initialEpics` derived directly from §01 `coreLoop` beats and §02 Camera/Scale/InputMap contracts.
-- Each Epic owns shared `sceneOwnership` (`.tscn`/`.gd` files), `inScope`, `doneWhen`, `states`, `interrupts`, `outOfScope`, AND `2–3` sittable 30-90 min `v0.1` Feature slices inside `features` (`F01`, `F02`, ... sequentially across all Epics with zero duplicate `F01` resets and zero `Task`/`Step` micro-lists).
-- Keep controls, `@export` tuning parameters, cues, and Playtest Gate checks inside child `features` (never duplicate them on the parent Epic).
+- Match the true genre of the spark cleanly: for non-combat ideas (puzzle, racing, cozy, builder, stealth), design native Unreal maps (`/Game/Maps/Lvl_RoomProto.umap`, `/Game/Maps/Lvl_TrackProto.umap`, `/Game/Maps/Lvl_CourseProto.umap`) and domain inputs/verbs instead of forcing enemy combat or arena brawlers.
+- Produce `2–4` Large-Domain `v0.1` Prototype Epics in `initialEpics` derived directly from §01 `coreLoop` beats and §02 Camera/Scale/Enhanced Input contracts.
+- Each Epic owns shared `sceneOwnership` (`/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, or `Source/*.cpp` files), `inScope`, `doneWhen`, `states`, `interrupts`, `outOfScope`, AND `2–3` sittable 30-90 min `v0.1` Feature slices inside `features` (`F01`, `F02`, ... sequentially across all Epics with zero duplicate `F01` resets and zero `Task`/`Step` micro-lists).
+- Keep controls, Exposed BP / `UPROPERTY(EditAnywhere)` tuning parameters, cues, and PIE Playtest Gate checks inside child `features` (never duplicate them on the parent Epic).
 - Populate `coreLoopBeat` on every Epic naming which §01 Core Loop beat(s) it proves, and defer waves, menus, save slots, and meta progression to `v0.2+`.
-- Use $unitGuide everywhere in §02 and in every Feature `@export` tuning parameter with `snake_case` keys and `snake_case` `InputMap` action names.
+- Use $tuningStyleGuide everywhere in §02 and in every Feature tuning parameter with `PascalCase` keys and `IA_*` Enhanced Input action names.
 ''';
 
     final res = await GeminiAgentClient.generateJson(
@@ -172,8 +198,10 @@ CRITICAL CONSTRAINTS:
     if (trimmedSpark.isNotEmpty) {
       parsed.sparkPrompt = trimmedSpark;
     }
-    if (dimensionOverride != null && parsed.dimension != dimensionOverride) {
-      final converted = convertBlueprintDimension(parsed, dimensionOverride);
+    if (architectureModeOverride != null &&
+        parsed.architectureMode != architectureModeOverride) {
+      final converted =
+          convertBlueprintArchitectureMode(parsed, architectureModeOverride);
       if (converted.initialEpics.isEmpty) {
         return const Stage1AgentOutcome(
           blueprint: null,
@@ -187,9 +215,13 @@ CRITICAL CONSTRAINTS:
         changedSections: const <String>{'s01', 's02', 's03', 's04', 's05'},
       );
     }
-    final rawDimStr = (res['dimension'] ?? '').toString().trim();
-    if (rawDimStr.isEmpty) {
-      parsed.dimension = effectiveDim;
+    final rawModeStr =
+        (res['architectureMode'] ?? res['mode'] ?? '').toString().trim();
+    if (rawModeStr.isEmpty) {
+      parsed.architectureMode = effectiveMode;
+    }
+    if (dimensionOverride != null) {
+      parsed.dimension = dimensionOverride;
     }
     if (parsed.initialEpics.isEmpty) {
       return const Stage1AgentOutcome(
@@ -198,7 +230,10 @@ CRITICAL CONSTRAINTS:
             'Cloud Gemini returned an empty §05 Epic list. Please retry.',
       );
     }
-    var clean = GodotSpecGuard.sanitizeConceptBlueprint(parsed);
+    var clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+      raw: parsed,
+      modeOverride: parsed.architectureMode,
+    );
     normalizeSequentialEpicAndFeatureCodes(clean);
     return Stage1AgentOutcome(
       blueprint: clean,
@@ -317,18 +352,19 @@ CRITICAL CONSTRAINTS:
       }
     }
 
-    // Detect explicit or camera-implied dimension switch FIRST so units scale safely.
+    // Detect architectureMode or legacy dimension switches FIRST.
+    final rawArch = (patch['architectureMode'] ?? patch['mode'] ?? '').toString().trim();
+    if (rawArch.isNotEmpty) {
+      final targetMode = UnrealArchitectureMode.fromString(rawArch);
+      if (targetMode != next.architectureMode) {
+        next = convertBlueprintArchitectureMode(next, targetMode);
+        changed.addAll(const <String>{'s02', 's05'});
+      }
+    }
     GodotProjectDimension targetDim = next.dimension;
     final rawDim = (patch['dimension'] ?? '').toString().trim();
     if (rawDim.isNotEmpty) {
       targetDim = GodotProjectDimension.fromString(rawDim);
-    } else if (patch['cameraChoiceId'] != null) {
-      final camId = patch['cameraChoiceId'].toString().trim().toLowerCase();
-      if (camId.endsWith('2d')) {
-        targetDim = GodotProjectDimension.dim2d;
-      } else if (const {'isometric', 'topdown', 'tps', 'fps'}.contains(camId)) {
-        targetDim = GodotProjectDimension.dim3d;
-      }
     }
     if (targetDim != next.dimension) {
       next = convertBlueprintDimension(next, targetDim);
@@ -584,7 +620,10 @@ CRITICAL CONSTRAINTS:
 
     next.lastCoDesignNote =
         (patch['coDesignNote'] ?? fallbackNote).toString().trim();
-    next = GodotSpecGuard.sanitizeConceptBlueprint(next);
+    next = UnrealSpecGuard.sanitizeConceptBlueprint(
+      raw: next,
+      modeOverride: next.architectureMode,
+    );
     normalizeSequentialEpicAndFeatureCodes(next);
     return (blueprint: next, changedSections: changed);
   }
@@ -628,14 +667,14 @@ CRITICAL CONSTRAINTS:
     final prompt = '''
 ${LayersTextStyleGuide.compactStyleRules}
 
-Patch only the sections of the Godot 4 Root Project Spec (`§01-§05`) requested by the user instruction.
-CURRENT ARCHITECTURE: ${currentSpec.dimension.fullLabel} (${currentSpec.dimension.architectureContract})
-CODE POLICY: ${currentSpec.dimension.codePolicyContract}
+Patch only the sections of the Unreal Engine 5 Root Project Spec (`§01-§05`) requested by the user instruction.
+CURRENT ARCHITECTURE: ${currentSpec.architectureMode.fullLabel} (${currentSpec.architectureMode.architectureContract})
+CODE POLICY: ${currentSpec.architectureMode.codePolicyContract}
 RULES:
-- Call `patch_godot_root_spec` with ONLY the fields you need to change plus `coDesignNote` and `changedSections`.
+- Call `patch_unreal_root_spec` with ONLY the fields you need to change plus `coDesignNote` and `changedSections`.
 - Omit unchanged scalar/list fields and untouched Epics so untouched sections remain identical.
-- If changing dimension (`dim2d` / `dim3d`) or Camera framing, update `dimension`, `cameraChoiceId`, `cameraContract`, `characterScale`, and any affected Epics in `epicUpdates`.
-- Keep all `§05` Epics strictly at `2–4` `v0.1` Epics with sequential `F01..FM` Feature slices and Godot units (`m`/`m/s` for 3D, `px`/`px/s` for 2D).
+- If changing `architectureMode` (`blueprint` / `cppHybrid`) or Camera framing, update `architectureMode`, `cameraChoiceId`, `cameraContract`, `characterScale`, and any affected Epics in `epicUpdates`.
+- Keep all `§05` Epics strictly at `2–4` `v0.1` Epics with sequential `F01..FM` Feature slices and Unreal units (`cm`/`cm/s`).
 
 CURRENT COMPACT SPEC JSON:
 $compactJson
@@ -679,32 +718,27 @@ USER CO-DESIGN INSTRUCTION:
     final next = current.deepCopy();
     final lower = instruction.toLowerCase();
 
-    if (RegExp(r'\b2d\b').hasMatch(lower) &&
-        !lower.contains('side-scroller') &&
-        !lower.contains('side scroller') &&
-        !lower.contains('top-down') &&
-        !lower.contains('top down')) {
-      final converted =
-          convertBlueprintDimension(next, GodotProjectDimension.dim2d);
+    if (RegExp(r'\b(?:c\+\+|cpp|hybrid)\b').hasMatch(lower)) {
+      final converted = convertBlueprintArchitectureMode(
+        next,
+        UnrealArchitectureMode.cppHybrid,
+      );
       normalizeSequentialEpicAndFeatureCodes(converted);
       converted.lastCoDesignNote =
-          'Switched project dimension to Godot 4 · 2D (px, px/s).';
+          'Switched project mode to Unreal Engine 5 · C++ & BP Hybrid.';
       return Stage1AgentOutcome(
         blueprint: converted,
         usedOfflineFallback: true,
         changedSections: const <String>{'s02', 's05'},
       );
-    } else if (RegExp(r'\b3d\b').hasMatch(lower) &&
-        !lower.contains('first-person') &&
-        !lower.contains('first person') &&
-        !lower.contains('third-person') &&
-        !lower.contains('third person') &&
-        !lower.contains('isometric')) {
-      final converted =
-          convertBlueprintDimension(next, GodotProjectDimension.dim3d);
+    } else if (RegExp(r'\bblueprint(?:-first)?\b').hasMatch(lower)) {
+      final converted = convertBlueprintArchitectureMode(
+        next,
+        UnrealArchitectureMode.blueprint,
+      );
       normalizeSequentialEpicAndFeatureCodes(converted);
       converted.lastCoDesignNote =
-          'Switched project dimension to Godot 4 · 3D (m, m/s).';
+          'Switched project mode to Unreal Engine 5 · Blueprint-First.';
       return Stage1AgentOutcome(
         blueprint: converted,
         usedOfflineFallback: true,
@@ -712,18 +746,20 @@ USER CO-DESIGN INSTRUCTION:
       );
     } else if (lower.contains('side-scroller') ||
         lower.contains('side scroller')) {
-      final base = convertBlueprintDimension(next, GodotProjectDimension.dim2d);
-      base.cameraChoiceId = 'sidescroller2d';
-      base.cameraContract =
-          'Camera2D Zoom 1.4x · Lookahead 64 px · Horizontal floor lock';
+      next.cameraChoiceId = 'sidescroller';
+      next.cameraContract =
+          'USpringArmComponent TargetArmLength 950 cm · Ortho/Locked Track · 55 deg FOV · Lookahead 160 cm';
       syncEpicCameraFraming(
-        base,
-        optionId: base.cameraChoiceId,
-        contractValue: base.cameraContract,
+        next,
+        optionId: next.cameraChoiceId,
+        contractValue: next.cameraContract,
       );
-      base.lastCoDesignNote =
-          'Switched §02 Camera contract & E01 framing to 2D Side-Scroller.';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(base);
+      next.lastCoDesignNote =
+          'Switched §02 Camera contract & E01 framing to Side-Scroller Cam.';
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -733,18 +769,20 @@ USER CO-DESIGN INSTRUCTION:
     } else if (lower.contains('first-person') ||
         lower.contains('first person') ||
         lower.contains('fps')) {
-      final base = convertBlueprintDimension(next, GodotProjectDimension.dim3d);
-      base.cameraChoiceId = 'fps';
-      base.cameraContract =
-          'Camera3D EyeHeight 1.65 m · 90 deg FOV · Captured mouse yaw/pitch';
+      next.cameraChoiceId = 'fps';
+      next.cameraContract =
+          'UCameraComponent EyeHeight 165 cm · 90 deg FOV · Captured mouse yaw/pitch';
       syncEpicCameraFraming(
-        base,
-        optionId: base.cameraChoiceId,
-        contractValue: base.cameraContract,
+        next,
+        optionId: next.cameraChoiceId,
+        contractValue: next.cameraContract,
       );
-      base.lastCoDesignNote =
+      next.lastCoDesignNote =
           'Switched §02 Camera contract & E01 look controls to First-Person.';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(base);
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -756,18 +794,20 @@ USER CO-DESIGN INSTRUCTION:
         lower.contains('tps') ||
         lower.contains('over-shoulder') ||
         lower.contains('over shoulder')) {
-      final base = convertBlueprintDimension(next, GodotProjectDimension.dim3d);
-      base.cameraChoiceId = 'tps';
-      base.cameraContract =
-          'SpringArm3D 3.8 m · Offset (0.65, 0.55) m · 68 deg FOV · CameraLag 10.0';
+      next.cameraChoiceId = 'tps';
+      next.cameraContract =
+          'USpringArmComponent TargetArmLength 360 cm · SocketOffset (0, 65, 55) cm · 68 deg FOV · CameraLagSpeed 11.0';
       syncEpicCameraFraming(
-        base,
-        optionId: base.cameraChoiceId,
-        contractValue: base.cameraContract,
+        next,
+        optionId: next.cameraChoiceId,
+        contractValue: next.cameraContract,
       );
-      base.lastCoDesignNote =
+      next.lastCoDesignNote =
           'Switched §02 Camera contract & E01 look controls to Third-Person.';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(base);
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -775,15 +815,9 @@ USER CO-DESIGN INSTRUCTION:
         changedSections: const <String>{'s02', 's05'},
       );
     } else if (lower.contains('top-down') || lower.contains('top down')) {
-      if (next.dimension == GodotProjectDimension.dim2d) {
-        next.cameraChoiceId = 'topdown2d';
-        next.cameraContract =
-            'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim';
-      } else {
-        next.cameraChoiceId = 'topdown';
-        next.cameraContract =
-            'SpringArm3D 16.5 m @ -88 deg pitch, 50 deg FOV, Zero camera roll';
-      }
+      next.cameraChoiceId = 'topdown';
+      next.cameraContract =
+          'USpringArmComponent TargetArmLength 1650 cm @ -88 deg pitch, 50 deg FOV, Zero camera roll';
       syncEpicCameraFraming(
         next,
         optionId: next.cameraChoiceId,
@@ -791,7 +825,10 @@ USER CO-DESIGN INSTRUCTION:
       );
       next.lastCoDesignNote =
           'Switched §02 Camera contract & E01 cursor aim to Fixed Top-Down.';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(next);
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -799,18 +836,20 @@ USER CO-DESIGN INSTRUCTION:
         changedSections: const <String>{'s02', 's05'},
       );
     } else if (lower.contains('isometric')) {
-      final base = convertBlueprintDimension(next, GodotProjectDimension.dim3d);
-      base.cameraChoiceId = 'isometric';
-      base.cameraContract =
-          'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0';
+      next.cameraChoiceId = 'isometric';
+      next.cameraContract =
+          'USpringArmComponent TargetArmLength 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLagSpeed 9.0';
       syncEpicCameraFraming(
-        base,
-        optionId: base.cameraChoiceId,
-        contractValue: base.cameraContract,
+        next,
+        optionId: next.cameraChoiceId,
+        contractValue: next.cameraContract,
       );
-      base.lastCoDesignNote =
+      next.lastCoDesignNote =
           'Switched §02 Camera contract & E01 cursor aim to Isometric.';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(base);
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -823,7 +862,10 @@ USER CO-DESIGN INSTRUCTION:
       syncEpicCoreFeel(next, feelId: 'heavy');
       next.lastCoDesignNote =
           'Switched §03 Core Feel & E01 locomotion to Heavy Deliberate.';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(next);
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -836,7 +878,10 @@ USER CO-DESIGN INSTRUCTION:
       syncEpicCoreFeel(next, feelId: 'physics');
       next.lastCoDesignNote =
           'Switched §03 Core Feel & E01 locomotion to Physics Momentum.';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(next);
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -847,7 +892,10 @@ USER CO-DESIGN INSTRUCTION:
       syncEpicCoreFeel(next, feelId: 'snappy');
       next.lastCoDesignNote =
           'Switched §03 Core Feel & E01 locomotion to Snappy Arcade.';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(next);
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,
@@ -865,7 +913,10 @@ USER CO-DESIGN INSTRUCTION:
         next.outOfScope = [...next.outOfScope, item];
       }
       next.lastCoDesignNote = 'Added hard scope cut: $item';
-      final clean = GodotSpecGuard.sanitizeConceptBlueprint(next);
+      final clean = UnrealSpecGuard.sanitizeConceptBlueprint(
+        raw: next,
+        modeOverride: next.architectureMode,
+      );
       normalizeSequentialEpicAndFeatureCodes(clean);
       return Stage1AgentOutcome(
         blueprint: clean,

@@ -5,37 +5,37 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
   return ProjectConceptBlueprint(
     sparkPrompt: sparkPrompt,
     gameTitle: 'EMBER KEEP',
-    dimension: GodotProjectDimension.dim2d,
+    architectureMode: UnrealArchitectureMode.blueprint,
     pitch:
-        'Tactical 2D top-down torch defense — cleave shadow stalkers while guarding shrinking brazier light rings',
+        'Tactical top-down torch defense — cleave shadow stalkers while guarding shrinking brazier light rings',
     coreLoop: const [
       'Swing Torch Axe',
       'Plant Brazier Light',
       'Hold Safe Radius',
       'Collect Ash Shards',
     ],
-    cameraChoiceId: 'topdown2d',
+    cameraChoiceId: 'topdown',
     cameraContract:
-        'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim',
+        'USpringArmComponent TargetArmLength 1550 cm @ -78 deg pitch, 50 deg FOV, CameraLagSpeed 8.0 (XY cursor world aim)',
     characterScale:
-        'CharacterBody2D CollisionShape 32x40 px · walk_speed 260 px/s',
+        'ACharacter CapsuleRadius 40 cm · HalfHeight 90 cm · WalkSpeed 620 cm/s',
     inputContract:
-        'InputMap (move_left/right/up/down, axe_swing, plant_brazier)',
+        'IMC_EmberKeep (IA_Move, IA_AxeSwing, IA_PlantBrazier)',
     assetPolicy:
-        'Polygon2D / ColorRect Keep Courtyard + PointLight2D (CanvasModulate dusk tint); @export vars',
+        'UStaticMeshComponent Stone Courtyard + UPointLightComponent Torch Rings + Exposed BP Vars',
     feelChoiceId: 'heavy',
-    cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera2dOptions,
+    cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera3dOptions,
     pillars: const [
-      'Light Defines Territory: Every 2D light circle visibly alters enemy aggression and player safety',
+      'Light Defines Territory: Every dynamic light circle visibly alters enemy aggression and player safety',
       'Deliberate Heavy Swings: Axe cleaves carry distinct windup weight rather than rapid spam',
     ],
     tradeOffs: const [
       TradeOffRule(
-        prefer: 'Dynamic 2D radial light circles for instant clarity',
-        avoid: 'Static darkness masks',
+        prefer: 'Dynamic radial UPointLightComponent rings for instant clarity',
+        avoid: 'Static baked darkness rooms',
       ),
       TradeOffRule(
-        prefer: 'Compact 1280x1280 px courtyard',
+        prefer: 'Compact 3200x3200 cm courtyard',
         avoid: 'Procedural forest chunks',
       ),
     ],
@@ -45,56 +45,52 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
       'No crafting bench menus',
     ],
     releaseDoneWhen:
-        'Run F6 on res://scenes/keep_proto.tscn -> plant brazier and fend off 3 shadow stalkers with 0 Debugger errors',
+        'Run PIE on /Game/Maps/Lvl_KeepProto.umap -> plant brazier and fend off 3 shadow stalkers with 0 Message Log errors',
     initialEpics: [
       EpicSpec(
         id: 'ek_e01',
         code: 'E01',
         lineageKey: 'e01',
-        title: 'Keeper Movement & 2D Combat',
+        title: 'Keeper Movement & Combat',
         releaseVersion: 'v0.1',
         lifecycle: EpicLifecycle.active,
         coreLoopBeat: 'Beat 1 · Swing Torch Axe',
         goal:
-            'Own 2D top-down keeper locomotion, snapped Camera2D tracking, and heavy directional axe cleaves.',
+            'Own top-down keeper locomotion, smoothed USpringArmComponent tracking, and heavy directional axe cleaves.',
         inScope: const [
-          'Normalized 260 px/s 2D courtyard walk & Camera2D smoothing',
+          'Normalized 620 cm/s courtyard walk & camera lag smoothing',
           '0.18 s windup 140 deg torch axe cleave pushing stalkers back',
         ],
         doneWhen: const [
-          'Walk and swing across keep courtyard -> 96 px cleave arc knocks shadow stalkers back cleanly',
+          'Walk and swing across keep courtyard -> 240 cm cleave arc knocks shadow stalkers back cleanly',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/keep_proto.tscn',
-            role: '1280x1280 px 2D stone courtyard + TileMapLayer walls',
+            path: '/Game/Maps/Lvl_KeepProto.umap',
+            role: '3200x3200 cm stone courtyard + perimeter wall meshes',
           ),
           EpicSceneOwnership(
-            path: 'res://scenes/keeper_player.tscn',
-            role: 'CharacterBody2D hero + Camera2D + PointLight2D',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/keeper_player.gd',
-            role: '2D movement loop & @export px/s axe cleave vars',
+            path: '/Game/Blueprints/BP_KeeperPlayer',
+            role: 'ACharacter hero + USpringArmComponent + carried torch light',
           ),
         ],
         links: const [
-          'Scene res://scenes/keeper_player.tscn + res://scripts/keeper_player.gd',
-          'Applies cleave knockback & damage to E03 Shadow Stalkers in enemy group',
+          'Blueprint /Game/Blueprints/BP_KeeperPlayer',
+          'Applies cleave knockback & damage to E03 Shadow Stalkers',
         ],
         outOfScope: const [
           'No multi-weapon swapping',
         ],
         controls: [
           EpicControlBinding(
-            action: 'move_left / move_right / move_up / move_down',
-            trigger: 'Held WASD',
-            rule: 'Moves keeper at 260 px/s; slowed 50% during AxeWindup',
+            action: 'IA_Move',
+            trigger: 'Triggered (WASD)',
+            rule: 'Moves keeper at 620 cm/s; slowed 50% during AxeWindup',
           ),
           EpicControlBinding(
-            action: 'axe_swing',
-            trigger: 'Just Pressed (LMB)',
-            rule: '0.18s windup -> 140 deg Area2D cleave hitbox out to 96 px reach',
+            action: 'IA_AxeSwing',
+            trigger: 'Started (LMB)',
+            rule: '0.18 s windup -> 140 deg UBoxComponent cleave hitbox out to 240 cm reach',
           ),
         ],
         states: const [
@@ -104,47 +100,47 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
           'Planting a Brazier (E02) takes priority over AxeRecover',
         ],
         tuning: [
-          EpicTuningParam(key: 'walk_speed', value: '260', unit: 'px/s'),
-          EpicTuningParam(key: 'cleave_radius', value: '96', unit: 'px'),
-          EpicTuningParam(key: 'cleave_damage', value: '40', unit: 'hp'),
-          EpicTuningParam(key: 'knockback_impulse', value: '320', unit: 'px/s'),
+          EpicTuningParam(key: 'WalkSpeed', value: '620', unit: 'cm/s'),
+          EpicTuningParam(key: 'CleaveRadius', value: '240', unit: 'cm'),
+          EpicTuningParam(key: 'CleaveDamage', value: '40', unit: 'hp'),
+          EpicTuningParam(key: 'KnockbackImpulse', value: '800', unit: 'cm/s'),
         ],
         feedback: const [
-          'Translucent amber 140 deg floor arc Polygon2D flashes on AxeStrike',
-          'Carried PointLight2D flickers brighter during swing impact',
+          'Translucent amber 140 deg floor arc decal flashes on AxeStrike',
+          'Carried UPointLightComponent flickers brighter during swing impact',
         ],
         levelStaging:
-            'res://scenes/keep_proto.tscn: 1280x1280 px 2D stone courtyard + central bonfire + TileMapLayer walls',
+            '/Game/Maps/Lvl_KeepProto.umap: 3200x3200 cm stone courtyard + central bonfire + stone walls',
         checks: [
           EpicPieCheck(
             id: 'ek_e01_c1',
-            text: 'Press LMB facing cursor -> axe cleave hits 96 px cone and shoves dummy target back',
+            text: 'Press LMB facing cursor -> axe cleave hits 240 cm cone and shoves dummy target back',
           ),
         ],
         features: [
           FeatureSpec(
             id: 'ek_f01',
             code: 'F01',
-            title: '2D Grid Walk & Camera2D',
+            title: 'Courtyard Walk & Follow Cam',
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.passed,
-            goal: 'Move keeper smoothly at 260 px/s with smoothed Camera2D courtyard tracking.',
+            goal: 'Move keeper smoothly at 620 cm/s with smoothed USpringArmComponent courtyard tracking.',
             controls: [
               EpicControlBinding(
-                action: 'move_2d',
-                trigger: 'Held (WASD)',
-                rule: 'Moves CharacterBody2D at walk_speed (260 px/s)',
+                action: 'IA_Move',
+                trigger: 'Triggered (WASD)',
+                rule: 'Moves ACharacter at WalkSpeed (620 cm/s)',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'walk_speed', value: '260', unit: 'px/s'),
+              EpicTuningParam(key: 'WalkSpeed', value: '620', unit: 'cm/s'),
             ],
-            cues: const ['Carried PointLight2D flickers gently with movement'],
+            cues: const ['Carried UPointLightComponent flickers gently with movement'],
             checks: [
               EpicPieCheck(
                 id: 'ek_f01_c1',
-                text: 'Walk across courtyard -> Moves cleanly at 260 px/s with zero wall snagging',
+                text: 'Walk across courtyard -> Moves cleanly at 620 cm/s with zero wall snagging',
                 passed: true,
               ),
             ],
@@ -156,24 +152,24 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.active,
-            goal: 'Wind up for 0.18 s and sweep a 96 px amber cleave sector knocking stalkers back.',
+            goal: 'Wind up for 0.18 s and sweep a 240 cm amber cleave sector knocking stalkers back.',
             controls: [
               EpicControlBinding(
-                action: 'axe_swing',
-                trigger: 'Just Pressed (LMB)',
-                rule: '0.18 s windup -> 140 deg Area2D cleave at 96 px reach',
+                action: 'IA_AxeSwing',
+                trigger: 'Started (LMB)',
+                rule: '0.18 s windup -> 140 deg cleave trace at 240 cm reach',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'cleave_radius', value: '96', unit: 'px'),
-              EpicTuningParam(key: 'cleave_damage', value: '40', unit: 'hp'),
-              EpicTuningParam(key: 'knockback_impulse', value: '320', unit: 'px/s'),
+              EpicTuningParam(key: 'CleaveRadius', value: '240', unit: 'cm'),
+              EpicTuningParam(key: 'CleaveDamage', value: '40', unit: 'hp'),
+              EpicTuningParam(key: 'KnockbackImpulse', value: '800', unit: 'cm/s'),
             ],
-            cues: const ['Amber 140 deg Polygon2D slash arc flashes on AxeStrike'],
+            cues: const ['Amber 140 deg slash Niagara ribbon flashes on AxeStrike'],
             checks: [
               EpicPieCheck(
                 id: 'ek_f02_c1',
-                text: 'Click LMB facing target -> Cleaves 96 px sector and knocks target back',
+                text: 'Click LMB facing target -> Cleaves 240 cm sector and knocks target back',
               ),
             ],
           ),
@@ -188,48 +184,48 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
         lifecycle: EpicLifecycle.queued,
         coreLoopBeat: 'Beats 2–3 · Plant Brazier & Hold Safe Radius',
         goal:
-            'Deploy temporary 2D braziers projecting shrinking PointLight2D rings and fuel stoking loops.',
-        inScope: const ['220 px safe radius placement 56 px ahead', '18 s flame decay curve'],
-        doneWhen: const ['Press E -> Brazier lights 220 px circle and shrinks smoothly over 18 s'],
+            'Deploy temporary field braziers projecting shrinking UPointLightComponent rings and fuel stoking loops.',
+        inScope: const ['550 cm safe radius placement 140 cm ahead', '18 s flame decay curve'],
+        doneWhen: const ['Press E -> Brazier lights 550 cm circle and shrinks smoothly over 18 s'],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/field_brazier.tscn',
-            role: 'Placed brazier Node2D + PointLight2D + Line2D border',
+            path: '/Game/Blueprints/BP_FieldBrazier',
+            role: 'Placed brazier AActor + UPointLightComponent + floor decal ring',
           ),
         ],
         links: const [
-          'Instantiates res://scenes/field_brazier.tscn and registers active light radius for E03',
+          'Spawns /Game/Blueprints/BP_FieldBrazier and registers active light radius for E03',
         ],
         outOfScope: const [
           'No defensive stone wall grid snapping',
         ],
         controls: [
           EpicControlBinding(
-            action: 'plant_brazier',
-            trigger: 'Just Pressed (RMB / E)',
-            rule: 'Spawns field_brazier.tscn 56 px ahead if amber_fuel >= 1',
+            action: 'IA_PlantBrazier',
+            trigger: 'Started (RMB / E)',
+            rule: 'Spawns BP_FieldBrazier 140 cm ahead if AmberFuel >= 1',
           ),
         ],
         states: const [
-          'Ignited (Full 220 px radius) -> Flickering (< 80 px) -> Extinguished',
+          'Ignited (Full 550 cm radius) -> Flickering (< 200 cm) -> Extinguished',
         ],
         interrupts: const [
-          'Hitting a planted brazier with AxeStrike stokes +4s burn lifetime cleanly',
+          'Hitting a planted brazier with AxeStrike stokes +4 s burn lifetime cleanly',
         ],
         tuning: [
-          EpicTuningParam(key: 'start_light_radius', value: '220', unit: 'px'),
-          EpicTuningParam(key: 'burn_duration', value: '18.0', unit: 's'),
-          EpicTuningParam(key: 'max_active_braziers', value: '3', unit: 'count'),
+          EpicTuningParam(key: 'StartLightRadius', value: '550', unit: 'cm'),
+          EpicTuningParam(key: 'BurnDuration', value: '18.0', unit: 's'),
+          EpicTuningParam(key: 'MaxActiveBraziers', value: '3', unit: 'count'),
         ],
         feedback: const [
-          'Crisp Line2D floor ring matches current PointLight2D safe attenuation radius',
+          'Crisp glowing decal floor ring matches current UPointLightComponent safe attenuation radius',
         ],
         levelStaging:
-            'res://scenes/keep_proto.tscn: dark perimeter corners contrast central lit courtyard circle',
+            '/Game/Maps/Lvl_KeepProto.umap: dark perimeter corners contrast central lit courtyard circle',
         checks: [
           EpicPieCheck(
             id: 'ek_e02_c1',
-            text: 'Press E -> brazier illuminates 220 px circle and shrinks smoothly over 18s',
+            text: 'Press E -> brazier illuminates 550 cm circle and shrinks smoothly over 18 s',
           ),
         ],
         features: [
@@ -240,15 +236,15 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Spawn a 220 px PointLight2D brazier 56 px ahead up to 3 active nodes.',
+            goal: 'Spawn a 550 cm UPointLightComponent brazier 140 cm ahead up to 3 active actors.',
             tuning: [
-              EpicTuningParam(key: 'start_light_radius', value: '220', unit: 'px'),
-              EpicTuningParam(key: 'max_active_braziers', value: '3', unit: 'count'),
+              EpicTuningParam(key: 'StartLightRadius', value: '550', unit: 'cm'),
+              EpicTuningParam(key: 'MaxActiveBraziers', value: '3', unit: 'count'),
             ],
             checks: [
               EpicPieCheck(
                 id: 'ek_f03_c1',
-                text: 'Press E -> Plants brazier lighting 220 px circle on dark stone',
+                text: 'Press E -> Plants brazier lighting 550 cm circle on dark stone',
               ),
             ],
           ),
@@ -261,7 +257,7 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
             status: FeatureStatus.queued,
             goal: 'Shrink safe radius over 18 s and grant +4 s burn duration when struck by AxeStrike.',
             tuning: [
-              EpicTuningParam(key: 'burn_duration', value: '18.0', unit: 's'),
+              EpicTuningParam(key: 'BurnDuration', value: '18.0', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -282,24 +278,24 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
         coreLoopBeat: 'Beats 3–4 · Shadow Recoil & Ash Shards',
         goal:
             'Own shadow enemy pursuit inside darkness, light-burst recoil interrupts, and courtyard waves.',
-        inScope: const ['190 px/s shadow prowl AI', '310 px/s light recoil flee interrupt'],
+        inScope: const ['460 cm/s shadow prowl AI', '760 cm/s light recoil flee interrupt'],
         doneWhen: const ['Light brazier near stalker -> Stalker screeches and recoils past lit perimeter'],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/shadow_stalker.tscn',
-            role: '2D enemy CharacterBody2D + light proximity sensor',
+            path: '/Game/Blueprints/BP_ShadowStalker',
+            role: 'Enemy ACharacter + light proximity sensor',
           ),
         ],
         links: const [
-          'Scene res://scenes/shadow_stalker.tscn queries E02 active light circles & E01 cleave hits',
+          'Blueprint /Game/Blueprints/BP_ShadowStalker queries E02 active light rings & E01 cleave hits',
         ],
         outOfScope: const [
           'No ranged shadow projectile casters',
         ],
         controls: [
           EpicControlBinding(
-            action: 'ai_stalk_flee',
-            trigger: 'Physics Tick AI',
+            action: 'IA_AiStalkFlee',
+            trigger: 'AI Behavior Tick',
             rule: 'Circles outside bright core -> dashes in when light dips -> flees on ignition',
           ),
         ],
@@ -307,18 +303,18 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
           'ShadowProwl -> BiteLunge -> LightRecoil (1.2s) -> Dead (Drop 1 EmberFuel)',
         ],
         interrupts: const [
-          'Fresh Brazier ignition inside 220 px forces instant LightRecoil and cancels BiteLunge',
+          'Fresh Brazier ignition inside 550 cm forces instant LightRecoil and cancels BiteLunge',
         ],
         tuning: [
-          EpicTuningParam(key: 'stalker_hp', value: '80', unit: 'hp'),
-          EpicTuningParam(key: 'prowl_speed', value: '190', unit: 'px/s'),
-          EpicTuningParam(key: 'recoil_speed', value: '310', unit: 'px/s'),
+          EpicTuningParam(key: 'StalkerHp', value: '80', unit: 'hp'),
+          EpicTuningParam(key: 'ProwlSpeed', value: '460', unit: 'cm/s'),
+          EpicTuningParam(key: 'RecoilSpeed', value: '760', unit: 'cm/s'),
         ],
         feedback: const [
           'Glowing violet eye slits dim whenever forced into LightRecoil',
         ],
         levelStaging:
-            'res://scenes/keep_proto.tscn: 3 stalker spawns stationed around dark courtyard corners',
+            '/Game/Maps/Lvl_KeepProto.umap: 3 stalker spawns stationed around dark courtyard corners',
         checks: [
           EpicPieCheck(
             id: 'ek_e03_c1',
@@ -333,15 +329,15 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Orbit dimly lit zones at 190 px/s and dart toward keeper when light shrinks.',
+            goal: 'Orbit dimly lit zones at 460 cm/s and dart toward keeper when light shrinks.',
             tuning: [
-              EpicTuningParam(key: 'stalker_hp', value: '80', unit: 'hp'),
-              EpicTuningParam(key: 'prowl_speed', value: '190', unit: 'px/s'),
+              EpicTuningParam(key: 'StalkerHp', value: '80', unit: 'hp'),
+              EpicTuningParam(key: 'ProwlSpeed', value: '460', unit: 'cm/s'),
             ],
             checks: [
               EpicPieCheck(
                 id: 'ek_f05_c1',
-                text: 'Stand in dimming courtyard -> Stalker creeps inward at 190 px/s',
+                text: 'Stand in dimming courtyard -> Stalker creeps inward at 460 cm/s',
               ),
             ],
           ),
@@ -352,9 +348,9 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
             introducedIn: 'v0.1',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Cancel enemy BiteLunge cleanly and push stalker outward at 310 px/s on fresh light.',
+            goal: 'Cancel enemy BiteLunge cleanly and push stalker outward at 760 cm/s on fresh light.',
             tuning: [
-              EpicTuningParam(key: 'recoil_speed', value: '310', unit: 'px/s'),
+              EpicTuningParam(key: 'RecoilSpeed', value: '760', unit: 'cm/s'),
             ],
             checks: [
               EpicPieCheck(
@@ -371,7 +367,7 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
         id: 'agile_flame',
         label: 'Agile Flame Combat',
         description:
-            'Pair 2D ember roll dodge with crisp cleave arcs and stalker threat waves.',
+            'Pair ember roll dodge with crisp cleave arcs and stalker threat waves.',
         upgradeIds: ['up_ek_e01_arc', 'up_ek_e03_telegraph', 'ek_f07_roll'],
         newEpicIds: ['ek_e04'],
       ),
@@ -389,7 +385,7 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
         EpicUpgradeOption(
           id: 'up_ek_e01_arc',
           targetFeatureCode: 'F02',
-          text: '+24 px wider 2D torch axe swipe arc with 35ms hitstop',
+          text: '+60 cm wider torch axe swipe arc with 35ms hitstop',
           chosen: true,
         ),
       ],
@@ -397,7 +393,7 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
         EpicUpgradeOption(
           id: 'up_ek_e02_flare',
           targetFeatureCode: 'F03',
-          text: '+60 px initial ignition flash pulse pushing nearby shadows',
+          text: '+150 cm initial ignition flash pulse pushing nearby shadows',
         ),
       ],
       'e03': [
@@ -414,19 +410,19 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
         FeatureSpec(
           id: 'ek_f07_roll',
           code: 'F07',
-          title: '2D Ember Roll Dodge',
+          title: 'Ember Roll Dodge',
           introducedIn: 'v0.2',
           sliceTime: '45 min',
           status: FeatureStatus.active,
-          goal: 'Roll 128 px past stalker bites at 480 px/s with 0.55 s cooldown.',
+          goal: 'Roll 320 cm past stalker bites at 1150 cm/s with 0.55 s cooldown.',
           tuning: [
-            EpicTuningParam(key: 'roll_speed', value: '480', unit: 'px/s'),
-            EpicTuningParam(key: 'roll_dist', value: '128', unit: 'px'),
+            EpicTuningParam(key: 'RollSpeed', value: '1150', unit: 'cm/s'),
+            EpicTuningParam(key: 'RollDist', value: '320', unit: 'cm'),
           ],
           checks: [
             EpicPieCheck(
               id: 'ek_f07_c1',
-              text: 'Press Space -> Keeper rolls 128 px cleanly with ember dust',
+              text: 'Press Space -> Keeper rolls 320 cm cleanly with Niagara ember dust',
             ),
           ],
         ),
@@ -437,24 +433,24 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
         id: 'ek_e04',
         code: 'E04',
         lineageKey: 'e04',
-        title: '2D Night Wave Pressure',
+        title: 'Night Wave Pressure',
         releaseVersion: 'v0.2',
         lifecycle: EpicLifecycle.newEpic,
         coreLoopBeat: 'Beat 4 · Escalating Courtyard Pressure',
         chosenForNextRelease: true,
         goal:
-            'Spawn 3 timed 2D shadow stalker waves from dark keep corners with top-center counter HUD.',
+            'Spawn 3 timed shadow stalker waves from dark keep corners with top-center WBP HUD counter.',
         inScope: const [
-          '3 courtyard wave tiers spaced 320 px outside center brazier',
-          'Top-center HUD night wave readout & R quick restart',
+          '3 courtyard wave tiers spaced 800 cm outside center brazier',
+          'Top-center UMG Widget night wave readout & R quick restart',
         ],
         doneWhen: const [
           'Clear Night Wave 1 -> 2.0 s breather plays and Wave 2 spawns from shadowed edges',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/night_wave_director.gd',
-            role: '2D wave spawn timing, edge offsets & R reset hook',
+            path: '/Game/Blueprints/BP_NightWaveDirector',
+            role: 'Wave spawn timing, edge offsets & R reset hook',
           ),
         ],
         outOfScope: const [
@@ -464,7 +460,7 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
           'WaveIntro -> ActiveHunt -> Breather (2.0s) -> NightSurvived',
         ],
         interrupts: const [
-          'Center brazier burnout halts spawns and triggers Relight Prompt overlay',
+          'Center brazier burnout halts spawns and triggers Relight Prompt UMG Widget',
         ],
         features: [
           FeatureSpec(
@@ -474,10 +470,10 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
             introducedIn: 'v0.2',
             sliceTime: '45 min',
             status: FeatureStatus.queued,
-            goal: 'Spawn 3 escalating 2D shadow waves at 320 px radius with top-center HUD counter.',
+            goal: 'Spawn 3 escalating shadow waves at 800 cm radius with top-center WBP HUD counter.',
             tuning: [
-              EpicTuningParam(key: 'spawn_edge_offset', value: '320', unit: 'px'),
-              EpicTuningParam(key: 'breather_seconds', value: '2.0', unit: 's'),
+              EpicTuningParam(key: 'SpawnEdgeOffset', value: '800', unit: 'cm'),
+              EpicTuningParam(key: 'BreatherSeconds', value: '2.0', unit: 's'),
             ],
             checks: [
               EpicPieCheck(

@@ -142,7 +142,7 @@ class ProjectConceptBlueprint {
 
   ProjectConceptBlueprint({
     this.sparkPrompt = '',
-    this.gameTitle = 'UNTITLED GODOT PROJECT',
+    this.gameTitle = 'UNTITLED UNREAL PROJECT',
     this.dimension = GodotProjectDimension.dim3d,
     this.architectureMode = UnrealArchitectureMode.blueprint,
     String? cameraChoiceId,
@@ -159,36 +159,24 @@ class ProjectConceptBlueprint {
     List<String>? outOfScope,
     List<EpicSpec>? initialEpics,
     this.releaseDoneWhen =
-        'Run F6 on res://scenes/arena_proto.tscn -> complete full 30s core loop cleanly with 0 Debugger errors',
+        'Run PIE on /Game/Maps/Lvl_ArenaProto.umap -> complete full 30s core loop cleanly with 0 Message Log errors',
     List<ReleaseDirectionPreset>? v02Presets,
     List<EpicSpec>? v02NewPool,
     Map<String, List<EpicUpgradeOption>>? v02UpgradesByLineageKey,
     Map<String, List<FeatureSpec>>? v02NewFeaturesByLineageKey,
     this.lastCoDesignNote = '',
     this.approved = false,
-  })  : cameraChoiceId = cameraChoiceId ??
-            (dimension == GodotProjectDimension.dim2d
-                ? 'topdown2d'
-                : 'isometric'),
+  })  : cameraChoiceId = cameraChoiceId ?? 'isometric',
         cameraContract = cameraContract ??
-            (dimension == GodotProjectDimension.dim2d
-                ? 'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim'
-                : 'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0'),
+            'USpringArmComponent TargetArmLength 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLagSpeed 9.0',
         characterScale = characterScale ??
-            (dimension == GodotProjectDimension.dim2d
-                ? 'CharacterBody2D CollisionShape 32x48 px · move_speed 260 px/s'
-                : 'CharacterBody3D CapsuleRadius 0.42 m · Height 1.84 m · move_speed 6.2 m/s'),
+            'ACharacter CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 620 cm/s',
         inputContract = inputContract ??
-            'InputMap (move_left/right/up/down, dodge, primary_action)',
-        assetPolicy = assetPolicy ??
-            (dimension == GodotProjectDimension.dim2d
-                ? 'ColorRect / Polygon2D Greybox Prototypes + Solid Tint Materials; @export vars & Resource (.tres)'
-                : 'CSGBox3D / PrimitiveMesh Greybox + StandardMaterial3D Tints; @export vars & Resource (.tres)'),
+            'IMC_Gameplay (IA_Move, IA_Dodge, IA_PrimaryAction)',
+        assetPolicy = assetPolicy ?? architectureMode.architectureContract,
         coreLoop = coreLoop ?? <String>[],
-        cameraDecisionOptions = cameraDecisionOptions ??
-            (dimension == GodotProjectDimension.dim2d
-                ? defaultCamera2dOptions
-                : defaultCamera3dOptions),
+        cameraDecisionOptions =
+            cameraDecisionOptions ?? defaultCamera3dOptions,
         pillars = pillars ?? <String>[],
         tradeOffs = tradeOffs ?? <TradeOffRule>[],
         outOfScope = outOfScope ?? <String>[],
@@ -205,55 +193,41 @@ class ProjectConceptBlueprint {
       id: 'isometric',
       label: 'Isometric (~52 deg)',
       contractValue:
-          'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0',
-      note: 'Best readability for 3D arena movement + XZ cursor plane aiming.',
+          'USpringArmComponent TargetArmLength 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLagSpeed 9.0',
+      note: 'Best readability for arena movement + XY cursor plane aiming.',
     ),
     ConceptSectionOption(
       id: 'topdown',
       label: 'Fixed Top-Down (90 deg)',
       contractValue:
-          'SpringArm3D 16.5 m @ -88 deg pitch, 50 deg FOV, Zero camera roll',
+          'USpringArmComponent TargetArmLength 1650 cm @ -88 deg pitch, 50 deg FOV, Zero camera roll',
       note: 'Pure tactical arena clarity with minimal perspective skew.',
     ),
     ConceptSectionOption(
       id: 'tps',
       label: 'Third-Person Over-Shoulder',
       contractValue:
-          'SpringArm3D 3.6 m · Offset (0.65, 0.55) m · 68 deg FOV · CameraLag 11.0',
+          'USpringArmComponent TargetArmLength 360 cm · SocketOffset (0, 65, 55) cm · 68 deg FOV · CameraLagSpeed 11.0',
       note: 'Close-quarters weight and horizon depth over rear flank awareness.',
     ),
     ConceptSectionOption(
       id: 'fps',
       label: 'First-Person (90 deg FOV)',
       contractValue:
-          'Camera3D EyeHeight 1.65 m · 90 deg FOV · Captured mouse yaw/pitch',
+          'UCameraComponent EyeHeight 165 cm · 90 deg FOV · Captured mouse yaw/pitch',
       note: 'Immediate eye-level aim precision with narrow peripheral awareness.',
+    ),
+    ConceptSectionOption(
+      id: 'sidescroller',
+      label: 'Side-Scroller Cam',
+      contractValue:
+          'USpringArmComponent TargetArmLength 950 cm · Ortho/Locked Track · 55 deg FOV · Lookahead 160 cm',
+      note: 'Clear vertical platform clearance and grounded forward readability.',
     ),
   ];
 
-  static const List<ConceptSectionOption> defaultCamera2dOptions = [
-    ConceptSectionOption(
-      id: 'topdown2d',
-      label: 'Top-Down 2D Follow',
-      contractValue:
-          'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim',
-      note: 'Crisp 360-degree top-down movement and mouse aim across 2D rooms.',
-    ),
-    ConceptSectionOption(
-      id: 'sidescroller2d',
-      label: '2D Side-Scroller Cam',
-      contractValue:
-          'Camera2D Zoom 1.4x · Lookahead 64 px · Horizontal floor lock',
-      note: 'Clear vertical platform clearance and grounded forward readability.',
-    ),
-    ConceptSectionOption(
-      id: 'fixedarena2d',
-      label: 'Fixed Room Frame (1280x720)',
-      contractValue:
-          'Camera2D Centered Fixed Frame (Zoom 1.0x) · Whole arena visible',
-      note: 'Zero scrolling disorientation for compact wave skirmish rooms.',
-    ),
-  ];
+  static const List<ConceptSectionOption> defaultCamera2dOptions =
+      defaultCamera3dOptions;
 
   static const List<CoreFeelOption> coreFeelOptions = [
     CoreFeelOption(
@@ -503,50 +477,38 @@ class ProjectConceptBlueprint {
       (json['architectureMode'] ?? json['mode'] ?? json['dimension'] ?? '')
           .toString(),
     );
-    final is2d = dim == GodotProjectDimension.dim2d;
 
     return ProjectConceptBlueprint(
       sparkPrompt: (json['sparkPrompt'] ?? json['prompt'] ?? '').toString(),
       gameTitle: (json['gameTitle'] ??
               json['title'] ??
               legacyGameSpec['title'] ??
-              'UNTITLED GODOT PROJECT')
+              'UNTITLED UNREAL PROJECT')
           .toString()
           .trim(),
       dimension: dim,
       architectureMode: archMode,
       pitch: (json['pitch'] ?? json['goal'] ?? '').toString().trim(),
       coreLoop: loop,
-      cameraChoiceId: (json['cameraChoiceId'] ??
-              (is2d ? 'topdown2d' : 'isometric'))
-          .toString()
-          .trim(),
+      cameraChoiceId: (json['cameraChoiceId'] ?? 'isometric').toString().trim(),
       cameraContract: (json['cameraContract'] ??
               legacyGameSpec['camera'] ??
-              (is2d
-                  ? 'Camera2D Zoom 1.0x · PositionSmoothing 8.0 · Cursor 2D world aim'
-                  : 'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0'))
+              'USpringArmComponent TargetArmLength 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLagSpeed 9.0')
           .toString()
           .trim(),
       characterScale: (json['characterScale'] ??
-              (is2d
-                  ? 'CharacterBody2D CollisionShape 32x48 px · move_speed 260 px/s'
-                  : 'CharacterBody3D CapsuleRadius 0.42 m · Height 1.84 m · move_speed 6.2 m/s'))
+              'ACharacter CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 620 cm/s')
           .toString()
           .trim(),
       inputContract: (json['inputContract'] ??
-              'InputMap (move_left/right/up/down, dodge, primary_action)')
+              'IMC_Gameplay (IA_Move, IA_Dodge, IA_PrimaryAction)')
           .toString()
           .trim(),
-      assetPolicy: (json['assetPolicy'] ??
-              (is2d
-                  ? 'ColorRect / Polygon2D Greybox Prototypes + Solid Tint Materials; @export vars & Resource (.tres)'
-                  : 'CSGBox3D / PrimitiveMesh Greybox + StandardMaterial3D Tints; @export vars & Resource (.tres)'))
+      assetPolicy: (json['assetPolicy'] ?? archMode.architectureContract)
           .toString()
           .trim(),
-      cameraDecisionOptions: cameraOpts.isEmpty
-          ? (is2d ? defaultCamera2dOptions : defaultCamera3dOptions)
-          : cameraOpts,
+      cameraDecisionOptions:
+          cameraOpts.isEmpty ? defaultCamera3dOptions : cameraOpts,
       feelChoiceId: normalizeFeelChoiceId(json['feelChoiceId']?.toString()),
       pillars: _stringList(json['pillars'] ?? json['designPillars']),
       tradeOffs: trades,
@@ -554,7 +516,7 @@ class ProjectConceptBlueprint {
       initialEpics: epics,
       releaseDoneWhen: (json['releaseDoneWhen'] ??
               json['doneWhen'] ??
-              'Run F6 on res://scenes/arena_proto.tscn -> complete full 30s core loop cleanly with 0 Debugger errors')
+              'Run PIE on /Game/Maps/Lvl_ArenaProto.umap -> complete full 30s core loop cleanly with 0 Message Log errors')
           .toString()
           .trim(),
       v02Presets: presets,

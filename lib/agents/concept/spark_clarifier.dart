@@ -261,31 +261,39 @@ class Stage1ScopeSummary {
 
     if (actions.isEmpty && spec.inputContract.trim().isNotEmpty) {
       final cleanedInput = spec.inputContract
-          .replaceAll(RegExp(r'\bInputMap\b', caseSensitive: false), '')
-          .replaceAll(RegExp(r'[()]'), ' ');
+          .replaceAll(
+            RegExp(r'\b(?:Enhanced Input|InputMap|IMC_[A-Za-z0-9_]+)\b',
+                caseSensitive: false),
+            '',
+          )
+          .replaceAll(RegExp(r'[():]'), ' ');
       for (final tok in cleanedInput.split(RegExp(r'[,/;]'))) {
         final c = tok.trim().toLowerCase();
         if (c.isNotEmpty) actions.add(c);
       }
     }
 
-    final tscnRx = RegExp(r'res://[^\s,;)\]]+\.tscn', caseSensitive: false);
+    final mapRx = RegExp(
+      r'(?:/Game/|res://)[^\s,;)\]]+\.(?:umap|tscn)',
+      caseSensitive: false,
+    );
     String? testScene;
     for (final ep in epics) {
       for (final own in ep.sceneOwnership) {
-        if (own.path.toLowerCase().endsWith('.tscn')) {
+        final low = own.path.toLowerCase();
+        if (low.endsWith('.umap') || low.endsWith('.tscn')) {
           testScene = own.path.trim();
           break;
         }
       }
       if (testScene != null) break;
-      final m = tscnRx.firstMatch(ep.levelStaging);
+      final m = mapRx.firstMatch(ep.levelStaging);
       if (m != null) {
         testScene = m.group(0);
         break;
       }
     }
-    testScene ??= tscnRx.firstMatch(spec.releaseDoneWhen)?.group(0);
+    testScene ??= mapRx.firstMatch(spec.releaseDoneWhen)?.group(0);
 
     final firstGate = (firstFeat != null && firstFeat.checks.isNotEmpty)
         ? firstFeat.checks.first.text
@@ -299,8 +307,8 @@ class Stage1ScopeSummary {
       if (featCount > 8)
         '$featCount Features in v0.1 (trim to <= 8 slices to ship faster)',
       if (testScene == null)
-        'Missing a .tscn playtest scene in E01 Scene Ownership',
-      if (anyMissingCheck) 'One or more Features lack a Playtest Gate check',
+        'Missing a /Game/Maps/Lvl_*.umap playtest map in E01 Scene Ownership',
+      if (anyMissingCheck) 'One or more Features lack a PIE Playtest Gate check',
     ];
 
     return Stage1ScopeSummary(

@@ -5,9 +5,9 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
   return ProjectConceptBlueprint(
     sparkPrompt: sparkPrompt,
     gameTitle: 'SHELLBREAKER',
-    dimension: GodotProjectDimension.dim3d,
+    architectureMode: UnrealArchitectureMode.blueprint,
     pitch:
-        'Crisp twin-stick 3D mech brawler — smash armored crabs inside a compact greybox arena',
+        'Crisp twin-stick mech brawler — smash armored crabs inside a compact greybox arena',
     coreLoop: const [
       'Skim & Cursor Aim',
       'Claw Dash Slam',
@@ -16,13 +16,13 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
     ],
     cameraChoiceId: 'isometric',
     cameraContract:
-        'SpringArm3D 14.5 m @ -52 deg pitch, 55 deg FOV, CameraLag 9.0 (XZ cursor plane aim)',
+        'USpringArmComponent TargetArmLength 1450 cm @ -52 deg pitch, 55 deg FOV, CameraLagSpeed 9.0 (XY cursor plane aim)',
     characterScale:
-        'CharacterBody3D CapsuleRadius 0.42 m · Height 1.84 m · move_speed 6.4 m/s',
+        'ACharacter CapsuleRadius 42 cm · HalfHeight 92 cm · MaxWalkSpeed 640 cm/s',
     inputContract:
-        'InputMap (move_left/right/up/down, claw_dash, fire_burst)',
+        'IMC_Shellbreaker (IA_Move, IA_MouseAim, IA_ClawDash, IA_FireBurst)',
     assetPolicy:
-        'CSGBox3D / PrimitiveMesh Greybox + StandardMaterial3D Tints; res://data/shellbreaker_tuning.tres',
+        'UStaticMeshComponent Greybox + UMaterialInstanceDynamic Tints; /Game/Data/DA_ShellbreakerTuning',
     feelChoiceId: 'snappy',
     cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera3dOptions,
     pillars: const [
@@ -37,7 +37,7 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
       ),
       TradeOffRule(
         prefer: 'Tight single-arena testbed',
-        avoid: 'Multi-room streaming scenes',
+        avoid: 'Multi-room streaming levels',
       ),
       TradeOffRule(
         prefer: 'Clear emissive debug shapes',
@@ -51,7 +51,7 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
       'No procedural terrain or multi-zone progression',
     ],
     releaseDoneWhen:
-        'Run F6 on res://scenes/shellbreaker_proto.tscn -> dash and shatter dummy crab cleanly with 0 Debugger errors',
+        'Run PIE on /Game/Maps/Lvl_ShellbreakerProto.umap -> dash and shatter dummy crab cleanly with 0 Message Log errors',
     initialEpics: [
       EpicSpec(
         id: 'sb_e01',
@@ -64,31 +64,27 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         goal:
             'Own mech planar locomotion, cursor turret facing, horizontal claw dash commitments, and follow camera tracking.',
         inScope: const [
-          '8-way arena XZ planar movement & mouse ground-plane aim',
-          'Invulnerable 5.5 m forward Claw Dash with cooldown indicator',
-          'Dampened SpringArm3D follow camera with cursor aim lead',
+          '8-way arena XY planar movement & mouse ground-plane aim',
+          'Invulnerable 550 cm forward Claw Dash with cooldown indicator',
+          'Dampened USpringArmComponent follow camera with cursor aim lead',
         ],
         doneWhen: const [
-          'All E01 movement and dash Features pass Playtest Gate -> Camera & mech move smoothly with zero snag',
+          'All E01 movement and dash Features pass PIE -> Camera & mech move smoothly with zero snag',
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/shellbreaker_proto.tscn',
-            role: '30x30 m walled greybox floor + cover pillars',
+            path: '/Game/Maps/Lvl_ShellbreakerProto.umap',
+            role: '3000x3000 cm walled greybox floor + cover pillars',
           ),
           EpicSceneOwnership(
-            path: 'res://scenes/player_mech.tscn',
-            role: 'CharacterBody3D root + VisualRig + DashHitbox',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/player_mech.gd',
-            role: 'Movement state machine, aim raycast & @export physics',
+            path: '/Game/Blueprints/BP_PlayerMech',
+            role: 'ACharacter root + TurretVisual + DashHitbox + USpringArmComponent',
           ),
         ],
         links: const [
-          'Scene res://scenes/player_mech.tscn + res://scripts/player_mech.gd',
-          'Emits dash_impact signal & hit_damage method contract to E03',
-          'Drives SpringArm3D follow lag and dash thruster GPUParticles3D',
+          'Blueprint /Game/Blueprints/BP_PlayerMech',
+          'Broadcasts OnDashImpact dispatcher & ApplyDamage contract to E03',
+          'Drives USpringArmComponent lag and dash Niagara ribbon',
         ],
         outOfScope: const [
           'No slope stair-stepping mechanics',
@@ -96,52 +92,52 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         ],
         controls: [
           EpicControlBinding(
-            action: 'move_left / move_right / move_up / move_down',
-            trigger: 'Held (WASD)',
-            rule: 'Ground velocity clamped cleanly at 6.4 m/s; locked during DashActive',
+            action: 'IA_Move',
+            trigger: 'Triggered (WASD)',
+            rule: 'Ground velocity clamped cleanly at 640 cm/s; locked during DashActive',
           ),
           EpicControlBinding(
-            action: 'mouse_aim',
-            trigger: 'Physics Tick Raycast',
-            rule: r'Rotates $VisualRig child toward cursor XZ plane hit every frame',
+            action: 'IA_MouseAim',
+            trigger: 'Tick HitResult UnderCursor',
+            rule: 'Rotates TurretVisual scene component toward cursor XY ground intersection every frame',
           ),
           EpicControlBinding(
-            action: 'claw_dash',
-            trigger: 'Just Pressed (Space / RMB)',
-            rule: 'Launches forward 5.5 m over 0.16s along aim vector on 1.1s cooldown',
+            action: 'IA_ClawDash',
+            trigger: 'Started (Space / RMB)',
+            rule: 'Launches forward 550 cm over 0.16 s along aim vector on 1.1 s cooldown',
           ),
         ],
         states: const [
           'Idle / Move -> DashWindup (0.04s) -> DashActive (0.16s) -> DashRecover (0.08s)',
         ],
         interrupts: const [
-          'DashActive cancels weapon burst fire cleanly and toggles DashHitbox monitoring',
+          'DashActive cancels weapon burst fire cleanly and enables DashHitbox overlap',
         ],
         tuning: [
-          EpicTuningParam(key: 'move_speed', value: '6.4', unit: 'm/s'),
-          EpicTuningParam(key: 'dash_distance', value: '5.5', unit: 'm'),
-          EpicTuningParam(key: 'dash_duration', value: '0.16', unit: 's'),
-          EpicTuningParam(key: 'dash_cooldown', value: '1.1', unit: 's'),
+          EpicTuningParam(key: 'MoveSpeed', value: '640', unit: 'cm/s'),
+          EpicTuningParam(key: 'DashDistance', value: '550', unit: 'cm'),
+          EpicTuningParam(key: 'DashDuration', value: '0.16', unit: 's'),
+          EpicTuningParam(key: 'DashCooldown', value: '1.1', unit: 's'),
         ],
         feedback: const [
-          'Orange emissive thruster trail during DashActive (0.16s)',
-          'Compact radial cooldown arc inside Control HUD overlay',
-          'Subtle camera punch on wall or enemy dash collision',
+          'Orange emissive Niagara thruster ribbon during DashActive (0.16 s)',
+          'Compact radial cooldown arc inside WBP HUD UMG Widget overlay',
+          'Subtle camera shake punch on wall or enemy dash collision',
         ],
         levelStaging:
-            'res://scenes/shellbreaker_proto.tscn: 30x30 m walled greybox floor + 2 solid CSG cover pillars + SpawnPoint at origin',
+            '/Game/Maps/Lvl_ShellbreakerProto.umap: 3000x3000 cm walled greybox floor + 2 static cover pillars + PlayerStart at origin',
         checks: [
           EpicPieCheck(
             id: 'sb_e01_c1',
-            text: 'Hold WASD -> mech accelerates smoothly to 6.4 m/s with zero wall snagging',
+            text: 'Hold WASD -> mech accelerates smoothly to 640 cm/s with zero wall snagging',
           ),
           EpicPieCheck(
             id: 'sb_e01_c2',
-            text: 'Move cursor across floor -> VisualRig tracks aim vector smoothly without flip',
+            text: 'Move cursor across floor -> TurretVisual tracks aim vector smoothly without flip',
           ),
           EpicPieCheck(
             id: 'sb_e01_c3',
-            text: 'Press Space -> dash travels ~5.5 m along aim direction and obeys 1.1s cooldown',
+            text: 'Press Space -> dash travels ~550 cm along aim direction and obeys 1.1s cooldown',
           ),
         ],
         features: [
@@ -153,43 +149,43 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
             sliceTime: '45 min',
             status: FeatureStatus.passed,
             goal:
-                'Move smoothly at 6.4 m/s across the arena XZ plane and orient VisualRig toward the mouse raycast target.',
+                'Move smoothly at 640 cm/s across the arena XY plane and orient TurretVisual toward the mouse trace target.',
             inScope: const [
               'WASD 8-way planar locomotion',
-              'Ground-plane XZ cursor raycast aim',
-              'Dampened SpringArm3D follow camera',
+              'Ground-plane XY cursor line-trace aim',
+              'Dampened USpringArmComponent follow camera',
             ],
             doneWhen: const [
               'Hold WASD into cover pillars -> Mech slides smoothly without catching edges',
             ],
             controls: [
               EpicControlBinding(
-                action: 'move_left / move_right / move_up / move_down',
-                trigger: 'Held (WASD)',
-                rule: 'Accelerates immediately up to move_speed (6.4 m/s)',
+                action: 'IA_Move',
+                trigger: 'Triggered (WASD)',
+                rule: 'Accelerates immediately up to MaxWalkSpeed (640 cm/s)',
               ),
               EpicControlBinding(
-                action: 'mouse_aim',
-                trigger: 'Physics Tick Raycast',
-                rule: 'Projects cursor ray onto XZ plane to rotate VisualRig',
+                action: 'IA_MouseAim',
+                trigger: 'Tick HitResult UnderCursor',
+                rule: 'Projects cursor trace onto XY plane to rotate TurretVisual',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'move_speed', value: '6.4', unit: 'm/s'),
-              EpicTuningParam(key: 'cam_follow_damp', value: '9.0', unit: '1/s'),
+              EpicTuningParam(key: 'MoveSpeed', value: '640', unit: 'cm/s'),
+              EpicTuningParam(key: 'CamFollowDamp', value: '9.0', unit: '1/s'),
             ],
             cues: const [
-              'Floor aim ring highlights cursor intersection point cleanly',
+              'Floor aim ring decal highlights cursor intersection point cleanly',
             ],
             checks: [
               EpicPieCheck(
                 id: 'sb_f01_c1',
-                text: 'Hold WASD -> mech moves cleanly at 6.4 m/s with zero wall snagging',
+                text: 'Hold WASD -> mech moves cleanly at 640 cm/s with zero wall snagging',
                 passed: true,
               ),
               EpicPieCheck(
                 id: 'sb_f01_c2',
-                text: 'Move mouse across arena -> VisualRig tracks cursor accurately',
+                text: 'Move mouse across arena -> TurretVisual tracks cursor accurately',
                 passed: true,
               ),
             ],
@@ -202,14 +198,14 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
             sliceTime: '60 min',
             status: FeatureStatus.active,
             goal:
-                'Launch a 5.5 m forward commitment dash with thruster trail, invulnerability window, and 1.1 s cooldown.',
+                'Launch a 550 cm forward commitment dash with Niagara ribbon, invulnerability window, and 1.1 s cooldown.',
             inScope: const [
               'Space / RMB dash impulse over 0.16 s',
-              'DashHitbox Area3D enemy impact trigger',
-              'Radial cooldown HUD ring indicator',
+              'DashHitbox UBoxComponent enemy impact trigger',
+              'Radial cooldown WBP UMG Widget indicator',
             ],
             doneWhen: const [
-              'Press Space -> Mech crosses 5.5 m cleanly and triggers dash_impact on crab shells',
+              'Press Space -> Mech crosses 550 cm cleanly and triggers OnDashImpact on crab shells',
             ],
             releaseDelta: '+55ms hitstop freeze & radial shockwave ring on Dash impact',
             releaseDeltaChecks: [
@@ -220,33 +216,33 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
             ],
             controls: [
               EpicControlBinding(
-                action: 'claw_dash',
-                trigger: 'Just Pressed (Space / RMB)',
-                rule: 'Launches 5.5 m over 0.16 s along aim vector on 1.1 s cooldown',
+                action: 'IA_ClawDash',
+                trigger: 'Started (Space / RMB)',
+                rule: 'Launches 550 cm over 0.16 s along aim vector on 1.1 s cooldown',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'dash_distance', value: '5.5', unit: 'm'),
-              EpicTuningParam(key: 'dash_duration', value: '0.16', unit: 's'),
-              EpicTuningParam(key: 'dash_cooldown', value: '1.1', unit: 's'),
+              EpicTuningParam(key: 'DashDistance', value: '550', unit: 'cm'),
+              EpicTuningParam(key: 'DashDuration', value: '0.16', unit: 's'),
+              EpicTuningParam(key: 'DashCooldown', value: '1.1', unit: 's'),
             ],
             cues: const [
-              'Orange emissive thruster ribbon fires for 0.16 s',
+              'Orange emissive Niagara thruster ribbon fires for 0.16 s',
               'Subtle camera punch on wall or crab shell impact',
             ],
             checks: [
               EpicPieCheck(
                 id: 'sb_f02_c1',
-                text: 'Press Space -> dash travels 5.5 m along aim vector and obeys 1.1 s cooldown',
+                text: 'Press Space -> dash travels 550 cm along aim vector and obeys 1.1 s cooldown',
                 passed: false,
               ),
             ],
           ),
         ],
         baselineSummary: const [
-          '8-way movement at 6.4 m/s',
+          '8-way movement at 640 cm/s',
           'Cursor plane turret aim',
-          '5.5 m invulnerable Claw Dash',
+          '550 cm invulnerable Claw Dash',
         ],
       ),
       EpicSpec(
@@ -268,17 +264,17 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/kinetic_bolt.tscn',
-            role: 'High-velocity projectile Area3D + emissive mesh',
+            path: '/Game/Blueprints/BP_KineticBolt',
+            role: 'High-velocity UProjectileMovementComponent + emissive mesh',
           ),
           EpicSceneOwnership(
-            path: 'res://scripts/burst_cannon.gd',
+            path: '/Game/Blueprints/BP_BurstCannonComponent',
             role: '3-round fire cadence, recoil push & heat tracker',
           ),
         ],
         links: const [
-          'Spawns res://scenes/kinetic_bolt.tscn from player muzzle Marker3D',
-          'Calls take_damage(amount) on E03 crab targets in enemy group',
+          'Spawns /Game/Blueprints/BP_KineticBolt from player muzzle USceneComponent',
+          'Calls ApplyDamage on E03 crab targets',
         ],
         outOfScope: const [
           'No alternate ammo pickups',
@@ -286,9 +282,9 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         ],
         controls: [
           EpicControlBinding(
-            action: 'fire_burst',
-            trigger: 'Pressed / Held (LMB)',
-            rule: 'Spawns 3-bolt burst over 0.24s when heat < 100 and not DashActive',
+            action: 'IA_FireBurst',
+            trigger: 'Triggered (LMB)',
+            rule: 'Spawns 3-bolt burst over 0.24 s when Heat < 100 and not DashActive',
           ),
         ],
         states: const [
@@ -296,22 +292,22 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
           'Heat >= 100 -> OverheatLock (1.3s vent) -> Ready',
         ],
         interrupts: const [
-          'Triggering claw_dash immediately aborts remaining burst bolts safely',
-          'Passive heat decay pauses for 0.35s right after last shot fired',
+          'Triggering IA_ClawDash immediately aborts remaining burst bolts safely',
+          'Passive heat decay pauses for 0.35 s right after last shot fired',
         ],
         tuning: [
-          EpicTuningParam(key: 'bolt_speed', value: '24.0', unit: 'm/s'),
-          EpicTuningParam(key: 'burst_damage', value: '18', unit: 'hp'),
-          EpicTuningParam(key: 'overheat_time', value: '1.3', unit: 's'),
-          EpicTuningParam(key: 'recoil_impulse', value: '1.2', unit: 'm/s'),
+          EpicTuningParam(key: 'BoltSpeed', value: '2400', unit: 'cm/s'),
+          EpicTuningParam(key: 'BurstDamage', value: '18', unit: 'hp'),
+          EpicTuningParam(key: 'OverheatTime', value: '1.3', unit: 's'),
+          EpicTuningParam(key: 'RecoilImpulse', value: '120', unit: 'cm/s'),
         ],
         feedback: const [
-          'Bright yellow emissive projectile capsules with hit-spark burst on wall hit',
-          'Barrel kicks back 0.18 m per shot and tweens smoothly forward',
+          'Bright yellow emissive projectile capsules with Niagara spark burst on wall hit',
+          'Barrel kicks back 18 cm per shot and lerps smoothly forward',
           'Thin curved heat bar turns amber above 75%',
         ],
         levelStaging:
-            'res://scenes/shellbreaker_proto.tscn: firing lane with static calibration cubes at 6 m and 14 m',
+            '/Game/Maps/Lvl_ShellbreakerProto.umap: firing lane with static calibration cubes at 600 cm and 1400 cm',
         checks: [
           EpicPieCheck(
             id: 'sb_e02_c1',
@@ -319,7 +315,7 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
           ),
           EpicPieCheck(
             id: 'sb_e02_c2',
-            text: 'Sustained fire past cap -> triggers 1.3s overheat vent and resumes cleanly',
+            text: 'Sustained fire past cap -> triggers 1.3 s overheat vent and resumes cleanly',
           ),
         ],
         features: [
@@ -331,22 +327,22 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
             sliceTime: '45 min',
             status: FeatureStatus.queued,
             goal:
-                'Spawn 3-bolt 24 m/s bursts toward cursor aim with backwards barrel recoil impulse.',
-            inScope: const ['3-round 0.08 s cadence', '1.2 m/s chassis recoil push'],
+                'Spawn 3-bolt 2400 cm/s bursts toward cursor aim with backwards barrel recoil impulse.',
+            inScope: const ['3-round 0.08 s cadence', '120 cm/s chassis recoil push'],
             doneWhen: const ['Hold LMB -> 3 yellow bolts streak toward cursor with barrel kick'],
             controls: [
               EpicControlBinding(
-                action: 'fire_burst',
-                trigger: 'Held (LMB)',
-                rule: 'Fires 3 bolts when heat < 100 and not DashActive',
+                action: 'IA_FireBurst',
+                trigger: 'Triggered (LMB)',
+                rule: 'Fires 3 bolts when Heat < 100 and not DashActive',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'bolt_speed', value: '24.0', unit: 'm/s'),
-              EpicTuningParam(key: 'burst_damage', value: '18', unit: 'hp'),
-              EpicTuningParam(key: 'recoil_impulse', value: '1.2', unit: 'm/s'),
+              EpicTuningParam(key: 'BoltSpeed', value: '2400', unit: 'cm/s'),
+              EpicTuningParam(key: 'BurstDamage', value: '18', unit: 'hp'),
+              EpicTuningParam(key: 'RecoilImpulse', value: '120', unit: 'cm/s'),
             ],
-            cues: const ['Barrel kicks back 0.18 m per bolt + hit sparks on wall collision'],
+            cues: const ['Barrel kicks back 18 cm per bolt + Niagara hit sparks on wall collision'],
             checks: [
               EpicPieCheck(
                 id: 'sb_f03_c1',
@@ -363,7 +359,7 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
             status: FeatureStatus.queued,
             goal:
                 'Build heat per burst shot, lock cannon for 1.3 s at overheat, and boost damage on staggered targets.',
-            inScope: const ['1.3 s OverheatLock vent cycle', 'HUD curved heat gauge'],
+            inScope: const ['1.3 s OverheatLock vent cycle', 'WBP curved heat gauge'],
             doneWhen: const ['Fire continuously to cap -> Heat bar triggers 1.3 s vent cleanly'],
             releaseDelta: '+2x weak-point crit bolts vs staggered crabs (instant heat vent)',
             releaseDeltaChecks: [
@@ -373,7 +369,7 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'overheat_time', value: '1.3', unit: 's'),
+              EpicTuningParam(key: 'OverheatTime', value: '1.3', unit: 's'),
             ],
             cues: const ['Heat gauge turns amber above 75% and vents steam at 100%'],
             checks: [
@@ -409,27 +405,23 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         ],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scenes/crab_grunt.tscn',
-            role: 'Enemy CharacterBody3D + front armor shield collider',
-          ),
-          EpicSceneOwnership(
-            path: 'res://scripts/crab_grunt.gd',
-            role: 'Patrol / Windup / Lunge / Stagger AI state machine',
+            path: '/Game/Blueprints/BP_CrabGrunt',
+            role: 'Enemy ACharacter + front armor shield collider',
           ),
         ],
         links: const [
-          'Scene res://scenes/crab_grunt.tscn + res://scripts/crab_grunt.gd',
-          'Responds to take_damage() & apply_dash_shatter() from E01/E02',
+          'Blueprint /Game/Blueprints/BP_CrabGrunt',
+          'Responds to ApplyDamage & ApplyDashShatter from E01/E02',
         ],
         outOfScope: const [
-          'No wave spawner director yet (placed directly in scene)',
+          'No wave spawner director yet (placed directly in map)',
           'No ranged enemy variants',
         ],
         controls: [
           EpicControlBinding(
-            action: 'ai_lunge',
-            trigger: 'AI Loop (4.2 m range)',
-            rule: 'Faces player -> telegraphs 0.45s crimson flash -> lunges 4.2 m',
+            action: 'IA_AiLunge',
+            trigger: 'AI Behavior (420 cm range)',
+            rule: 'Faces player -> telegraphs 0.45 s crimson flash -> lunges 420 cm',
           ),
         ],
         states: const [
@@ -437,21 +429,21 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         ],
         interrupts: const [
           'E01 Claw Dash hit shatters shell immediately and enters ExposedStagger (2.0s)',
-          'Bolt impacts on intact shell deal 25% chip damage and emit metallic sparks',
+          'Bolt impacts on intact shell deal 25% chip damage and emit metallic Niagara sparks',
         ],
         tuning: [
-          EpicTuningParam(key: 'shell_hp', value: '60', unit: 'hp'),
-          EpicTuningParam(key: 'core_hp', value: '90', unit: 'hp'),
-          EpicTuningParam(key: 'telegraph_duration', value: '0.45', unit: 's'),
-          EpicTuningParam(key: 'stagger_duration', value: '2.0', unit: 's'),
+          EpicTuningParam(key: 'ShellHp', value: '60', unit: 'hp'),
+          EpicTuningParam(key: 'CoreHp', value: '90', unit: 'hp'),
+          EpicTuningParam(key: 'TelegraphDuration', value: '0.45', unit: 's'),
+          EpicTuningParam(key: 'StaggerDuration', value: '2.0', unit: 's'),
         ],
         feedback: const [
-          'Front dome shifts from slate-grey armor to glowing magenta on Armor Break',
-          'SubViewport floating HP + Armor bar above enemy mesh',
-          'Enemy flashes solid white for 0.08s on exposed core hits',
+          'Front dome UMaterialInstanceDynamic shifts slate-grey to magenta on Armor Break',
+          'UWidgetComponent floating HP + Armor bar above enemy mesh',
+          'Enemy flashes solid white for 0.08 s on exposed core hits',
         ],
         levelStaging:
-            'res://scenes/shellbreaker_proto.tscn: 2 static CrabGrunt instances placed 12 m north of SpawnPoint',
+            '/Game/Maps/Lvl_ShellbreakerProto.umap: 2 placed BP_CrabGrunt actors 1200 cm north of PlayerStart',
         checks: [
           EpicPieCheck(
             id: 'sb_e03_c1',
@@ -459,7 +451,7 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
           ),
           EpicPieCheck(
             id: 'sb_e03_c2',
-            text: 'Dash through crab -> armor shatters into 2.0s stagger and bursts kill cleanly',
+            text: 'Dash through crab -> armor shatters into 2.0 s stagger and bursts kill cleanly',
           ),
         ],
         features: [
@@ -471,25 +463,25 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
             sliceTime: '45 min',
             status: FeatureStatus.queued,
             goal:
-                'Pursue player inside arena and commit to a 4.2 m forward lunge after a clear 0.45 s crimson telegraph.',
-            inScope: const ['4.2 m aggro stop distance', '0.45 s crimson warning stripe'],
+                'Pursue player inside arena and commit to a 420 cm forward lunge after a clear 0.45 s crimson telegraph.',
+            inScope: const ['420 cm aggro stop distance', '0.45 s crimson warning stripe'],
             doneWhen: const ['Approach crab -> 0.45 s crimson flash warns clearly before lunge'],
             controls: [
               EpicControlBinding(
-                action: 'ai_lunge',
-                trigger: 'AI Loop (4.2 m range)',
-                rule: 'Faces player -> telegraphs 0.45 s -> lunges 4.2 m',
+                action: 'IA_AiLunge',
+                trigger: 'AI Behavior (420 cm range)',
+                rule: 'Faces player -> telegraphs 0.45 s -> lunges 420 cm',
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'telegraph_duration', value: '0.45', unit: 's'),
-              EpicTuningParam(key: 'lunge_range', value: '4.2', unit: 'm'),
+              EpicTuningParam(key: 'TelegraphDuration', value: '0.45', unit: 's'),
+              EpicTuningParam(key: 'LungeRange', value: '420', unit: 'cm'),
             ],
-            cues: const ['Glowing red windup telegraph strip ahead of pincers'],
+            cues: const ['Glowing red windup telegraph decal strip ahead of pincers'],
             checks: [
               EpicPieCheck(
                 id: 'sb_f05_c1',
-                text: 'Stand within 4.2 m -> crimson telegraph warns 0.45 s before forward lunge',
+                text: 'Stand within 420 cm -> crimson telegraph warns 0.45 s before forward lunge',
               ),
             ],
           ),
@@ -512,9 +504,9 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
               ),
             ],
             tuning: [
-              EpicTuningParam(key: 'shell_hp', value: '60', unit: 'hp'),
-              EpicTuningParam(key: 'core_hp', value: '90', unit: 'hp'),
-              EpicTuningParam(key: 'stagger_duration', value: '2.0', unit: 's'),
+              EpicTuningParam(key: 'ShellHp', value: '60', unit: 'hp'),
+              EpicTuningParam(key: 'CoreHp', value: '90', unit: 'hp'),
+              EpicTuningParam(key: 'StaggerDuration', value: '2.0', unit: 's'),
             ],
             cues: const [
               'Front dome shifts slate-grey -> magenta on Armor Break',
@@ -598,22 +590,22 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
           sliceTime: '45 min',
           status: FeatureStatus.active,
           goal:
-              'Refund claw_dash cooldown immediately for 0.35 s after shattering an enemy shell.',
+              'Refund IA_ClawDash cooldown immediately for 0.35 s after shattering an enemy shell.',
           inScope: const ['0.35 s chain grace timer', '1.2x chained dash burst speed'],
           doneWhen: const [
             'Shatter crab shell then tap Space -> Second dash chains immediately with zero wait',
           ],
           controls: [
             EpicControlBinding(
-              action: 'claw_dash',
-              trigger: 'Just Pressed (Space / RMB)',
+              action: 'IA_ClawDash',
+              trigger: 'Started (Space / RMB)',
               rule: 'Bypasses cooldown cleanly during 0.35 s chain window',
             ),
           ],
           tuning: [
-            EpicTuningParam(key: 'chain_dash_distance', value: '5.5', unit: 'm'),
-            EpicTuningParam(key: 'chain_window_s', value: '0.35', unit: 's'),
-            EpicTuningParam(key: 'chain_speed_mult', value: '1.2', unit: 'x'),
+            EpicTuningParam(key: 'ChainDashDistance', value: '550', unit: 'cm'),
+            EpicTuningParam(key: 'ChainWindowS', value: '0.35', unit: 's'),
+            EpicTuningParam(key: 'ChainSpeedMult', value: '1.2', unit: 'x'),
           ],
           cues: const ['Pitch-up synth chirp + cyan wireframe afterimage mesh'],
           checks: [
@@ -636,13 +628,55 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         coreLoopBeat: 'Beat 4 · 3-Wave Escalation & Arena Reset',
         chosenForNextRelease: true,
         goal:
-            'Spawn escalating 3-wave crab squads from perimeter gates with live wave banner and quick restart flow.',
-        inScope: const ['4 perimeter SpawnGate spawners', 'HUD wave counter & R quick reset'],
+            'Spawn escalating 3-wave crab squads from perimeter gates with live WBP HUD wave banner and quick restart flow.',
+        inScope: const ['4 perimeter SpawnGate actors', 'UMG Widget wave counter & R quick reset'],
         doneWhen: const ['Clear 3 waves -> Victory banner shows cleanly and R restarts in < 0.2 s'],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/wave_director.gd',
+            path: '/Game/Blueprints/BP_WaveDirector',
             role: '3-wave squad timer, HUD counter & arena reset',
+          ),
+        ],
+        links: const [
+          'Spawns /Game/Blueprints/BP_CrabGrunt (E03) at 4 perimeter SpawnGate TargetPoints',
+          'Updates WBP_ArenaHud wave label and remaining enemy counter',
+        ],
+        outOfScope: const [
+          'No endless wave scaling past Wave 3',
+          'No boss cutscenes',
+        ],
+        controls: [
+          EpicControlBinding(
+            action: 'IA_QuickRestart',
+            trigger: 'Started (R on Clear)',
+            rule: 'Resets player HP/pos and restarts Wave 1 cleanly in < 0.2 s',
+          ),
+        ],
+        states: const [
+          'WaveIntro (1.2s) -> WaveCombat -> WaveClear (2.0s breather) -> ArenaVictory',
+        ],
+        interrupts: const [
+          'Player HP <= 0 transitions directly to ArenaDefeat UMG Widget and stops active spawn timers',
+        ],
+        tuning: [
+          EpicTuningParam(key: 'Wave1Count', value: '3', unit: 'count'),
+          EpicTuningParam(key: 'Wave3Count', value: '7', unit: 'count'),
+          EpicTuningParam(key: 'BreatherSeconds', value: '2.0', unit: 's'),
+        ],
+        feedback: const [
+          'Perimeter floor pad pulses cyan 1.0 s before spawning each grunt',
+          'Top-center WBP HUD Wave pill animates scale punch on wave transitions',
+        ],
+        levelStaging:
+            '/Game/Maps/Lvl_ShellbreakerProto.umap: 4 SpawnGate TargetPoint actors along N/E/S/W walls',
+        checks: [
+          EpicPieCheck(
+            id: 'sb_e04_c1',
+            text: 'Kill all Wave 1 crabs -> 2.0 s breather plays and Wave 2 spawns from lit gates',
+          ),
+          EpicPieCheck(
+            id: 'sb_e04_c2',
+            text: 'Press R after ArenaVictory -> resets arena immediately with 0 stale actors',
           ),
         ],
         features: [
@@ -655,8 +689,8 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
             status: FeatureStatus.queued,
             goal: 'Spawn 3 escalating waves from 4 perimeter SpawnGates with HUD readout and R reset.',
             tuning: [
-              EpicTuningParam(key: 'wave_1_count', value: '3', unit: 'count'),
-              EpicTuningParam(key: 'breather_seconds', value: '2.0', unit: 's'),
+              EpicTuningParam(key: 'Wave1Count', value: '3', unit: 'count'),
+              EpicTuningParam(key: 'BreatherSeconds', value: '2.0', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
@@ -664,48 +698,6 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
                 text: 'Clear Wave 1 -> 2.0 s breather plays and Wave 2 spawns from lit gates',
               ),
             ],
-          ),
-        ],
-        links: const [
-          'Instantiates res://scenes/crab_grunt.tscn (E03) at 4 perimeter Marker3D SpawnGates',
-          'Updates Control HUD wave label and remaining enemy counter',
-        ],
-        outOfScope: const [
-          'No endless wave scaling past Wave 3',
-          'No boss cutscenes',
-        ],
-        controls: [
-          EpicControlBinding(
-            action: 'quick_restart',
-            trigger: 'Just Pressed (R on Clear)',
-            rule: 'Resets player HP/pos and restarts Wave 1 cleanly in < 0.2s',
-          ),
-        ],
-        states: const [
-          'WaveIntro (1.2s) -> WaveCombat -> WaveClear (2.0s breather) -> ArenaVictory',
-        ],
-        interrupts: const [
-          'Player HP <= 0 transitions directly to ArenaDefeat overlay and stops active spawn timers',
-        ],
-        tuning: [
-          EpicTuningParam(key: 'wave_1_count', value: '3', unit: 'count'),
-          EpicTuningParam(key: 'wave_3_count', value: '7', unit: 'count'),
-          EpicTuningParam(key: 'breather_seconds', value: '2.0', unit: 's'),
-        ],
-        feedback: const [
-          'Perimeter floor pad pulses cyan 1.0s before spawning each grunt',
-          'Top-center HUD Wave pill animates scale punch on wave transitions',
-        ],
-        levelStaging:
-            'res://scenes/shellbreaker_proto.tscn: 4 SpawnGate Marker3D nodes placed along N/E/S/W walls',
-        checks: [
-          EpicPieCheck(
-            id: 'sb_e04_c1',
-            text: 'Kill all Wave 1 crabs -> 2.0s breather plays and Wave 2 spawns from lit gates',
-          ),
-          EpicPieCheck(
-            id: 'sb_e04_c2',
-            text: 'Press R after ArenaVictory -> resets arena immediately with 0 stale nodes',
           ),
         ],
       ),
@@ -723,7 +715,7 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         doneWhen: const ['Press Q during red lunge telegraph -> Attacker stops and staggers 2.2 s'],
         sceneOwnership: [
           EpicSceneOwnership(
-            path: 'res://scripts/shell_guard.gd',
+            path: '/Game/Blueprints/BP_ShellGuardComponent',
             role: 'Parry cone window & heat zero counter hook',
           ),
         ],
@@ -735,9 +727,9 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
         ],
         controls: [
           EpicControlBinding(
-            action: 'shell_guard',
-            trigger: 'Just Pressed (Shift / Q)',
-            rule: 'Opens 0.25s parry window; successful reflect staggers attacker 2.2s',
+            action: 'IA_ShellGuard',
+            trigger: 'Started (Shift / Q)',
+            rule: 'Opens 0.25 s parry window; successful reflect staggers attacker 2.2 s',
           ),
         ],
         states: const [
@@ -747,18 +739,18 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
           'Successful parry zeroes heat bar and allows immediate Dash cancel',
         ],
         tuning: [
-          EpicTuningParam(key: 'parry_window', value: '0.25', unit: 's'),
-          EpicTuningParam(key: 'parry_stagger', value: '2.2', unit: 's'),
+          EpicTuningParam(key: 'ParryWindow', value: '0.25', unit: 's'),
+          EpicTuningParam(key: 'ParryStagger', value: '2.2', unit: 's'),
         ],
         feedback: const [
-          'Cyan arc shield mesh flashes front 120 deg cone during GuardWindow',
+          'Cyan arc shield UStaticMeshComponent flashes front 120 deg cone during GuardWindow',
         ],
         levelStaging:
-            'res://scenes/shellbreaker_proto.tscn: test directly against E03 Crab lunge telegraph',
+            '/Game/Maps/Lvl_ShellbreakerProto.umap: test directly against E03 Crab lunge telegraph',
         checks: [
           EpicPieCheck(
             id: 'sb_e05_c1',
-            text: 'Press Q during crimson crab windup -> attacker stops and enters 2.2s stagger',
+            text: 'Press Q during crimson crab windup -> attacker stops and enters 2.2 s stagger',
           ),
         ],
         features: [
@@ -771,8 +763,8 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
             status: FeatureStatus.queued,
             goal: 'Flash 120 deg front parry arc for 0.25 s to counter crab lunges and reset cannon heat.',
             tuning: [
-              EpicTuningParam(key: 'parry_window', value: '0.25', unit: 's'),
-              EpicTuningParam(key: 'parry_stagger', value: '2.2', unit: 's'),
+              EpicTuningParam(key: 'ParryWindow', value: '0.25', unit: 's'),
+              EpicTuningParam(key: 'ParryStagger', value: '2.2', unit: 's'),
             ],
             checks: [
               EpicPieCheck(
