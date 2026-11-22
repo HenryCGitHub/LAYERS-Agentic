@@ -31,7 +31,7 @@ int _countTotalSubtasksRecursive(List<Subtask> tasks) {
   return count;
 }
 
-/// Returns `true` when [remoteDoc] carries newer timestamps or further Godot/Playtest
+/// Returns `true` when [remoteDoc] carries newer timestamps or further Playtest
 /// progress than [localDoc] so startup cloud sync merges instead of overwriting.
 bool shouldPreferRemoteDocumentOnSync(
   TierDocument localDoc,

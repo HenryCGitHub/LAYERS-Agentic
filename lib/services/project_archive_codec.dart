@@ -53,9 +53,9 @@ class ProjectArchiveCodec {
   static void remapEmbeddedEpicJsonAndClearSync(
     Map<String, String> sections, {
     String? newEpicDocId,
-    required bool clearGodotSync,
+    required bool clearSyncMetadata,
   }) {
-    if (clearGodotSync) {
+    if (clearSyncMetadata) {
       sections.remove('last_godot_sync_ms');
       sections.remove('godot_live_context_json');
       sections.remove('collaborators_json');
@@ -88,7 +88,7 @@ class ProjectArchiveCodec {
     final newId = 'proj_${DateTime.now().microsecondsSinceEpoch}';
     final copyTitle = '${src.title} (Copy)';
     final copiedSections = Map<String, String>.from(src.sections);
-    remapEmbeddedEpicJsonAndClearSync(copiedSections, clearGodotSync: true);
+    remapEmbeddedEpicJsonAndClearSync(copiedSections, clearSyncMetadata: true);
 
     final rawConcept = copiedSections['concept_blueprint_json'];
     if (rawConcept != null && rawConcept.isNotEmpty) {
@@ -131,7 +131,7 @@ class ProjectArchiveCodec {
         remapEmbeddedEpicJsonAndClearSync(
           epicSections,
           newEpicDocId: newEpicId,
-          clearGodotSync: true,
+          clearSyncMetadata: true,
         );
         final clonedEpic = oldEpic.copyWith(
           id: newEpicId,
@@ -144,7 +144,7 @@ class ProjectArchiveCodec {
       }
 
       final relSections = Map<String, String>.from(oldRel.sections);
-      remapEmbeddedEpicJsonAndClearSync(relSections, clearGodotSync: true);
+      remapEmbeddedEpicJsonAndClearSync(relSections, clearSyncMetadata: true);
       final newRelDoc = oldRel.copyWith(
         id: newRelId,
         parentId: newId,
@@ -293,7 +293,7 @@ class ProjectArchiveCodec {
         remapEmbeddedEpicJsonAndClearSync(
           newSections,
           newEpicDocId: d.tier == TierType.epic ? newId : null,
-          clearGodotSync: true,
+          clearSyncMetadata: true,
         );
 
         String importedTitle = d.title;

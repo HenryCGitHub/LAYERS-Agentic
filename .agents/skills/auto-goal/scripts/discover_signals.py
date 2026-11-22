@@ -16,6 +16,12 @@ import subprocess
 REPO_ROOT = Path(__file__).resolve().parents[4]
 TODO_PATTERN = re.compile(r"\b(?:TODO|FIXME)\b")
 WARNING_PATTERN = re.compile(r"(?:AssertionError|Error:|Traceback|FAIL)")
+LEAKAGE_PATTERN = re.compile(
+    r"\b(?:Godot|GDScript|InputMap|CharacterBody[23]D|SpringArm3D|Camera[23]D|GPUParticles[23]D|project\.godot|GameObject|MonoBehaviour|SerializeField)\b"
+    r"|\.(?:tscn|tres|gd|prefab)\b|\bres://|@export\b",
+    re.IGNORECASE,
+)
+LEAKAGE_ALLOWLIST = {"lib/utils/unreal_spec_guard.dart"}
 EXCLUDED_DIR_NAMES = {
     "__pycache__",
     "node_modules",
@@ -272,6 +278,24 @@ def _scan_todo_markers(limit: int = 15) -> list[str]:
   return markers
 
 
+def _scan_leakage_hits(limit: int = 25) -> list[str]:
+  hits: list[str] = []
+  for fpath in _iter_source_files([REPO_ROOT / "lib"], (".dart",)):
+    rel = fpath.relative_to(REPO_ROOT).as_posix()
+    if rel in LEAKAGE_ALLOWLIST:
+      continue
+    try:
+      lines = fpath.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+      continue
+    for lineno, line in enumerate(lines, start=1):
+      if LEAKAGE_PATTERN.search(line):
+        hits.append(f"{rel}:{lineno}: {line.strip()[:140]}")
+        if len(hits) >= limit:
+          return hits
+  return hits
+
+
 def main() -> int:
   raw_args = sys.argv[1:]
   skip_tests = "--no-test" in raw_args
@@ -291,7 +315,7 @@ def main() -> int:
       "cloudProxyTest": cloud_proxy_test,
       "monolithHotspots": _scan_monolith_hotspots(),
       "untestedModules": _scan_untested_modules(),
-      "leakageHits": [],
+      "leakageHits": _scan_leakage_hits(),
       "todoMarkers": _scan_todo_markers(15),
   }
   print(json.dumps(report, indent=2))

@@ -256,7 +256,8 @@ void syncEpicCameraFramingImpl(
     contractValue,
     RegExp(r'(?:TargetArmLength|USpringArmComponent)\s+(\d+(?:\.\d+)?)\s*cm',
         caseSensitive: false),
-    RegExp(r'SpringArm3D\s+(\d+(?:\.\d+)?)\s*m', caseSensitive: false),
+    RegExp(r'(?:TargetArmLength|USpringArmComponent|SpringArm\w*)\s+(\d+(?:\.\d+)?)\s*m',
+        caseSensitive: false),
   );
   final eyeCm = _extractCmFromContract(
     contractValue,

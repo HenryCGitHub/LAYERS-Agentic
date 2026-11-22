@@ -7,6 +7,7 @@ import sys
 
 sys.dont_write_bytecode = True
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -94,6 +95,30 @@ def _verify_skills_and_discovery() -> None:
   assert isinstance(report.get("monolithHotspots"), list), "Expected monolithHotspots list"
   assert isinstance(report.get("untestedModules"), list), "Expected untestedModules list"
   assert isinstance(report.get("leakageHits"), list), "Expected leakageHits list"
+  assert report.get("leakageHits") == [], (
+      f"Unexpected non-Unreal leakage in lib/: {report.get('leakageHits')}"
+  )
+
+  spec = importlib.util.spec_from_file_location("discover_signals_mod", DISCOVER_PATH)
+  assert spec is not None and spec.loader is not None
+  discover_mod = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(discover_mod)
+  for bad_sample in (
+      "res://scenes/arena.tscn",
+      "@export var move_speed",
+      "Godot 4 CharacterBody3D",
+      "InputMap",
+  ):
+    assert discover_mod.LEAKAGE_PATTERN.search(bad_sample), (
+        f"Expected LEAKAGE_PATTERN to match: {bad_sample!r}"
+    )
+  for clean_sample in (
+      "/Game/Blueprints/BP_Player.uasset",
+      "last_godot_sync_ms",
+  ):
+    assert discover_mod.LEAKAGE_PATTERN.search(clean_sample) is None, (
+        f"Unexpected LEAKAGE_PATTERN false positive: {clean_sample!r}"
+    )
 
   proc_audit = subprocess.run(
       [sys.executable, str(DISCOVER_PATH), "--no-test", "audit codebase"],

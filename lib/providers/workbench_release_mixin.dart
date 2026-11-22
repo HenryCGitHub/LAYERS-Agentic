@@ -1,7 +1,7 @@
 part of 'workbench_provider.dart';
 
 /// Stage 2 actions: Release switching, 4-tier Epic -> Feature selection & expansion,
-/// live `@export` tuning, Playtest Gate checkboxes, Flag `[FIX]` / Resolve,
+/// live Exposed BP / UPROPERTY(EditAnywhere) tuning, Playtest Gate checkboxes, Flag `[FIX]` / Resolve,
 /// `addFeatureSlice`, and `passFeature` / `reopenFeature` rollups.
 extension WorkbenchReleaseMixin on WorkbenchProvider {
   FeatureSpec? _findFeatureByIdOrCode(EpicSpec spec, String featureIdOrCode) {

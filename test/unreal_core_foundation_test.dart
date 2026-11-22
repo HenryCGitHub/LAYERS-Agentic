@@ -6,6 +6,7 @@ import 'package:layers_agentic/agents/concept/project_concept_schemas.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
 import 'package:layers_agentic/agents/release_planner_agent.dart';
 import 'package:layers_agentic/constants/text_style_guide.dart';
+import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
 import 'package:layers_agentic/models/agent_blueprints.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
@@ -817,6 +818,38 @@ void main() {
             reason: prompt,
           );
         }
+      },
+    );
+
+    test(
+      '7. Round 7/10: TierType tooltips and extractLegacySceneOwnership emit clean UE5 paths with zero leakage',
+      () {
+        for (final tier in TierType.values) {
+          expect(
+            UnrealSpecGuard.containsEngineLeakage(tier.descriptionTooltip),
+            isFalse,
+            reason: 'Tooltip leaked on ${tier.name}: ${tier.descriptionTooltip}',
+          );
+          expect(tier.descriptionTooltip, isNot(contains('1 UU')));
+        }
+
+        final owned = extractLegacySceneOwnership(
+          [
+            'res://scenes/arena_proto.tscn — Arena combat map',
+            '/Game/Blueprints/BP_PlayerMech.uasset — Player pawn',
+          ],
+          'res://scenes/boss_room.tscn',
+        );
+        expect(owned.length, equals(3));
+        for (final item in owned) {
+          expect(item.path, startsWith('/Game/'));
+          expect(item.path, isNot(contains('res://')));
+          expect(UnrealSpecGuard.containsEngineLeakage(item.path), isFalse);
+        }
+        expect(
+          owned.any((o) => o.path == '/Game/Blueprints/BP_PlayerMech.uasset'),
+          isTrue,
+        );
       },
     );
   });

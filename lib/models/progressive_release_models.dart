@@ -1,3 +1,4 @@
+import '../utils/unreal_spec_guard.dart';
 import 'epic_spec.dart';
 
 class EpicUpgradeOption {
@@ -189,18 +190,19 @@ List<EpicSceneOwnership> extractLegacySceneOwnership(
   List<String> links,
   String levelStaging,
 ) {
-  final resPattern = RegExp(r'res://[^\s,)\];"]+');
+  final uePathPattern = RegExp(r'/Game/[^\s,)\];"]+');
   final seen = <String>{};
   final result = <EpicSceneOwnership>[];
 
   void scanText(String source, String fallbackRole) {
     final trimmed = source.trim();
     if (trimmed.isEmpty) return;
-    for (final m in resPattern.allMatches(trimmed)) {
+    final sanitized = UnrealSpecGuard.sanitizeLine(trimmed);
+    for (final m in uePathPattern.allMatches(sanitized)) {
       final path = m.group(0)!.trim();
       if (path.isEmpty || !seen.add(path)) continue;
       String role = fallbackRole;
-      final split = trimmed.split(RegExp(r'\s+[—-]\s+'));
+      final split = sanitized.split(RegExp(r'\s+[—-]\s+'));
       if (split.length > 1 && split.first.contains(path)) {
         role = split.sublist(1).join(' - ').trim();
       }

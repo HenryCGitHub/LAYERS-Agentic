@@ -610,8 +610,8 @@ void main() {
         expect(
           migrated.sceneOwnership.map((o) => o.path),
           containsAll([
-            'res://scenes/player_mech.tscn',
-            'res://scenes/arena_proto.tscn',
+            '/Game/Blueprints/BP_PlayerMech',
+            '/Game/Maps/Lvl_ArenaProto.umap',
           ]),
         );
         expect(migrated.stateFlow, equals(['Idle', 'ClawDash']));

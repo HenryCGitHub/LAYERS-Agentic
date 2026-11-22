@@ -243,7 +243,7 @@ class Stage1ScopeSummary {
     if (actions.isEmpty && spec.inputContract.trim().isNotEmpty) {
       final cleanedInput = spec.inputContract
           .replaceAll(
-            RegExp(r'\b(?:Enhanced Input|InputMap|IMC_[A-Za-z0-9_]+)\b',
+            RegExp(r'\b(?:Enhanced Input|IMC_[A-Za-z0-9_]+|IA_[A-Za-z0-9_]+)\b',
                 caseSensitive: false),
             '',
           )
@@ -255,14 +255,14 @@ class Stage1ScopeSummary {
     }
 
     final mapRx = RegExp(
-      r'(?:/Game/|res://)[^\s,;)\]]+\.(?:umap|tscn)',
+      r'/Game/[^\s,;)\]]+\.umap',
       caseSensitive: false,
     );
     String? testScene;
     for (final ep in epics) {
       for (final own in ep.sceneOwnership) {
         final low = own.path.toLowerCase();
-        if (low.endsWith('.umap') || low.endsWith('.tscn')) {
+        if (low.endsWith('.umap')) {
           testScene = own.path.trim();
           break;
         }

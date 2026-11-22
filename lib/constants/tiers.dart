@@ -53,10 +53,10 @@ enum TierType {
       };
 
   String get descriptionTooltip => switch (this) {
-        TierType.project => 'Project: Root Godot 4 PROJECT_SPEC.md workspace',
+        TierType.project => 'Project: Root Unreal Engine 5 PROJECT_SPEC.md workspace',
         TierType.release => 'Release: Target playable milestone (v0.1, v0.2+)',
         TierType.epic =>
-          'Epic: Large game domain owning shared scenes, scripts, and state rules',
+          'Epic: Large game domain owning shared levels, Blueprints/C++, and state rules',
         TierType.feature =>
           'Feature: Sittable 30-90 min playable slice with tuning and Playtest Gate',
       };

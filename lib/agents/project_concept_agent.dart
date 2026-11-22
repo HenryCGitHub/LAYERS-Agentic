@@ -308,7 +308,7 @@ CRITICAL CONSTRAINTS:
     return <String>[];
   }
 
-  /// Applies a scoped `patch_godot_root_spec` (or full spec payload) cleanly onto [currentSpec].
+  /// Applies a scoped `patch_unreal_root_spec` (or full spec payload) cleanly onto [currentSpec].
   static ({ProjectConceptBlueprint blueprint, Set<String> changedSections})
       applyPatchJsonToBlueprint(
     ProjectConceptBlueprint currentSpec,

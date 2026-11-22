@@ -298,7 +298,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   }
 
   /// Flushes pending debounced edits, merges remote-newer Cloud documents, and pushes
-  /// local changes to Cloud Firestore without overwriting newer Godot Dock edits.
+  /// local changes to Cloud Firestore without overwriting newer remote Cloud Vault edits.
   Future<void> syncNowWithCloud() async {
     if (_persistTimers.isNotEmpty) {
       final pendingIds = _persistTimers.keys.toList();
@@ -625,8 +625,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       ProjectArchiveCodec.collectProjectTreeIds(documents, projectId);
 
   /// Cancels pending debounce timers and saves [projectId]'s full 3-tier tree
-  /// (`Project -> Release -> Epic`) to Firestore before Godot 4 Dock handoff redirects
-  /// unload the browser tab.
+  /// (`Project -> Release -> Epic`) to Firestore when syncing active project hierarchy before
+  /// tab unload.
   Future<void> flushProjectTreeToCloud(String projectId) async {
     final treeIds = _collectProjectDocumentTreeIds(projectId);
     if (treeIds.isEmpty) return;

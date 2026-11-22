@@ -200,7 +200,7 @@ enum FeatureStatus {
   }
 }
 
-/// Shared Godot 4 `.tscn` scene or `.gd` script owned by an [EpicSpec] domain.
+/// Shared Unreal Engine 5 `/Game/...` asset or `Source/` C++ file owned by an [EpicSpec] domain.
 class EpicSceneOwnership {
   String path;
   String role;
@@ -460,7 +460,7 @@ class FeatureSpec {
   }
 }
 
-/// Canonical Godot 4 Domain Epic Spec (`Project -> Release -> Epic -> Feature`).
+/// Canonical Unreal Engine 5 Domain Epic Spec (`Project -> Release -> Epic -> Feature`).
 /// Owns domain architecture (`sceneOwnership`, `stateFlow`, `interruptRules`, `outOfScope`)
 /// and contains playable 30-90 min [FeatureSpec] slices in [features].
 class EpicSpec {
