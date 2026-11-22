@@ -4,6 +4,7 @@ import 'progressive_release_models.dart';
 import 'tier_document.dart';
 
 export 'progressive_release_models.dart';
+export 'unreal_architecture_mode.dart';
 
 /// Godot 4 spatial target dimension for `ROOT_GODOT_CONTEXT`, `GodotSpecGuard`,
 /// and `§02` / `§04` Studio contracts (`3D`: `1 unit = 1 m`, `2D`: pixel space).
