@@ -93,9 +93,6 @@ class CoreFeelOption {
   });
 
   String get decelCmPerSec => decelPxPerSec;
-
-  String decelFor(GodotProjectDimension dim) =>
-      dim == GodotProjectDimension.dim2d ? decelPxPerSec : decelMPerSec;
 }
 
 /// Stage 1 Unreal Engine 5 Root Project Specification (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`).
@@ -104,14 +101,13 @@ class CoreFeelOption {
 class ProjectConceptBlueprint {
   String sparkPrompt;
   String gameTitle;
-  GodotProjectDimension dimension;
   UnrealArchitectureMode architectureMode;
 
   // §01 Core Fantasy & 30s Loop
   String pitch;
   List<String> coreLoop;
 
-  // §02 Global Godot 4 Scale & Architecture
+  // §02 Global Unreal Engine 5 Scale & Architecture
   String cameraChoiceId;
   String cameraContract;
   String characterScale;
@@ -143,7 +139,6 @@ class ProjectConceptBlueprint {
   ProjectConceptBlueprint({
     this.sparkPrompt = '',
     this.gameTitle = 'UNTITLED UNREAL PROJECT',
-    this.dimension = GodotProjectDimension.dim3d,
     this.architectureMode = UnrealArchitectureMode.blueprint,
     String? cameraChoiceId,
     String? cameraContract,
@@ -176,7 +171,7 @@ class ProjectConceptBlueprint {
         assetPolicy = assetPolicy ?? architectureMode.architectureContract,
         coreLoop = coreLoop ?? <String>[],
         cameraDecisionOptions =
-            cameraDecisionOptions ?? defaultCamera3dOptions,
+            cameraDecisionOptions ?? defaultCameraOptions,
         pillars = pillars ?? <String>[],
         tradeOffs = tradeOffs ?? <TradeOffRule>[],
         outOfScope = outOfScope ?? <String>[],
@@ -188,7 +183,7 @@ class ProjectConceptBlueprint {
         v02NewFeaturesByLineageKey =
             v02NewFeaturesByLineageKey ?? <String, List<FeatureSpec>>{};
 
-  static const List<ConceptSectionOption> defaultCamera3dOptions = [
+  static const List<ConceptSectionOption> defaultCameraOptions = [
     ConceptSectionOption(
       id: 'isometric',
       label: 'Isometric (~52 deg)',
@@ -225,9 +220,6 @@ class ProjectConceptBlueprint {
       note: 'Clear vertical platform clearance and grounded forward readability.',
     ),
   ];
-
-  static const List<ConceptSectionOption> defaultCamera2dOptions =
-      defaultCamera3dOptions;
 
   static const List<CoreFeelOption> coreFeelOptions = [
     CoreFeelOption(
@@ -280,12 +272,9 @@ class ProjectConceptBlueprint {
   CoreFeelOption get selectedCoreFeelOption => coreFeelOptionById(feelChoiceId);
 
   List<ConceptSectionOption> get effectiveCameraDecisionOptions {
-    final defaults = dimension == GodotProjectDimension.dim2d
-        ? defaultCamera2dOptions
-        : defaultCamera3dOptions;
     return [
       ...cameraDecisionOptions,
-      for (final def in defaults)
+      for (final def in defaultCameraOptions)
         if (!cameraDecisionOptions.any((o) => o.id == def.id)) def,
     ];
   }
@@ -296,13 +285,12 @@ class ProjectConceptBlueprint {
       initialEpics.isNotEmpty;
 
   String get normalizedTitle =>
-      gameTitle.trim().isEmpty ? 'UNTITLED GODOT PROJECT' : gameTitle.trim();
+      gameTitle.trim().isEmpty ? 'UNTITLED UNREAL PROJECT' : gameTitle.trim();
 
   ProjectConceptBlueprint deepCopy() {
     return ProjectConceptBlueprint(
       sparkPrompt: sparkPrompt,
       gameTitle: gameTitle,
-      dimension: dimension,
       architectureMode: architectureMode,
       pitch: pitch,
       coreLoop: List<String>.from(coreLoop),
@@ -338,7 +326,6 @@ class ProjectConceptBlueprint {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'sparkPrompt': sparkPrompt,
         'gameTitle': gameTitle,
-        'dimension': dimension.id,
         'architectureMode': architectureMode.id,
         'pitch': pitch,
         'coreLoop': coreLoop,
@@ -465,14 +452,6 @@ class ProjectConceptBlueprint {
     final legacyGameSpec = json['gameSpec'] is Map
         ? Map<String, dynamic>.from(json['gameSpec'] as Map)
         : const <String, dynamic>{};
-    final legacyTechSpec = json['techSpec'] is Map
-        ? Map<String, dynamic>.from(json['techSpec'] as Map)
-        : const <String, dynamic>{};
-
-    final dim = GodotProjectDimension.fromString(
-      (json['dimension'] ?? json['engine'] ?? legacyTechSpec['engine'] ?? 'dim3d')
-          .toString(),
-    );
     final archMode = UnrealArchitectureMode.fromString(
       (json['architectureMode'] ?? json['mode'] ?? json['dimension'] ?? '')
           .toString(),
@@ -486,7 +465,6 @@ class ProjectConceptBlueprint {
               'UNTITLED UNREAL PROJECT')
           .toString()
           .trim(),
-      dimension: dim,
       architectureMode: archMode,
       pitch: (json['pitch'] ?? json['goal'] ?? '').toString().trim(),
       coreLoop: loop,
@@ -508,7 +486,7 @@ class ProjectConceptBlueprint {
           .toString()
           .trim(),
       cameraDecisionOptions:
-          cameraOpts.isEmpty ? defaultCamera3dOptions : cameraOpts,
+          cameraOpts.isEmpty ? defaultCameraOptions : cameraOpts,
       feelChoiceId: normalizeFeelChoiceId(json['feelChoiceId']?.toString()),
       pillars: _stringList(json['pillars'] ?? json['designPillars']),
       tradeOffs: trades,

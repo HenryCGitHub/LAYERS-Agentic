@@ -24,7 +24,7 @@ ProjectConceptBlueprint buildRailjackPreset(String sparkPrompt) {
     assetPolicy:
         'Source/HoverSkiffPawn.cpp UPROPERTY(EditAnywhere) Physics + Thin /Game/Blueprints/BP_HoverSkiff & /Game/Data/DA_SkiffPhysics',
     feelChoiceId: 'physics',
-    cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera3dOptions,
+    cameraDecisionOptions: ProjectConceptBlueprint.defaultCameraOptions,
     pillars: const [
       'Flow Over Friction: Wall scrapes glance forward cleanly instead of dead-stopping momentum',
       'Speed Tells Everything: Camera FOV, engine pitch, and wing-tip Niagara trails rise smoothly into boost',

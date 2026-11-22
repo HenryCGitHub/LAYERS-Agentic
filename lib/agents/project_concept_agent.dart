@@ -19,12 +19,6 @@ class ProjectConceptAgent {
   ) =>
       convertBlueprintArchitectureModeImpl(source, targetMode);
 
-  static ProjectConceptBlueprint convertBlueprintDimension(
-    ProjectConceptBlueprint source,
-    GodotProjectDimension targetDim,
-  ) =>
-      convertBlueprintDimensionImpl(source, targetDim);
-
   /// Keeps `E01..EN` and `F01..FM` strictly sequential across `initialEpics` without gaps or duplicate codes.
   static void normalizeSequentialEpicAndFeatureCodes(
     ProjectConceptBlueprint bp,
@@ -55,7 +49,6 @@ class ProjectConceptAgent {
   static Future<ProjectConceptBlueprint> draftSpecFromSpark({
     required String sparkPrompt,
     required String apiKey,
-    GodotProjectDimension? dimensionOverride,
     UnrealArchitectureMode? architectureModeOverride,
     String? archetypeId,
     String? viewChoiceId,
@@ -66,7 +59,6 @@ class ProjectConceptAgent {
     final outcome = await draftSpecWithStatus(
       sparkPrompt: sparkPrompt,
       apiKey: apiKey,
-      dimensionOverride: dimensionOverride,
       architectureModeOverride: architectureModeOverride,
       archetypeId: archetypeId,
       viewChoiceId: viewChoiceId,
@@ -82,7 +74,6 @@ class ProjectConceptAgent {
   static Future<Stage1AgentOutcome> draftSpecWithStatus({
     required String sparkPrompt,
     required String apiKey,
-    GodotProjectDimension? dimensionOverride,
     UnrealArchitectureMode? architectureModeOverride,
     String? archetypeId,
     String? viewChoiceId,
@@ -92,9 +83,6 @@ class ProjectConceptAgent {
   }) async {
     final trimmedSpark = sparkPrompt.trim();
     final matchedPreset = UnrealSparkPresets.matchSparkPrompt(trimmedSpark);
-    final effectiveDim = dimensionOverride ??
-        matchedPreset?.dimension ??
-        GodotProjectDimension.detectFromSpark(trimmedSpark);
     final effectiveMode = architectureModeOverride ??
         matchedPreset?.architectureMode ??
         UnrealArchitectureMode.detectFromSpark(trimmedSpark);
@@ -108,10 +96,6 @@ class ProjectConceptAgent {
             presetCopy,
             architectureModeOverride,
           );
-        }
-        if (dimensionOverride != null &&
-            dimensionOverride != presetCopy.dimension) {
-          presetCopy = convertBlueprintDimension(presetCopy, dimensionOverride);
         }
         if (trimmedSpark.isNotEmpty) {
           presetCopy.sparkPrompt = trimmedSpark;
@@ -129,7 +113,6 @@ class ProjectConceptAgent {
       }
       final fallback = buildSynthesizedFallback(
         trimmedSpark,
-        dimension: effectiveDim,
         architectureMode: effectiveMode,
         archetypeId: archetypeId,
         viewChoiceId: viewChoiceId,
@@ -219,9 +202,6 @@ CRITICAL CONSTRAINTS:
         (res['architectureMode'] ?? res['mode'] ?? '').toString().trim();
     if (rawModeStr.isEmpty) {
       parsed.architectureMode = effectiveMode;
-    }
-    if (dimensionOverride != null) {
-      parsed.dimension = dimensionOverride;
     }
     if (parsed.initialEpics.isEmpty) {
       return const Stage1AgentOutcome(
@@ -352,7 +332,7 @@ CRITICAL CONSTRAINTS:
       }
     }
 
-    // Detect architectureMode or legacy dimension switches FIRST.
+    // Detect architectureMode switches FIRST.
     final rawArch = (patch['architectureMode'] ?? patch['mode'] ?? '').toString().trim();
     if (rawArch.isNotEmpty) {
       final targetMode = UnrealArchitectureMode.fromString(rawArch);
@@ -360,15 +340,6 @@ CRITICAL CONSTRAINTS:
         next = convertBlueprintArchitectureMode(next, targetMode);
         changed.addAll(const <String>{'s02', 's05'});
       }
-    }
-    GodotProjectDimension targetDim = next.dimension;
-    final rawDim = (patch['dimension'] ?? '').toString().trim();
-    if (rawDim.isNotEmpty) {
-      targetDim = GodotProjectDimension.fromString(rawDim);
-    }
-    if (targetDim != next.dimension) {
-      next = convertBlueprintDimension(next, targetDim);
-      changed.addAll(const <String>{'s02', 's05'});
     }
 
     bool majorScopeShift = false;

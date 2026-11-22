@@ -28,8 +28,8 @@ part 'workbench_progressive_planner_mixin.dart';
 part 'workbench_copilot_mixin.dart';
 
 /// Pure 2-Stage Antigravity Studio Workflow:
-/// - [projectPitch]: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`, Spark Onboarding, Co-Designer).
-/// - [releaseWorkbench]: `2. Epic Specs` (6-section Godot 4 Epic Spec Sheets, `v0.1` -> `v0.2+`, In-Editor Dock Sync).
+/// - [projectPitch]: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`, Spark Onboarding, Co-Designer).
+/// - [releaseWorkbench]: `2. Release Workbench` (Unreal Engine 5 Domain Epics & Feature Slices, `v0.1` -> `v0.2+`, CoPilot GDD & Prompts).
 enum WorkbenchStage {
   projectPitch,
   releaseWorkbench,
@@ -88,7 +88,7 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _pendingUrlEpicId;
   String? _pendingUrlFeatureId;
   String? _inviteFeedbackMessage;
-  bool _userPinnedDimension = false;
+  bool _userPinnedMode = false;
 
   String? get pendingUrlInviteToken => _pendingUrlInviteToken;
   String? get pendingUrlInvitedEmail => _pendingUrlInvitedEmail;
@@ -394,8 +394,7 @@ class WorkbenchProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  GodotProjectDimension get projectDimension =>
-      _conceptDraft?.dimension ?? GodotProjectDimension.dim3d;
+  UnrealArchitectureMode get architectureMode => unrealArchitectureMode;
 
   TierDocument? get activeProject =>
       _activeProjectId != null ? documents[_activeProjectId] : null;

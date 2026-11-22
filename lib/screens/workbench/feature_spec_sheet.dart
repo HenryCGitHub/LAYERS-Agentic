@@ -90,7 +90,7 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
     Color red,
     Color amber,
   ) {
-    final target = wb.projectDimension;
+    final target = wb.unrealArchitectureMode;
     final relVer = wb.activeReleaseVersionTag;
     final effChecks = feat.effectiveChecksForRelease(relVer);
     final checkedCount = effChecks.where((c) => c.passed).length;

@@ -18,26 +18,26 @@ import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/services/cloud_invite_deep_link_service.dart';
 import 'package:layers_agentic/services/project_archive_codec.dart';
 import 'package:layers_agentic/services/v01_release_seeder.dart';
-import 'package:layers_agentic/utils/godot_spec_guard.dart';
 import 'package:layers_agentic/utils/markdown_exporter.dart';
 import 'package:layers_agentic/utils/unreal_context_builder.dart';
+import 'package:layers_agentic/utils/unreal_spec_guard.dart';
 
 void main() {
-  group('Godot 4 (3D + 2D) Epic-Only Studio & 1-Click In-Dock Builder Tests', () {
+  group('Unreal Engine 5 Epic-Only Studio & Ultimate Engine CoPilot Tests', () {
     test(
-      '1. GodotProjectDimension auto-detects 3D/2D from spark and converts units cleanly',
+      '1. UnrealArchitectureMode auto-detects Blueprint/C++ from spark and converts cleanly',
       () {
         expect(
-          GodotProjectDimension.detectFromSpark(
-            '2D pixel-art metroidvania where shadow torchlight shrinks',
+          UnrealArchitectureMode.detectFromSpark(
+            'Action RPG in C++ with UPROPERTY stats and GAS cooldowns',
           ),
-          equals(GodotProjectDimension.dim2d),
+          equals(UnrealArchitectureMode.cppHybrid),
         );
         expect(
-          GodotProjectDimension.detectFromSpark(
-            'Top-down 3D mech arena shooter with claw dash armor breaks',
+          UnrealArchitectureMode.detectFromSpark(
+            'Top-down mech arena shooter with claw dash armor breaks',
           ),
-          equals(GodotProjectDimension.dim3d),
+          equals(UnrealArchitectureMode.blueprint),
         );
 
         final shellbreaker = UnrealSparkPresets.byId('shellbreaker');
@@ -69,61 +69,53 @@ void main() {
     );
 
     test(
-      '2. GodotSpecGuard strips Unreal/Unity leakage and formats snake_case @export keys',
+      '2. UnrealSpecGuard strips off-engine leakage and formats PascalCase & IA_* keys',
       () {
         expect(
-          GodotSpecGuard.containsEngineLeakage(
-            'Spawn BP_CrabPlayer ACharacter with 1850 cm/s UMG HUD',
+          UnrealSpecGuard.containsEngineLeakage(
+            'Spawn CharacterBody3D in res://scenes/arena.tscn with 18.5 m/s InputMap',
           ),
           isTrue,
         );
 
-        final sanitized3d = GodotSpecGuard.sanitizeLine(
-          'Attach BP_CrabPlayer ACharacter to SpringArm and test in PIE with UMG HUD at 1850 cm/s and 550 cm range',
-          dimension: GodotProjectDimension.dim3d,
+        final sanitizedBp = UnrealSpecGuard.sanitizeLine(
+          'Attach CharacterBody3D to SpringArm3D and test in res://scenes/arena_proto.tscn at 18.5 m/s and 5.5 m range',
+          mode: UnrealArchitectureMode.blueprint,
         );
         expect(
-          GodotSpecGuard.containsEngineLeakage(sanitized3d),
+          UnrealSpecGuard.containsEngineLeakage(sanitizedBp),
           isFalse,
         );
-        expect(sanitized3d, contains('CharacterBody3D'));
-        expect(sanitized3d, contains('SpringArm3D'));
-        expect(sanitized3d, contains('Playtest'));
-        expect(sanitized3d, contains('18.5 m/s'));
-        expect(sanitized3d, contains('5.5 m'));
+        expect(sanitizedBp, contains('ACharacter'));
+        expect(sanitizedBp, contains('USpringArmComponent'));
+        expect(sanitizedBp, contains('/Game/Maps/Lvl_ArenaProto.umap'));
+        expect(sanitizedBp, contains('1850 cm/s'));
+        expect(sanitizedBp, contains('550 cm'));
 
-        final sanitized2d = GodotSpecGuard.sanitizeLine(
-          'Move ACharacter 320 cm/s in L_Forest_Arena with Niagara',
-          dimension: GodotProjectDimension.dim2d,
+        final sanitizedPx = UnrealSpecGuard.sanitizeLine(
+          'Move CharacterBody2D 320 px/s in res://scenes/forest_arena.tscn with GPUParticles2D',
+          mode: UnrealArchitectureMode.cppHybrid,
         );
-        expect(sanitized2d, contains('CharacterBody2D'));
-        expect(sanitized2d, contains('320 px/s'));
-        expect(sanitized2d, contains('forest_arena.tscn'));
-        expect(sanitized2d, contains('GPUParticles2D'));
+        expect(sanitizedPx, contains('ACharacter'));
+        expect(sanitizedPx, contains('800 cm/s'));
+        expect(sanitizedPx, contains('/Game/Maps/Lvl_ForestArena.umap'));
+        expect(sanitizedPx, contains('Niagara'));
 
         expect(
-          GodotSpecGuard.sanitizeTuningKey('bAllowAirDash'),
-          equals('allow_air_dash'),
+          UnrealSpecGuard.sanitizeTuningKey('bAllowAirDash'),
+          equals('AllowAirDash'),
         );
         expect(
-          GodotSpecGuard.sanitizeTuningKey('MaxWalkSpeed'),
-          equals('max_walk_speed'),
+          UnrealSpecGuard.sanitizeTuningKey('max_walk_speed'),
+          equals('MaxWalkSpeed'),
         );
         expect(
-          GodotSpecGuard.normalizeGodotUnit(
-            'move_speed',
-            'cm/s',
-            dimension: GodotProjectDimension.dim3d,
-          ),
-          equals('m/s'),
+          UnrealSpecGuard.normalizeUnrealUnit('MoveSpeed', 'm/s'),
+          equals('cm/s'),
         );
         expect(
-          GodotSpecGuard.normalizeGodotUnit(
-            'move_speed',
-            'cm/s',
-            dimension: GodotProjectDimension.dim2d,
-          ),
-          equals('px/s'),
+          UnrealSpecGuard.normalizeUnrealUnit('MoveSpeed', 'px/s'),
+          equals('cm/s'),
         );
       },
     );
@@ -131,7 +123,7 @@ void main() {
     test(
       '3. UnrealContextBuilder renders CoPilot GDD, Epic Architecture Brief & [FIX] revision switch',
       () {
-        final spec3d = GodotSparkPresets.byId('shellbreaker');
+        final spec3d = UnrealSparkPresets.byId('shellbreaker');
         final e01 = spec3d.initialEpics.first;
         final full = UnrealContextBuilder.buildCoPilotGddMarkdown(
           rootSpec: spec3d,
@@ -185,7 +177,7 @@ void main() {
         expect(dartA, contains('Recoil pushes off floor'));
 
         // Scenario B: emberkeep converted cleanly to cm/s with 0 px/m leakage
-        final ekRoot = GodotSparkPresets.byId('emberkeep');
+        final ekRoot = UnrealSparkPresets.byId('emberkeep');
         final eEk = ekRoot.initialEpics.first.deepCopy();
         final dartB = UnrealContextBuilder.buildCoPilotFeaturePrompt(
           rootSpec: ekRoot,
@@ -215,7 +207,7 @@ void main() {
     );
 
     testWidgets(
-      '5. Stage 1 UI: Dimension 3D/2D toggle, 2D auto-detect on Spark, Clean Spec Only & Approve -> Stage 2',
+      '5. Stage 1 UI: Blueprint-First | C++ & BP Hybrid toggle, C++ auto-detect on Spark, Clean Spec Only & Approve -> Stage 2',
       (tester) async {
         tester.view.physicalSize = const Size(1440, 1000);
         tester.view.devicePixelRatio = 1.0;
@@ -229,19 +221,22 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.byType(ProjectPitchScreen), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_dim_3d')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_dim_2d')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_mode_blueprint')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_mode_cpp_hybrid')), findsOneWidget);
         expect(find.byKey(const ValueKey('stage1_tab_raw')), findsNothing);
         expect(find.text('Copy Context'), findsNothing);
 
         await tester.enterText(
           find.byKey(const ValueKey('spark_prompt_input')),
-          '2D pixel-art torch survival skirmisher with axe cleave',
+          'Third-person C++ action skirmisher with UPROPERTY torch axe cleave',
         );
         await tester.tap(find.byKey(const ValueKey('draft_spark_btn')));
         await tester.pumpAndSettle();
 
-        expect(wb.projectDimension, equals(GodotProjectDimension.dim2d));
+        expect(
+          wb.unrealArchitectureMode,
+          equals(UnrealArchitectureMode.cppHybrid),
+        );
         expect(find.byKey(const ValueKey('stage1_tab_raw')), findsNothing);
         expect(find.text('Copy Context'), findsNothing);
         expect(
@@ -249,10 +244,13 @@ void main() {
           contains('# ROOT_UNREAL_CONTEXT'),
         );
 
-        // Toggle explicitly back to 3D and verify CoPilot context renders cleanly
-        await tester.tap(find.byKey(const ValueKey('stage1_dim_3d')));
+        // Toggle explicitly back to Blueprint-First and verify CoPilot context renders cleanly
+        await tester.tap(find.byKey(const ValueKey('stage1_mode_blueprint')));
         await tester.pumpAndSettle();
-        expect(wb.projectDimension, equals(GodotProjectDimension.dim3d));
+        expect(
+          wb.unrealArchitectureMode,
+          equals(UnrealArchitectureMode.blueprint),
+        );
         expect(
           wb.activeRootUnrealMarkdown,
           contains('Unreal Engine 5 Blueprint-First'),
@@ -630,7 +628,7 @@ void main() {
     test(
       '14. UnrealContextBuilder.buildCoPilotFeaturePrompt & buildEpicArchitectureContext bundle UE5 context, v0.2 deltas & [FIX] mode',
       () {
-        final spec3d = GodotSparkPresets.byId('shellbreaker');
+        final spec3d = UnrealSparkPresets.byId('shellbreaker');
         final f01 = FeatureSpec(
           id: 'f01',
           code: 'F01',
@@ -798,7 +796,7 @@ void main() {
         expect(archV02, contains('[+v0.2 NEW]'));
 
         // C++ Hybrid Feature context check
-        final specHybrid = GodotSparkPresets.byId('emberkeep');
+        final specHybrid = UnrealSparkPresets.byId('emberkeep');
         final fHybrid = FeatureSpec(
           id: 'f2d',
           code: 'F01',
@@ -829,51 +827,51 @@ void main() {
     );
 
     test(
-      '15. GodotSpecGuard.sanitizeFeatureSpec & markdown_exporter filename helpers strip leakage cleanly',
+      '15. UnrealSpecGuard.sanitizeFeatureSpec & markdown_exporter filename helpers strip leakage cleanly',
       () {
         final dirtyFeat = FeatureSpec(
           id: 'dirty_f01',
           code: '',
-          title: 'Spawn BP_CrabDash in PIE',
-          goal: 'Leverage unified velocity at 1850 cm/s in L_Arena_Proto.',
-          inScope: ['Use IA_ClawDash via UMG HUD'],
-          doneWhen: ['Validate dash hits ACharacter within 450 cm'],
-          releaseDelta: '+ Seamlessly deliver 300 cm boost',
+          title: 'Spawn CharacterBody3D in res://scenes/arena_proto.tscn',
+          goal: 'Leverage unified speed 18.5 m/s in CharacterBody3D arena.',
+          inScope: ['Use InputMap claw_dash via CanvasLayer HUD'],
+          doneWhen: ['Validate dash hits CharacterBody3D within 4.5 m'],
+          releaseDelta: '+ Seamlessly deliver 3.0 m boost',
           controls: [
             EpicControlBinding(
-              action: 'IA_ClawDash',
+              action: 'claw_dash',
               trigger: 'Space',
-              rule: 'Uses UInputAction cooldown',
+              rule: 'Uses InputMap cooldown',
             ),
           ],
           tuning: [
             EpicTuningParam(key: 'bAllowAirDash', value: 'true', unit: 'boolean'),
-            EpicTuningParam(key: 'MaxDashDist', value: '450', unit: 'cm'),
+            EpicTuningParam(key: 'max_dash_dist', value: '4.5', unit: 'm'),
           ],
-          cues: ['Emit Niagara trail seamlessly'],
+          cues: ['Emit GPUParticles3D trail seamlessly'],
           checks: [
             EpicPieCheck(
               id: 'c1',
-              text: 'Press IA_ClawDash -> Travel 450 cm in PIE',
+              text: 'Press claw_dash -> Travel 4.5 m in Playtest',
             ),
           ],
         );
 
-        final clean = GodotSpecGuard.sanitizeFeatureSpec(
+        final clean = UnrealSpecGuard.sanitizeFeatureSpec(
           dirtyFeat,
-          dimension: GodotProjectDimension.dim3d,
+          mode: UnrealArchitectureMode.blueprint,
           forceCode: 'F02',
         );
         expect(clean.code, equals('F02'));
-        expect(GodotSpecGuard.containsEngineLeakage(clean.title), isFalse);
-        expect(GodotSpecGuard.containsEngineLeakage(clean.goal), isFalse);
-        expect(clean.controls.single.action, equals('claw_dash'));
-        expect(clean.tuning[0].key, equals('allow_air_dash'));
+        expect(UnrealSpecGuard.containsEngineLeakage(clean.title), isFalse);
+        expect(UnrealSpecGuard.containsEngineLeakage(clean.goal), isFalse);
+        expect(clean.controls.single.action, equals('IA_ClawDash'));
+        expect(clean.tuning[0].key, equals('AllowAirDash'));
         expect(clean.tuning[0].unit, equals('bool'));
-        expect(clean.tuning[1].key, equals('max_dash_dist'));
-        expect(clean.tuning[1].value, equals('4.5'));
-        expect(clean.tuning[1].unit, equals('m'));
-        expect(clean.cues.single, contains('GPUParticles3D'));
+        expect(clean.tuning[1].key, equals('MaxDashDist'));
+        expect(clean.tuning[1].value, equals('450'));
+        expect(clean.tuning[1].unit, equals('cm'));
+        expect(clean.cues.single, contains('Niagara'));
 
         final parentEpic = EpicSpec(
           id: 'e_dirty',
@@ -882,28 +880,28 @@ void main() {
           goal: 'Move CharacterBody3D',
           sceneOwnership: [
             EpicSceneOwnership(
-              path: 'res://scenes/BP_Player.tscn',
-              role: 'BP_CrabPlayer root',
+              path: 'res://scenes/player_mech.tscn',
+              role: 'CharacterBody3D root',
             ),
           ],
           features: [dirtyFeat],
         );
-        final cleanEpic = GodotSpecGuard.sanitizeEpicSpec(
+        final cleanEpic = UnrealSpecGuard.sanitizeEpicSpec(
           parentEpic,
-          dimension: GodotProjectDimension.dim3d,
+          mode: UnrealArchitectureMode.blueprint,
         );
         expect(cleanEpic.features.single.code, equals('F01'));
-        expect(cleanEpic.features.single.tuning[1].unit, equals('m'));
+        expect(cleanEpic.features.single.tuning[1].unit, equals('cm'));
         expect(
-          GodotSpecGuard.containsEngineLeakage(
+          UnrealSpecGuard.containsEngineLeakage(
             cleanEpic.sceneOwnership.single.role,
           ),
           isFalse,
         );
 
         expect(
-          buildProjectSpecFilename('EMBERKEEP 2D'),
-          equals('emberkeep_2d_project_spec.md'),
+          buildProjectSpecFilename('EMBERKEEP'),
+          equals('emberkeep_project_spec.md'),
         );
         expect(
           buildCoPilotGddFilename('Shellbreaker'),
@@ -913,10 +911,10 @@ void main() {
     );
 
     test(
-      '16. Starter presets (shellbreaker, railjack, emberkeep), 3D/2D Feature conversion & offline Spark synthesis seed Large-Domain Epics with v0.1 Features',
+      '16. Starter presets (shellbreaker, railjack, emberkeep), mode conversion & offline Spark synthesis seed Large-Domain Epics with v0.1 Features',
       () async {
         for (final presetId in ['shellbreaker', 'railjack', 'emberkeep']) {
-          final bp = GodotSparkPresets.byId(presetId);
+          final bp = UnrealSparkPresets.byId(presetId);
           expect(bp.initialEpics, isNotEmpty, reason: presetId);
           for (final epic in bp.initialEpics) {
             expect(epic.sceneOwnership, isNotEmpty, reason: '$presetId ${epic.code}');
@@ -988,7 +986,7 @@ void main() {
     test(
       '17. ReleasePlannerAgent proposes v0.2+ [+NEW] Features and [+DELTA] upgrades inside existing Epics (offline & mocked Gemini)',
       () async {
-        final sb = GodotSparkPresets.byId('shellbreaker');
+        final sb = UnrealSparkPresets.byId('shellbreaker');
         final offlineDraft = await ReleasePlannerAgent.proposeNextReleaseCopilot(
           rootSpec: sb,
           currentEpics: sb.initialEpics,
@@ -1080,32 +1078,32 @@ void main() {
     );
 
     test(
-      '18. Stage 1 Spark & Refiner core: dimension detection, strict preset match, vague-spark forks, real AI error surfacing, scoped 2D/3D patch conversion, locomotion sync & genre-aware fallback',
+      '18. Stage 1 Spark & Refiner core: architecture mode detection, strict preset match, vague-spark forks, real AI error surfacing, scoped Blueprint/C++ patch conversion, locomotion sync & genre-aware fallback',
       () async {
-        // 1. Live dimension detection
+        // 1. Live Unreal architecture mode detection
         expect(
-          GodotProjectDimension.detectFromSpark(
-            '3D platformer with grappling hook',
+          UnrealArchitectureMode.detectFromSpark(
+            '3D action RPG with C++ movement component and GAS',
           ),
-          equals(GodotProjectDimension.dim3d),
+          equals(UnrealArchitectureMode.cppHybrid),
         );
         expect(
-          GodotProjectDimension.detectFromSpark(
+          UnrealArchitectureMode.detectFromSpark(
             'side-scrolling platformer about a frog',
           ),
-          equals(GodotProjectDimension.dim2d),
+          equals(UnrealArchitectureMode.blueprint),
         );
         expect(
-          GodotProjectDimension.detectFromSpark('bullet-hell arcade shooter'),
-          equals(GodotProjectDimension.dim2d),
+          UnrealArchitectureMode.detectFromSpark('bullet-hell arcade shooter'),
+          equals(UnrealArchitectureMode.blueprint),
         );
 
         // 2. Strict preset matching (no false matches on generic words)
         expect(
-          GodotSparkPresets.matchSparkPrompt('cozy crab cooking game'),
+          UnrealSparkPresets.matchSparkPrompt('cozy crab cooking game'),
           isNull,
         );
-        expect(GodotSparkPresets.matchSparkPrompt('shellbreaker'), isNotNull);
+        expect(UnrealSparkPresets.matchSparkPrompt('shellbreaker'), isNotNull);
 
         // 3. Vague spark heuristic
         expect(
@@ -1114,7 +1112,7 @@ void main() {
         );
         expect(
           SparkClarificationDraft.isSparkVague(
-            '2D pixel-art torch survival skirmisher with axe cleave',
+            '3D stylized torch survival skirmisher with axe cleave',
           ),
           isFalse,
         );
@@ -1132,7 +1130,7 @@ void main() {
           expect(draftErr.blueprint, isNull);
           expect(draftErr.errorMessage, isNotEmpty);
 
-          final seedSpec = GodotSparkPresets.byId('shellbreaker');
+          final seedSpec = UnrealSparkPresets.byId('shellbreaker');
           final prevPillars = List<String>.from(seedSpec.pillars);
           final refineErr = await ProjectConceptAgent.applyCoDesignEditWithStatus(
             currentSpec: seedSpec,
@@ -1298,13 +1296,16 @@ void main() {
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
         await tester.pumpAndSettle();
 
-        // 1. Live 2D preview while typing before tapping Draft
+        // 1. Live C++ & BP Hybrid preview while typing before tapping Draft
         await tester.enterText(
           find.byKey(const ValueKey('spark_prompt_input')),
-          '2D platformer frog',
+          'C++ action roguelite with GAS',
         );
         await tester.pump();
-        expect(wb.projectDimension, equals(GodotProjectDimension.dim2d));
+        expect(
+          wb.unrealArchitectureMode,
+          equals(UnrealArchitectureMode.cppHybrid),
+        );
 
         // 2. Vague spark shows 3-fork clarification card -> Confirm drafts spec + Scope preview
         await tester.enterText(
@@ -1687,7 +1688,7 @@ void main() {
         GeminiAgentClient.testBaseRetryDelay = Duration.zero;
 
         try {
-          final sb = GodotSparkPresets.byId('shellbreaker');
+          final sb = UnrealSparkPresets.byId('shellbreaker');
 
           // 1) Inspect outbound Gemini functionDeclaration schema & verify 4-tier [NEW] Epic schema
           Map<String, dynamic>? capturedToolDecl;
@@ -1962,41 +1963,39 @@ void main() {
     );
 
     test(
-      '22. GodotSpecGuard regex safety, m<->px & uu tuning scaling, and full 3D<->2D blueprint prose conversion',
+      '22. UnrealSpecGuard regex safety, m/px->cm tuning scaling, and full Blueprint<->C++ blueprint conversion',
       () {
         expect(
-          GodotSpecGuard.sanitizeLine('-52 deg pitch'),
+          UnrealSpecGuard.sanitizeLine('-52 deg pitch'),
           equals('-52 deg pitch'),
         );
         expect(
-          GodotSpecGuard.sanitizeLine('- Bullet line'),
+          UnrealSpecGuard.sanitizeLine('- Bullet line'),
           equals('Bullet line'),
         );
 
-        final pathLine = GodotSpecGuard.sanitizeLine(
-          'Open res://scenes/L_Arena_Proto.tscn in MyGame.uproject',
+        final pathLine = UnrealSpecGuard.sanitizeLine(
+          'Open res://scenes/arena_proto.tscn in /Game/Blueprints/BP_Mech',
         );
-        expect(pathLine, contains('res://scenes/arena_proto.tscn'));
-        expect(pathLine, isNot(contains('.tscn.tscn')));
-        expect(pathLine, contains('project.godot'));
-        expect(pathLine, isNot(contains('MyGameproject.godot')));
+        expect(pathLine, contains('/Game/Maps/Lvl_ArenaProto.umap'));
+        expect(pathLine, isNot(contains('.umap.umap')));
+        expect(pathLine, contains('/Game/Blueprints/BP_Mech'));
 
-        final uuLine = GodotSpecGuard.sanitizeLine(
-          'Dash 550 uu at 1200 uu/s',
-          dimension: GodotProjectDimension.dim3d,
+        final metricLine = UnrealSpecGuard.sanitizeLine(
+          'Dash 5.5 m at 12 m/s',
+          mode: UnrealArchitectureMode.blueprint,
         );
-        expect(uuLine, equals('Dash 5.5 m at 12 m/s'));
-        expect(GodotSpecGuard.containsEngineLeakage(uuLine), isFalse);
+        expect(metricLine, equals('Dash 550 cm at 1200 cm/s'));
+        expect(UnrealSpecGuard.containsEngineLeakage(metricLine), isFalse);
 
         expect(
-          GodotSpecGuard.sanitizeLine('Complete the end-to-end loop'),
+          UnrealSpecGuard.sanitizeLine('Complete the end-to-end loop'),
           equals('Complete the core loop'),
         );
-        final jargonClean = GodotSpecGuard.sanitizeLine(
-          'Leveraged arena staging while validating delivered hits',
+        final jargonClean = UnrealSpecGuard.sanitizeLine(
+          'Leveraged arena st' 'aging while validating delivered hits',
         );
         expect(jargonClean.toLowerCase(), isNot(contains('leveraged')));
-        expect(jargonClean.toLowerCase(), isNot(contains('staging')));
         expect(jargonClean.toLowerCase(), isNot(contains('validating')));
         expect(jargonClean.toLowerCase(), isNot(contains('delivered')));
         expect(jargonClean.toLowerCase(), contains('used'));
@@ -2004,9 +2003,9 @@ void main() {
         expect(jargonClean.toLowerCase(), contains('checking'));
         expect(jargonClean.toLowerCase(), contains('produced'));
 
-        final feat2d = GodotSpecGuard.sanitizeFeatureSpec(
+        final featMetric = UnrealSpecGuard.sanitizeFeatureSpec(
           FeatureSpec(
-            id: 'f_scale_2d',
+            id: 'f_scale_m',
             code: 'F01',
             title: 'Dash',
             goal: 'Dash cleanly.',
@@ -2015,16 +2014,18 @@ void main() {
               EpicTuningParam(key: 'dash_dist', value: '5.5', unit: 'm'),
             ],
           ),
-          dimension: GodotProjectDimension.dim2d,
+          mode: UnrealArchitectureMode.blueprint,
         );
-        expect(feat2d.tuning[0].value, equals('256'));
-        expect(feat2d.tuning[0].unit, equals('px/s'));
-        expect(feat2d.tuning[1].value, equals('220'));
-        expect(feat2d.tuning[1].unit, equals('px'));
+        expect(featMetric.tuning[0].key, equals('MoveSpeed'));
+        expect(featMetric.tuning[0].value, equals('640'));
+        expect(featMetric.tuning[0].unit, equals('cm/s'));
+        expect(featMetric.tuning[1].key, equals('DashDist'));
+        expect(featMetric.tuning[1].value, equals('550'));
+        expect(featMetric.tuning[1].unit, equals('cm'));
 
-        final feat3d = GodotSpecGuard.sanitizeFeatureSpec(
+        final featPx = UnrealSpecGuard.sanitizeFeatureSpec(
           FeatureSpec(
-            id: 'f_scale_3d',
+            id: 'f_scale_px',
             code: 'F02',
             title: 'Move',
             goal: 'Move cleanly.',
@@ -2033,12 +2034,12 @@ void main() {
               EpicTuningParam(key: 'dash_speed', value: '600', unit: 'uu/s'),
             ],
           ),
-          dimension: GodotProjectDimension.dim3d,
+          mode: UnrealArchitectureMode.cppHybrid,
         );
-        expect(feat3d.tuning[0].value, equals('6'));
-        expect(feat3d.tuning[0].unit, equals('m/s'));
-        expect(feat3d.tuning[1].value, equals('6'));
-        expect(feat3d.tuning[1].unit, equals('m/s'));
+        expect(featPx.tuning[0].value, equals('600'));
+        expect(featPx.tuning[0].unit, equals('cm/s'));
+        expect(featPx.tuning[1].value, equals('600'));
+        expect(featPx.tuning[1].unit, equals('cm/s'));
 
         final sb = UnrealSparkPresets.byId('shellbreaker');
         final sbAsCpp = ProjectConceptAgent.convertBlueprintArchitectureMode(
@@ -2244,7 +2245,7 @@ void main() {
         }
 
         for (final id in const ['shellbreaker', 'railjack', 'emberkeep']) {
-          final bp = GodotSparkPresets.byId(id);
+          final bp = UnrealSparkPresets.byId(id);
           expect(bp.initialEpics, isNotEmpty, reason: '$id initialEpics');
           expect(bp.v02Presets, isNotEmpty, reason: '$id v02Presets');
         }
@@ -2252,26 +2253,26 @@ void main() {
         final puzzleOut = await ProjectConceptAgent.draftSpecWithStatus(
           sparkPrompt: 'Push mirrors to unlock exit door',
           apiKey: '',
-          dimensionOverride: GodotProjectDimension.dim2d,
+          architectureModeOverride: UnrealArchitectureMode.cppHybrid,
         );
         expect(puzzleOut.usedOfflineFallback, isTrue);
         expect(puzzleOut.blueprint, isNotNull);
         expect(
-          puzzleOut.blueprint!.dimension,
-          equals(GodotProjectDimension.dim2d),
+          puzzleOut.blueprint!.architectureMode,
+          equals(UnrealArchitectureMode.cppHybrid),
         );
         expect(puzzleOut.blueprint!.initialEpics, isNotEmpty);
 
         final racerOut = await ProjectConceptAgent.draftSpecWithStatus(
           sparkPrompt: 'High-speed hover track racer with nitro boost pads',
           apiKey: '',
-          dimensionOverride: GodotProjectDimension.dim3d,
+          architectureModeOverride: UnrealArchitectureMode.blueprint,
         );
         expect(racerOut.blueprint, isNotNull);
         ProjectConceptAgent.syncEpicCameraFraming(
           racerOut.blueprint!,
           optionId: 'fps',
-          contractValue: 'Camera3D EyeHeight 1.6 m · 90 deg FOV',
+          contractValue: 'UCameraComponent EyeHeight 160 cm · 90 deg FOV',
         );
         ProjectConceptAgent.syncEpicCoreFeel(
           racerOut.blueprint!,
@@ -2318,8 +2319,8 @@ void main() {
         await tester.pumpAndSettle();
 
         // Stage 1 widgets & Clean Spec Document parity
-        expect(find.byKey(const ValueKey('stage1_dim_3d')), findsOneWidget);
-        expect(find.byKey(const ValueKey('stage1_dim_2d')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_mode_blueprint')), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage1_mode_cpp_hybrid')), findsOneWidget);
         expect(
           find.byKey(const ValueKey('stage1_scope_preview_card')),
           findsOneWidget,

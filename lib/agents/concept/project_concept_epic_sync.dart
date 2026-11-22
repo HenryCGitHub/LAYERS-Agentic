@@ -62,18 +62,6 @@ ProjectConceptBlueprint convertBlueprintArchitectureModeImpl(
   );
 }
 
-/// Compatibility shim keeping legacy `convertBlueprintDimensionImpl` callers compiling until Round 6.
-ProjectConceptBlueprint convertBlueprintDimensionImpl(
-  ProjectConceptBlueprint current,
-  GodotProjectDimension targetDim,
-) {
-  final next = current.deepCopy()..dimension = targetDim;
-  return UnrealSpecGuard.sanitizeConceptBlueprint(
-    raw: next,
-    modeOverride: next.architectureMode,
-  );
-}
-
 /// Keeps `E01..EN` and `F01..FM` strictly sequential across `initialEpics` without gaps or duplicate codes.
 void normalizeSequentialEpicAndFeatureCodesImpl(
   ProjectConceptBlueprint bp,

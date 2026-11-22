@@ -24,7 +24,7 @@ ProjectConceptBlueprint buildShellbreakerPreset(String sparkPrompt) {
     assetPolicy:
         'UStaticMeshComponent Greybox + UMaterialInstanceDynamic Tints; /Game/Data/DA_ShellbreakerTuning',
     feelChoiceId: 'snappy',
-    cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera3dOptions,
+    cameraDecisionOptions: ProjectConceptBlueprint.defaultCameraOptions,
     pillars: const [
       'Aggressive Armor Cracking: Every dash creates an immediate weak-spot window',
       'Readable Telegraph Clarity: Distinct silhouette colors and sharp windup cues beat visual noise',

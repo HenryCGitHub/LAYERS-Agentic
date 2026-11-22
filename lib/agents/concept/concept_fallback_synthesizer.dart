@@ -10,7 +10,6 @@ String _ownerAsset(String stem, UnrealArchitectureMode mode) =>
 
 ProjectConceptBlueprint buildSynthesizedFallback(
   String sparkPrompt, {
-  GodotProjectDimension dimension = GodotProjectDimension.dim3d,
   UnrealArchitectureMode? architectureMode,
   String? archetypeId,
   String? viewChoiceId,
@@ -20,7 +19,7 @@ ProjectConceptBlueprint buildSynthesizedFallback(
   final lower = cleaned.toLowerCase();
   final archMode =
       architectureMode ?? UnrealArchitectureMode.detectFromSpark(cleaned);
-  final resolvedCamOptions = ProjectConceptBlueprint.defaultCamera3dOptions;
+  final resolvedCamOptions = ProjectConceptBlueprint.defaultCameraOptions;
 
   String cameraChoice;
   if (viewChoiceId != null &&
@@ -1180,7 +1179,6 @@ ProjectConceptBlueprint buildSynthesizedFallback(
   final bp = ProjectConceptBlueprint(
     sparkPrompt: cleaned,
     gameTitle: title,
-    dimension: dimension,
     architectureMode: archMode,
     pitch: '$title — $shortSpark',
     coreLoop: loop,

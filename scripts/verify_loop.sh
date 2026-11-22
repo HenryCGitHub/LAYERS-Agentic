@@ -44,7 +44,7 @@ if [ "$FAST_MODE" -eq 1 ]; then
   if [ "$RUN_FULL_FLUTTER" -eq 1 ]; then
     flutter test
   else
-    flutter test test/godot_spec_studio_test.dart
+    flutter test test/unreal_spec_studio_test.dart
   fi
 else
   flutter test

@@ -24,7 +24,7 @@ ProjectConceptBlueprint buildEmberkeepPreset(String sparkPrompt) {
     assetPolicy:
         'UStaticMeshComponent Stone Courtyard + UPointLightComponent Torch Rings + Exposed BP Vars',
     feelChoiceId: 'heavy',
-    cameraDecisionOptions: ProjectConceptBlueprint.defaultCamera3dOptions,
+    cameraDecisionOptions: ProjectConceptBlueprint.defaultCameraOptions,
     pillars: const [
       'Light Defines Territory: Every dynamic light circle visibly alters enemy aggression and player safety',
       'Deliberate Heavy Swings: Axe cleaves carry distinct windup weight rather than rapid spam',

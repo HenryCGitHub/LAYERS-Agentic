@@ -4,14 +4,14 @@ import '../../models/epic_spec.dart';
 /// Optional 3-fork clarification draft shown for vague Stage 1 sparks before drafting.
 class SparkClarificationDraft {
   final String rawSpark;
-  final GodotProjectDimension dimension;
+  final UnrealArchitectureMode architectureMode;
   final String viewChoiceId;
   final String archetypeId;
   final String prototypeHookId;
 
   const SparkClarificationDraft({
     required this.rawSpark,
-    required this.dimension,
+    required this.architectureMode,
     required this.viewChoiceId,
     required this.archetypeId,
     required this.prototypeHookId,
@@ -32,14 +32,12 @@ class SparkClarificationDraft {
   ];
 
   List<ConceptSectionOption> get viewOptions =>
-      dimension == GodotProjectDimension.dim2d
-          ? ProjectConceptBlueprint.defaultCamera2dOptions
-          : ProjectConceptBlueprint.defaultCamera3dOptions;
+      ProjectConceptBlueprint.defaultCameraOptions;
 
   static bool isSparkVague(String sparkPrompt) {
     final trimmed = sparkPrompt.trim();
     if (trimmed.isEmpty) return false;
-    if (GodotSparkPresets.matchSparkPrompt(trimmed) != null) return false;
+    if (UnrealSparkPresets.matchSparkPrompt(trimmed) != null) return false;
     final words = RegExp(r'[A-Za-z0-9]+')
         .allMatches(trimmed)
         .map((m) => m.group(0)!)
@@ -57,43 +55,33 @@ class SparkClarificationDraft {
 
   static SparkClarificationDraft suggestFromSpark(
     String rawSpark, {
-    GodotProjectDimension? pinnedDimension,
+    UnrealArchitectureMode? pinnedMode,
   }) {
     final cleaned = rawSpark.trim();
     final lower = cleaned.toLowerCase();
-    final dim = pinnedDimension ?? GodotProjectDimension.detectFromSpark(cleaned);
+    final mode = pinnedMode ?? UnrealArchitectureMode.detectFromSpark(cleaned);
 
     final String viewId;
-    if (dim == GodotProjectDimension.dim2d) {
-      if (lower.contains('side') ||
-          lower.contains('platformer') ||
-          lower.contains('metroidvania')) {
-        viewId = 'sidescroller2d';
-      } else if (lower.contains('room') ||
-          lower.contains('puzzle') ||
-          lower.contains('sokoban')) {
-        viewId = 'fixedarena2d';
-      } else {
-        viewId = 'topdown2d';
-      }
+    if (lower.contains('first-person') ||
+        lower.contains('first person') ||
+        lower.contains('fps')) {
+      viewId = 'fps';
+    } else if (lower.contains('side') ||
+        lower.contains('platformer') ||
+        lower.contains('metroidvania')) {
+      viewId = 'sidescroller';
+    } else if (lower.contains('third-person') ||
+        lower.contains('third person') ||
+        lower.contains('tps') ||
+        lower.contains('racer') ||
+        lower.contains('drift') ||
+        lower.contains('grapple') ||
+        lower.contains('glider')) {
+      viewId = 'tps';
+    } else if (lower.contains('top-down') || lower.contains('top down')) {
+      viewId = 'topdown';
     } else {
-      if (lower.contains('first-person') ||
-          lower.contains('first person') ||
-          lower.contains('fps')) {
-        viewId = 'fps';
-      } else if (lower.contains('third-person') ||
-          lower.contains('third person') ||
-          lower.contains('tps') ||
-          lower.contains('racer') ||
-          lower.contains('drift') ||
-          lower.contains('grapple') ||
-          lower.contains('glider')) {
-        viewId = 'tps';
-      } else if (lower.contains('top-down') || lower.contains('top down')) {
-        viewId = 'topdown';
-      } else {
-        viewId = 'isometric';
-      }
+      viewId = 'isometric';
     }
 
     final String archId;
@@ -126,7 +114,7 @@ class SparkClarificationDraft {
 
     return SparkClarificationDraft(
       rawSpark: cleaned,
-      dimension: dim,
+      architectureMode: mode,
       viewChoiceId: viewId,
       archetypeId: archId,
       prototypeHookId: hookId,
@@ -135,22 +123,15 @@ class SparkClarificationDraft {
 
   SparkClarificationDraft copyWith({
     String? rawSpark,
-    GodotProjectDimension? dimension,
+    UnrealArchitectureMode? architectureMode,
     String? viewChoiceId,
     String? archetypeId,
     String? prototypeHookId,
   }) {
-    final nextDim = dimension ?? this.dimension;
-    final nextView = viewChoiceId ??
-        (dimension != null && dimension != this.dimension
-            ? (nextDim == GodotProjectDimension.dim2d
-                ? 'topdown2d'
-                : 'isometric')
-            : this.viewChoiceId);
     return SparkClarificationDraft(
       rawSpark: rawSpark ?? this.rawSpark,
-      dimension: nextDim,
-      viewChoiceId: nextView,
+      architectureMode: architectureMode ?? this.architectureMode,
+      viewChoiceId: viewChoiceId ?? this.viewChoiceId,
       archetypeId: archetypeId ?? this.archetypeId,
       prototypeHookId: prototypeHookId ?? this.prototypeHookId,
     );
@@ -178,7 +159,7 @@ class SparkClarificationDraft {
         break;
       }
     }
-    return '$rawSpark (Dimension: ${dimension.pillLabel}; Camera: $viewLabel; Loop Focus: $archLabel; v0.1 Scope: $hookLabel)';
+    return '$rawSpark (Architecture: ${architectureMode.pillLabel}; Camera: $viewLabel; Loop Focus: $archLabel; v0.1 Scope: $hookLabel)';
   }
 }
 

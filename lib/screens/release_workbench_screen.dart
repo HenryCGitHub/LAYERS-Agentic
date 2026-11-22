@@ -291,7 +291,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                     color: cyan,
                                   ),
                                   HeaderPill(
-                                    label: wb.projectDimension.pillLabel,
+                                    label: wb.unrealArchitectureMode.pillLabel,
                                     color: muted,
                                   ),
                                   HeaderPill(

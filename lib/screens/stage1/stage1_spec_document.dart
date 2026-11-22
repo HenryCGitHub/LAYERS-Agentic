@@ -208,11 +208,11 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
         ),
         const SizedBox(height: 16),
 
-        // §02 Global Godot 4 Scale & Architecture
+        // §02 Unreal Engine 5 Scale & Architecture
         Stage1SectionCard(
           isDark: isDark,
           code: '§02',
-          title: 'Global Godot 4 Scale & Architecture (${spec.dimension.pillLabel})',
+          title: 'Unreal Engine 5 Scale & Architecture (${spec.architectureMode.pillLabel})',
           isUpdated: changed.contains('s02'),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -562,7 +562,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                       Divider(height: 1, color: border),
                       const SizedBox(height: 8),
                       Text(
-                        'First Playtest (${scope.firstFeatureLabel ?? 'F01'}) · ${scope.firstTestScenePath ?? 'res://scenes/arena_proto.tscn'}',
+                        'First Playtest (${scope.firstFeatureLabel ?? 'F01'}) · ${scope.firstTestScenePath ?? '/Game/Maps/Lvl_ArenaProto.umap'}',
                         style: GoogleFonts.jetBrainsMono(
                           fontSize: 11,
                           color: cyan,

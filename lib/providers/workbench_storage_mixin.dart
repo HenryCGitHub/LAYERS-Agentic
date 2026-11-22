@@ -585,7 +585,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _selectedEpicId = null;
     _selectedFeatureId = null;
     _expandedEpicIds.clear();
-    _userPinnedDimension = false;
+    _userPinnedMode = false;
     _conceptDraft = null;
     _clearStage1TransientState();
     _resetProgressiveDraftState();

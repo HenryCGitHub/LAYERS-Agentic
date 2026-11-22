@@ -1393,7 +1393,7 @@ void main() {
           };
         wb.loadPresetSpark('shellbreaker');
         // Push a Stage 1 undo entry so canUndoStage1 == true
-        wb.setProjectDimension(GodotProjectDimension.dim2d);
+        wb.setArchitectureMode(UnrealArchitectureMode.cppHybrid);
         await Future<void>.delayed(Duration.zero);
         expect(wb.canUndoStage1, isTrue);
 
@@ -1589,7 +1589,7 @@ void main() {
             equals(chosenArch.id),
           );
 
-          final seedSb = GodotSparkPresets.byId('shellbreaker');
+          final seedSb = UnrealSparkPresets.byId('shellbreaker');
           GeminiAgentClient.testMockResponder = (prompt, model) async {
             capturedPrompt = prompt;
             return seedSb.toJson();

@@ -8,7 +8,7 @@ import 'stage1/stage1_shared_widgets.dart';
 import 'stage1/stage1_spec_document.dart';
 
 
-/// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_GODOT_CONTEXT`).
+/// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`).
 /// Single-space canvas with Idea Intake + vague-spark forks, scoped patch Refine + Undo,
 /// changed-section badges, `§05` Scope & First Playtest preview, and lean direct inline edits.
 class ProjectPitchScreen extends StatefulWidget {
@@ -288,10 +288,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               spacing: 10,
               runSpacing: 6,
               children: [
-                GodotDimensionToggle(
-                  dimension: wb.projectDimension,
+                UnrealArchitectureToggle(
+                  mode: wb.unrealArchitectureMode,
                   isDark: isDark,
-                  onChanged: wb.isAgentBusy ? null : wb.setProjectDimension,
+                  onChanged: wb.isAgentBusy ? null : wb.setArchitectureMode,
                 ),
                 ElevatedButton.icon(
                   key: const ValueKey('approve_launch_workbench_btn'),
@@ -370,7 +370,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Turn a one-sentence idea into a playable v0.1 Godot 4 spec — camera, controls, tuning, and first Epics.',
+          'Turn a one-sentence idea into a playable v0.1 Unreal Engine 5 spec — camera, Enhanced Input, tuning, and first Epics.',
           style: TextStyle(
             fontSize: 14,
             color: textSecondary,
@@ -404,7 +404,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   filled: false,
                   contentPadding: EdgeInsets.zero,
                 ),
-                onChanged: wb.previewDimensionFromSparkText,
+                onChanged: wb.previewArchitectureModeFromSparkText,
                 onSubmitted: (val) async {
                   if (!wb.isAgentBusy && val.trim().isNotEmpty) {
                     await wb.handleStage1SparkSubmit(val);
@@ -418,10 +418,10 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 spacing: 10,
                 runSpacing: 10,
                 children: [
-                  GodotDimensionToggle(
-                    dimension: wb.projectDimension,
+                  UnrealArchitectureToggle(
+                    mode: wb.unrealArchitectureMode,
                     isDark: isDark,
-                    onChanged: wb.isAgentBusy ? null : wb.setProjectDimension,
+                    onChanged: wb.isAgentBusy ? null : wb.setArchitectureMode,
                   ),
                   ElevatedButton.icon(
                     key: const ValueKey('draft_spark_btn'),
@@ -492,7 +492,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               'Starter Packs:',
               style: TextStyle(fontSize: 12, color: textMuted),
             ),
-            for (final preset in GodotSparkPresets.entries)
+            for (final preset in UnrealSparkPresets.entries)
               ActionChip(
                 key: ValueKey('preset_${preset.id}'),
                 avatar: Icon(Icons.bolt_rounded, size: 14, color: cyan),
@@ -751,9 +751,9 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               Expanded(
                 flex: 3,
                 child: Tooltip(
-                  message: spec.dimension.architectureContract,
+                  message: spec.architectureMode.architectureContract,
                   child: Text(
-                    spec.dimension.architectureContract,
+                    spec.architectureMode.architectureContract,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,

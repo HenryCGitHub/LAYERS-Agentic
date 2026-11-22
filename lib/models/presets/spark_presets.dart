@@ -68,6 +68,3 @@ class UnrealSparkPresets {
     };
   }
 }
-
-typedef GodotSparkPresetInfo = UnrealSparkPresetInfo;
-typedef GodotSparkPresets = UnrealSparkPresets;

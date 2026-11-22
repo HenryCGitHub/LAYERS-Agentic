@@ -1,8 +1,8 @@
 part of 'workbench_provider.dart';
 
-/// Stage 1 actions: Spark Onboarding, Preset Packs, 3D | 2D Dimension toggle,
+/// Stage 1 actions: Spark Onboarding, Preset Packs, Blueprint-First | C++ & BP Hybrid toggle,
 /// vague-spark clarification forks, scoped Co-Designer edits, Undo stack,
-/// lean inline edits, and `Approve & Launch Godot Workbench`.
+/// lean inline edits, and `Approve & Launch Release Workbench`.
 extension WorkbenchConceptMixin on WorkbenchProvider {
   void _pushStage1UndoSnapshot() {
     final draft = _conceptDraft;
@@ -32,7 +32,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     notifyListeners();
   }
 
-  void previewDimensionFromSparkText(String rawText) {
+  void previewArchitectureModeFromSparkText(String rawText) {
     var changed = false;
     if (_pendingSparkClarification != null &&
         _pendingSparkClarification!.rawSpark != rawText.trim()) {
@@ -43,15 +43,18 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _stage1InlineError = null;
       changed = true;
     }
-    if (!_userPinnedDimension &&
+    if (!_userPinnedMode &&
         (_conceptDraft == null || !_conceptDraft!.hasSpec)) {
-      final detected = GodotProjectDimension.detectFromSpark(rawText);
-      if (detected != projectDimension) {
+      final detected = UnrealArchitectureMode.detectFromSpark(rawText);
+      if (detected != unrealArchitectureMode) {
         _conceptDraft = ProjectConceptBlueprint(
           sparkPrompt: rawText.trim(),
-          gameTitle: _conceptDraft?.gameTitle ?? 'UNTITLED GODOT PROJECT',
-          dimension: detected,
+          gameTitle: _conceptDraft?.gameTitle ?? 'UNTITLED UNREAL PROJECT',
+          architectureMode: detected,
         );
+        if (activeProject != null) {
+          activeProject!.sections['unreal_arch_mode'] = detected.id;
+        }
         changed = true;
       }
     }
@@ -79,7 +82,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     nextSections['concept_blueprint_json'] = jsonEncode(bp.toJson());
     nextSections['unreal_arch_mode'] = bp.architectureMode.id;
     nextSections['engine'] = bp.architectureMode.shortLabel;
-    nextSections['dimension'] = bp.dimension.id;
+    nextSections.remove('dimension');
     nextSections['current_stage'] = _currentStage.name;
 
     final updated = (existing ??
@@ -101,7 +104,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
   void loadPresetSpark(String presetId) {
     final preset = UnrealSparkPresets.byId(presetId);
-    _userPinnedDimension = false;
+    _userPinnedMode = false;
     _clearStage1TransientState();
     _offlineErrorMessage = null;
     _conceptDraft = preset;
@@ -121,7 +124,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (SparkClarificationDraft.isSparkVague(cleanPrompt)) {
       _pendingSparkClarification = SparkClarificationDraft.suggestFromSpark(
         cleanPrompt,
-        pinnedDimension: _userPinnedDimension ? projectDimension : null,
+        pinnedMode: _userPinnedMode ? unrealArchitectureMode : null,
       );
       notifyListeners();
       return null;
@@ -131,19 +134,19 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }
 
   void updateSparkClarification({
-    GodotProjectDimension? dimension,
+    UnrealArchitectureMode? architectureMode,
     String? viewChoiceId,
     String? archetypeId,
     String? prototypeHookId,
   }) {
     final pending = _pendingSparkClarification;
     if (pending == null) return;
-    if (dimension != null) {
-      _userPinnedDimension = true;
-      setProjectDimension(dimension);
+    if (architectureMode != null) {
+      _userPinnedMode = true;
+      setArchitectureMode(architectureMode);
     }
     _pendingSparkClarification = pending.copyWith(
-      dimension: dimension,
+      architectureMode: architectureMode,
       viewChoiceId: viewChoiceId,
       archetypeId: archetypeId,
       prototypeHookId: prototypeHookId,
@@ -169,11 +172,11 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final ProjectConceptBlueprint? result = skipPicks
         ? await generateSpecFromSpark(
             savedPending.rawSpark,
-            explicitDimension: _userPinnedDimension ? projectDimension : null,
+            explicitMode: _userPinnedMode ? unrealArchitectureMode : null,
           )
         : await generateSpecFromSpark(
             savedPending.buildEnrichedSpark(),
-            explicitDimension: savedPending.dimension,
+            explicitMode: savedPending.architectureMode,
             archetypeId: savedPending.archetypeId,
             viewChoiceId: savedPending.viewChoiceId,
             prototypeHookId: savedPending.prototypeHookId,
@@ -188,7 +191,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
   Future<ProjectConceptBlueprint?> generateSpecFromSpark(
     String sparkPrompt, {
-    GodotProjectDimension? explicitDimension,
+    UnrealArchitectureMode? explicitMode,
     String? archetypeId,
     String? viewChoiceId,
     String? prototypeHookId,
@@ -206,8 +209,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       final outcome = await ProjectConceptAgent.draftSpecWithStatus(
         sparkPrompt: cleanPrompt,
         apiKey: _apiKey,
-        dimensionOverride:
-            explicitDimension ?? (_userPinnedDimension ? projectDimension : null),
+        architectureModeOverride:
+            explicitMode ?? (_userPinnedMode ? unrealArchitectureMode : null),
         archetypeId: archetypeId,
         viewChoiceId: viewChoiceId,
         prototypeHookId: prototypeHookId,
@@ -227,7 +230,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _stage1InlineError = null;
       _offlineErrorMessage = null;
       _conceptDraft = outcome.blueprint;
-      _userPinnedDimension = false;
+      _userPinnedMode = false;
       _showingSparkPicker = false;
       _currentStage = WorkbenchStage.projectPitch;
       _ensureActiveProjectDocument(outcome.blueprint!);
@@ -293,29 +296,38 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     }
   }
 
-  void setProjectDimension(GodotProjectDimension dim) {
-    _userPinnedDimension = true;
+  void setArchitectureMode(UnrealArchitectureMode mode) {
+    _userPinnedMode = true;
     final draft = _conceptDraft;
     if (draft == null) {
-      _conceptDraft = ProjectConceptBlueprint(dimension: dim);
+      _conceptDraft = ProjectConceptBlueprint(architectureMode: mode);
+      if (activeProject != null) {
+        activeProject!.sections['unreal_arch_mode'] = mode.id;
+      }
     } else if (draft.hasSpec) {
-      if (draft.dimension == dim) return;
+      if (draft.architectureMode == mode) return;
       _pushStage1UndoSnapshot();
-      final converted = ProjectConceptAgent.convertBlueprintDimension(draft, dim);
+      final converted = ProjectConceptAgent.convertBlueprintArchitectureMode(
+        draft,
+        mode,
+      );
       converted.lastCoDesignNote =
-          'Switched project dimension to ${dim.shortLabel}.';
+          'Switched project mode to ${mode.pillLabel}.';
       _conceptDraft = converted;
       _lastStage1ChangedSections = const <String>{'s02', 's05'};
     } else {
       _conceptDraft = ProjectConceptBlueprint(
         sparkPrompt: draft.sparkPrompt,
         gameTitle: draft.gameTitle,
-        dimension: dim,
+        architectureMode: mode,
       );
+      if (activeProject != null) {
+        activeProject!.sections['unreal_arch_mode'] = mode.id;
+      }
     }
     if (_pendingSparkClarification != null) {
       _pendingSparkClarification =
-          _pendingSparkClarification!.copyWith(dimension: dim);
+          _pendingSparkClarification!.copyWith(architectureMode: mode);
     }
     if (activeProject != null && _conceptDraft != null) {
       _ensureActiveProjectDocument(_conceptDraft!);
@@ -362,12 +374,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   /// Clears the active unapproved draft back to empty Stage 1 intake, or opens a fresh Stage 1
   /// project when existing approved Releases exist so saved project work is preserved.
   void resetStage1ToNewIdea() {
-    final dim = projectDimension;
+    final mode = unrealArchitectureMode;
     _clearStage1TransientState();
     if (projectReleases.isNotEmpty) {
       createNewProject();
-      _userPinnedDimension = false;
-      _conceptDraft = ProjectConceptBlueprint(dimension: dim);
+      _userPinnedMode = false;
+      _conceptDraft = ProjectConceptBlueprint(architectureMode: mode);
       notifyListeners();
       return;
     }
@@ -389,8 +401,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _expandedEpicIds.clear();
     _resetProgressiveDraftState();
     _executionLog.clear();
-    _userPinnedDimension = false;
-    _conceptDraft = ProjectConceptBlueprint(dimension: dim);
+    _userPinnedMode = false;
+    _conceptDraft = ProjectConceptBlueprint(architectureMode: mode);
     _showingSparkPicker = true;
     _offlineErrorMessage = null;
     _currentStage = WorkbenchStage.projectPitch;

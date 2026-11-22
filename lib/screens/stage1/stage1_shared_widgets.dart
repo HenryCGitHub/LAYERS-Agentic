@@ -3,14 +3,14 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/epic_spec.dart';
 import '../../theme/app_theme.dart';
 
-class GodotDimensionToggle extends StatelessWidget {
-  final GodotProjectDimension dimension;
+class UnrealArchitectureToggle extends StatelessWidget {
+  final UnrealArchitectureMode mode;
   final bool isDark;
-  final ValueChanged<GodotProjectDimension>? onChanged;
+  final ValueChanged<UnrealArchitectureMode>? onChanged;
 
-  const GodotDimensionToggle({
+  const UnrealArchitectureToggle({
     super.key,
-    required this.dimension,
+    required this.mode,
     required this.isDark,
     required this.onChanged,
   });
@@ -23,9 +23,9 @@ class GodotDimensionToggle extends StatelessWidget {
 
     Widget buildOption({
       required Key key,
-      required GodotProjectDimension target,
+      required UnrealArchitectureMode target,
     }) {
-      final selected = dimension == target;
+      final selected = mode == target;
       return InkWell(
         key: key,
         onTap: onChanged == null ? null : () => onChanged!(target),
@@ -52,7 +52,7 @@ class GodotDimensionToggle extends StatelessWidget {
     }
 
     return Container(
-      key: const ValueKey('stage1_dimension_toggle'),
+      key: const ValueKey('stage1_architecture_toggle'),
       padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
         color: AppTheme.bgSurfaceFor(isDark),
@@ -63,13 +63,13 @@ class GodotDimensionToggle extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           buildOption(
-            key: const ValueKey('stage1_dim_3d'),
-            target: GodotProjectDimension.dim3d,
+            key: const ValueKey('stage1_mode_blueprint'),
+            target: UnrealArchitectureMode.blueprint,
           ),
           const SizedBox(width: 2),
           buildOption(
-            key: const ValueKey('stage1_dim_2d'),
-            target: GodotProjectDimension.dim2d,
+            key: const ValueKey('stage1_mode_cpp_hybrid'),
+            target: UnrealArchitectureMode.cppHybrid,
           ),
         ],
       ),
@@ -236,8 +236,8 @@ class Stage1EmptyBlueprintOutline extends StatelessWidget {
         ),
         (
           '§02',
-          'Global Godot 4 Scale & Architecture (3D m | 2D px)',
-          'Camera framing fork (3D SpringArm3D or 2D Camera2D), scale, and InputMap actions.',
+          'Unreal Engine 5 Scale & Architecture',
+          'Camera framing fork (USpringArmComponent / UCameraComponent), player scale, and Enhanced Input actions.',
         ),
         (
           '§03',
