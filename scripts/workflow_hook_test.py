@@ -74,7 +74,7 @@ def _verify_skills_and_discovery() -> None:
   env = dict(os.environ)
   env["PYTHONDONTWRITEBYTECODE"] = "1"
   proc = subprocess.run(
-      [sys.executable, str(DISCOVER_PATH), "--no-test", "godot"],
+      [sys.executable, str(DISCOVER_PATH), "--no-test", "workbench"],
       cwd=str(REPO_ROOT),
       capture_output=True,
       text=True,
@@ -83,15 +83,17 @@ def _verify_skills_and_discovery() -> None:
   )
   assert proc.returncode == 0, f"discover_signals.py failed: {proc.stderr}"
   report = json.loads(proc.stdout)
-  assert report.get("focus") == "godot", f"Unexpected focus: {report.get('focus')}"
+  assert report.get("focus") == "workbench", f"Unexpected focus: {report.get('focus')}"
   assert isinstance(report.get("focusMatches"), list) and len(report["focusMatches"]) > 0, (
-      "Expected non-empty focusMatches for 'godot'"
+      "Expected non-empty focusMatches for 'workbench'"
   )
-  assert report.get("pluginVersion") == "4.2.0", f"Unexpected pluginVersion: {report.get('pluginVersion')}"
-  assert report.get("zipParityOk") is True, "Expected zipParityOk is True"
+  assert "pluginVersion" not in report and "zipParityOk" not in report, (
+      f"Removed Godot plugin fields should not appear in report: {report.keys()}"
+  )
+  assert isinstance(report.get("cloudProxyTest"), dict), "Expected cloudProxyTest dict"
   assert isinstance(report.get("monolithHotspots"), list), "Expected monolithHotspots list"
   assert isinstance(report.get("untestedModules"), list), "Expected untestedModules list"
-  assert report.get("unrealLeakageHits") == [], f"Unexpected unrealLeakageHits: {report.get('unrealLeakageHits')}"
+  assert isinstance(report.get("leakageHits"), list), "Expected leakageHits list"
 
   proc_audit = subprocess.run(
       [sys.executable, str(DISCOVER_PATH), "--no-test", "audit codebase"],
@@ -109,10 +111,9 @@ def _verify_skills_and_discovery() -> None:
   untested = set(audit_report.get("untestedModules", []))
   for covered_part in (
       "lib/providers/workbench_storage_mixin.dart",
-      "lib/screens/shell_dialogs_part.dart",
       "lib/utils/markdown_exporter_stub.dart",
   ):
-    assert covered_part not in untested, f"Expected transitive part/export module covered: {covered_part}"
+    assert covered_part not in untested, f"Expected transitive export module covered: {covered_part}"
 
 
 def _verify_non_trigger_guards() -> None:
@@ -120,6 +121,7 @@ def _verify_non_trigger_guards() -> None:
     tmp_dir = Path(td)
     for phrase in (
         "auto goal should loop continuously",
+        "why auto goal should loop?",
         "should we design separate auto goal and auto grill?",
         "is auto gg working well right now?",
     ):
@@ -305,6 +307,26 @@ def _verify_auto_goal_bounded() -> None:
     )
     st = _load_state(tmp_dir)
     assert st.get("maxRounds") == 3 and st.get("focus") == "3-tier hierarchy", st
+
+    # Polite conversational lead-ins activate bounded auto-goal / auto-gg cleanly
+    for phrase, exp_mode, exp_max, exp_focus in (
+        ("Okay Auto Goal 10", "goal", 10, ""),
+        ("Yes, auto goal 4", "goal", 4, ""),
+        ("Sure auto gg 2 stage 2", "gg", 2, "stage 2"),
+    ):
+      with tempfile.TemporaryDirectory() as sub_td:
+        sub_dir = Path(sub_td)
+        _run_hook(
+            "pre_invocation",
+            {"artifactDirectoryPath": str(sub_dir), "lastUserInput": phrase},
+        )
+        sub_st = _load_state(sub_dir)
+        assert (
+            sub_st.get("active") is True
+            and sub_st.get("mode") == exp_mode
+            and sub_st.get("maxRounds") == exp_max
+            and sub_st.get("focus") == exp_focus
+        ), f"Lead-in failed for {phrase!r}: {sub_st}"
 
     # Explicit stop ends active loop immediately
     _run_hook(

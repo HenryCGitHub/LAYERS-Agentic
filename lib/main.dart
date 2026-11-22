@@ -8,7 +8,6 @@ import 'screens/project_pitch_screen.dart';
 import 'screens/release_workbench_screen.dart';
 import 'screens/shell/studio_top_bar.dart';
 import 'screens/shell/team_invites_dialog.dart';
-import 'screens/widgets/godot_bridge_modals.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -161,8 +160,6 @@ class WorkbenchShell extends StatelessWidget {
           ),
           if (workbench.hasPendingInviteLanding)
             InviteAcceptanceOverlay(workbench: workbench),
-          if (workbench.hasPendingGodotAuth)
-            GodotAuthHandoffOverlay(workbench: workbench),
         ],
       ),
     );

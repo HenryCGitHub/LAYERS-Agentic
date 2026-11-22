@@ -6,10 +6,7 @@ import 'firestore_vault_service.dart';
 import 'project_archive_codec.dart';
 
 int docEffectiveTimestampMs(TierDocument doc) {
-  final codeTs = int.tryParse(doc.sections['updated_at_ms'] ?? '') ?? 0;
-  final godotSyncTs =
-      int.tryParse(doc.sections['last_godot_sync_ms'] ?? '') ?? 0;
-  return codeTs > godotSyncTs ? codeTs : godotSyncTs;
+  return int.tryParse(doc.sections['updated_at_ms'] ?? '') ?? 0;
 }
 
 int _countCompletedSubtasksRecursive(List<Subtask> tasks) {
@@ -103,14 +100,6 @@ bool shouldPreferRemoteDocumentOnSync(
     return remoteDoc.childrenIds.length > localDoc.childrenIds.length;
   }
 
-  final remoteGodotCtx =
-      (remoteDoc.sections['godot_live_context_json'] ?? '').trim();
-  final localGodotCtx =
-      (localDoc.sections['godot_live_context_json'] ?? '').trim();
-  if (remoteGodotCtx.isNotEmpty && localGodotCtx.isEmpty) {
-    return true;
-  }
-
   return false;
 }
 
@@ -172,42 +161,12 @@ class CloudInviteDeepLinkService {
     );
   }
 
-  /// Parses Web Studio URL deep-link and Godot 4 OAuth loopback query parameters.
+  /// Parses Web Studio URL deep-link query parameters (`?project=<id>&epic=<id>&feature=<id>`).
   static ({
-    bool hasGodotAuth,
-    int? godotPort,
-    String? godotState,
-    String? godotProjectName,
     String? projectId,
     String? epicId,
     String? featureId,
   }) parseDeepLinkQuery(Map<String, String> queryParams) {
-    bool hasGodotAuth = false;
-    int? godotPort;
-    String? godotState;
-    String? godotProjectName;
-
-    final godotAuthFlag =
-        (queryParams['godot_auth'] ?? '').trim().toLowerCase();
-    if (godotAuthFlag == '1' || godotAuthFlag == 'true') {
-      final port = int.tryParse((queryParams['port'] ?? '').trim());
-      final state = (queryParams['state'] ?? '').trim();
-      final projectNameRaw = (queryParams['project_name'] ?? '').trim();
-      if (port != null &&
-          port >= 1024 &&
-          port <= 65535 &&
-          RegExp(r'^[A-Za-z0-9_\-]{8,128}$').hasMatch(state)) {
-        hasGodotAuth = true;
-        godotPort = port;
-        godotState = state;
-        godotProjectName = projectNameRaw.isEmpty
-            ? null
-            : (projectNameRaw.length > 120
-                ? projectNameRaw.substring(0, 120)
-                : projectNameRaw);
-      }
-    }
-
     final projParam = (queryParams['project'] ?? '').trim();
     final rawEpicParam = (queryParams['epic'] ?? '').trim();
     final rawFeatureParam = (queryParams['feature'] ?? '').trim();
@@ -216,10 +175,6 @@ class CloudInviteDeepLinkService {
         rawEpicParam.isNotEmpty ? rawFeatureParam : '';
 
     return (
-      hasGodotAuth: hasGodotAuth,
-      godotPort: godotPort,
-      godotState: godotState,
-      godotProjectName: godotProjectName,
       projectId: projParam.isNotEmpty ? projParam : null,
       epicId: epicParam.isNotEmpty ? epicParam : null,
       featureId: explicitFeatureParam.isNotEmpty ? explicitFeatureParam : null,

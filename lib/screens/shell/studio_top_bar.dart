@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
-import '../widgets/godot_bridge_modals.dart';
 import 'cloud_ai_settings_dialog.dart';
 import 'project_manage_dialogs.dart';
 import 'studio_export_actions.dart';
@@ -478,79 +477,6 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (draft != null) ...[
-                      Builder(
-                        builder: (ctx) {
-                          final isNarrowTopBar =
-                              MediaQuery.sizeOf(ctx).width < 1040;
-                          final isGodotSynced =
-                              workbench.isActiveProjectSyncedWithGodot;
-                          return Tooltip(
-                            message: isGodotSynced
-                                ? 'Godot 4 Plugin (${workbench.formatGodotSyncStatusLabel()})'
-                                : 'Connect Godot 4 Editor Plugin (addons/layers + Token)',
-                            child: InkWell(
-                              key: const ValueKey(
-                                'top_bar_connect_godot_btn',
-                              ),
-                              borderRadius: BorderRadius.circular(5),
-                              onTap: () => showConnectGodotPluginDialog(
-                                context,
-                                workbench,
-                              ),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: isNarrowTopBar ? 6 : 8,
-                                  vertical: 3.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: bgSurface,
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: (isGodotSynced
-                                            ? const Color(0xFF10B981)
-                                            : const Color(0xFF38BDF8))
-                                        .withValues(
-                                      alpha: isGodotSynced ? 0.55 : 0.4,
-                                    ),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    if (isGodotSynced) ...[
-                                      Container(
-                                        key: const ValueKey(
-                                          'top_bar_godot_live_sync_dot',
-                                        ),
-                                        width: 6,
-                                        height: 6,
-                                        decoration: const BoxDecoration(
-                                          color: Color(0xFF10B981),
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 5),
-                                    ],
-                                    Text(
-                                      isNarrowTopBar
-                                          ? '🎮'
-                                          : '🎮 Godot 4',
-                                      style: GoogleFonts.jetBrainsMono(
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w600,
-                                        color: isGodotSynced
-                                            ? const Color(0xFF6EE7B7)
-                                            : const Color(0xFF7DD3FC),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                      const SizedBox(width: 4),
                       PopupMenuButton<String>(
                         key: const ValueKey('global_export_spec_btn'),
                         tooltip: 'Export Project Spec or Backup (.md / .layers.json)',
@@ -564,9 +490,7 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                           side: BorderSide(color: borderColor),
                         ),
                         onSelected: (val) {
-                          if (val == 'connect_godot') {
-                            showConnectGodotPluginDialog(context, workbench);
-                          } else if (val == 'spec') {
+                          if (val == 'spec') {
                             exportFullProjectSpec(context, workbench);
                           } else if (val == 'json_export') {
                             exportActiveProjectJson(context, workbench);
@@ -575,13 +499,6 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                           }
                         },
                         itemBuilder: (ctx) => [
-                          _buildExportMenuItem(
-                            value: 'connect_godot',
-                            icon: Icons.extension_rounded,
-                            iconColor: const Color(0xFF38BDF8),
-                            label: 'Connect Godot 4 Editor Plugin',
-                            textColor: textPrimary,
-                          ),
                           _buildExportMenuItem(
                             value: 'spec',
                             icon: Icons.copy_rounded,

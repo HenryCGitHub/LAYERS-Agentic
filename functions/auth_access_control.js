@@ -45,64 +45,9 @@ function createAuthAccessControl({
   FieldValue,
   gmailAppPasswordSecret,
   defaultWebStudioUrl,
-  extractBearerLinkToken,
-  hashLinkToken,
 }) {
   const DEFAULT_WEB_STUDIO_URL = defaultWebStudioUrl;
   const accessCache = new Map();
-
-  async function verifyGodotLinkToken(req) {
-    const rawToken = extractBearerLinkToken(req);
-    if (!rawToken) {
-      return {
-        errorStatus: 401,
-        errorMessage: "Missing or invalid Godot Project Link Token (lyr_...).",
-      };
-    }
-    const tokenHash = hashLinkToken(rawToken);
-    const snap = await getFirestore()
-      .collection("godot_links")
-      .where("tokenHash", "==", tokenHash)
-      .limit(1)
-      .get();
-    if (snap.empty) {
-      return {
-        errorStatus: 401,
-        errorMessage: "Invalid or expired Godot Project Link Token.",
-      };
-    }
-    const linkDoc = snap.docs[0];
-    const data = linkDoc.data() || {};
-    if (data.revoked === true || !data.uid || !data.projectId) {
-      return {
-        errorStatus: 401,
-        errorMessage: "This Godot Project Link Token has been revoked.",
-      };
-    }
-    const email = String(data.email || "").trim().toLowerCase();
-    if (!email) {
-      return {
-        errorStatus: 403,
-        errorMessage: "Linked account email is missing.",
-      };
-    }
-    if (!isAdminEmail(email)) {
-      const status = await getAccessStatusFromDb(email);
-      if (status !== "approved") {
-        return {
-          errorStatus: 403,
-          errorMessage: `Invite approval required for ${email}.`,
-        };
-      }
-    }
-    return {
-      uid: String(data.uid),
-      email,
-      projectId: String(data.projectId),
-      webStudioUrl: String(data.webStudioUrl || DEFAULT_WEB_STUDIO_URL),
-      linkRef: linkDoc.ref,
-    };
-  }
 
   function setCachedStatus(email, status) {
     accessCache.set(email, {
@@ -465,7 +410,6 @@ function createAuthAccessControl({
   }
 
   return {
-    verifyGodotLinkToken,
     getAccessStatusFromDb,
     verifyCallerToken,
     handleInviteAdminRoutes,

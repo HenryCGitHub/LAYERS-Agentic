@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""PreToolUse hook blocking writes to external user Godot game files."""
+"""PreToolUse hook blocking writes to external user game project directories."""
 
 import json
 import os
-from pathlib import Path
 import sys
 
 sys.dont_write_bytecode = True
 
-EXTERNAL_GODOT_ROOT = "/Users/henry/Godot/Projects/"
+EXTERNAL_GAME_PROJECT_ROOTS = (
+    "/Users/henry/Documents/Unreal Projects/",
+    "/Users/henry/Unreal/",
+    "/Users/henry/Godot/Projects/",
+)
 
 
 def _extract_target_path(args: dict) -> str:
@@ -35,15 +38,13 @@ def main() -> int:
   args = tool_call.get("args") if isinstance(tool_call, dict) else {}
   target_path = _extract_target_path(args if isinstance(args, dict) else {})
 
-  if target_path.startswith(EXTERNAL_GODOT_ROOT) and "/addons/layers/" not in f"{target_path}/":
+  if any(target_path.startswith(root) for root in EXTERNAL_GAME_PROJECT_ROOTS):
     print(
         json.dumps({
             "decision": "deny",
             "reason": (
-                "External user Godot project game files under "
-                "/Users/henry/Godot/Projects/ are read-only. "
-                "Fix LAYERS plugin/agent code instead "
-                "(syncing addons/layers/ is allowed)."
+                "External user game project files are read-only. "
+                "Modify LAYERS-Agentic workspace files instead."
             ),
         })
     )

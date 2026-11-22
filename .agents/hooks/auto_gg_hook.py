@@ -28,7 +28,7 @@ SLASH_TRIGGER_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 BARE_TRIGGER_RE = re.compile(
-    r"^\s*auto[\s_-]*(gg|goal|grill)\b(?:\s+(\S+))?(.*)$",
+    r"^\s*(?:(?:okay|ok|yes|yeah|yep|sure|alright|please|let['’]?s|lets)[\s,!:.-]+)*auto[\s_-]*(gg|goal|grill)\b(?:\s+(\S+))?(.*)$",
     re.IGNORECASE | re.DOTALL,
 )
 ACTION_TRIGGER_RE = re.compile(

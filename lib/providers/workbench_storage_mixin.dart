@@ -17,7 +17,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       _isCloudSynced = false;
       _myAiAccessStatus = null;
       _aiAccessRecords = const [];
-      clearCachedGodotLinkTokens();
       _firestoreService.stopRealtimeSync();
       notifyListeners();
       return;
@@ -421,25 +420,14 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _autoSyncDebounceTimer?.cancel();
     _deferredRemoteSnapshot = null;
     _pendingCloudWriteDocIds.clear();
-    clearCachedGodotLinkTokens();
     await _authService.signOut();
     notifyListeners();
   }
 
-  /// Applies Web Studio URL deep-link query params (`?project=<id>&epic=<id>`)
-  /// and Godot 4 Dock Google Sign-In browser handoff params (`?godot_auth=1&port=<port>&state=<nonce>&project_name=<Name>`).
+  /// Applies Web Studio URL deep-link query params (`?project=<id>&epic=<id>`).
   void applyDeepLinkParams(Map<String, String> queryParams) {
     final parsed = CloudInviteDeepLinkService.parseDeepLinkQuery(queryParams);
     bool didUpdate = false;
-    if (parsed.hasGodotAuth) {
-      _pendingGodotAuthPort = parsed.godotPort;
-      _pendingGodotAuthState = parsed.godotState;
-      _pendingGodotProjectName = parsed.godotProjectName;
-      _godotAuthSelectedProjectId = null;
-      _godotAuthMinimized = false;
-      _godotAuthError = null;
-      didUpdate = true;
-    }
 
     if (parsed.projectId != null) {
       _pendingUrlProjectId = parsed.projectId;
@@ -729,7 +717,6 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final idsToRemove = _collectProjectDocumentTreeIds(projectId);
     if (idsToRemove.isEmpty) return;
 
-    _cachedGodotLinkTokensByProjectId.remove(projectId);
     _projectCollaborators.remove(projectId);
     final user = _authService.currentUser;
     for (final id in idsToRemove) {

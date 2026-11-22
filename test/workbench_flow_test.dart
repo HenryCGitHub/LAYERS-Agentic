@@ -12,7 +12,6 @@ import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
-import 'package:layers_agentic/screens/widgets/godot_bridge_modals.dart';
 import 'package:layers_agentic/services/firestore_vault_service.dart';
 import 'package:layers_agentic/services/local_vault_service.dart';
 import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
@@ -471,7 +470,7 @@ void main() {
     );
 
     test(
-      'Deep-link (?project=&epic=) and shouldPreferRemoteDocumentOnSync (last_godot_sync_ms & Playtest checks)',
+      'Deep-link (?project=&epic=) and shouldPreferRemoteDocumentOnSync (updated_at_ms & Playtest checks)',
       () {
         final wb = WorkbenchProvider(enableAutoLoad: false);
         wb.loadPresetSpark('shellbreaker');
@@ -495,7 +494,7 @@ void main() {
         expect(wb.selectedEpicId, equals(targetE02.id));
         expect(wb.currentStage, equals(WorkbenchStage.releaseWorkbench));
 
-        // Cloud merge conflict test: newer `last_godot_sync_ms` wins
+        // Cloud merge conflict test: newer `updated_at_ms` wins
         final localEpic = wb.documents[targetE02.id]!.copyWith(
           sections: {
             ...wb.documents[targetE02.id]!.sections,
@@ -505,8 +504,7 @@ void main() {
         final remoteEpic = wb.documents[targetE02.id]!.copyWith(
           sections: {
             ...wb.documents[targetE02.id]!.sections,
-            'updated_at_ms': '1000',
-            'last_godot_sync_ms': '5000',
+            'updated_at_ms': '5000',
           },
         );
         expect(shouldPreferRemoteDocumentOnSync(localEpic, remoteEpic), isTrue);
@@ -516,46 +514,28 @@ void main() {
           isCompleted: true,
           sections: {
             ...remoteEpic.sections,
-            'last_godot_sync_ms': '1000',
+            'updated_at_ms': '1000',
           },
         );
         final tiedLocal = localEpic.copyWith(
           isCompleted: false,
           sections: {
             ...localEpic.sections,
-            'last_godot_sync_ms': '1000',
+            'updated_at_ms': '1000',
           },
         );
         expect(shouldPreferRemoteDocumentOnSync(tiedLocal, tiedRemote), isTrue);
 
-        // Equal timestamps: Godot `[FIX]` log beats 0-fix local doc; live snapshot beats empty Project doc
+        // Equal timestamps: `[FIX]` log beats 0-fix local doc
         final fixSpec = EpicSpec.fromDocument(tiedLocal)
           ..fixes.add(EpicPieFix(id: 'fx_live', text: 'Dash clips stair ramp'));
         final remoteWithFix = fixSpec.applyToDocument(tiedLocal).copyWith(
           sections: {
             ...fixSpec.applyToDocument(tiedLocal).sections,
             'updated_at_ms': '1000',
-            'last_godot_sync_ms': '1000',
           },
         );
         expect(shouldPreferRemoteDocumentOnSync(tiedLocal, remoteWithFix), isTrue);
-
-        final localProj = wb.documents[p1]!.copyWith(
-          sections: {
-            ...wb.documents[p1]!.sections,
-            'updated_at_ms': '1000',
-          },
-        );
-        final remoteProjWithCtx = localProj.copyWith(
-          sections: {
-            ...localProj.sections,
-            'godot_live_context_json': '{"project_name":"ShellbreakerGodot"}',
-          },
-        );
-        expect(
-          shouldPreferRemoteDocumentOnSync(localProj, remoteProjWithCtx),
-          isTrue,
-        );
 
         // Real-time snapshot sync refreshes currently open active project & Epic selection
         final e01 = wb.activeReleaseEpics.first;
@@ -576,17 +556,12 @@ void main() {
           sections: {
             ...wb.documents[p1]!.sections,
             'selected_epic_id': targetE02.id,
-            'godot_live_context_json': '{"project_name":"ShellbreakerGodot"}',
           },
         );
 
         expect(wb.applyRemoteDocumentSnapshot(remoteDocs), isTrue);
         expect(wb.selectedEpicId, equals(targetE02.id));
         expect(wb.activeReleaseEpics.first.tuning.first.value, equals('999'));
-        expect(
-          wb.latestLiveGodotContext?['project_name'],
-          equals('ShellbreakerGodot'),
-        );
       },
     );
 
@@ -1319,7 +1294,7 @@ void main() {
         expect(fullExport.content, isNot(contains('## Tasks')));
         expect(fullExport.content, isNot(contains('## Steps')));
 
-        // Global Export menu keeps Godot Dock + Spec + Backup and excludes local-AI prompt items
+        // Global Export menu keeps Spec + Backup and excludes Godot plugin & local-AI prompt items
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
         await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('global_export_spec_btn')));
@@ -1332,7 +1307,7 @@ void main() {
           find.text('Export AI Agent Context (AGENTS.md)'),
           findsNothing,
         );
-        expect(find.text('Connect Godot 4 Editor Plugin'), findsOneWidget);
+        expect(find.text('Connect Godot 4 Editor Plugin'), findsNothing);
         expect(find.text('Copy Full Project Spec (.md)'), findsOneWidget);
         expect(find.text('Export Project Vault (.layers.json)'), findsOneWidget);
         expect(find.text('Import Project Backup (.layers.json)'), findsOneWidget);
@@ -1474,7 +1449,6 @@ void main() {
             (DateTime.now().millisecondsSinceEpoch + 60000).toString();
         final queuedRemoteDoc = queuedE01.applyToDocument(wb.documents[e01.id]!);
         queuedRemoteDoc.sections['updated_at_ms'] = futureTs;
-        queuedRemoteDoc.sections['last_godot_sync_ms'] = futureTs;
         final queuedSnap = <String, TierDocument>{
           for (final entry in wb.documents.entries) entry.key: entry.value,
           e01.id: queuedRemoteDoc,
@@ -1515,7 +1489,6 @@ void main() {
           wb.documents[e01.id]!,
         );
         agentRemoteDoc.sections['updated_at_ms'] = laterTs;
-        agentRemoteDoc.sections['last_godot_sync_ms'] = laterTs;
         final agentSnap = <String, TierDocument>{
           for (final entry in wb.documents.entries) entry.key: entry.value,
           e01.id: agentRemoteDoc,
@@ -1550,7 +1523,6 @@ void main() {
         final godotNewerTs =
             (DateTime.now().millisecondsSinceEpoch + 240000).toString();
         remoteWinnerDoc.sections['updated_at_ms'] = godotNewerTs;
-        remoteWinnerDoc.sections['last_godot_sync_ms'] = godotNewerTs;
 
         pushedDocs.clear();
         wb.testCloudDocumentsFetcher = (uid) async => <String, TierDocument>{
@@ -1958,12 +1930,9 @@ void main() {
         );
         expect(relBundle, contains('(v0.1.2)'));
 
-        // ParentId-linked Epic + collaborators + sync metadata in duplicateProject
+        // ParentId-linked Epic + collaborators in duplicateProject
         final v01RelDoc = wb.documents[v01Id]!;
         wb.documents[v01Id] = v01RelDoc.copyWith(childrenIds: const <String>[]);
-        wb.activeProject!.sections['last_godot_sync_ms'] = '1700000000000';
-        wb.activeProject!.sections['godot_live_context_json'] =
-            jsonEncode({'project_name': 'ShellbreakerGodot'});
         wb.activeProject!.sections['collaborators_json'] = jsonEncode([
           {'email': 'ally@studio.io', 'role': 'editor'},
         ]);
@@ -1976,15 +1945,11 @@ void main() {
         final exported = wb.exportProjectToJson();
         final dupId = wb.duplicateProject(wb.activeProjectId!)!;
         expect(wb.epicsForRelease(wb.projectReleases.first.id), isNotEmpty);
-        expect(wb.isActiveProjectSyncedWithGodot, isFalse);
-        expect(wb.latestLiveGodotContext, isNull);
         expect(wb.collaboratorsForProject(dupId), isEmpty);
 
-        // Fresh-vault import strips stale sync/live/collaborator fields & rejects rootless bundles
+        // Fresh-vault import strips collaborator fields & rejects rootless bundles
         final freshWb = WorkbenchProvider(enableAutoLoad: false);
         final impId = freshWb.importProjectFromJson(exported)!;
-        expect(freshWb.isActiveProjectSyncedWithGodot, isFalse);
-        expect(freshWb.latestLiveGodotContext, isNull);
         expect(freshWb.collaboratorsForProject(impId), isEmpty);
 
         expect(
@@ -2001,7 +1966,7 @@ void main() {
     );
 
     testWidgets(
-      'Connect Godot modal deduplicates token fetch, supports 1-click Retry & dynamic Feature code, and Cloud Vault delete requires confirmation',
+      'Cloud Vault project delete requires confirmation dialog',
       (tester) async {
         tester.view.physicalSize = const Size(1400, 900);
         tester.view.devicePixelRatio = 1.0;
@@ -2010,89 +1975,11 @@ void main() {
           tester.view.resetDevicePixelRatio();
         });
 
-        final prevHttp = GeminiAgentClient.testHttpPost;
-        final prevAuth = GeminiAgentClient.authTokenProvider;
-        addTearDown(() {
-          GeminiAgentClient.testHttpPost = prevHttp;
-          GeminiAgentClient.authTokenProvider = prevAuth;
-        });
-
         final wb = WorkbenchProvider(enableAutoLoad: false);
         wb.loadPresetSpark('shellbreaker');
         wb.approveRootSpecAndLaunchWorkbench();
-        final e01 = wb.activeReleaseEpics.first;
-        final f02 = e01.features.firstWhere((f) => f.code == 'F02');
-        wb.selectFeature(e01.id, f02.id);
-
-        final firstTokenAttempt = Completer<http.Response>();
-        int tokenCalls = 0;
-        GeminiAgentClient.authTokenProvider =
-            ({bool forceRefresh = false}) async => 'fake-id-token';
-        GeminiAgentClient.testHttpPost = (uri, {headers, body}) {
-          if (uri.path.endsWith('/godotLink/token')) {
-            tokenCalls++;
-            if (tokenCalls == 1) {
-              return firstTokenAttempt.future;
-            }
-            return Future<http.Response>.value(
-              http.Response(
-                jsonEncode({
-                  'ok': true,
-                  'projectId': wb.activeProjectId,
-                  'linkToken': 'lyr_recovered_token_1234',
-                }),
-                200,
-              ),
-            );
-          }
-          return Future<http.Response>.value(
-            http.Response('{"error":{"message":"Not found"}}', 404),
-          );
-        };
 
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
-        await tester.pumpAndSettle();
-
-        unawaited(
-          showConnectGodotPluginDialog(
-            tester.element(find.byType(Scaffold).first),
-            wb,
-          ),
-        );
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 20));
-        expect(tokenCalls, equals(1));
-
-        // Rebuilding while in flight must not spawn duplicate /godotLink/token calls
-        wb.toggleTheme();
-        await tester.pump();
-        wb.toggleTheme();
-        await tester.pump();
-        expect(tokenCalls, equals(1));
-
-        firstTokenAttempt.complete(
-          http.Response(
-            jsonEncode({
-              'error': {'message': 'Temporary token outage'},
-            }),
-            403,
-          ),
-        );
-        await tester.pumpAndSettle();
-
-        expect(find.text('Temporary token outage'), findsOneWidget);
-        expect(find.textContaining('Build F02'), findsAtLeastNWidgets(1));
-        expect(
-          find.byKey(const ValueKey('retry_godot_token_btn')),
-          findsOneWidget,
-        );
-
-        await tester.tap(find.byKey(const ValueKey('retry_godot_token_btn')));
-        await tester.pumpAndSettle();
-        expect(tokenCalls, equals(2));
-        expect(find.text('lyr_recovered_token_1234'), findsOneWidget);
-
-        Navigator.of(tester.element(find.byType(Dialog))).pop();
         await tester.pumpAndSettle();
 
         // Cloud Vault project delete requires confirmation dialog

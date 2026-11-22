@@ -17,9 +17,7 @@ WATCHED_PREFIXES = (
     "lib/",
     "test/",
     "functions/",
-    "godot_plugin/",
     "scripts/",
-    "web/layers_godot_plugin.zip",
     "pubspec.yaml",
 )
 

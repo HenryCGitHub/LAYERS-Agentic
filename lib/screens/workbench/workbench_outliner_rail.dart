@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/epic_spec.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
-import '../widgets/godot_bridge_modals.dart';
 import 'progressive_release_modal.dart';
 import 'workbench_shared_widgets.dart';
 
@@ -323,27 +322,6 @@ class WorkbenchOutlinerRail extends StatelessWidget {
                   ),
                 );
               },
-            ),
-          ),
-
-          // Godot 4 Plugin Setup footer
-          Divider(height: 1, color: border),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: OutlinedButton.icon(
-              onPressed: () => showConnectGodotPluginDialog(context, wb),
-              icon: Icon(
-                Icons.cable,
-                size: 14,
-                color: wb.isActiveProjectSyncedWithGodot ? green : cyan,
-              ),
-              label: Text(
-                wb.isActiveProjectSyncedWithGodot
-                    ? wb.formatGodotSyncStatusLabel()
-                    : 'Godot 4 Plugin Setup',
-                style: const TextStyle(fontSize: 11.5),
-                overflow: TextOverflow.ellipsis,
-              ),
             ),
           ),
         ],

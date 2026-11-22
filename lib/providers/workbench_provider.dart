@@ -88,14 +88,6 @@ class WorkbenchProvider extends ChangeNotifier {
   String? _pendingUrlEpicId;
   String? _pendingUrlFeatureId;
   String? _inviteFeedbackMessage;
-
-  int? _pendingGodotAuthPort;
-  String? _pendingGodotAuthState;
-  String? _pendingGodotProjectName;
-  String? _godotAuthSelectedProjectId;
-  bool _godotAuthMinimized = false;
-  bool _isCompletingGodotAuth = false;
-  String? _godotAuthError;
   bool _userPinnedDimension = false;
 
   String? get pendingUrlInviteToken => _pendingUrlInviteToken;
@@ -208,7 +200,6 @@ class WorkbenchProvider extends ChangeNotifier {
   Map<String, TierDocument>? _deferredRemoteSnapshot;
   String? _unpersistedNewProjectId;
   final List<String> _executionLog = <String>[];
-  final Map<String, String> _cachedGodotLinkTokensByProjectId = {};
 
   String? _activeProjectId;
   String? get activeProjectId => _activeProjectId;
@@ -284,14 +275,6 @@ class WorkbenchProvider extends ChangeNotifier {
   String? get agentProgressStep => _agentProgressStep;
 
   Timer? _autoSyncDebounceTimer;
-
-  String? get cachedGodotLinkTokenForActiveProject => _activeProjectId != null
-      ? _cachedGodotLinkTokensByProjectId[_activeProjectId!]
-      : null;
-
-  void clearCachedGodotLinkTokens() {
-    _cachedGodotLinkTokensByProjectId.clear();
-  }
 
   void scheduleDebouncedAutoSync() {
     _autoSyncDebounceTimer?.cancel();
@@ -516,7 +499,7 @@ class WorkbenchProvider extends ChangeNotifier {
   String activeFeatureBuildPrompt(EpicSpec epic, FeatureSpec feature) {
     final spec = _conceptDraft ??
         ProjectConceptBlueprint(
-          gameTitle: activeProject?.title ?? 'GODOT PROJECT',
+          gameTitle: activeProject?.title ?? 'LAYERS PROJECT',
         );
     return GodotContextBuilder.buildFeatureContext(
       rootSpec: spec,
@@ -524,21 +507,19 @@ class WorkbenchProvider extends ChangeNotifier {
       feature: feature,
       releaseVersion: activeReleaseVersionTag,
       releaseOrder: projectReleaseOrder,
-      liveGodotContext: latestLiveGodotContext,
     );
   }
 
   String activeEpicArchitecturePrompt(EpicSpec epic) {
     final spec = _conceptDraft ??
         ProjectConceptBlueprint(
-          gameTitle: activeProject?.title ?? 'GODOT PROJECT',
+          gameTitle: activeProject?.title ?? 'LAYERS PROJECT',
         );
     return GodotContextBuilder.buildEpicArchitectureContext(
       rootSpec: spec,
       epic: epic,
       releaseVersion: activeReleaseVersionTag,
       releaseOrder: projectReleaseOrder,
-      liveGodotContext: latestLiveGodotContext,
     );
   }
 

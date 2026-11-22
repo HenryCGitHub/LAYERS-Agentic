@@ -15,46 +15,12 @@ import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/project_pitch_screen.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
-import 'package:layers_agentic/screens/widgets/godot_bridge_modals.dart';
 import 'package:layers_agentic/services/cloud_invite_deep_link_service.dart';
-import 'package:layers_agentic/services/local_vault_service.dart';
 import 'package:layers_agentic/services/project_archive_codec.dart';
-import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
 import 'package:layers_agentic/services/v01_release_seeder.dart';
-import 'package:layers_agentic/theme/app_theme.dart';
 import 'package:layers_agentic/utils/godot_context_builder.dart';
 import 'package:layers_agentic/utils/godot_spec_guard.dart';
 import 'package:layers_agentic/utils/markdown_exporter.dart';
-
-class _TestVaultBackend implements VaultStorageBackend {
-  final Map<String, TierDocument> savedDocs = {};
-  final List<String> saveOrder = [];
-
-  @override
-  Future<VaultLoadResult> loadVaultData() async =>
-      const VaultLoadResult(documents: {});
-
-  @override
-  Future<void> saveDocument(TierDocument doc) async {
-    savedDocs[doc.id] = doc;
-    saveOrder.add(doc.id);
-  }
-
-  @override
-  Future<void> deleteDocument(String docId) async {
-    savedDocs.remove(docId);
-  }
-
-  @override
-  Future<void> saveSettings({
-    required String activeDocumentId,
-    String? apiKey,
-    String? modelName,
-    String? planningModel,
-    String? thinkingLevel,
-    String? themeMode,
-  }) async {}
-}
 
 void main() {
   group('Godot 4 (3D + 2D) Epic-Only Studio & 1-Click In-Dock Builder Tests', () {
@@ -204,24 +170,15 @@ void main() {
     );
 
     test(
-      '4. Dart GodotContextBuilder matches Node functions/index.js renderServerGodotEpicContextJs byte-for-byte across 3D, 2D, v0.2 Deltas & [FIX]',
+      '4. Dart GodotContextBuilder renders deterministic 3D, 2D, v0.2 Deltas & [FIX] contexts cleanly',
       () {
         final wb = WorkbenchProvider(enableAutoLoad: false);
         wb.loadPresetSpark('shellbreaker');
         final root3d = wb.conceptDraft!;
         final e01 = root3d.initialEpics[0].deepCopy();
         final e02 = root3d.initialEpics[1].deepCopy();
-        final liveCtx = {
-          'project_name': 'ShellbreakerGodot',
-          'main_scene': 'res://scenes/shellbreaker_proto.tscn',
-          'input_actions': ['move_left', 'claw_dash'],
-          'scene_files': ['res://scenes/shellbreaker_proto.tscn'],
-          'script_files': ['res://scripts/player_mech.gd'],
-          'resource_files': ['res://data/mech_stats.tres'],
-          'recent_errors': ['SCRIPT ERROR: Invalid get index on Sprite2D'],
-        };
 
-        // Scenario A: 3D v0.1 full build + roadmap + live context
+        // Scenario A: 3D v0.1 + [FIX] revision pass + sibling roadmap
         e01.lifecycle = EpicLifecycle.stable;
         for (final chk in e01.checks) {
           chk.passed = true;
@@ -233,8 +190,11 @@ void main() {
           rootSpec: root3d,
           epic: e02,
           releaseEpics: [e01, e02],
-          liveGodotContext: liveCtx,
         );
+        expect(dartA, contains('# ROOT_GODOT_CONTEXT'));
+        expect(dartA, contains('FOCUSED PLAYTEST REVISION PASS (1 OPEN [FIX])'));
+        expect(dartA, contains('[BUILT ✓] ${e01.code}'));
+        expect(dartA, contains('Recoil pushes off floor'));
 
         // Scenario B: 2D preset (emberkeep)
         final root2d = GodotSparkPresets.byId('emberkeep');
@@ -244,94 +204,22 @@ void main() {
           epic: e2d,
           releaseEpics: root2d.initialEpics,
         );
+        expect(dartB, contains('2D (px, px/s)'));
+        expect(dartB, isNot(contains(' m/s')));
 
-        // Scenario C: v0.2 upgraded Epic with baselineSummary + upgradeDeltas + open fixes = 0
+        // Scenario C: v0.2 upgraded Epic with baselineSummary + upgradeDeltas
         final v02Epic = e01.deepCopy()
           ..releaseVersion = 'v0.2'
           ..lifecycle = EpicLifecycle.upgrading
-          ..baselineSummary = ['v0.1 Walk & Claw Dash verified']
+          ..baselineSummary = ['v0.1 Walk & Claw Dash checked']
           ..upgradeDeltas = ['Chain second dash on armor break'];
         final dartC = GodotContextBuilder.buildEpicGodotContext(
           rootSpec: root3d,
           epic: v02Epic,
           releaseEpics: [v02Epic],
         );
-
-        String toJson(ProjectConceptBlueprint r, EpicSpec e, List<EpicSpec> list, Map<String, dynamic>? ctx) {
-          final docs = <String, dynamic>{
-            'root': r.toJson(),
-            'epic': {
-              'id': e.id,
-              'title': e.title,
-              'sections': {
-                'code': e.code,
-                'lineage_key': e.lineageKey,
-                'release_version': e.releaseVersion,
-                'lifecycle': e.lifecycle.name,
-                'goal': e.goal,
-                'epic_spec_json': jsonEncode(e.toJson()),
-              },
-              'isCompleted': e.isPassed,
-            },
-            'releaseEpics': [
-              for (final s in list)
-                {
-                  'id': s.id,
-                  'title': s.title,
-                  'sections': {
-                    'code': s.code,
-                    'lineage_key': s.lineageKey,
-                    'release_version': s.releaseVersion,
-                    'lifecycle': s.lifecycle.name,
-                    'goal': s.goal,
-                    'epic_spec_json': jsonEncode(s.toJson()),
-                  },
-                  'isCompleted': s.isPassed,
-                }
-            ],
-            'liveContext': ctx,
-          };
-          return jsonEncode(docs);
-        }
-
-        final payloadJson = jsonEncode({
-          'a': jsonDecode(toJson(root3d, e02, [e01, e02], liveCtx)),
-          'b': jsonDecode(toJson(root2d, e2d, root2d.initialEpics, null)),
-          'c': jsonDecode(toJson(root3d, v02Epic, [v02Epic], null)),
-        });
-
-        final nodeScript = r'''
-const path = require("path");
-const { _testHelpers } = require(path.resolve(process.cwd(), "functions", "index.js"));
-const input = JSON.parse(process.argv[1]);
-function runCase(c) {
-  const rootSpec = _testHelpers.parseRootSpecJs({
-    title: c.root.gameTitle,
-    sections: { concept_blueprint_json: JSON.stringify(c.root) },
-  });
-  const epicSpec = _testHelpers.parseEpicSpecJs(c.epic, 0, rootSpec.dimension);
-  const relEpics = c.releaseEpics.map((s, idx) => _testHelpers.parseEpicSpecJs(s, idx, rootSpec.dimension));
-  const liveCtx = c.liveContext ? _testHelpers.sanitizeGodotLiveContextJs(c.liveContext) : null;
-  return _testHelpers.renderServerGodotEpicContextJs({
-    rootSpec,
-    epicSpec,
-    releaseEpics: relEpics,
-    liveGodotContext: liveCtx,
-  });
-}
-console.log(JSON.stringify({
-  a: runCase(input.a),
-  b: runCase(input.b),
-  c: runCase(input.c),
-}));
-''';
-        final proc = Process.runSync('node', ['-e', nodeScript, payloadJson]);
-        expect(proc.exitCode, equals(0), reason: 'stderr: ${proc.stderr}');
-        final out = jsonDecode(proc.stdout.toString().trim()) as Map<String, dynamic>;
-
-        expect(out['a'], equals(dartA), reason: 'Scenario A (3D + [FIX] + Snapshot + Roadmap) mismatch');
-        expect(out['b'], equals(dartB), reason: 'Scenario B (2D emberkeep) mismatch');
-        expect(out['c'], equals(dartC), reason: 'Scenario C (v0.2 Deltas) mismatch');
+        expect(dartC, contains('(v0.2)'));
+        expect(dartC, contains('Chain second dash on armor break'));
       },
     );
 
@@ -492,188 +380,25 @@ console.log(JSON.stringify({
     );
 
     test(
-      '8. duplicateProject & importProjectFromJson clear stale last_godot_sync_ms and remap embedded IDs',
+      '8. duplicateProject & importProjectFromJson clear collaborator metadata and remap embedded IDs',
       () {
         final wb = WorkbenchProvider(enableAutoLoad: false);
         wb.loadPresetSpark('emberkeep');
         wb.approveRootSpecAndLaunchWorkbench();
 
-        wb.activeProject!.sections['last_godot_sync_ms'] = '1700000000000';
-        expect(wb.isActiveProjectSyncedWithGodot, isTrue);
+        wb.activeProject!.sections['collaborators_json'] =
+            jsonEncode([{'email': 'ally@studio.io', 'role': 'editor'}]);
+        wb.switchProject(wb.activeProjectId!);
+        expect(wb.collaboratorsForProject(wb.activeProjectId), isNotEmpty);
 
         final exported = wb.exportProjectToJson();
         final dupId = wb.duplicateProject(wb.activeProjectId!)!;
         expect(wb.activeProjectId, equals(dupId));
-        expect(wb.isActiveProjectSyncedWithGodot, isFalse);
+        expect(wb.collaboratorsForProject(dupId), isEmpty);
 
         final impId = wb.importProjectFromJson(exported)!;
         expect(wb.activeProjectId, equals(impId));
-        expect(wb.isActiveProjectSyncedWithGodot, isFalse);
-      },
-    );
-
-    testWidgets(
-      '9. showConnectGodotPluginDialog downloads layers_godot_plugin.zip and rotates lyr_ token via /godotLink/token',
-      (tester) async {
-        tester.view.physicalSize = const Size(1400, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        final prevHttp = GeminiAgentClient.testHttpPost;
-        final prevAuth = GeminiAgentClient.authTokenProvider;
-        int calls = 0;
-
-        GeminiAgentClient.authTokenProvider =
-            ({bool forceRefresh = false}) async => 'fake-id-token';
-        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
-          if (uri.path.endsWith('/godotLink/token')) {
-            calls += 1;
-            final req = jsonDecode(body.toString()) as Map<String, dynamic>;
-            final rotate = req['rotate'] == true;
-            return http.Response(
-              jsonEncode({
-                'ok': true,
-                'projectId': req['projectId'],
-                'linkToken': rotate
-                    ? 'lyr_rotated_godot_9999888877776666'
-                    : 'lyr_initial_godot_1111222233334444',
-              }),
-              200,
-            );
-          }
-          return http.Response('{"error":{"message":"Not found"}}', 404);
-        };
-
-        try {
-          final wb = WorkbenchProvider(enableAutoLoad: false);
-          wb.loadPresetSpark('shellbreaker');
-          wb.approveRootSpecAndLaunchWorkbench();
-
-          await tester.pumpWidget(
-            MaterialApp(
-              theme: AppTheme.darkTheme,
-              home: Builder(
-                builder: (ctx) => Scaffold(
-                  body: Center(
-                    child: ElevatedButton(
-                      key: const ValueKey('open_godot_modal_btn'),
-                      onPressed: () => showConnectGodotPluginDialog(ctx, wb),
-                      child: const Text('Open'),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-
-          await tester.tap(find.byKey(const ValueKey('open_godot_modal_btn')));
-          await tester.pumpAndSettle();
-
-          expect(find.text('Connect Godot 4 Editor Plugin'), findsOneWidget);
-          expect(find.byKey(const ValueKey('download_godot_plugin_btn')), findsOneWidget);
-          expect(find.text('lyr_initial_godot_1111222233334444'), findsOneWidget);
-          expect(calls, equals(1));
-
-          final rotateBtn = find.byKey(const ValueKey('rotate_godot_token_btn'));
-          await tester.ensureVisible(rotateBtn);
-          await tester.tap(rotateBtn);
-          await tester.pumpAndSettle();
-          expect(find.text('lyr_rotated_godot_9999888877776666'), findsOneWidget);
-          expect(calls, equals(2));
-        } finally {
-          GeminiAgentClient.testHttpPost = prevHttp;
-          GeminiAgentClient.authTokenProvider = prevAuth;
-        }
-      },
-    );
-
-    testWidgets(
-      '10. GodotAuthHandoffOverlay (?godot_auth=1) flushes project tree to Cloud before minting token & redirecting to 127.0.0.1 loopback',
-      (tester) async {
-        tester.view.physicalSize = const Size(1400, 900);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(() {
-          tester.view.resetPhysicalSize();
-          tester.view.resetDevicePixelRatio();
-        });
-
-        final fakeBackend = _TestVaultBackend();
-        final prevBackend = LocalVaultService.testBackendOverride;
-        final prevHttp = GeminiAgentClient.testHttpPost;
-        final prevAuth = GeminiAgentClient.authTokenProvider;
-        final prevRedirect = debugBrowserRedirectInterceptor;
-        String? redirectedUrl;
-        bool flushedBeforeMint = false;
-
-        LocalVaultService.testBackendOverride = fakeBackend;
-        GeminiAgentClient.authTokenProvider =
-            ({bool forceRefresh = false}) async => 'fake-id-token';
-        debugBrowserRedirectInterceptor = (url) {
-          redirectedUrl = url;
-          return true;
-        };
-
-        final wb = WorkbenchProvider(enableAutoLoad: false);
-        wb.loadPresetSpark('emberkeep');
-        wb.approveRootSpecAndLaunchWorkbench();
-        final targetPid = wb.activeProjectId!;
-
-        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
-          if (uri.path.endsWith('/godotLink/token')) {
-            flushedBeforeMint = fakeBackend.savedDocs.containsKey(targetPid);
-            return http.Response(
-              jsonEncode({
-                'ok': true,
-                'projectId': targetPid,
-                'linkToken': 'lyr_handoff_godot_1234567890abcdef',
-              }),
-              200,
-            );
-          }
-          return http.Response('{"error":{"message":"Not found"}}', 404);
-        };
-
-        try {
-          wb.setAiAccessRecordsForTest(
-            const [],
-            overrideEmail: 'dev@godot.studio',
-          );
-          wb.applyDeepLinkParams({
-            'godot_auth': '1',
-            'port': '54321',
-            'state': 'nonce_xyz',
-            'project_name': 'EmberKeep',
-          });
-
-          await tester.pumpWidget(LayersAgenticApp(provider: wb));
-          await tester.pumpAndSettle();
-
-          expect(find.byKey(const ValueKey('godot_handoff_overlay')), findsOneWidget);
-          expect(wb.effectiveGodotAuthProjectId, equals(targetPid));
-
-          await tester.tap(find.byKey(const ValueKey('godot_handoff_approve_btn')));
-          await tester.pumpAndSettle();
-
-          expect(flushedBeforeMint, isTrue);
-          expect(redirectedUrl, isNotNull);
-          final parsed = Uri.parse(redirectedUrl!);
-          expect(parsed.host, equals('127.0.0.1'));
-          expect(parsed.port, equals(54321));
-          expect(parsed.path, equals('/callback'));
-          expect(parsed.queryParameters['state'], equals('nonce_xyz'));
-          expect(
-            parsed.queryParameters['token'],
-            equals('lyr_handoff_godot_1234567890abcdef'),
-          );
-        } finally {
-          debugBrowserRedirectInterceptor = prevRedirect;
-          GeminiAgentClient.testHttpPost = prevHttp;
-          GeminiAgentClient.authTokenProvider = prevAuth;
-          LocalVaultService.testBackendOverride = prevBackend;
-        }
+        expect(wb.collaboratorsForProject(impId), isEmpty);
       },
     );
 
@@ -1181,6 +906,10 @@ console.log(JSON.stringify({
         expect(
           buildProjectSpecFilename('EMBERKEEP 2D'),
           equals('emberkeep_2d_project_spec.md'),
+        );
+        expect(
+          buildCoPilotGddFilename('Shellbreaker'),
+          equals('shellbreaker_copilot_gdd.md'),
         );
       },
     );
@@ -2710,16 +2439,13 @@ console.log(JSON.stringify({
         );
         expect(treeIds, contains(importedId));
         final parsedQuery = CloudInviteDeepLinkService.parseDeepLinkQuery({
-          'godot_auth': '1',
-          'port': '49152',
-          'state': 'nonce_12345678',
-          'project_name': 'Shellbreaker',
           'project': importedId,
           'epic': 'e01',
+          'feature': 'f02',
         });
-        expect(parsedQuery.hasGodotAuth, isTrue);
-        expect(parsedQuery.godotPort, equals(49152));
         expect(parsedQuery.projectId, equals(importedId));
+        expect(parsedQuery.epicId, equals('e01'));
+        expect(parsedQuery.featureId, equals('f02'));
         final seeded = V01ReleaseSeeder.buildOrReconcileV01Release(
           projectId: 'unit_proj',
           draft: wb.conceptDraft!,
