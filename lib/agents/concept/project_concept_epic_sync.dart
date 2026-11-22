@@ -86,6 +86,27 @@ String _swapArchitectureRoleOrLink(
   return out;
 }
 
+/// Converts a single [EpicSpec]'s non-map ownership paths, links, and wording
+/// between `Blueprint-First` and `C++ & BP Hybrid` while preserving IDs and `cm` values.
+EpicSpec convertEpicArchitectureModeImpl(
+  EpicSpec source,
+  UnrealArchitectureMode targetMode,
+) {
+  final copy = source.deepCopy();
+  copy.sceneOwnership = [
+    for (final own in copy.sceneOwnership)
+      EpicSceneOwnership(
+        path: _swapArchitectureAssetPath(own.path, targetMode),
+        role: _swapArchitectureRoleOrLink(own.role, targetMode),
+      ),
+  ];
+  copy.links = [
+    for (final link in copy.links)
+      _swapArchitectureRoleOrLink(link, targetMode),
+  ];
+  return UnrealSpecGuard.sanitizeEpicSpec(copy, mode: targetMode);
+}
+
 /// Switches a [ProjectConceptBlueprint] between `Blueprint-First` and `C++ & BP Hybrid`,
 /// updating `§02` Asset Policy and non-map `EpicSceneOwnership` paths while keeping `cm` values intact.
 ProjectConceptBlueprint convertBlueprintArchitectureModeImpl(
@@ -98,19 +119,14 @@ ProjectConceptBlueprint convertBlueprintArchitectureModeImpl(
       ? 'Source/ ACharacter & UActorComponent UPROPERTY(EditAnywhere) C++ Base + Thin /Game/Blueprints/BP_* & /Game/Data/DA_*'
       : 'UStaticMeshComponent Greybox + UMaterialInstanceDynamic Tints; /Game/Data/DA_GameTuning & Exposed BP Vars';
 
-  for (final ep in [...next.initialEpics, ...next.v02NewPool]) {
-    ep.sceneOwnership = [
-      for (final own in ep.sceneOwnership)
-        EpicSceneOwnership(
-          path: _swapArchitectureAssetPath(own.path, targetMode),
-          role: _swapArchitectureRoleOrLink(own.role, targetMode),
-        ),
-    ];
-    ep.links = [
-      for (final link in ep.links)
-        _swapArchitectureRoleOrLink(link, targetMode),
-    ];
-  }
+  next.initialEpics = [
+    for (final ep in next.initialEpics)
+      convertEpicArchitectureModeImpl(ep, targetMode),
+  ];
+  next.v02NewPool = [
+    for (final ep in next.v02NewPool)
+      convertEpicArchitectureModeImpl(ep, targetMode),
+  ];
   return UnrealSpecGuard.sanitizeConceptBlueprint(
     raw: next,
     modeOverride: targetMode,

@@ -13,8 +13,24 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     }
   }
 
+  void _syncMaterializedEpicsArchitectureMode(UnrealArchitectureMode mode) {
+    for (final rel in projectReleases) {
+      for (final epDoc in epicDocsForRelease(rel.id)) {
+        final spec = EpicSpec.fromDocument(epDoc);
+        final converted = ProjectConceptAgent.convertEpicArchitectureMode(
+          spec,
+          mode,
+        );
+        final updatedDoc = converted.applyToDocument(epDoc);
+        documents[epDoc.id] = updatedDoc;
+        _persistDocument(updatedDoc);
+      }
+    }
+  }
+
   bool undoStage1Edit() {
     if (_stage1UndoStack.isEmpty || _isAgentBusy) return false;
+    final prevMode = _conceptDraft?.architectureMode;
     final restored = _stage1UndoStack.removeLast();
     restored.lastCoDesignNote = 'Reverted last Stage 1 change.';
     _conceptDraft = restored;
@@ -22,6 +38,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _stage1InlineError = null;
     _offlineErrorMessage = null;
     _ensureActiveProjectDocument(restored);
+    if (prevMode != restored.architectureMode && projectReleases.isNotEmpty) {
+      _syncMaterializedEpicsArchitectureMode(restored.architectureMode);
+    }
     notifyListeners();
     return true;
   }
@@ -254,6 +273,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     final draft = _conceptDraft;
     final clean = instruction.trim();
     if (draft == null || clean.isEmpty) return null;
+    final prevMode = draft.architectureMode;
 
     _isAgentBusy = true;
     _agentProgressStep = 'Co-Designer updating ROOT_UNREAL_CONTEXT...';
@@ -282,6 +302,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       _lastStage1ChangedSections = outcome.changedSections;
       _conceptDraft = outcome.blueprint;
       _ensureActiveProjectDocument(outcome.blueprint!);
+      if (outcome.blueprint!.architectureMode != prevMode &&
+          projectReleases.isNotEmpty) {
+        _syncMaterializedEpicsArchitectureMode(
+          outcome.blueprint!.architectureMode,
+        );
+      }
       return outcome.blueprint;
     } catch (e) {
       final msg = 'Co-Designer edit error: $e';
@@ -331,6 +357,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     }
     if (activeProject != null && _conceptDraft != null) {
       _ensureActiveProjectDocument(_conceptDraft!);
+    }
+    if (projectReleases.isNotEmpty) {
+      _syncMaterializedEpicsArchitectureMode(mode);
     }
     notifyListeners();
   }

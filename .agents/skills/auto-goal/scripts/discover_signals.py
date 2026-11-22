@@ -41,6 +41,7 @@ CONDITIONAL_DART_RE = re.compile(
     re.DOTALL,
 )
 IMPORT_DART_RE = re.compile(r"(?:import|export)\s+['\"]([^'\"]+\.dart)['\"]", re.MULTILINE)
+EXPORT_DART_RE = re.compile(r"^\s*export\s+['\"]([^'\"]+\.dart)['\"][^;]*;", re.MULTILINE)
 
 
 def _run(
@@ -221,6 +222,10 @@ def _scan_untested_modules() -> list[str]:
         target = (fpath.parent / rel_target).resolve()
         if target.is_file():
           parent_paths.setdefault(target, set()).add(resolved)
+    for m in EXPORT_DART_RE.finditer(text):
+      target = (fpath.parent / m.group(1)).resolve()
+      if target.is_file() and target != resolved:
+        parent_paths.setdefault(target, set()).add(resolved)
 
   if conditional_gateways:
     for fpath in dart_lib_files:

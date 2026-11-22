@@ -137,6 +137,7 @@ def _verify_skills_and_discovery() -> None:
   for covered_part in (
       "lib/providers/workbench_storage_mixin.dart",
       "lib/utils/markdown_exporter_stub.dart",
+      "lib/models/unreal_architecture_mode.dart",
   ):
     assert covered_part not in untested, f"Expected transitive export module covered: {covered_part}"
 

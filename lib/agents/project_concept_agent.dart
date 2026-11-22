@@ -19,6 +19,12 @@ class ProjectConceptAgent {
   ) =>
       convertBlueprintArchitectureModeImpl(source, targetMode);
 
+  static EpicSpec convertEpicArchitectureMode(
+    EpicSpec source,
+    UnrealArchitectureMode targetMode,
+  ) =>
+      convertEpicArchitectureModeImpl(source, targetMode);
+
   /// Keeps `E01..EN` and `F01..FM` strictly sequential across `initialEpics` without gaps or duplicate codes.
   static void normalizeSequentialEpicAndFeatureCodes(
     ProjectConceptBlueprint bp,

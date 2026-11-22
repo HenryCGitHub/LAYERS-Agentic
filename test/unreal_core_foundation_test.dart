@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1366,6 +1367,87 @@ void main() {
           contains('# ULTIMATE ENGINE COPILOT — LOCKED BASELINE REFERENCE'),
         );
         expect(lockedPrompt, contains('Do not rebuild'));
+      },
+    );
+
+    test(
+      '10. Round 10/10: Live Stage 1 <-> Stage 2 architecture mode sync across toggle, Co-Designer refine, and Undo plus codebase invariant gate',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final e01 = wb.selectedEpicSpec!;
+        final f01 = wb.selectedFeatureSpec!;
+        expect(
+          e01.sceneOwnership.any((o) => o.path == '/Game/Blueprints/BP_PlayerMech'),
+          isTrue,
+        );
+
+        wb.toggleFeatureCheck(e01.id, f01.id, f01.checks.first.id, true);
+        wb.flagFeatureFix(e01.id, f01.id, 'Dash clips corner');
+
+        // 1) Toggle Blueprint-First -> C++ & BP Hybrid syncs Stage 2 Epics while preserving Feature checks & [FIX]
+        wb.setArchitectureMode(UnrealArchitectureMode.cppHybrid);
+        final cppEpic = wb.selectedEpicSpec!;
+        final cppFeat = wb.selectedFeatureSpec!;
+        expect(
+          cppEpic.sceneOwnership.any((o) => o.path == 'Source/PlayerMech.cpp'),
+          isTrue,
+        );
+        expect(cppFeat.checks.first.passed, isTrue);
+        expect(
+          cppFeat.fixes.any((fx) => fx.text.contains('Dash clips corner')),
+          isTrue,
+        );
+        final cppPrompt = wb.activeCoPilotPrompt();
+        expect(cppPrompt, contains('Source/PlayerMech.cpp'));
+        expect(cppPrompt, contains('UPROPERTY(EditAnywhere, BlueprintReadWrite)'));
+
+        // 2) Undo restores both Stage 1 & materialized Stage 2 Epics back to Blueprint-First
+        expect(wb.undoStage1Edit(), isTrue);
+        expect(
+          wb.selectedEpicSpec!.sceneOwnership.any(
+            (o) => o.path == '/Game/Blueprints/BP_PlayerMech',
+          ),
+          isTrue,
+        );
+
+        // 3) Stage 1 Co-Designer Refine switching to C++ hybrid also syncs materialized Stage 2 Epics
+        final refined = await wb.applyStage1CoDesignInstruction(
+          'Switch architecture to C++ hybrid',
+        );
+        expect(refined, isNotNull);
+        expect(
+          wb.selectedEpicSpec!.sceneOwnership.any(
+            (o) => o.path == 'Source/PlayerMech.cpp',
+          ),
+          isTrue,
+        );
+
+        // 4) Codebase line-cap & 1 UU clutter invariant gate across lib/
+        for (final entity in Directory('lib').listSync(recursive: true)) {
+          if (entity is! File || !entity.path.endsWith('.dart')) continue;
+          final normPath = entity.path.replaceAll('\\', '/');
+          final lines = entity.readAsLinesSync();
+          if (normPath.startsWith('lib/screens/') ||
+              normPath.startsWith('lib/providers/') ||
+              normPath.startsWith('lib/services/')) {
+            expect(
+              lines.length,
+              lessThanOrEqualTo(950),
+              reason: '$normPath exceeded 950-line cap (${lines.length})',
+            );
+          }
+          if (normPath != 'lib/utils/unreal_spec_guard.dart') {
+            final joined = lines.join('\n');
+            expect(
+              joined,
+              isNot(contains('1 UU')),
+              reason: '$normPath contains banned 1 UU label clutter',
+            );
+          }
+        }
       },
     );
   });
