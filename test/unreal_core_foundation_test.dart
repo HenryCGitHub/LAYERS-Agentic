@@ -1818,6 +1818,153 @@ void main() {
         await tester.pumpAndSettle();
       },
     );
+
+    testWidgets(
+      '14. Stage 2 Epic Domain Sheet inline §02 Ownership & §03 State Rules persist and flow into child Feature CoPilot prompts',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final e01 = wb.activeReleaseEpics.first;
+        wb.selectEpic(e01.id);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // §02 Add owner -> persists & updates child Feature CoPilot prompt
+        final addOwnerBtn = find.byKey(const ValueKey('epic_add_owner_btn'));
+        await tester.ensureVisible(addOwnerBtn);
+        await tester.tap(addOwnerBtn);
+        await tester.pumpAndSettle();
+
+        final pathInput = find.byKey(const ValueKey('epic_owner_path_input'));
+        final roleInput = find.byKey(const ValueKey('epic_owner_role_input'));
+        await tester.ensureVisible(pathInput);
+        await tester.enterText(
+          pathInput,
+          '/Game/Player/AC_ShellMomentum.uasset',
+        );
+        await tester.ensureVisible(roleInput);
+        await tester.enterText(roleInput, 'Momentum charge tracker');
+
+        final saveOwnerBtn = find.byKey(const ValueKey('epic_owner_save_btn'));
+        await tester.ensureVisible(saveOwnerBtn);
+        await tester.tap(saveOwnerBtn);
+        await tester.pumpAndSettle();
+
+        final afterAdd = wb.selectedEpicSpec!;
+        expect(
+          afterAdd.sceneOwnership.any(
+            (o) =>
+                o.path == '/Game/Player/AC_ShellMomentum.uasset' &&
+                o.role == 'Momentum charge tracker',
+          ),
+          isTrue,
+        );
+        final f02 = afterAdd.features.firstWhere((f) => f.code == 'F02');
+        expect(
+          wb.activeFeatureBuildPrompt(afterAdd, f02),
+          contains('/Game/Player/AC_ShellMomentum.uasset'),
+        );
+
+        // §02 Edit & Delete that owner
+        final lastIdx = afterAdd.sceneOwnership.length - 1;
+        final editOwnerBtn = find.byKey(ValueKey('epic_owner_edit_$lastIdx'));
+        await tester.ensureVisible(editOwnerBtn);
+        await tester.tap(editOwnerBtn);
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(roleInput);
+        await tester.enterText(roleInput, 'Dash charge component');
+        await tester.ensureVisible(saveOwnerBtn);
+        await tester.tap(saveOwnerBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedEpicSpec!.sceneOwnership[lastIdx].role,
+          equals('Dash charge component'),
+        );
+
+        final deleteOwnerBtn = find.byKey(
+          ValueKey('epic_owner_delete_$lastIdx'),
+        );
+        await tester.ensureVisible(deleteOwnerBtn);
+        await tester.tap(deleteOwnerBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedEpicSpec!.sceneOwnership.any(
+            (o) => o.path == '/Game/Player/AC_ShellMomentum.uasset',
+          ),
+          isFalse,
+        );
+
+        // §03 Edit State Flow & Interrupt Rules -> flows into child Feature @STATES:
+        final editStatesBtn = find.byKey(
+          const ValueKey('epic_edit_states_btn'),
+        );
+        await tester.ensureVisible(editStatesBtn);
+        await tester.tap(editStatesBtn);
+        await tester.pumpAndSettle();
+
+        final statesInput = find.byKey(const ValueKey('epic_states_input'));
+        final interruptsInput = find.byKey(
+          const ValueKey('epic_interrupts_input'),
+        );
+        await tester.ensureVisible(statesInput);
+        await tester.enterText(
+          statesInput,
+          'Idle -> Sprint -> ArmoredDash -> Cooldown',
+        );
+        await tester.ensureVisible(interruptsInput);
+        await tester.enterText(
+          interruptsInput,
+          'ArmoredDash cancels Sprint\nHitstun cancels ArmoredDash',
+        );
+        await tester.pumpAndSettle();
+
+        final saveStatesBtn = find.byKey(
+          const ValueKey('epic_states_save_btn'),
+        );
+        await tester.ensureVisible(saveStatesBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(saveStatesBtn);
+        await tester.pumpAndSettle();
+
+        final afterStates = wb.selectedEpicSpec!;
+        expect(
+          afterStates.stateFlow,
+          equals(const ['Idle', 'Sprint', 'ArmoredDash', 'Cooldown']),
+        );
+        expect(
+          afterStates.interruptRules,
+          equals(const [
+            'ArmoredDash cancels Sprint',
+            'Hitstun cancels ArmoredDash',
+          ]),
+        );
+
+        final f02After = afterStates.features.firstWhere((f) => f.code == 'F02');
+        final promptAfterStates = wb.activeFeatureBuildPrompt(
+          afterStates,
+          f02After,
+        );
+        expect(
+          promptAfterStates,
+          contains('@STATES: Idle -> Sprint -> ArmoredDash -> Cooldown'),
+        );
+        expect(promptAfterStates, contains('ArmoredDash cancels Sprint'));
+        expect(promptAfterStates, contains('Hitstun cancels ArmoredDash'));
+      },
+    );
   });
 }
 

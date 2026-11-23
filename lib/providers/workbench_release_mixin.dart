@@ -744,6 +744,56 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     );
   }
 
+  List<String> _cleanSpecList(List<String> raw, UnrealArchitectureMode mode) =>
+      raw
+          .map((s) => UnrealSpecGuard.sanitizeLine(s, mode: mode).trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+
+  void upsertEpicOwnership(
+    String epicId, {
+    int? index,
+    required String path,
+    String role = '',
+  }) {
+    final mode = unrealArchitectureMode;
+    final cleanPath = UnrealSpecGuard.sanitizeLine(path, mode: mode).trim();
+    if (cleanPath.isEmpty) return;
+    final cleanRole = UnrealSpecGuard.sanitizeLine(role, mode: mode).trim();
+    _updateAndPersistEpic(epicId, (spec) {
+      final entry = EpicSceneOwnership(path: cleanPath, role: cleanRole);
+      if (index != null && index >= 0 && index < spec.sceneOwnership.length) {
+        spec.sceneOwnership[index] = entry;
+      } else {
+        spec.sceneOwnership.add(entry);
+      }
+    });
+  }
+
+  void removeEpicOwnership(String epicId, int index) {
+    _updateAndPersistEpic(epicId, (spec) {
+      if (index >= 0 && index < spec.sceneOwnership.length) {
+        spec.sceneOwnership.removeAt(index);
+      }
+    });
+  }
+
+  void updateEpicStateRules(
+    String epicId, {
+    List<String>? stateFlow,
+    List<String>? interruptRules,
+  }) {
+    final mode = unrealArchitectureMode;
+    _updateAndPersistEpic(epicId, (spec) {
+      if (stateFlow != null) {
+        spec.stateFlow = _cleanSpecList(stateFlow, mode);
+      }
+      if (interruptRules != null) {
+        spec.interruptRules = _cleanSpecList(interruptRules, mode);
+      }
+    });
+  }
+
   void flagEpicFix(String epicId, String fixText) {
     final clean = fixText.trim();
     if (clean.isEmpty) return;
