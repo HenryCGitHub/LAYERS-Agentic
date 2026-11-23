@@ -147,8 +147,8 @@ void main() {
           feature: e01.features.first,
           mode: UnrealArchitectureMode.blueprint,
         );
-        expect(fixCtx, contains('## Open [FIX] Revisions to Resolve Now'));
-        expect(fixCtx, contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS'));
+        expect(fixCtx, contains('@FIX_NOW:'));
+        expect(fixCtx, contains('[UE5_COPILOT TASK=FIX'));
         expect(fixCtx, contains('Dash stops short at wall corner'));
       },
     );
@@ -172,7 +172,7 @@ void main() {
           feature: e02.features.first,
           mode: UnrealArchitectureMode.cppHybrid,
         );
-        expect(dartA, contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS'));
+        expect(dartA, contains('[UE5_COPILOT TASK=FIX'));
         expect(dartA, contains('C++ & BP Hybrid'));
         expect(dartA, contains('Recoil pushes off floor'));
 
@@ -201,7 +201,7 @@ void main() {
           releaseVersion: 'v0.2',
           mode: UnrealArchitectureMode.blueprint,
         );
-        expect(dartC, contains('(v0.2)'));
+        expect(dartC, contains('REL=v0.2'));
         expect(dartC, contains('Chain second dash on armor break'));
       },
     );
@@ -315,7 +315,7 @@ void main() {
         expect(wb.selectedFeatureSpec!.openFixesCount, equals(1));
         expect(
           wb.selectedBuildPrompt,
-          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'),
+          contains('[UE5_COPILOT TASK=FIX TARGET=F02'),
         );
 
         // Resolve [FIX], check Playtest Gate, and Pass Feature -> advances to E02 / F03
@@ -725,25 +725,25 @@ void main() {
         );
         expect(
           ctxV01,
-          contains('# ULTIMATE ENGINE COPILOT — BUILD FEATURE · F02 · Armored Claw Dash (v0.1)'),
+          contains('[UE5_COPILOT TASK=BUILD TARGET=F02 · Armored Claw Dash REL=v0.1'),
         );
         expect(
           ctxV01,
-          contains('## 1. Parent Epic Architecture Guardrails (Read-Only)'),
+          contains('@EPIC E01(Player Movement & Camera):'),
         );
         expect(ctxV01, contains('/Game/Blueprints/BP_PlayerMech'));
         expect(ctxV01, contains('Idle -> Walk -> ClawDash -> Recovery'));
-        expect(ctxV01, contains('No stamina bar in v0.1'));
-        expect(ctxV01, contains('[PASSED — DO NOT REGRESS] F01'));
-        expect(ctxV01, contains('[ACTIVE TARGET ->] F02'));
-        expect(ctxV01, contains('| IA_ClawDash | Space / L-Trigger | 0.65 s cooldown |'));
-        expect(ctxV01, contains('Exposed Blueprint Var `float DashDistanceM = 400 cm`'));
-        expect(ctxV01, contains('Exposed Blueprint Var `int32 MaxChains = 3 count`'));
-        expect(ctxV01, contains('## §05 PIE Playtest Gate'));
-        expect(ctxV01, contains('- [x] Tap Space -> Mech crosses 400 cm'));
+        expect(ctxV01, contains('@CUTS: !stamina bar in v0.1'));
+        expect(ctxV01, contains('KEEP=[F01]'));
+        expect(ctxV01, contains('TARGET=[F02]'));
+        expect(ctxV01, contains('IA_ClawDash(Space / L-Trigger) -> 0.65 s cooldown'));
+        expect(ctxV01, contains('float DashDistanceM = 400 cm'));
+        expect(ctxV01, contains('int32 MaxChains = 3 count'));
+        expect(ctxV01, contains('@PIE_GATE:'));
+        expect(ctxV01, contains('[x] Tap Space -> Mech crosses 400 cm'));
         expect(
           ctxV01,
-          contains('- [ ] Collide with cracked shell -> Enemy staggers 150 cm'),
+          contains('[ ] Collide with cracked shell -> Enemy staggers 150 cm'),
         );
 
         // v0.2 delta & delta check
@@ -756,9 +756,9 @@ void main() {
         );
         expect(
           ctxV02,
-          contains('# ULTIMATE ENGINE COPILOT — UPGRADE FEATURE DELTA · F02'),
+          contains('[UE5_COPILOT TASK=DELTA TARGET=F02'),
         );
-        expect(ctxV02, contains('## v0.2 Upgrade Delta'));
+        expect(ctxV02, contains('@DELTA v0.2:'));
         expect(ctxV02, contains('Reset dash cooldown when breaking cracked shell'));
         expect(
           ctxV02,
@@ -776,9 +776,12 @@ void main() {
           releaseVersion: 'v0.1',
           mode: UnrealArchitectureMode.cppHybrid,
         );
-        expect(ctxFix, contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'));
-        expect(ctxFix, contains('UPROPERTY(EditAnywhere, BlueprintReadWrite) `float DashDistanceM = 400 cm`'));
-        expect(ctxFix, contains('## Open [FIX] Revisions to Resolve Now'));
+        expect(ctxFix, contains('[UE5_COPILOT TASK=FIX TARGET=F02'));
+        expect(
+          ctxFix,
+          contains('@VARS [UPROPERTY(EditAnywhere, BlueprintReadWrite)]: float DashDistanceM = 400 cm'),
+        );
+        expect(ctxFix, contains('@FIX_NOW:'));
         expect(ctxFix, contains('Dash clips pillar edge'));
 
         // Epic domain architecture brief (v0.1 vs v0.2 rollups)
@@ -789,11 +792,11 @@ void main() {
         );
         expect(
           archV02,
-          contains('# UE5 EPIC ARCHITECTURE BRIEF · E01 · Player Movement & Camera (v0.2)'),
+          contains('[UE5_COPILOT TASK=EPIC_BRIEF TARGET=E01 · Player Movement & Camera REL=v0.2'),
         );
-        expect(archV02, contains('Progress: 1/3 Features Passed | 1 Open [FIX]'));
-        expect(archV02, contains('[v0.1 ✓ BASELINE]'));
-        expect(archV02, contains('[+v0.2 NEW]'));
+        expect(archV02, contains('1/3 PASS | 1 FIX'));
+        expect(archV02, contains('v0.1 ✓ BASELINE'));
+        expect(archV02, contains('+v0.2 NEW'));
 
         // C++ Hybrid Feature context check
         final specHybrid = UnrealSparkPresets.byId('emberkeep');

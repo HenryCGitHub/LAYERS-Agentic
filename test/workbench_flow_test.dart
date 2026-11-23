@@ -715,7 +715,7 @@ void main() {
         expect(wb.selectedFeatureSpec?.code, equals('F02'));
         expect(
           wb.selectedBuildPrompt,
-          contains('ULTIMATE ENGINE COPILOT — BUILD FEATURE · F02 · Armored Claw Dash'),
+          contains('[UE5_COPILOT TASK=BUILD TARGET=F02 · Armored Claw Dash'),
         );
 
         // Toggle outliner expansion & open Epic Domain Sheet (selectedFeatureId == null)
@@ -727,7 +727,7 @@ void main() {
         expect(wb.isInspectingEpicDomain, isTrue);
         expect(
           wb.selectedBuildPrompt,
-          contains('# UE5 EPIC ARCHITECTURE BRIEF · E01'),
+          contains('[UE5_COPILOT TASK=EPIC_BRIEF TARGET=E01'),
         );
 
         // Select F02, mutate live Exposed BP tuning & add parameter
@@ -755,7 +755,7 @@ void main() {
         expect(wb.selectedFeatureSpec!.openFixesCount, equals(1));
         expect(
           wb.selectedBuildPrompt,
-          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'),
+          contains('[UE5_COPILOT TASK=FIX TARGET=F02'),
         );
         final f02CheckId = wb.selectedFeatureSpec!.checks.first.id;
         wb.toggleFeatureCheck(e01.id, 'sb_f02', f02CheckId, true);
@@ -1245,18 +1245,18 @@ void main() {
         // Legacy Epic payload remains intact under UnrealContextBuilder
         expect(
           wb.activeEpicArchitecturePrompt(migratedEpic),
-          contains('UE5 EPIC ARCHITECTURE BRIEF · E01 · Hover Thruster Core'),
+          contains('[UE5_COPILOT TASK=EPIC_BRIEF TARGET=E01 · Hover Thruster Core'),
         );
 
         // CoPilot context adapts cleanly across Feature Sheet, Epic Domain Sheet & explicit empty-feature Epics
         expect(
           wb.activeCoPilotPrompt(),
-          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F01 · Hover Thruster Core'),
+          contains('[UE5_COPILOT TASK=FIX TARGET=F01 · Hover Thruster Core'),
         );
         wb.selectEpic(migratedEpic.id);
         expect(
           wb.activeCoPilotPrompt(),
-          contains('# UE5 EPIC ARCHITECTURE BRIEF · E01'),
+          contains('[UE5_COPILOT TASK=EPIC_BRIEF TARGET=E01'),
         );
 
         final explicitEmptyEpic = EpicSpec(
@@ -1267,7 +1267,7 @@ void main() {
         );
         expect(
           wb.activeCoPilotPrompt(epicOverride: explicitEmptyEpic),
-          contains('UE5 EPIC ARCHITECTURE BRIEF · E02 · Raw Dock Fallback'),
+          contains('[UE5_COPILOT TASK=EPIC_BRIEF TARGET=E02 · Raw Dock Fallback'),
         );
       },
     );
@@ -1927,6 +1927,14 @@ void main() {
         expect(md, contains('Core Loop Beat:'));
         expect(
           wb.selectedBuildPrompt,
+          contains('[UE5_COPILOT TASK=LOCKED_BASELINE TARGET=F07'),
+        );
+        expect(
+          wb.selectedBuildPrompt,
+          contains('@EPIC E01(Player Movement & Camera):'),
+        );
+        expect(
+          wb.activeFeatureReadablePrompt(v03E01, v03F07),
           contains('## 1. Parent Epic Architecture Guardrails (Read-Only)'),
         );
 

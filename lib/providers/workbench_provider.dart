@@ -516,6 +516,22 @@ class WorkbenchProvider extends ChangeNotifier {
     );
   }
 
+  String activeFeatureReadablePrompt(EpicSpec epic, FeatureSpec feature) {
+    final spec = _conceptDraft ??
+        ProjectConceptBlueprint(
+          gameTitle: activeProject?.title ?? 'LAYERS PROJECT',
+        );
+    return UnrealContextBuilder.buildCoPilotFeaturePrompt(
+      rootSpec: spec,
+      epic: epic,
+      feature: feature,
+      releaseVersion: activeReleaseVersionTag,
+      releaseOrder: projectReleaseOrder,
+      mode: unrealArchitectureMode,
+      compact: false,
+    );
+  }
+
   String activeEpicArchitecturePrompt(EpicSpec epic) {
     final spec = _conceptDraft ??
         ProjectConceptBlueprint(
@@ -527,6 +543,21 @@ class WorkbenchProvider extends ChangeNotifier {
       releaseVersion: activeReleaseVersionTag,
       releaseOrder: projectReleaseOrder,
       mode: unrealArchitectureMode,
+    );
+  }
+
+  String activeEpicReadableBrief(EpicSpec epic) {
+    final spec = _conceptDraft ??
+        ProjectConceptBlueprint(
+          gameTitle: activeProject?.title ?? 'LAYERS PROJECT',
+        );
+    return UnrealContextBuilder.buildEpicArchitectureContext(
+      rootSpec: spec,
+      epic: epic,
+      releaseVersion: activeReleaseVersionTag,
+      releaseOrder: projectReleaseOrder,
+      mode: unrealArchitectureMode,
+      compact: false,
     );
   }
 

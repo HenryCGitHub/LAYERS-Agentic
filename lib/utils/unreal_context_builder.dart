@@ -1,6 +1,9 @@
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
+import 'unreal_prompt_compactor.dart';
 import 'unreal_spec_guard.dart';
+
+export 'unreal_prompt_compactor.dart';
 
 /// Formats `ProjectConceptBlueprint`, `EpicSpec`, and `FeatureSpec` into
 /// Unreal Engine 5 GDD documents and Feature / `[FIX]` prompts for Ultimate Engine CoPilot.
@@ -194,7 +197,7 @@ class UnrealContextBuilder {
     return 'QUEUED';
   }
 
-  /// Builds the `*_copilot_gdd.md` document for Ultimate Engine CoPilot's GDD context slot.
+  /// Builds the heading-indexed `*_copilot_gdd.md` document for Ultimate Engine CoPilot's GDD slot.
   static String buildCoPilotGddMarkdown({
     required ProjectConceptBlueprint rootSpec,
     required Map<String, List<EpicSpec>> epicsByReleaseLabel,
@@ -202,7 +205,52 @@ class UnrealContextBuilder {
   }) {
     final b = StringBuffer();
     b.writeln('# PROJECT GDD · ${rootSpec.normalizedTitle} (${mode.pillLabel})');
-    _writeRootSections(b, rootSpec, mode);
+    b.writeln('Arch: ${mode.architectureContract}');
+    b.writeln();
+    b.writeln('## §01 Concept & 30s Loop');
+    b.writeln('- Vision: ${UnrealPromptCompactor.compactProse(_s(rootSpec.pitch, mode))}');
+    if (rootSpec.coreLoop.isNotEmpty) {
+      final cleanLoop = [
+        for (final step in rootSpec.coreLoop)
+          if (_s(step, mode).isNotEmpty)
+            UnrealPromptCompactor.compactProse(_s(step, mode)),
+      ];
+      if (cleanLoop.isNotEmpty) {
+        b.writeln('- Loop: ${cleanLoop.join(' -> ')}');
+      }
+    }
+    if (rootSpec.releaseDoneWhen.trim().isNotEmpty) {
+      b.writeln(
+        '- PIE Gate: ${UnrealPromptCompactor.compactProse(_s(rootSpec.releaseDoneWhen, mode))}',
+      );
+    }
+    b.writeln();
+    b.writeln('## §02 Global UE5 Contracts (${mode.pillLabel})');
+    b.writeln('- Cam: ${UnrealPromptCompactor.compactProse(_s(rootSpec.cameraContract, mode))}');
+    b.writeln('- Scale: ${UnrealPromptCompactor.compactProse(_s(rootSpec.characterScale, mode))}');
+    b.writeln('- Input: ${_s(rootSpec.inputContract, mode)}');
+    b.writeln('- Assets: ${UnrealPromptCompactor.compactProse(_s(rootSpec.assetPolicy, mode))}');
+    b.writeln();
+    b.writeln('## §03 Pillars & Trade-Offs');
+    b.writeln('- Feel: ${rootSpec.selectedCoreFeelOption.label}');
+    for (final pillar in rootSpec.pillars) {
+      final clean = UnrealPromptCompactor.compactProse(_s(pillar, mode));
+      if (clean.isNotEmpty) b.writeln('- Pillar: $clean');
+    }
+    for (final tradeOff in rootSpec.tradeOffs) {
+      final cleanPref = UnrealPromptCompactor.compactProse(_s(tradeOff.prefer, mode));
+      final cleanAvoid = UnrealPromptCompactor.compactProse(_s(tradeOff.avoid, mode));
+      if (cleanPref.isNotEmpty || cleanAvoid.isNotEmpty) {
+        b.writeln('- Rule: $cleanPref OVER $cleanAvoid');
+      }
+    }
+    final compactRootCuts =
+        UnrealPromptCompactor.compactCuts(rootSpec.outOfScope, mode: mode);
+    if (compactRootCuts.isNotEmpty) {
+      b.writeln();
+      b.writeln('## §04 Hard Scope Cuts');
+      b.writeln('- $compactRootCuts');
+    }
 
     b.writeln();
     b.writeln('## §05 Release Architecture & Epic Domain Ownership');
@@ -219,7 +267,7 @@ class UnrealContextBuilder {
     ];
 
     if (sortedReleases.isEmpty) {
-      b.writeln('- No Epics planned yet.');
+      b.writeln('- No Epics planned.');
     } else {
       for (final entry in sortedReleases) {
         final relVer = _extractReleaseVersion(entry.key);
@@ -227,11 +275,15 @@ class UnrealContextBuilder {
         b.writeln('### ${entry.key}');
         for (final rawEpic in entry.value) {
           final epic = UnrealSpecGuard.sanitizeEpicSpec(rawEpic, mode: mode);
-          b.writeln('- **${epic.code} · ${epic.title}**: ${epic.goal}');
+          b.writeln(
+            '- **${epic.code} · ${epic.title}**: ${UnrealPromptCompactor.compactProse(epic.goal)}',
+          );
           if (epic.sceneOwnership.isNotEmpty) {
             final owners = [
               for (final o in epic.sceneOwnership)
-                o.role.isEmpty ? o.path : '${o.path} (${o.role})',
+                o.role.isEmpty
+                    ? o.path
+                    : '${o.path} (${UnrealPromptCompactor.compactProse(o.role)})',
             ];
             b.writeln('  - Owners: ${owners.join(', ')}');
           }
@@ -241,7 +293,7 @@ class UnrealContextBuilder {
                 ? ' (Delta: ${feat.releaseDelta.trim()})'
                 : '';
             b.writeln(
-              '  - ${feat.code} · ${feat.title} [$tag] — ${feat.goal}$deltaNote',
+              '  - ${feat.code} · ${feat.title} [$tag] — ${UnrealPromptCompactor.compactProse(feat.goal)}$deltaNote',
             );
           }
         }
@@ -251,6 +303,7 @@ class UnrealContextBuilder {
   }
 
   /// Builds the 1-click Feature / `[FIX]` / `v0.2+` Delta prompt for Ultimate Engine CoPilot.
+  /// Defaults to compact `@TAG` telegraphic DSL (`compact: true`); pass `compact: false` for readable Markdown.
   static String buildCoPilotFeaturePrompt({
     required ProjectConceptBlueprint rootSpec,
     required EpicSpec epic,
@@ -258,7 +311,18 @@ class UnrealContextBuilder {
     String releaseVersion = 'v0.1',
     List<String> releaseOrder = const ['v0.1', 'v0.2'],
     UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
+    bool compact = true,
   }) {
+    if (compact) {
+      return UnrealPromptCompactor.buildCompactFeaturePrompt(
+        rootSpec: rootSpec,
+        epic: epic,
+        feature: feature,
+        releaseVersion: releaseVersion,
+        releaseOrder: releaseOrder,
+        mode: mode,
+      );
+    }
     final cleanEpic = UnrealSpecGuard.sanitizeEpicSpec(epic, mode: mode);
     final cleanFeat = UnrealSpecGuard.sanitizeFeatureSpec(feature, mode: mode);
     final ver = releaseVersion.trim().isNotEmpty
@@ -446,6 +510,7 @@ class UnrealContextBuilder {
   }
 
   /// Builds a domain-level architecture brief for an [EpicSpec] in a given [releaseVersion].
+  /// Defaults to compact `@TAG` DSL (`compact: true`); pass `compact: false` for readable Markdown.
   static String buildEpicArchitectureContext({
     required ProjectConceptBlueprint rootSpec,
     required EpicSpec epic,
@@ -453,7 +518,18 @@ class UnrealContextBuilder {
     List<String> releaseOrder = const ['v0.1', 'v0.2'],
     UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
     bool includeRootContext = true,
+    bool compact = true,
   }) {
+    if (compact) {
+      return UnrealPromptCompactor.buildCompactEpicBrief(
+        rootSpec: rootSpec,
+        epic: epic,
+        releaseVersion: releaseVersion,
+        releaseOrder: releaseOrder,
+        mode: mode,
+        includeRootContext: includeRootContext,
+      );
+    }
     final cleanEpic = UnrealSpecGuard.sanitizeEpicSpec(epic, mode: mode);
     final ver = (releaseVersion != null && releaseVersion.trim().isNotEmpty)
         ? releaseVersion.trim()
@@ -535,6 +611,7 @@ class UnrealContextBuilder {
           releaseOrder: effectiveOrder,
           mode: mode,
           includeRootContext: false,
+          compact: false,
         ),
       );
       for (final feat in epic.featuresForRelease(relVer, effectiveOrder)) {
@@ -547,6 +624,7 @@ class UnrealContextBuilder {
             releaseVersion: relVer,
             releaseOrder: effectiveOrder,
             mode: mode,
+            compact: false,
           ),
         );
       }

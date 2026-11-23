@@ -456,21 +456,21 @@ void main() {
         );
         expect(
           buildF01Prompt,
-          contains('ULTIMATE ENGINE COPILOT — BUILD FEATURE · F01'),
+          contains('[UE5_COPILOT TASK=BUILD TARGET=F01'),
         );
         expect(buildF01Prompt, contains('/Game/Blueprints/BP_CrabPlayer'));
-        expect(buildF01Prompt, contains('First-Slice'));
-        expect(buildF01Prompt, contains('[ACTIVE TARGET ->] F01'));
-        expect(buildF01Prompt, contains('[QUEUED — DO NOT BUILD YET] F02'));
+        expect(buildF01Prompt, contains('@FIRST_SLICE:'));
+        expect(buildF01Prompt, contains('TARGET=[F01]'));
+        expect(buildF01Prompt, contains('DO_NOT_BUILD=[F02]'));
         expect(buildF01Prompt, contains('IA_Move'));
         expect(buildF01Prompt, contains('MaxWalkSpeed'));
-        expect(buildF01Prompt, contains('§05 PIE Playtest Gate'));
+        expect(buildF01Prompt, contains('@PIE_GATE:'));
         expect(
           UnrealSpecGuard.containsEngineLeakage(buildF01Prompt),
           isFalse,
         );
 
-        // Pass F01 and open a [FIX] on F02 -> FOCUSED [FIX] PASS
+        // Pass F01 and open a [FIX] on F02 -> FIX compact task
         f01.status = FeatureStatus.passed;
         f01.checks.single.passed = true;
         f02.fixes.add(
@@ -486,13 +486,10 @@ void main() {
         );
         expect(
           fixF02Prompt,
-          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'),
+          contains('[UE5_COPILOT TASK=FIX TARGET=F02'),
         );
-        expect(fixF02Prompt, contains('[PASSED — DO NOT REGRESS] F01'));
-        expect(
-          fixF02Prompt,
-          contains('## Open [FIX] Revisions to Resolve Now'),
-        );
+        expect(fixF02Prompt, contains('KEEP=[F01]'));
+        expect(fixF02Prompt, contains('@FIX_NOW:'));
         expect(fixF02Prompt, contains('Dash clips sloped arena corners'));
         expect(fixF02Prompt, contains('C++ & BP Hybrid'));
 
@@ -517,9 +514,9 @@ void main() {
         );
         expect(
           upgradeF02Prompt,
-          contains('ULTIMATE ENGINE COPILOT — UPGRADE FEATURE DELTA · F02'),
+          contains('[UE5_COPILOT TASK=DELTA TARGET=F02'),
         );
-        expect(upgradeF02Prompt, contains('+Chain second dash on shell break'));
+        expect(upgradeF02Prompt, contains('@DELTA v0.2: +Chain second dash on shell break'));
         expect(
           upgradeF02Prompt,
           contains('Dash launches forward 450 cm cleanly'),
@@ -536,7 +533,7 @@ void main() {
           releaseOrder: ['v0.1'],
           mode: UnrealArchitectureMode.blueprint,
         );
-        expect(epicBrief, contains('# UE5 EPIC ARCHITECTURE BRIEF · E01'));
+        expect(epicBrief, contains('[UE5_COPILOT TASK=EPIC_BRIEF TARGET=E01'));
         expect(epicBrief, contains('Blueprint-First'));
         expect(UnrealSpecGuard.containsEngineLeakage(epicBrief), isFalse);
 
@@ -599,7 +596,7 @@ void main() {
         );
         await tester.pumpAndSettle();
         expect(
-          find.textContaining('ULTIMATE ENGINE COPILOT — BUILD FEATURE · F02'),
+          find.textContaining('[UE5_COPILOT TASK=BUILD TARGET=F02'),
           findsOneWidget,
         );
         expect(
@@ -616,7 +613,7 @@ void main() {
         expect(find.text('🔧 Copy CoPilot [FIX] Prompt (1)'), findsOneWidget);
         expect(
           wb.activeCoPilotPrompt(),
-          contains('ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · F02'),
+          contains('[UE5_COPILOT TASK=FIX TARGET=F02'),
         );
       },
     );
@@ -1352,7 +1349,7 @@ void main() {
           wb.selectedEpicSpec!,
           wb.selectedFeatureSpec!,
         );
-        expect(deltaPrompt, contains('Apply ONLY the v0.2 Upgrade Delta above'));
+        expect(deltaPrompt, contains('@EXEC: Apply ONLY @DELTA v0.2 to ${deltaFeat.code}'));
 
         // Select locked [v0.1] baseline Feature in v0.2 and verify Locked Baseline prompt
         wb.selectFeature(lockedEpic!.id, lockedFeat!.id);
@@ -1365,7 +1362,7 @@ void main() {
         );
         expect(
           lockedPrompt,
-          contains('# ULTIMATE ENGINE COPILOT — LOCKED BASELINE REFERENCE'),
+          contains('[UE5_COPILOT TASK=LOCKED_BASELINE TARGET=${lockedFeat.code}'),
         );
         expect(lockedPrompt, contains('Do not rebuild'));
       },
@@ -1546,6 +1543,157 @@ void main() {
           GeminiAgentClient.resetCapabilityCacheForTest();
           GeminiAgentClient.resetUsage();
         }
+      },
+    );
+
+    test(
+      '12. Round 2/5: UnrealPromptCompactor telegraphic DSL cuts >=30% tokens across BUILD/FIX/DELTA/EPIC_BRIEF & preserves GDD/Spec readability',
+      () {
+        expect(
+          UnrealPromptCompactor.compactProse(
+            'When the player triggers the IA_ClawDash input in /Game/Maps/Lvl_ShellbreakerProto.umap, '
+            'the ACharacter should be launching a forward 550 cm dash with Source/PlayerMech.cpp and DashDistanceCm.',
+          ),
+          allOf([
+            contains('IA_ClawDash'),
+            contains('/Game/Maps/Lvl_ShellbreakerProto.umap'),
+            contains('ACharacter'),
+            contains('550 cm'),
+            contains('Source/PlayerMech.cpp'),
+            contains('DashDistanceCm'),
+            isNot(contains('When the player')),
+            isNot(contains('should be')),
+          ]),
+        );
+
+        expect(
+          UnrealPromptCompactor.compactCuts([
+            'No main menu or save slots',
+            'No co-op multiplayer',
+          ]),
+          equals('!main menu or save slots | !co-op multiplayer'),
+        );
+
+        final spec = UnrealSparkPresets.byId('shellbreaker');
+        final epic = spec.initialEpics.first.deepCopy();
+        final f02 = epic.features.firstWhere((f) => f.code == 'F02');
+        f02.checks.first.passed = true;
+        f02.checks.add(
+          EpicPieCheck(
+            id: 'c_open',
+            text: 'Dash into cracked guard -> Shield shatters with Niagara burst',
+            passed: false,
+          ),
+        );
+
+        // BUILD compact vs readable savings >= 30%
+        final buildCompact = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: spec,
+          epic: epic,
+          feature: f02,
+          mode: UnrealArchitectureMode.cppHybrid,
+          compact: true,
+        );
+        final buildReadable = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: spec,
+          epic: epic,
+          feature: f02,
+          mode: UnrealArchitectureMode.cppHybrid,
+          compact: false,
+        );
+        final buildStats =
+            UnrealPromptCompactor.compareSavings(buildCompact, buildReadable);
+        expect(buildStats.savedPercent, greaterThanOrEqualTo(30));
+        expect(buildReadable, contains('ULTIMATE ENGINE COPILOT — BUILD FEATURE'));
+        expect(UnrealSpecGuard.containsEngineLeakage(buildCompact), isFalse);
+        expect(buildCompact, isNot(contains('1 UU')));
+
+        // FIX mode prunes already-passing PIE checks into a summary count + cuts >= 30%
+        f02.fixes.add(
+          EpicPieFix(id: 'fx_corner', text: 'Dash clips south pillar bevel'),
+        );
+        final fixCompact = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: spec,
+          epic: epic,
+          feature: f02,
+          mode: UnrealArchitectureMode.cppHybrid,
+          compact: true,
+        );
+        final fixReadable = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: spec,
+          epic: epic,
+          feature: f02,
+          mode: UnrealArchitectureMode.cppHybrid,
+          compact: false,
+        );
+        expect(fixCompact, contains('1/2 PASS (keep)'));
+        expect(fixCompact, contains('@FIX_NOW: [FIX] Dash clips south pillar bevel'));
+        expect(
+          UnrealPromptCompactor.compareSavings(fixCompact, fixReadable).savedPercent,
+          greaterThanOrEqualTo(30),
+        );
+
+        // DELTA mode savings >= 30%
+        f02.fixes.clear();
+        f02.releaseDelta = '+55ms Hit-Stop freeze & radial shockwave ring';
+        final deltaCompact = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: spec,
+          epic: epic,
+          feature: f02,
+          releaseVersion: 'v0.2',
+          compact: true,
+        );
+        final deltaReadable = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: spec,
+          epic: epic,
+          feature: f02,
+          releaseVersion: 'v0.2',
+          compact: false,
+        );
+        expect(
+          UnrealPromptCompactor.compareSavings(deltaCompact, deltaReadable).savedPercent,
+          greaterThanOrEqualTo(30),
+        );
+
+        // EPIC_BRIEF savings >= 30%
+        final epicCompact = UnrealContextBuilder.buildEpicArchitectureContext(
+          rootSpec: spec,
+          epic: epic,
+          compact: true,
+        );
+        final epicReadable = UnrealContextBuilder.buildEpicArchitectureContext(
+          rootSpec: spec,
+          epic: epic,
+          compact: false,
+        );
+        expect(
+          UnrealPromptCompactor.compareSavings(epicCompact, epicReadable).savedPercent,
+          greaterThanOrEqualTo(30),
+        );
+
+        // Heading-indexed GDD keeps # / ## / ### headings; Full Spec stays human Markdown
+        final gdd = UnrealContextBuilder.buildCoPilotGddMarkdown(
+          rootSpec: spec,
+          epicsByReleaseLabel: {'v0.1 · Prototype': spec.initialEpics},
+        );
+        for (final heading in const [
+          '# PROJECT GDD · SHELLBREAKER',
+          '## §01 Concept & 30s Loop',
+          '## §02 Global UE5 Contracts',
+          '## §03 Pillars & Trade-Offs',
+          '## §04 Hard Scope Cuts',
+          '## §05 Release Architecture',
+          '### v0.1 · Prototype',
+        ]) {
+          expect(gdd, contains(heading));
+        }
+
+        final fullSpec = UnrealContextBuilder.buildFullProjectSpecMarkdown(
+          rootSpec: spec,
+          epicsByReleaseLabel: {'v0.1 · Prototype': spec.initialEpics},
+        );
+        expect(fullSpec, contains('# UE5 EPIC ARCHITECTURE BRIEF'));
+        expect(fullSpec, contains('# ULTIMATE ENGINE COPILOT — BUILD FEATURE'));
       },
     );
   });
