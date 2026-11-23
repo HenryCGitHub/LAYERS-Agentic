@@ -59,8 +59,8 @@ class ProjectConceptAgent {
     String? archetypeId,
     String? viewChoiceId,
     String? prototypeHookId,
-    String preferredModel = GeminiAgentClient.pinnedLiveFlashModel,
-    String thinkingLevel = 'LOW',
+    String preferredModel = GeminiAgentClient.pinnedArchitectModel,
+    String thinkingLevel = GeminiAgentClient.defaultArchitectThinkingLevel,
   }) async {
     final outcome = await draftSpecWithStatus(
       sparkPrompt: sparkPrompt,
@@ -84,8 +84,8 @@ class ProjectConceptAgent {
     String? archetypeId,
     String? viewChoiceId,
     String? prototypeHookId,
-    String preferredModel = GeminiAgentClient.pinnedLiveFlashModel,
-    String thinkingLevel = 'LOW',
+    String preferredModel = GeminiAgentClient.pinnedArchitectModel,
+    String thinkingLevel = GeminiAgentClient.defaultArchitectThinkingLevel,
   }) async {
     final trimmedSpark = sparkPrompt.trim();
     final matchedPreset = UnrealSparkPresets.matchSparkPrompt(trimmedSpark);

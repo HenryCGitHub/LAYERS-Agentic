@@ -114,7 +114,7 @@ class VaultStorageImpl implements VaultStorageBackend {
         'activeDocumentId': activeDocumentId,
         'apiKey': apiKey ?? '',
         'modelName': modelName ?? GeminiAgentClient.pinnedLiveFlashModel,
-        'planningModel': planningModel ?? GeminiAgentClient.pinnedLiveFlashModel,
+        'planningModel': planningModel ?? GeminiAgentClient.pinnedArchitectModel,
         'thinkingLevel': thinkingLevel ?? 'LOW',
         'themeMode': themeMode ?? currentThemeMode ?? 'dark',
       }));

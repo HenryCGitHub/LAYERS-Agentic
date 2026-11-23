@@ -225,6 +225,11 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     notifyListeners();
 
     try {
+      final archThinking =
+          (_planningModel == GeminiAgentClient.pinnedArchitectModel ||
+                  _planningModel == 'gemini-4-neon')
+              ? GeminiAgentClient.defaultArchitectThinkingLevel
+              : _thinkingLevel;
       final outcome = await ProjectConceptAgent.draftSpecWithStatus(
         sparkPrompt: cleanPrompt,
         apiKey: _apiKey,
@@ -234,7 +239,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         viewChoiceId: viewChoiceId,
         prototypeHookId: prototypeHookId,
         preferredModel: _planningModel,
-        thinkingLevel: _thinkingLevel,
+        thinkingLevel: archThinking,
       );
       if (outcome.blueprint == null) {
         final msg = outcome.errorMessage ??

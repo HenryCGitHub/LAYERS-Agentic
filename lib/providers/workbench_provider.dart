@@ -117,13 +117,13 @@ class WorkbenchProvider extends ChangeNotifier {
   String? get aiLastErrorStatus => GeminiAgentClient.lastErrorStatus;
   String? get aiFallbackReason => GeminiAgentClient.lastFallbackReason;
 
-  String _conversationModel = 'gemini-4-hydrogen';
+  String _conversationModel = GeminiAgentClient.pinnedLiveFlashModel;
   String get conversationModel => _conversationModel;
 
-  String _planningModel = 'gemini-4-hydrogen';
+  String _planningModel = GeminiAgentClient.pinnedArchitectModel;
   String get planningModel => _planningModel;
 
-  String _thinkingLevel = 'LOW';
+  String _thinkingLevel = GeminiAgentClient.defaultFastThinkingLevel;
   String get thinkingLevel => _thinkingLevel;
 
   int get totalInputTokens => GeminiAgentClient.totalInputTokens;
@@ -165,13 +165,16 @@ class WorkbenchProvider extends ChangeNotifier {
       inputTokens: inputTokens,
       outputTokens: outputTokens,
       thinkingTokens: thinkingTokens,
+      model: modelUsed,
     );
     notifyListeners();
   }
 
   String get activeModelIndicatorLabel {
-    final used = (GeminiAgentClient.lastResolvedModel ?? _conversationModel)
+    final used = (GeminiAgentClient.lastResolvedModel ?? _planningModel)
         .toLowerCase();
+    if (used.contains('argon')) return '⚡ Argon';
+    if (used.contains('neon')) return '⚡ Neon';
     if (used.contains('hydrogen')) return '⚡ Hydrogen';
     if (used.contains('flash')) return '⚡ Flash (Fallback)';
     return 'Gemini';
@@ -179,10 +182,13 @@ class WorkbenchProvider extends ChangeNotifier {
 
   static const List<String> availableConversationModels = [
     'gemini-4-hydrogen',
+    'gemini-4-argon',
     'gemini-flash-latest',
   ];
 
   static const List<String> availablePlanningModels = [
+    'gemini-4-argon',
+    'gemini-4-neon',
     'gemini-4-hydrogen',
     'gemini-flash-latest',
   ];

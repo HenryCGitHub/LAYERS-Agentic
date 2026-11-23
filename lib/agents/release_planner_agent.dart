@@ -293,8 +293,8 @@ class ReleasePlannerAgent {
     required String targetVersion,
     required String apiKey,
     String directionPrompt = '',
-    String preferredModel = GeminiAgentClient.pinnedLiveFlashModel,
-    String thinkingLevel = 'LOW',
+    String preferredModel = GeminiAgentClient.pinnedArchitectModel,
+    String thinkingLevel = GeminiAgentClient.defaultArchitectThinkingLevel,
   }) async {
     // Instant local curated Co-Pilot pack when switching v0.1 -> v0.2 with cached v0.2 data
     if (targetVersion == 'v0.2' &&

@@ -5,7 +5,7 @@ import '../constants/text_style_guide.dart';
 
 /// Lightweight, resilient Gemini JSON client for LAYERS-Agentic.
 /// Supports:
-/// - Explicit live model pinning to `gemini-4-hydrogen` with Flash-only `gemini-flash-latest` failover (never Argon/Pro).
+/// - Explicit dual-model routing (`gemini-4-argon` Architect -> `gemini-4-hydrogen` fast edit -> `gemini-flash-latest` failover).
 /// - Header-only `x-goog-api-key` auth (never exposing API keys in DevTools URLs).
 /// - Exponential backoff + jitter retries on transient `429` / `503` / `5xx` responses.
 class GeminiAgentClient {
@@ -14,8 +14,11 @@ class GeminiAgentClient {
       String.fromEnvironment('GEMINI_PROXY_URL');
   static const String defaultProxyBaseUrl =
       'https://us-central1-layers-b8a16.cloudfunctions.net/geminiProxy';
+  static const String pinnedArchitectModel = 'gemini-4-argon';
   static const String pinnedLiveFlashModel = 'gemini-4-hydrogen';
   static const String fallbackFlashModel = 'gemini-flash-latest';
+  static const String defaultArchitectThinkingLevel = 'MEDIUM';
+  static const String defaultFastThinkingLevel = 'LOW';
   static String? _cachedDefaultKey;
 
   /// Optional override for the Firebase Cloud Function proxy URL (used in tests or custom deployments).
@@ -31,7 +34,7 @@ class GeminiAgentClient {
   static final Random _jitterRandom = Random();
   static const int _maxTransientAttempts = 3;
   static const Duration _defaultBaseRetryDelay = Duration(milliseconds: 900);
-  static const Duration _heavyModelTimeout = Duration(seconds: 60);
+  static const Duration _heavyModelTimeout = Duration(seconds: 90);
   static const Duration _standardModelTimeout = Duration(seconds: 60);
   static const Duration _metadataTimeout = Duration(seconds: 6);
 
@@ -76,11 +79,59 @@ class GeminiAgentClient {
   /// Records why `gemini-4-hydrogen` failed over to `gemini-flash-latest` on the most recent call.
   static String? lastFallbackReason;
 
-  /// Pricing rates for Gemini 4 Hydrogen (`gemini-4-hydrogen`):
-  /// $1.50 per 1 million input tokens.
-  /// $7.50 per 1 million output tokens (includes candidate text and thinking/reasoning tokens).
+  /// Standard Paid Tier rates per 1M tokens (USD):
+  /// - Gemini 4 Hydrogen: $1.50 input / $7.50 output
+  /// - Gemini 4 Argon: $2.00 input / $10.00 output (introductory through Nov 30, 2026)
+  /// - Gemini 4 Neon: $3.00 input / $15.00 output
   static const double flashInputCostPerMillion = 1.50;
   static const double flashOutputCostPerMillion = 7.50;
+  static const double argonInputCostPerMillion = 2.00;
+  static const double argonOutputCostPerMillion = 10.00;
+  static const double neonInputCostPerMillion = 3.00;
+  static const double neonOutputCostPerMillion = 15.00;
+
+  /// Resolves the ordered model failover chain for [preferredModel].
+  static List<String> resolveModelSequence(String preferredModel) {
+    final lower = preferredModel.trim().toLowerCase();
+    if (lower == pinnedArchitectModel) {
+      return const <String>[
+        pinnedArchitectModel,
+        pinnedLiveFlashModel,
+        fallbackFlashModel,
+      ];
+    }
+    if (lower == 'gemini-4-neon') {
+      return const <String>[
+        'gemini-4-neon',
+        pinnedLiveFlashModel,
+        fallbackFlashModel,
+      ];
+    }
+    return const <String>[pinnedLiveFlashModel, fallbackFlashModel];
+  }
+
+  /// Returns per-1M USD token pricing rates for [model].
+  static ({double inputPerM, double outputPerM}) pricingRatesForModel(
+    String? model,
+  ) {
+    final lower = (model ?? '').trim().toLowerCase();
+    if (lower.contains('argon')) {
+      return (
+        inputPerM: argonInputCostPerMillion,
+        outputPerM: argonOutputCostPerMillion,
+      );
+    }
+    if (lower.contains('neon')) {
+      return (
+        inputPerM: neonInputCostPerMillion,
+        outputPerM: neonOutputCostPerMillion,
+      );
+    }
+    return (
+      inputPerM: flashInputCostPerMillion,
+      outputPerM: flashOutputCostPerMillion,
+    );
+  }
 
   /// Accumulative token counters and estimated cost across all Gemini calls in the session.
   static int totalInputTokens = 0;
@@ -93,12 +144,14 @@ class GeminiAgentClient {
     required int inputTokens,
     required int outputTokens,
     int thinkingTokens = 0,
+    String? model,
   }) {
+    final rates = pricingRatesForModel(model ?? lastResolvedModel);
     totalInputTokens += inputTokens;
     totalOutputTokens += outputTokens;
     totalThinkingTokens += thinkingTokens;
-    totalEstimatedCostUsd = (totalInputTokens * flashInputCostPerMillion +
-            totalOutputTokens * flashOutputCostPerMillion) /
+    totalEstimatedCostUsd += (inputTokens * rates.inputPerM +
+            outputTokens * rates.outputPerM) /
         1000000.0;
   }
 
@@ -397,7 +450,10 @@ class GeminiAgentClient {
         (lower.contains('model') && lower.contains('blocked'));
   }
 
-  static void _recordUsageFromBody(Map<String, dynamic> body) {
+  static void _recordUsageFromBody(
+    Map<String, dynamic> body, {
+    String? model,
+  }) {
     try {
       final rawUsage = body['usageMetadata'];
       if (rawUsage is Map) {
@@ -416,16 +472,20 @@ class GeminiAgentClient {
             inputTokens: billedInput,
             outputTokens: billedOutput,
             thinkingTokens: thoughtsTokens,
+            model: model,
           );
         }
       }
     } catch (_) {}
   }
 
-  static Map<String, dynamic>? _parseCandidateResponseJson(String responseBody) {
+  static Map<String, dynamic>? _parseCandidateResponseJson(
+    String responseBody, {
+    String? model,
+  }) {
     try {
       final body = jsonDecode(responseBody) as Map<String, dynamic>;
-      _recordUsageFromBody(body);
+      _recordUsageFromBody(body, model: model);
       final candidates = body['candidates'] as List?;
       if (candidates == null || candidates.isEmpty) return null;
       final content = candidates.first['content'] as Map<String, dynamic>?;
@@ -511,17 +571,17 @@ class GeminiAgentClient {
     String functionCallingMode = 'ANY',
     Map<String, dynamic>? responseSchema,
   }) async {
-    final List<String> modelsToTry =
-        const <String>[pinnedLiveFlashModel, fallbackFlashModel];
-    final resolvedModel = modelsToTry.first;
+    final List<String> modelsToTry = resolveModelSequence(preferredModel);
+    final String primaryModel = modelsToTry.first;
     if (testMockResponder != null) {
-      final mockRes = await testMockResponder!(prompt, resolvedModel);
+      final mockRes = await testMockResponder!(prompt, primaryModel);
       if (mockRes != null &&
           mockRes.containsKey('_usageMetadata') &&
           mockRes['_usageMetadata'] is Map) {
-        _recordUsageFromBody({
-          'usageMetadata': mockRes['_usageMetadata'],
-        });
+        _recordUsageFromBody(
+          {'usageMetadata': mockRes['_usageMetadata']},
+          model: primaryModel,
+        );
       }
       return mockRes;
     }
@@ -576,7 +636,10 @@ class GeminiAgentClient {
       final uri = Uri.parse(
         '$baseApiRoot/v1beta/models/$model:generateContent',
       );
-      final isHeavyPlanningModel = model.contains('pro');
+      final isHeavyPlanningModel = model.contains('argon') ||
+          model.contains('neon') ||
+          model.contains('carbon') ||
+          model.contains('pro');
       final timeoutDuration =
           isHeavyPlanningModel ? _heavyModelTimeout : _standardModelTimeout;
       int? modelLastStatus;
@@ -686,14 +749,17 @@ class GeminiAgentClient {
               if (mv.isNotEmpty) lastModelVersion = mv;
             }
           } catch (_) {}
-          final parsed = _parseCandidateResponseJson(response.body);
+          final parsed = _parseCandidateResponseJson(
+            response.body,
+            model: model,
+          );
           if (parsed != null) {
-            if (model == pinnedLiveFlashModel) {
+            if (model == primaryModel) {
               lastFallbackReason = null;
             }
             return parsed;
           }
-          if (model == pinnedLiveFlashModel) {
+          if (model == primaryModel) {
             lastFallbackReason = 'HTTP 200: empty or unparseable JSON response';
           }
         } else {
@@ -701,7 +767,7 @@ class GeminiAgentClient {
           if (_isProxyModelPolicyBlock(response.statusCode, errMsg)) {
             lastNon200Status = 403;
             lastPolicyErrorMessage = errMsg;
-            if (model == pinnedLiveFlashModel) {
+            if (model == primaryModel) {
               lastFallbackReason =
                   _formatHttpStatusReason(response.statusCode, errMsg);
             }
@@ -716,14 +782,14 @@ class GeminiAgentClient {
             return null;
           }
           lastNon200Status = response.statusCode;
-          if (model == pinnedLiveFlashModel) {
+          if (model == primaryModel) {
             lastFallbackReason =
                 _formatHttpStatusReason(response.statusCode, errMsg);
           }
         }
       } catch (err) {
         lastCaughtError = err;
-        if (model == pinnedLiveFlashModel) {
+        if (model == primaryModel) {
           lastFallbackReason = '$err';
         }
         // Proceed to JSON-mode fallback only if a non-404 HTTP response arrived
@@ -773,14 +839,17 @@ class GeminiAgentClient {
                 if (mv.isNotEmpty) lastModelVersion = mv;
               }
             } catch (_) {}
-            final parsed = _parseCandidateResponseJson(fallbackRes.body);
+            final parsed = _parseCandidateResponseJson(
+              fallbackRes.body,
+              model: model,
+            );
             if (parsed != null) {
-              if (model == pinnedLiveFlashModel) {
+              if (model == primaryModel) {
                 lastFallbackReason = null;
               }
               return parsed;
             }
-            if (model == pinnedLiveFlashModel) {
+            if (model == primaryModel) {
               lastFallbackReason =
                   'HTTP 200: empty or unparseable JSON fallback response';
             }
@@ -789,7 +858,7 @@ class GeminiAgentClient {
             if (_isProxyModelPolicyBlock(fallbackRes.statusCode, errMsg)) {
               lastNon200Status = 403;
               lastPolicyErrorMessage = errMsg;
-              if (model == pinnedLiveFlashModel) {
+              if (model == primaryModel) {
                 lastFallbackReason =
                     _formatHttpStatusReason(fallbackRes.statusCode, errMsg);
               }
@@ -803,14 +872,14 @@ class GeminiAgentClient {
               return null;
             }
             lastNon200Status = fallbackRes.statusCode;
-            if (model == pinnedLiveFlashModel) {
+            if (model == primaryModel) {
               lastFallbackReason =
                   _formatHttpStatusReason(fallbackRes.statusCode, errMsg);
             }
           }
         } catch (err) {
           lastCaughtError = err;
-          if (model == pinnedLiveFlashModel) {
+          if (model == primaryModel) {
             lastFallbackReason = '$err';
           }
           continue;

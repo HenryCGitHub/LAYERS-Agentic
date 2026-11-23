@@ -15,6 +15,11 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     notifyListeners();
 
     try {
+      final archThinking =
+          (_planningModel == GeminiAgentClient.pinnedArchitectModel ||
+                  _planningModel == 'gemini-4-neon')
+              ? GeminiAgentClient.defaultArchitectThinkingLevel
+              : _thinkingLevel;
       final draft = await ReleasePlannerAgent.proposeNextReleaseCopilot(
         rootSpec: rootSpec,
         currentEpics: latestReleaseEpics,
@@ -22,7 +27,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         apiKey: _apiKey,
         directionPrompt: directionPrompt,
         preferredModel: _planningModel,
-        thinkingLevel: _thinkingLevel,
+        thinkingLevel: archThinking,
       );
       if (reqSeq != _progressiveDraftRequestSeq ||
           _activeProjectId != startedProjectId) {

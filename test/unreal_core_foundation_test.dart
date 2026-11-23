@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/concept/project_concept_schemas.dart';
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/project_concept_agent.dart';
@@ -1447,6 +1448,103 @@ void main() {
               reason: '$normPath contains banned 1 UU label clutter',
             );
           }
+        }
+      },
+    );
+
+    test(
+      '11. Round 1/5: Frontier Gemini 4 Argon architect routing, failover to Hydrogen, and per-model cost tracking',
+      () async {
+        expect(
+          GeminiAgentClient.resolveModelSequence('gemini-4-argon'),
+          equals(['gemini-4-argon', 'gemini-4-hydrogen', 'gemini-flash-latest']),
+        );
+        expect(
+          GeminiAgentClient.resolveModelSequence('gemini-4-neon'),
+          equals(['gemini-4-neon', 'gemini-4-hydrogen', 'gemini-flash-latest']),
+        );
+        expect(
+          GeminiAgentClient.resolveModelSequence('gemini-4-hydrogen'),
+          equals(['gemini-4-hydrogen', 'gemini-flash-latest']),
+        );
+
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.resetCapabilityCacheForTest();
+        GeminiAgentClient.resetUsage();
+        GeminiAgentClient.testMockResponder = null;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+
+        final requestedUrls = <String>[];
+        final capturedBodies = <Map<String, dynamic>>[];
+
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          requestedUrls.add(uri.toString());
+          if (body is String && body.isNotEmpty) {
+            capturedBodies.add(jsonDecode(body) as Map<String, dynamic>);
+          }
+          if (uri.toString().contains('gemini-4-argon')) {
+            return http.Response('{"error":{"message":"Argon busy"}}', 503);
+          }
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {'text': '{"planned": true}'},
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        };
+
+        try {
+          final wbIdle = WorkbenchProvider(enableAutoLoad: false);
+          expect(wbIdle.activeModelIndicatorLabel, equals('⚡ Argon'));
+
+          final res = await GeminiAgentClient.generateJson(
+            prompt: 'Draft Unreal project architecture',
+            apiKey: 'test-key-1234',
+            preferredModel: 'gemini-4-argon',
+            thinkingLevel: 'MEDIUM',
+          );
+
+          expect(res, isNotNull);
+          expect(res!['planned'], isTrue);
+          expect(requestedUrls.first, contains('models/gemini-4-argon:'));
+          expect(requestedUrls.last, contains('models/gemini-4-hydrogen:'));
+          final argonCfg =
+              capturedBodies.first['generationConfig'] as Map<String, dynamic>;
+          expect(argonCfg['thinkingConfig'], equals({'thinkingLevel': 'MEDIUM'}));
+          expect(argonCfg.containsKey('temperature'), isFalse);
+          expect(GeminiAgentClient.lastResolvedModel, equals('gemini-4-hydrogen'));
+          expect(GeminiAgentClient.lastFallbackReason, contains('HTTP 503'));
+
+          GeminiAgentClient.resetUsage();
+          GeminiAgentClient.recordUsage(
+            inputTokens: 1000000,
+            outputTokens: 1000000,
+            model: 'gemini-4-argon',
+          );
+          expect(GeminiAgentClient.totalEstimatedCostUsd, closeTo(12.0, 0.0001));
+
+          GeminiAgentClient.recordUsage(
+            inputTokens: 1000000,
+            outputTokens: 1000000,
+            model: 'gemini-4-hydrogen',
+          );
+          expect(GeminiAgentClient.totalEstimatedCostUsd, closeTo(21.0, 0.0001));
+        } finally {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+          GeminiAgentClient.resetCapabilityCacheForTest();
+          GeminiAgentClient.resetUsage();
         }
       },
     );

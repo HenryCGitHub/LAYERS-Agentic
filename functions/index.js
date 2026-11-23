@@ -9,8 +9,10 @@ initializeApp();
 const GEMINI_API_KEY = defineSecret("GEMINI_API_KEY");
 const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
 
-// Hard model lock: strictly allow Gemini Flash models only (never Argon / Pro / Imagen / Veo).
+// Allowlist of supported Gemini 4 & Flash models (blocks legacy/non-text models).
 const ALLOWED_MODELS = new Set([
+  "gemini-4-argon",
+  "gemini-4-neon",
   "gemini-4-hydrogen",
   "gemini-3.8-flash",
   "gemini-flash-latest",
@@ -81,7 +83,7 @@ exports.geminiProxy = onRequest(
       res.status(403).json({
         error: {
           code: 403,
-          message: `Model "${modelName}" is blocked by LAYERS Flash-only policy.`,
+          message: `Model "${modelName}" is blocked by LAYERS model policy.`,
         },
       });
       return;

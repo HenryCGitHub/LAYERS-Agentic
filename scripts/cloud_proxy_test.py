@@ -145,6 +145,8 @@ const indexMod = require(path.join(functionsDir, "index.js"));
 const handler = indexMod.geminiProxy;
 const helpers = indexMod._testHelpers;
 
+assert(helpers.ALLOWED_MODELS.includes("gemini-4-argon"));
+assert(helpers.ALLOWED_MODELS.includes("gemini-4-neon"));
 assert(helpers.ALLOWED_MODELS.includes("gemini-4-hydrogen"));
 assert(helpers.ALLOWED_MODELS.includes("gemini-flash-latest"));
 assert.strictEqual(helpers.computeActiveGodotEpicPayload, undefined);
@@ -239,6 +241,13 @@ async function invoke(method, reqPath, { token = null, body = null, rawBytes = n
     fetchCalls[0].opts.headers["x-goog-api-key"],
     "test-gemini-secret"
   );
+
+  const okArgonProxy = await invoke("POST", "/v1beta/models/gemini-4-argon:generateContent", {
+    token: "tok-approved",
+    body: { contents: [{ parts: [{ text: "plan" }] }] },
+  });
+  assert.strictEqual(okArgonProxy.statusCode, 200);
+  assert.strictEqual(fetchCalls.length, 2);
 
   // 5. Invite & access control routes.
   const sendForbidden = await invoke("POST", "/sendInvite", {

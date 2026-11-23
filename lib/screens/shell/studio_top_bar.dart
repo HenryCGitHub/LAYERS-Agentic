@@ -695,7 +695,7 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                     const SizedBox(width: 4),
                     Tooltip(
                       message:
-                          'Active AI Model: ${workbench.activeModelIndicatorLabel} (${workbench.conversationModel}, thinking: ${workbench.thinkingLevel})'
+                          'Active AI Models: ${workbench.activeModelIndicatorLabel} · Architect ${workbench.planningModel} · Refine ${workbench.conversationModel} (thinking: ${workbench.thinkingLevel})'
                           '${workbench.activeModelIndicatorLabel.contains('Fallback') && workbench.aiFallbackReason != null ? '\nFallback reason: ${workbench.aiFallbackReason}' : ''}',
                       child: Container(
                         key: const ValueKey('active_model_indicator_pill'),
@@ -729,10 +729,10 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                     ),
                     const SizedBox(width: 4),
                     Tooltip(
-                      message: 'Gemini 4 Hydrogen Session Token Usage:\n'
-                          '• Input: ${workbench.totalInputTokens} tokens (\$1.50 / 1M)\n'
-                          '• Output: ${workbench.totalOutputTokens} tokens (\$7.50 / 1M inc. reasoning)\n'
-                          '• Est. Cost: \$${workbench.totalEstimatedCostUsd.toStringAsFixed(4)}\n\n'
+                      message: 'Gemini 4 Session Token Usage:\n'
+                          '• Input: ${workbench.totalInputTokens} tokens\n'
+                          '• Output: ${workbench.totalOutputTokens} tokens (inc. reasoning)\n'
+                          '• Est. Cost: \$${workbench.totalEstimatedCostUsd.toStringAsFixed(4)} (Argon \$2/\$10 · Hydrogen \$1.50/\$7.50 per 1M)\n\n'
                           'Click to reset session token counter.',
                       child: InkWell(
                         key: const ValueKey('token_usage_tracker_pill'),

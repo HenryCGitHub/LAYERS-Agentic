@@ -108,7 +108,7 @@ class VaultStorageWebImpl implements VaultStorageBackend {
             'apiKey': apiKey ?? '',
             'modelName': modelName ?? GeminiAgentClient.pinnedLiveFlashModel,
             'planningModel':
-                planningModel ?? GeminiAgentClient.pinnedLiveFlashModel,
+                planningModel ?? GeminiAgentClient.pinnedArchitectModel,
             'thinkingLevel': thinkingLevel ?? 'LOW',
             'themeMode': themeMode ?? currentThemeMode ?? 'dark',
           }));

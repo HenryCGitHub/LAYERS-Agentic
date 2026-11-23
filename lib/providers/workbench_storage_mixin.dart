@@ -528,17 +528,18 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       }
       // API keys are no longer loaded from browser localStorage; all live calls authenticate via Google Sign-In + geminiProxy.
       _apiKey = GeminiAgentClient.resolveDefaultApiKey();
-      const pinned = GeminiAgentClient.pinnedLiveFlashModel;
+      const pinnedFast = GeminiAgentClient.pinnedLiveFlashModel;
+      const pinnedArch = GeminiAgentClient.pinnedArchitectModel;
       final hadSavedAiPrefs = loaded.modelName != null ||
           loaded.planningModel != null ||
           loaded.thinkingLevel != null;
-      _conversationModel = pinned;
-      _planningModel = pinned;
-      _thinkingLevel = 'LOW';
+      _conversationModel = pinnedFast;
+      _planningModel = pinnedArch;
+      _thinkingLevel = GeminiAgentClient.defaultFastThinkingLevel;
 
       final needsAiPrefsMigration = hadSavedAiPrefs &&
-          (loaded.modelName?.trim() != pinned ||
-              loaded.planningModel?.trim() != pinned ||
+          (loaded.modelName?.trim() != pinnedFast ||
+              loaded.planningModel?.trim() != pinnedArch ||
               loaded.thinkingLevel?.trim().toUpperCase() != 'LOW');
       final projs = savedProjects;
       if (!_tryResolvePendingDeepLink() && projs.isNotEmpty) {

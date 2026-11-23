@@ -23,7 +23,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   group('Platform, Vault, Auth, Invite & Model Failover Regression Suite', () {
     test(
-      'initVault() auto-migrates legacy gemini-flash-latest & HIGH settings to gemini-4-hydrogen + LOW',
+      'initVault() auto-migrates legacy gemini-flash-latest & HIGH settings to gemini-4-argon planner + gemini-4-hydrogen fast edit + LOW',
       () async {
         final fakeBackend = _MemoryVaultStorageBackend(
           const VaultLoadResult(
@@ -46,7 +46,7 @@ void main() {
           );
           expect(
             provider.planningModel,
-            equals(GeminiAgentClient.pinnedLiveFlashModel),
+            equals(GeminiAgentClient.pinnedArchitectModel),
           );
           expect(provider.thinkingLevel, equals('LOW'));
           expect(fakeBackend.saveSettingsCount, greaterThanOrEqualTo(1));
@@ -56,7 +56,7 @@ void main() {
           );
           expect(
             fakeBackend.lastSavedPlanningModel,
-            equals(GeminiAgentClient.pinnedLiveFlashModel),
+            equals(GeminiAgentClient.pinnedArchitectModel),
           );
           expect(fakeBackend.lastSavedThinkingLevel, equals('LOW'));
         } finally {
