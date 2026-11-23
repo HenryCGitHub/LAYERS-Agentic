@@ -484,7 +484,7 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                           final accentCyan = AppTheme.accentCyanFor(isDark);
                           return Tooltip(
                             message:
-                                'Export & Copy Ultimate Engine CoPilot GDD (*_copilot_gdd.md)',
+                                'Export heading-indexed CoPilot GDD (*_copilot_gdd.md) for UE5 GDD window',
                             child: InkWell(
                               key: const ValueKey('top_bar_copilot_gdd_btn'),
                               borderRadius: BorderRadius.circular(5),
@@ -517,7 +517,8 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                       const SizedBox(width: 4),
                       PopupMenuButton<String>(
                         key: const ValueKey('global_export_spec_btn'),
-                        tooltip: 'Export CoPilot GDD, Spec or Backup (.md / .layers.json)',
+                        tooltip:
+                            'Export CoPilot GDD, Human Spec (.md), or Vault Backup (.layers.json)',
                         constraints: const BoxConstraints(
                           minWidth: 280,
                           maxWidth: 340,

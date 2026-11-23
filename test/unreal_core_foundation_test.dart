@@ -1696,6 +1696,128 @@ void main() {
         expect(fullSpec, contains('# ULTIMATE ENGINE COPILOT — BUILD FEATURE'));
       },
     );
+
+    testWidgets(
+      '13. Stage 2 CoPilot Preview toggles Compact DSL vs Readable View with token savings badge (Feature & Epic)',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final e01 = wb.activeReleaseEpics.first;
+        final f02 = e01.features.firstWhere((f) => f.code == 'F02');
+        wb.selectFeature(e01.id, f02.id);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // Feature Preview: Compact DSL default + token badge + toggle to Readable View and back
+        await tester.tap(
+          find.byKey(const ValueKey('preview_copilot_prompt_btn')),
+        );
+        await tester.pumpAndSettle();
+
+        final badgeFinder = find.byKey(
+          const ValueKey('copilot_preview_token_badge'),
+        );
+        expect(badgeFinder, findsOneWidget);
+        expect(
+          find.descendant(
+            of: badgeFinder,
+            matching: find.textContaining('tok'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: badgeFinder,
+            matching: find.textContaining('% vs MD'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('preview_mode_compact_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('preview_mode_readable_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('[UE5_COPILOT TASK=BUILD TARGET=F02'),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('preview_mode_readable_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('# ULTIMATE ENGINE COPILOT — BUILD FEATURE · F02'),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('[UE5_COPILOT TASK=BUILD TARGET=F02'),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('dialog_copy_readable_prompt_btn')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('preview_mode_compact_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('[UE5_COPILOT TASK=BUILD TARGET=F02'),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('close_copilot_preview_btn')),
+        );
+        await tester.pumpAndSettle();
+
+        // Epic Architecture Brief Preview: Compact DSL default + Readable View toggle
+        wb.selectEpic(e01.id);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('preview_epic_brief_btn')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('preview_epic_brief_btn')));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.textContaining('[UE5_COPILOT TASK=EPIC_BRIEF TARGET=E01'),
+          findsOneWidget,
+        );
+        expect(badgeFinder, findsOneWidget);
+
+        await tester.tap(
+          find.byKey(const ValueKey('preview_mode_readable_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.textContaining('# UE5 EPIC ARCHITECTURE BRIEF · E01'),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('close_copilot_preview_btn')),
+        );
+        await tester.pumpAndSettle();
+      },
+    );
   });
 }
 

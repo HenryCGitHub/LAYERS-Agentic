@@ -369,6 +369,25 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                               style: TextStyle(fontSize: 12),
                             ),
                           ),
+                          OutlinedButton.icon(
+                            key: const ValueKey('preview_epic_brief_btn'),
+                            onPressed: () => showCoPilotPromptPreviewDialog(
+                              context,
+                              title:
+                                  '${epic.code} · ${epic.title} — Epic Architecture Brief',
+                              promptText: wb.activeEpicArchitecturePrompt(epic),
+                              readableText: wb.activeEpicReadableBrief(epic),
+                              isDark: isDark,
+                            ),
+                            icon: const Icon(
+                              Icons.visibility_outlined,
+                              size: 14,
+                            ),
+                            label: const Text(
+                              'Preview',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                          ),
                           ElevatedButton(
                             key: const ValueKey(
                               'epic_inspect_first_feature_btn',
@@ -420,6 +439,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   '${feature.code} · ${feature.title} — CoPilot Prompt',
                               promptText:
                                   wb.activeFeatureBuildPrompt(epic, feature),
+                              readableText:
+                                  wb.activeFeatureReadablePrompt(epic, feature),
                               isDark: isDark,
                             ),
                             icon: const Icon(Icons.visibility_outlined, size: 14),
