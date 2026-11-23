@@ -49,12 +49,12 @@ Displays the Clean Spec Document (`PROJECT_SPEC.md`) with a `Blueprint-First` / 
 
 ### C. Stage 2 — Release Workbench (`2. Release Workbench` in [`lib/screens/release_workbench_screen.dart`](lib/screens/release_workbench_screen.dart)) & CoPilot Prompt Export ([`lib/utils/unreal_context_builder.dart`](lib/utils/unreal_context_builder.dart))
 
-#### Epic Domain Sheet (`selectedFeatureId == null` -> `UnrealContextBuilder.buildEpicArchitectureBrief`)
+#### Epic Domain Sheet (`selectedFeatureId == null` -> `UnrealContextBuilder.buildEpicArchitectureContext`)
 | Section | Fields | Assigned Style | Exact Format Rule | Example |
 | :--- | :--- | :--- | :--- | :--- |
 | **`§01` Domain Scope** | `goal`, `inScope[]`, `doneWhen[]` | **1. BLUF** + Structured 3-Part | 1-sentence Domain Goal + concise bullets (zero duplicated Feature inputs/vars) | `Goal: Own mech planar locomotion & dash commitments.` |
-| **`§02` Shared Asset & Script Ownership** | `sceneOwnership[]` (`path`, `role`) | **4. `/Game/...` & `Source/` Contract** | Authoritative `/Game/...` maps/Blueprints or `Source/` C++ files & responsibilities owned by this Epic | `/Game/Blueprints/BP_PlayerMech.uasset — Movement state & Exposed BP tuning` |
-| **`§03` Shared State & Interrupt Rules** | `stateFlow[]`, `interruptRules[]` | **4. State Transition** | Cross-slice state graph + interrupt precedence | `Idle -> Walk -> ClawDash -> Recover` |
+| **`§02` Shared Blueprint, Level & Class Ownership** | `sceneOwnership[]` (`path`, `role`), `+ Add Owner` inline editor | **4. `/Game/...` & `Source/` Contract** | Editable authoritative `/Game/...` assets or `Source/` C++ classes & roles flowing directly into child prompts | `/Game/Blueprints/BP_PlayerMech.uasset — Movement state & Exposed BP tuning` |
+| **`§03` Shared State & Interrupt Rules** | `stateFlow[]`, `interruptRules[]`, `Edit Rules` inline editor | **4. State Transition** | Editable cross-slice state graph + interrupt precedence (`@STATES:` in child prompts) | `Idle -> Walk -> ClawDash -> Recover` |
 | **`§04` Domain Out-of-Scope Cuts** | `outOfScope[]` | **4. Micro-Label Cut** | Explicit `"No ..."` boundaries for the Epic domain | `No wall jumping or ledge vaulting` |
 | **`§05` Child Features** | `features[]`, `+ Add Feature Slice` | **Rollup Cards** | Live `passed/total` Feature rollups + inline creation of new slices | `F02 · Armored Claw Dash (60 min)` |
 
@@ -66,3 +66,12 @@ Displays the Clean Spec Document (`PROJECT_SPEC.md`) with a `Blueprint-First` / 
 | **`§03` Exposed Tuning (`Exposed BP Var` / `UPROPERTY(EditAnywhere)`)** | `tuning[]` (`key`, `value`, `unit`) | **4. Live Tuning Input** | `PascalCase` variable + canonical UE5 unit (`cm`, `cm/s`, `deg`, `s`, `hp`, `x`, `%`, `count`, `bool`) | `DashDistanceCm: 550 cm` |
 | **`§04` Viewport, UI & Audio Cues** | `cues[]` | **1. Observable Cue** | Camera shake, `UNiagaraComponent`/emissive material flash, `WBP_*` HUD widget, or audio cue | `Orange emissive thruster ribbon fires for 0.16 s` |
 | **`§05` Playtest Gate & `[FIX]` Notes** | `checks[]`, `releaseDeltaChecks[]`, `fixes[]`, `status` | **2. Causal Playtest Gate** + **`[FIX]`** | Interactive PIE checks + live `Flag [FIX]` switching Stage 2 CoPilot CTA between `⚡ Copy CoPilot Prompt` and `🔧 Copy CoPilot [FIX] Prompt` | `Press Space -> Mech crosses 550 cm cleanly` |
+
+---
+
+## 3. Dual-Format Output (Human-Readable Studio vs. Token-Efficient CoPilot DSL)
+
+1. **Web Studio UI & `Copy Full Project Spec (.md)`**: Structured human-readable Markdown (`compact: false`) for team reading, spec reviews, and archival exports.
+2. **Heading-Indexed `*_copilot_gdd.md` (`⚡ CoPilot GDD`)**: Clean `#` / `##` / `###` Markdown headings with telegraphic bullets so Ultimate Engine CoPilot `V2.0+` splits and searches sections on demand.
+3. **CoPilot Chat Prompts ([`UnrealPromptCompactor`](lib/utils/unreal_prompt_compactor.dart), `compact: true`)**: Default output for `⚡ Copy CoPilot Prompt`, `🔧 Copy CoPilot [FIX] Prompt`, `⚡ Copy CoPilot Delta Prompt`, and `Copy Epic Brief`. Uses telegraphic `@TAG` headers (`[UE5_COPILOT TASK=BUILD|FIX|DELTA|EPIC_BRIEF]`, `@CTX`, `@EPIC`, `@OWNERS`, `@STATES`, `@FEATURE`, `@INPUT`, `@TUNE`, `@CUES`, `@CHECKS`, `@FIX_NOW`, `@CUTS`), keeps exact `/Game/...`, `Source/...`, `IA_*`/`IMC_*`, `PascalCase`, and `cm`/`cm/s` tokens, and collapses passed PIE checks during `[FIX]` passes (`~35–55%` fewer tokens).
+4. **Live Preview Toggle (`Compact DSL | Readable View`)**: Both Feature Prompt and Epic Brief `Preview` dialogs show the live `~N tok · -X% vs MD` badge and toggle between `Compact DSL` and `Readable View` without altering clipboard defaults.
