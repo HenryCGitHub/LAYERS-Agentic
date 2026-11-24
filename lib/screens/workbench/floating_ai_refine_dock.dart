@@ -22,6 +22,8 @@ class FloatingAiRefineDock extends StatefulWidget {
   final Future<void> Function(String instruction) onApply;
   final VoidCallback? onUndo;
   final VoidCallback? onDismissError;
+  final bool alwaysShowUndo;
+  final Widget? customErrorBanner;
 
   const FloatingAiRefineDock({
     super.key,
@@ -42,6 +44,8 @@ class FloatingAiRefineDock extends StatefulWidget {
     required this.onApply,
     this.onUndo,
     this.onDismissError,
+    this.alwaysShowUndo = false,
+    this.customErrorBanner,
   });
 
   @override
@@ -89,7 +93,7 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
     if (text.isEmpty) return;
     await widget.onApply(text);
     if (!mounted) return;
-    if (widget.errorText == null) {
+    if (widget.externalController == null && widget.errorText == null) {
       _ctrl.clear();
     }
   }
@@ -124,7 +128,12 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (widget.errorText != null &&
+              if (widget.customErrorBanner != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: widget.customErrorBanner!,
+                ),
+              ] else if (widget.errorText != null &&
                   widget.errorText!.trim().isNotEmpty) ...[
                 Container(
                   margin: const EdgeInsets.only(bottom: 6),
@@ -282,11 +291,14 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
                             ),
                           ),
                         ],
-                        if (widget.canUndo && widget.onUndo != null) ...[
+                        if ((widget.canUndo || widget.alwaysShowUndo) &&
+                            widget.onUndo != null) ...[
                           const SizedBox(width: 4),
                           OutlinedButton.icon(
                             key: widget.undoBtnKey,
-                            onPressed: widget.isBusy ? null : widget.onUndo,
+                            onPressed: (widget.isBusy || !widget.canUndo)
+                                ? null
+                                : widget.onUndo,
                             style: OutlinedButton.styleFrom(
                               minimumSize: const Size(0, 30),
                               padding: EdgeInsets.symmetric(

@@ -82,6 +82,7 @@ class Stage1SectionCard extends StatelessWidget {
   final String code;
   final String title;
   final Widget child;
+  final Widget? trailing;
   final bool isUpdated;
 
   const Stage1SectionCard({
@@ -90,6 +91,7 @@ class Stage1SectionCard extends StatelessWidget {
     required this.code,
     required this.title,
     required this.child,
+    this.trailing,
     this.isUpdated = false,
   });
 
@@ -132,6 +134,10 @@ class Stage1SectionCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (trailing != null) ...[
+                const SizedBox(width: 8),
+                trailing!,
+              ],
               if (isUpdated)
                 Container(
                   key: ValueKey('stage1_updated_badge_$code'),

@@ -2600,6 +2600,161 @@ void main() {
         );
       },
     );
+
+    testWidgets(
+      '20. Stage 1 (1. Plan) supports inline §02/§03 contract editing, shared FloatingAiRefineDock, and dynamic Launch/Sync header CTA',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        expect(wb.currentStage, equals(WorkbenchStage.projectPitch));
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // Zero sliders anywhere in Stage 1
+        expect(find.byType(Slider), findsNothing);
+
+        // Pre-launch CTA displays Approve & Launch v0.1 ...
+        final approveBtn = find.byKey(
+          const ValueKey('approve_launch_workbench_btn'),
+        );
+        expect(
+          find.descendant(
+            of: approveBtn,
+            matching: find.textContaining('Approve & Launch v0.1'),
+          ),
+          findsOneWidget,
+        );
+
+        // Shared FloatingAiRefineDock pinned at bottom with tucked quick ideas
+        expect(
+          find.byKey(const ValueKey('stage1_codesign_input')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('stage1_codesign_apply_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('stage1_undo_btn')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('stage1_ai_ideas_strip')),
+          findsNothing,
+        );
+        await tester.tap(find.byKey(const ValueKey('stage1_ai_ideas_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('stage1_ai_ideas_strip')),
+          findsOneWidget,
+        );
+
+        // Inline §02 UE5 Contracts edit
+        final editContractsBtn = find.byKey(
+          const ValueKey('stage1_edit_contracts_btn'),
+        );
+        await tester.ensureVisible(editContractsBtn);
+        await tester.tap(editContractsBtn);
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('stage1_camera_input')),
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_camera_input')),
+          'Fixed 40 deg isometric follow cam, 1400 cm arm length',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_scale_input')),
+          'Capsule 190 cm tall, 620 cm/s walk speed',
+        );
+        await tester.pumpAndSettle();
+
+        final saveContractsBtn = find.byKey(
+          const ValueKey('stage1_contracts_save_btn'),
+        );
+        await tester.ensureVisible(saveContractsBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(saveContractsBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.conceptDraft!.cameraContract,
+          equals('Fixed 40 deg isometric follow cam, 1400 cm arm length'),
+        );
+        expect(
+          wb.conceptDraft!.characterScale,
+          equals('Capsule 190 cm tall, 620 cm/s walk speed'),
+        );
+        expect(wb.canUndoStage1, isTrue);
+
+        // Inline §03 Pillars & Trade-Offs edit
+        final editPillarsBtn = find.byKey(
+          const ValueKey('stage1_edit_pillars_btn'),
+        );
+        await tester.ensureVisible(editPillarsBtn);
+        await tester.tap(editPillarsBtn);
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('stage1_pillars_input')),
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_pillars_input')),
+          'Every dash commits cleanly\nShell breaks trigger instant counterplay',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_tradeoffs_input')),
+          'Crisp Input Response OVER Heavy Inertia',
+        );
+        await tester.pumpAndSettle();
+
+        final savePillarsBtn = find.byKey(
+          const ValueKey('stage1_pillars_save_btn'),
+        );
+        await tester.ensureVisible(savePillarsBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(savePillarsBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.conceptDraft!.pillars,
+          equals(const [
+            'Every dash commits cleanly',
+            'Shell breaks trigger instant counterplay',
+          ]),
+        );
+        expect(wb.conceptDraft!.tradeOffs.single.prefer,
+            equals('Crisp Input Response'));
+        expect(
+          wb.conceptDraft!.tradeOffs.single.avoid,
+          equals('Heavy Inertia'),
+        );
+
+        // Launching transitions to Stage 2; switching back shows dynamic Sync CTA
+        await tester.tap(approveBtn);
+        await tester.pumpAndSettle();
+        expect(wb.currentStage, equals(WorkbenchStage.releaseWorkbench));
+
+        wb.setStage(WorkbenchStage.projectPitch);
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: approveBtn,
+            matching: find.textContaining('Sync Spec & Return to v0.1'),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }
 

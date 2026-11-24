@@ -499,6 +499,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     String? releaseDoneWhen,
     List<String>? coreLoop,
     List<String>? pillars,
+    List<TradeOffRule>? tradeOffs,
     List<String>? outOfScope,
   }) {
     final draft = _conceptDraft;
@@ -552,6 +553,18 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         for (final p in pillars)
           if (UnrealSpecGuard.sanitizeLine(p, mode: mode).isNotEmpty)
             UnrealSpecGuard.sanitizeLine(p, mode: mode),
+      ];
+      changed.add('s03');
+    }
+    if (tradeOffs != null) {
+      draft.tradeOffs = [
+        for (final t in tradeOffs)
+          if (UnrealSpecGuard.sanitizeLine(t.prefer, mode: mode).isNotEmpty &&
+              UnrealSpecGuard.sanitizeLine(t.avoid, mode: mode).isNotEmpty)
+            TradeOffRule(
+              prefer: UnrealSpecGuard.sanitizeLine(t.prefer, mode: mode),
+              avoid: UnrealSpecGuard.sanitizeLine(t.avoid, mode: mode),
+            ),
       ];
       changed.add('s03');
     }

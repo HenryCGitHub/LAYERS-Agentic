@@ -6,6 +6,7 @@ import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
 import 'stage1/stage1_shared_widgets.dart';
 import 'stage1/stage1_spec_document.dart';
+import 'workbench/floating_ai_refine_dock.dart';
 
 
 /// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`).
@@ -113,15 +114,13 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                           cyan: cyan,
                         )
                       else
-                        _buildCompactRefineTopCard(
-                          wb: wb,
+                        _buildSparkContextCaption(
                           spec: draft,
                           isDark: isDark,
-                          textPrimary: textPrimary,
                           textMuted: textMuted,
-                          cyan: cyan,
+                          border: border,
                         ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 16),
                       if (!hasSpec)
                         Stage1EmptyBlueprintOutline(isDark: isDark)
                       else
@@ -136,6 +135,46 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
               ),
             ),
           ),
+          if (hasSpec)
+            FloatingAiRefineDock(
+              isDark: isDark,
+              targetBadge: 'AI · Spec',
+              hintText:
+                  'Refine spec: "Switch to third-person", "Make movement heavier", or "Add parry shield"...',
+              isBusy: wb.isAgentBusy,
+              canUndo: wb.canUndoStage1,
+              alwaysShowUndo: true,
+              externalController: _coDesignController,
+              summaryText: draft.lastCoDesignNote.isEmpty
+                  ? null
+                  : 'Updated: ${draft.lastCoDesignNote}',
+              errorText: wb.stage1InlineError,
+              customErrorBanner: wb.stage1InlineError == null
+                  ? null
+                  : _buildStage1InlineErrorBanner(
+                      wb: wb,
+                      isDark: isDark,
+                      textPrimary: textPrimary,
+                      retryKey: const ValueKey('stage1_refine_retry_btn'),
+                      onRetry: () => _submitCoDesign(wb),
+                    ),
+              quickPrompts: [
+                for (final chip in ProjectConceptAgent.suggestQuickRefines(draft))
+                  chip.instruction,
+              ],
+              inputKey: const ValueKey('stage1_codesign_input'),
+              applyBtnKey: const ValueKey('stage1_codesign_apply_btn'),
+              undoBtnKey: const ValueKey('stage1_undo_btn'),
+              ideasBtnKey: const ValueKey('stage1_ai_ideas_btn'),
+              ideasStripKey: const ValueKey('stage1_ai_ideas_strip'),
+              onApply: (_) => _submitCoDesign(wb),
+              onUndo: () {
+                setState(_resetInlineEditFlags);
+                _clearInlineControllers();
+                wb.undoStage1Edit();
+              },
+              onDismissError: wb.dismissStage1InlineError,
+            ),
         ],
       ),
     );
@@ -312,13 +351,13 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   label: Text(
                     () {
                       if (wb.projectReleases.isNotEmpty) {
-                        return 'Sync & Open Workbench →';
+                        return 'Sync Spec & Return to ${wb.activeReleaseVersionTag} →';
                       }
                       final sliceCount = spec.initialEpics.fold<int>(
                         0,
                         (sum, e) => sum + e.featuresForRelease('v0.1').length,
                       );
-                      return 'Approve & Launch (${spec.initialEpics.length} Epics · $sliceCount Features) →';
+                      return 'Approve & Launch v0.1 (${spec.initialEpics.length} Epics · $sliceCount Features) →';
                     }(),
                   ),
                 ),
@@ -714,147 +753,48 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     );
   }
 
-  Widget _buildCompactRefineTopCard({
-    required WorkbenchProvider wb,
+  Widget _buildSparkContextCaption({
     required ProjectConceptBlueprint spec,
     required bool isDark,
-    required Color textPrimary,
     required Color textMuted,
-    required Color cyan,
+    required Color border,
   }) {
-    final quickChips = ProjectConceptAgent.suggestQuickRefines(spec);
     return Container(
-      key: const ValueKey('stage1_unified_refine_bar'),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: AppTheme.bgPanelFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.borderBrightFor(isDark)),
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        border: Border.all(color: border),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              if (spec.sparkPrompt.trim().isNotEmpty) ...[
-                Expanded(
-                  flex: 2,
-                  child: Text(
-                    'Spark: "${spec.sparkPrompt.trim()}"',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12, color: textMuted),
-                  ),
-                ),
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                flex: 3,
-                child: Tooltip(
-                  message: spec.architectureMode.architectureContract,
-                  child: Text(
-                    spec.architectureMode.architectureContract,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: textMuted,
-                    ),
-                  ),
-                ),
+          if (spec.sparkPrompt.trim().isNotEmpty) ...[
+            Expanded(
+              flex: 2,
+              child: Text(
+                'Spark: "${spec.sparkPrompt.trim()}"',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: textMuted),
               ),
-            ],
-          ),
-          if (spec.lastCoDesignNote.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Updated: ${spec.lastCoDesignNote}',
-              style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: cyan),
             ),
+            const SizedBox(width: 12),
           ],
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              Icon(Icons.auto_fix_high_rounded, size: 16, color: cyan),
-              const SizedBox(width: 8),
-              Expanded(
-                child: TextField(
-                  key: const ValueKey('stage1_codesign_input'),
-                  controller: _coDesignController,
-                  style: TextStyle(fontSize: 13.5, color: textPrimary),
-                  decoration: InputDecoration(
-                    hintText:
-                        'Refine spec: "Switch to third-person", "Make movement heavier", or "Add parry shield"...',
-                    hintStyle: TextStyle(fontSize: 13, color: textMuted),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                  ),
-                  onSubmitted: (_) => _submitCoDesign(wb),
+          Expanded(
+            flex: 3,
+            child: Tooltip(
+              message: spec.architectureMode.architectureContract,
+              child: Text(
+                spec.architectureMode.architectureContract,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 11,
+                  color: textMuted,
                 ),
               ),
-              const SizedBox(width: 8),
-              ElevatedButton(
-                key: const ValueKey('stage1_codesign_apply_btn'),
-                onPressed: wb.isAgentBusy ? null : () => _submitCoDesign(wb),
-                child: Text(wb.isAgentBusy ? 'Applying...' : 'Apply'),
-              ),
-              const SizedBox(width: 6),
-              OutlinedButton.icon(
-                key: const ValueKey('stage1_undo_btn'),
-                onPressed: (wb.isAgentBusy || !wb.canUndoStage1)
-                    ? null
-                    : () {
-                        setState(_resetInlineEditFlags);
-                        _clearInlineControllers();
-                        wb.undoStage1Edit();
-                      },
-                icon: const Icon(Icons.undo_rounded, size: 15),
-                label: const Text('Undo'),
-              ),
-            ],
-          ),
-          if (wb.stage1InlineError != null) ...[
-            const SizedBox(height: 10),
-            _buildStage1InlineErrorBanner(
-              wb: wb,
-              isDark: isDark,
-              textPrimary: textPrimary,
-              retryKey: const ValueKey('stage1_refine_retry_btn'),
-              onRetry: () => _submitCoDesign(wb),
             ),
-          ],
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              for (int i = 0; i < quickChips.length; i++)
-                ActionChip(
-                  key: ValueKey('stage1_quick_refine_$i'),
-                  avatar: Icon(Icons.bolt_rounded, size: 13, color: cyan),
-                  label: Text(
-                    quickChips[i].label,
-                    style: TextStyle(fontSize: 11.5, color: textPrimary),
-                  ),
-                  onPressed: wb.isAgentBusy
-                      ? null
-                      : () async {
-                          final res = await wb.applyStage1CoDesignInstruction(
-                            quickChips[i].instruction,
-                          );
-                          if (!mounted) return;
-                          if (res == null &&
-                              _coDesignController.text.trim().isEmpty) {
-                            _coDesignController.text =
-                                quickChips[i].instruction;
-                          }
-                        },
-                ),
-            ],
           ),
         ],
       ),
