@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../models/epic_spec.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
+import 'stage2_inline_editors.dart';
 import 'workbench_shared_widgets.dart';
 
 class EpicDomainSheet extends StatefulWidget {
@@ -33,6 +34,8 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
   final TextEditingController _statesController = TextEditingController();
   final TextEditingController _interruptsController = TextEditingController();
 
+  bool _editingScope = false;
+  bool _addingCut = false;
   bool _showAddFeatureForm = false;
   bool _showOwnerForm = false;
   int? _editingOwnerIndex;
@@ -42,6 +45,8 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
   void didUpdateWidget(covariant EpicDomainSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectionKey != widget.selectionKey) {
+      _editingScope = false;
+      _addingCut = false;
       _showAddFeatureForm = false;
       _showOwnerForm = false;
       _editingOwnerIndex = null;
@@ -117,9 +122,52 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
           isDark: isDark,
           code: '§01',
           title: 'Domain Scope (Zero Feature Duplication)',
+          trailing: TextButton.icon(
+            key: const ValueKey('epic_edit_scope_btn'),
+            onPressed: () => setState(() => _editingScope = !_editingScope),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            ),
+            icon: Icon(
+              _editingScope ? Icons.close : Icons.edit_outlined,
+              size: 13,
+            ),
+            label: Text(
+              _editingScope ? 'Cancel' : 'Edit Scope',
+              style: const TextStyle(fontSize: 11.5),
+            ),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (_editingScope)
+                InlineScopeEditorBox(
+                  isDark: isDark,
+                  initialGoal: epic.goal,
+                  initialInScope: epic.inScope,
+                  initialDoneWhen: epic.doneWhen,
+                  goalInputKey: const ValueKey('epic_scope_goal_input'),
+                  inScopeInputKey: const ValueKey('epic_scope_in_scope_input'),
+                  doneWhenInputKey:
+                      const ValueKey('epic_scope_done_when_input'),
+                  saveBtnKey: const ValueKey('epic_scope_save_btn'),
+                  onSave: ({
+                    required goal,
+                    required inScope,
+                    required doneWhen,
+                    required delta,
+                  }) {
+                    wb.updateEpicScope(
+                      epic.id,
+                      goal: goal,
+                      inScope: inScope,
+                      doneWhen: doneWhen,
+                    );
+                    setState(() => _editingScope = false);
+                  },
+                  onCancel: () => setState(() => _editingScope = false),
+                ),
               Text(
                 'Goal: ${epic.goal}',
                 style: TextStyle(fontSize: 14, color: primary, height: 1.45),
@@ -570,16 +618,47 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
           isDark: isDark,
           code: '§04',
           title: 'Domain Out-of-Scope Cuts',
-          child: epic.outOfScope.isEmpty
-              ? Text(
+          trailing: TextButton.icon(
+            key: const ValueKey('epic_add_cut_btn'),
+            onPressed: () => setState(() => _addingCut = !_addingCut),
+            style: TextButton.styleFrom(
+              visualDensity: VisualDensity.compact,
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            ),
+            icon: Icon(_addingCut ? Icons.close : Icons.add, size: 13.5),
+            label: Text(
+              _addingCut ? 'Close' : '+ Add Cut',
+              style: const TextStyle(fontSize: 11.5),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (_addingCut)
+                InlineSingleLineAdderBox(
+                  isDark: isDark,
+                  labelText: 'Domain Scope Cut (e.g. No multiplayer lobbies)',
+                  hintText: 'No procedural dungeon generation',
+                  submitLabel: 'Add Cut',
+                  inputKey: const ValueKey('epic_cut_input'),
+                  saveBtnKey: const ValueKey('epic_cut_save_btn'),
+                  onSubmit: (text) {
+                    wb.addEpicOutOfScopeCut(epic.id, text);
+                    setState(() => _addingCut = false);
+                  },
+                  onCancel: () => setState(() => _addingCut = false),
+                ),
+              if (epic.outOfScope.isEmpty)
+                Text(
                   'Scoped cleanly to child Features below.',
                   style: TextStyle(fontSize: 12.5, color: muted),
                 )
-              : Wrap(
+              else
+                Wrap(
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    for (final cut in epic.outOfScope)
+                    for (int i = 0; i < epic.outOfScope.length; i++)
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 9,
@@ -590,13 +669,31 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                           borderRadius: BorderRadius.circular(AppTheme.radiusXs),
                           border: Border.all(color: red.withValues(alpha: 0.3)),
                         ),
-                        child: Text(
-                          cut,
-                          style: TextStyle(fontSize: 12, color: primary),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              epic.outOfScope[i],
+                              style: TextStyle(fontSize: 12, color: primary),
+                            ),
+                            const SizedBox(width: 6),
+                            InkWell(
+                              key: ValueKey('epic_cut_delete_$i'),
+                              onTap: () =>
+                                  wb.removeEpicOutOfScopeCut(epic.id, i),
+                              child: Icon(
+                                Icons.close_rounded,
+                                size: 13,
+                                color: red,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                   ],
                 ),
+            ],
+          ),
         ),
         const SizedBox(height: 14),
 

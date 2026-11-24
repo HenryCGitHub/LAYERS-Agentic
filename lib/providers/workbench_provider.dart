@@ -35,6 +35,7 @@ part 'workbench_release_mixin.dart';
 part 'workbench_progressive_planner_mixin.dart';
 part 'workbench_copilot_mixin.dart';
 part 'workbench_stage2_refine_mixin.dart';
+part 'workbench_spec_edit_mixin.dart';
 
 /// Pure 2-Stage Antigravity Studio Workflow:
 /// - [projectPitch]: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`, Spark Onboarding, Co-Designer).

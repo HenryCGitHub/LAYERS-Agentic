@@ -470,6 +470,8 @@ class LiveTuningChip extends StatefulWidget {
   final bool readOnly;
   final ValueChanged<String> onChanged;
   final Key? inputKey;
+  final VoidCallback? onDelete;
+  final Key? deleteKey;
 
   const LiveTuningChip({
     super.key,
@@ -478,6 +480,8 @@ class LiveTuningChip extends StatefulWidget {
     required this.isDark,
     this.readOnly = false,
     required this.onChanged,
+    this.onDelete,
+    this.deleteKey,
   });
 
   @override
@@ -561,6 +565,21 @@ class LiveTuningChipState extends State<LiveTuningChip> {
             Text(
               widget.param.unit,
               style: GoogleFonts.jetBrainsMono(fontSize: 11, color: muted),
+            ),
+          ],
+          if (!widget.readOnly && widget.onDelete != null) ...[
+            const SizedBox(width: 4),
+            Tooltip(
+              message: 'Remove variable',
+              child: InkWell(
+                key: widget.deleteKey,
+                onTap: widget.onDelete,
+                borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(Icons.close_rounded, size: 13, color: muted),
+                ),
+              ),
             ),
           ],
         ],

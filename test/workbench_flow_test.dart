@@ -2170,6 +2170,337 @@ void main() {
         wb.dispose();
       },
     );
+
+    testWidgets(
+      'Stage 2 inline manual editors allow editing Epic §01/§04 and Feature §01-§05 with zero sliders and Undo support',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final epic = wb.activeReleaseEpics.first;
+        final f02 = epic.features.firstWhere((f) => f.code == 'F02');
+        wb.selectEpic(epic.id);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // Zero sliders anywhere in the workbench
+        expect(find.byType(Slider), findsNothing);
+
+        // 1) Epic §01 Domain Scope inline edit
+        final editEpicScopeBtn = find.byKey(const ValueKey('epic_edit_scope_btn'));
+        await tester.ensureVisible(editEpicScopeBtn);
+        await tester.tap(editEpicScopeBtn);
+        await tester.pumpAndSettle();
+
+        final epicGoalInput = find.byKey(const ValueKey('epic_scope_goal_input'));
+        final epicInScopeInput =
+            find.byKey(const ValueKey('epic_scope_in_scope_input'));
+        await tester.ensureVisible(epicGoalInput);
+        await tester.enterText(
+          epicGoalInput,
+          'Drive responsive mech locomotion and shell-cracking dashes.',
+        );
+        await tester.ensureVisible(epicInScopeInput);
+        await tester.enterText(
+          epicInScopeInput,
+          'Core movement\nArmored claw dash\nSprint coyote buffer',
+        );
+        await tester.pumpAndSettle();
+
+        final epicScopeSaveBtn = find.byKey(const ValueKey('epic_scope_save_btn'));
+        await tester.ensureVisible(epicScopeSaveBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(epicScopeSaveBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedEpicSpec!.goal,
+          equals('Drive responsive mech locomotion and shell-cracking dashes.'),
+        );
+        expect(wb.selectedEpicSpec!.inScope, contains('Sprint coyote buffer'));
+        expect(wb.canUndoStage2Edit, isTrue);
+
+        // 2) Epic §04 Domain Out-of-Scope Cuts inline add + delete
+        final addCutBtn = find.byKey(const ValueKey('epic_add_cut_btn'));
+        await tester.ensureVisible(addCutBtn);
+        await tester.tap(addCutBtn);
+        await tester.pumpAndSettle();
+
+        final cutInput = find.byKey(const ValueKey('epic_cut_input'));
+        await tester.ensureVisible(cutInput);
+        await tester.enterText(cutInput, 'Wall-running parkour');
+        await tester.pumpAndSettle();
+
+        final cutSaveBtn = find.byKey(const ValueKey('epic_cut_save_btn'));
+        await tester.ensureVisible(cutSaveBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(cutSaveBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedEpicSpec!.outOfScope,
+          contains('No Wall-running parkour'),
+        );
+        expect(
+          wb.activeFeatureBuildPrompt(
+            wb.selectedEpicSpec!,
+            wb.selectedEpicSpec!.features.firstWhere((f) => f.code == 'F02'),
+          ),
+          contains('!Wall-running parkour'),
+        );
+
+        final cutIdx = wb.selectedEpicSpec!.outOfScope.length - 1;
+        final cutDeleteBtn = find.byKey(ValueKey('epic_cut_delete_$cutIdx'));
+        await tester.ensureVisible(cutDeleteBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(cutDeleteBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedEpicSpec!.outOfScope,
+          isNot(contains('No Wall-running parkour')),
+        );
+
+        // 3) Switch to Feature F02 & verify zero sliders + full §01-§05 inline editors
+        wb.selectFeature(epic.id, f02.id);
+        await tester.pumpAndSettle();
+        expect(find.byType(Slider), findsNothing);
+
+        // §01 Feature Scope edit
+        final editFeatScopeBtn =
+            find.byKey(const ValueKey('feature_edit_scope_btn'));
+        await tester.ensureVisible(editFeatScopeBtn);
+        await tester.tap(editFeatScopeBtn);
+        await tester.pumpAndSettle();
+
+        final featGoalInput =
+            find.byKey(const ValueKey('feature_scope_goal_input'));
+        await tester.ensureVisible(featGoalInput);
+        await tester.enterText(
+          featGoalInput,
+          'Launch armored claw dash 500 cm to crack enemy shells.',
+        );
+        await tester.pumpAndSettle();
+
+        final featScopeSaveBtn =
+            find.byKey(const ValueKey('feature_scope_save_btn'));
+        await tester.ensureVisible(featScopeSaveBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(featScopeSaveBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedFeatureSpec!.goal,
+          equals('Launch armored claw dash 500 cm to crack enemy shells.'),
+        );
+        expect(
+          wb.activeFeatureBuildPrompt(
+            wb.selectedEpicSpec!,
+            wb.selectedFeatureSpec!,
+          ),
+          contains('Launch armored claw dash 500 cm'),
+        );
+
+        // §02 Input Actions inline add + delete
+        final addCtrlBtn =
+            find.byKey(const ValueKey('feature_add_control_btn'));
+        await tester.ensureVisible(addCtrlBtn);
+        await tester.tap(addCtrlBtn);
+        await tester.pumpAndSettle();
+
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('feature_control_action_input')),
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('feature_control_action_input')),
+          'IA_ClawCancel',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('feature_control_trigger_input')),
+          'Pressed',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('feature_control_rule_input')),
+          'Cancel dash into immediate recovery',
+        );
+        await tester.pumpAndSettle();
+
+        final ctrlSaveBtn =
+            find.byKey(const ValueKey('feature_control_save_btn'));
+        await tester.ensureVisible(ctrlSaveBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(ctrlSaveBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedFeatureSpec!.controls.any((c) => c.action == 'IA_ClawCancel'),
+          isTrue,
+        );
+        final ctrlIdx = wb.selectedFeatureSpec!.controls.length - 1;
+        final ctrlDelBtn =
+            find.byKey(ValueKey('feature_control_delete_$ctrlIdx'));
+        await tester.ensureVisible(ctrlDelBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(ctrlDelBtn);
+        await tester.pumpAndSettle();
+        expect(
+          wb.selectedFeatureSpec!.controls.any((c) => c.action == 'IA_ClawCancel'),
+          isFalse,
+        );
+
+        // §03 Exposed Tuning plain Key | Value | Unit add + delete (no Slider!)
+        final addTuningBtn =
+            find.byKey(const ValueKey('feature_add_tuning_btn'));
+        await tester.ensureVisible(addTuningBtn);
+        await tester.tap(addTuningBtn);
+        await tester.pumpAndSettle();
+        expect(find.byType(Slider), findsNothing);
+
+        await tester.enterText(
+          find.byKey(const ValueKey('feature_tuning_key_input')),
+          'DashImpactForce',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('feature_tuning_value_input')),
+          '850',
+        );
+        await tester.enterText(
+          find.byKey(const ValueKey('feature_tuning_unit_input')),
+          'cm/s',
+        );
+        await tester.pumpAndSettle();
+
+        final tuningSaveBtn =
+            find.byKey(const ValueKey('feature_tuning_save_btn'));
+        await tester.ensureVisible(tuningSaveBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(tuningSaveBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedFeatureSpec!.tuning.any(
+            (t) =>
+                t.key == 'DashImpactForce' &&
+                t.value == '850' &&
+                t.unit == 'cm/s',
+          ),
+          isTrue,
+        );
+        expect(
+          wb.activeFeatureBuildPrompt(
+            wb.selectedEpicSpec!,
+            wb.selectedFeatureSpec!,
+          ),
+          contains('DashImpactForce = 850 cm/s'),
+        );
+
+        final tuneIdx = wb.selectedFeatureSpec!.tuning.length - 1;
+        final tuneDelBtn =
+            find.byKey(ValueKey('tuning_delete_${f02.id}_$tuneIdx'));
+        await tester.ensureVisible(tuneDelBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(tuneDelBtn);
+        await tester.pumpAndSettle();
+        expect(
+          wb.selectedFeatureSpec!.tuning
+              .any((t) => t.key == 'DashImpactForce'),
+          isFalse,
+        );
+
+        // §04 Cues add + delete
+        final addCueBtn = find.byKey(const ValueKey('feature_add_cue_btn'));
+        await tester.ensureVisible(addCueBtn);
+        await tester.tap(addCueBtn);
+        await tester.pumpAndSettle();
+
+        final cueInput = find.byKey(const ValueKey('feature_cue_input'));
+        await tester.ensureVisible(cueInput);
+        await tester.enterText(
+          cueInput,
+          'Metallic clang SFX on shell shatter',
+        );
+        await tester.pumpAndSettle();
+
+        final cueSaveBtn = find.byKey(const ValueKey('feature_cue_save_btn'));
+        await tester.ensureVisible(cueSaveBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(cueSaveBtn);
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedFeatureSpec!.cues,
+          contains('Metallic clang SFX on shell shatter'),
+        );
+        final cueIdx = wb.selectedFeatureSpec!.cues.length - 1;
+        final cueDelBtn = find.byKey(ValueKey('feature_cue_delete_$cueIdx'));
+        await tester.ensureVisible(cueDelBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(cueDelBtn);
+        await tester.pumpAndSettle();
+        expect(
+          wb.selectedFeatureSpec!.cues,
+          isNot(contains('Metallic clang SFX on shell shatter')),
+        );
+
+        // §05 PIE Checks add + delete + Undo restore
+        final addCheckBtn =
+            find.byKey(const ValueKey('feature_add_check_btn'));
+        await tester.ensureVisible(addCheckBtn);
+        await tester.tap(addCheckBtn);
+        await tester.pumpAndSettle();
+
+        final checkInput = find.byKey(const ValueKey('feature_check_input'));
+        await tester.ensureVisible(checkInput);
+        await tester.enterText(
+          checkInput,
+          'Hold IA_Dash into cracked shell -> Armor splits cleanly',
+        );
+        await tester.pumpAndSettle();
+
+        final checkSaveBtn =
+            find.byKey(const ValueKey('feature_check_save_btn'));
+        await tester.ensureVisible(checkSaveBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(checkSaveBtn);
+        await tester.pumpAndSettle();
+
+        final addedCheck = wb.selectedFeatureSpec!.checks.last;
+        expect(
+          addedCheck.text,
+          equals('Hold IA_Dash into cracked shell -> Armor splits cleanly'),
+        );
+
+        final checkDelBtn =
+            find.byKey(ValueKey('feature_check_delete_${addedCheck.id}'));
+        await tester.ensureVisible(checkDelBtn);
+        await tester.pumpAndSettle();
+        await tester.tap(checkDelBtn);
+        await tester.pumpAndSettle();
+        expect(
+          wb.selectedFeatureSpec!.checks.any((c) => c.id == addedCheck.id),
+          isFalse,
+        );
+
+        // Stage 2 Undo restores deleted check cleanly
+        expect(wb.undoStage2Edit(), isTrue);
+        await tester.pumpAndSettle();
+        expect(
+          wb.selectedFeatureSpec!.checks.any((c) => c.id == addedCheck.id),
+          isTrue,
+        );
+
+        wb.dispose();
+      },
+    );
   });
 }
 
