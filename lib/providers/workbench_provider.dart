@@ -11,6 +11,7 @@ import '../models/tier_document.dart';
 import '../services/auth_service.dart';
 import '../services/cloud_invite_deep_link_service.dart';
 import '../services/firestore_vault_service.dart';
+import '../services/local_gdd_sync_service.dart';
 import '../services/local_vault_service.dart';
 import '../services/project_archive_codec.dart';
 import '../services/v01_release_seeder.dart';
@@ -20,6 +21,12 @@ import '../utils/unreal_spec_guard.dart';
 
 export '../services/cloud_invite_deep_link_service.dart'
     show shouldPreferRemoteDocumentOnSync;
+export '../services/local_gdd_sync_service.dart'
+    show
+        LocalGddFileBackend,
+        LocalGddLinkResult,
+        LocalGddSyncStatus,
+        LocalGddWriteResult;
 
 part 'workbench_storage_mixin.dart';
 part 'workbench_concept_mixin.dart';
@@ -282,6 +289,41 @@ class WorkbenchProvider extends ChangeNotifier {
 
   Timer? _autoSyncDebounceTimer;
 
+  LocalGddSyncService _localGddSync = LocalGddSyncService();
+  Timer? _localGddDebounceTimer;
+  String? _linkedGddProjectId;
+  String? _linkedGddFileName;
+  LocalGddSyncStatus _gddSyncStatus = LocalGddSyncStatus.unlinked;
+  DateTime? _lastGddSyncAt;
+  String? _gddSyncError;
+
+  bool get isLocalGddLinkSupported => _localGddSync.isSupported;
+  String? get linkedGddFileName =>
+      _linkedGddProjectId == _activeProjectId ? _linkedGddFileName : null;
+  LocalGddSyncStatus get gddSyncStatus => _gddSyncStatus;
+  DateTime? get lastGddSyncAt => _lastGddSyncAt;
+  String? get gddSyncError => _gddSyncError;
+  bool get isLocalGddLinked =>
+      _linkedGddProjectId != null &&
+      _linkedGddProjectId == _activeProjectId &&
+      _linkedGddFileName != null &&
+      _linkedGddFileName!.isNotEmpty &&
+      (_gddSyncStatus == LocalGddSyncStatus.linked ||
+          _gddSyncStatus == LocalGddSyncStatus.syncing ||
+          _gddSyncStatus == LocalGddSyncStatus.synced ||
+          _gddSyncStatus == LocalGddSyncStatus.permissionNeeded);
+
+  @visibleForTesting
+  void setLocalGddBackendForTest(LocalGddFileBackend backend) {
+    _localGddDebounceTimer?.cancel();
+    _localGddSync = LocalGddSyncService(backend: backend);
+    _linkedGddProjectId = null;
+    _linkedGddFileName = null;
+    _gddSyncStatus = LocalGddSyncStatus.unlinked;
+    _lastGddSyncAt = null;
+    _gddSyncError = null;
+  }
+
   void scheduleDebouncedAutoSync() {
     _autoSyncDebounceTimer?.cancel();
     if (!isUserLoggedIn) return;
@@ -350,6 +392,7 @@ class WorkbenchProvider extends ChangeNotifier {
     if (_isDisposed) return;
     _isDisposed = true;
     _autoSyncDebounceTimer?.cancel();
+    _localGddDebounceTimer?.cancel();
     _deferredRemoteSnapshot = null;
     for (final timer in _persistTimers.values) {
       timer.cancel();

@@ -1965,7 +1965,233 @@ void main() {
         expect(promptAfterStates, contains('Hitstun cancels ArmoredDash'));
       },
     );
+
+    test(
+      '15. Feature BUILD and DELTA prompts include self-healing @OWNERS instructions',
+      () {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final epic = wb.activeReleaseEpics.first;
+        final f01 = epic.features.firstWhere((f) => f.code == 'F01');
+
+        final buildF01Prompt = wb.activeFeatureBuildPrompt(epic, f01);
+        expect(buildF01Prompt, contains('@FIRST_SLICE:'));
+
+        for (final chk in f01.checks) {
+          wb.toggleFeatureCheck(epic.id, f01.id, chk.id, true);
+        }
+        wb.passFeature(epic.id, f01.id);
+
+        final updatedEpic = wb.activeReleaseEpics.first;
+        final updatedF02 =
+            updatedEpic.features.firstWhere((f) => f.code == 'F02');
+        final buildF02Compact =
+            wb.activeFeatureBuildPrompt(updatedEpic, updatedF02);
+        final buildF02Readable =
+            wb.activeFeatureReadablePrompt(updatedEpic, updatedF02);
+
+        expect(buildF02Compact, isNot(contains('@FIRST_SLICE:')));
+        expect(
+          buildF02Compact,
+          contains('create missing @OWNERS if absent, else extend existing'),
+        );
+        expect(
+          buildF02Readable,
+          contains('Create any missing shared Epic ownership assets if absent'),
+        );
+
+        final rootSpec = wb.conceptDraft!;
+        final deltaFeature = updatedF02.deepCopy()
+          ..releaseDelta = '+Add brief hitstop on shell crack';
+        final deltaCompact = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: rootSpec,
+          epic: updatedEpic,
+          feature: deltaFeature,
+          releaseVersion: 'v0.2',
+          mode: wb.unrealArchitectureMode,
+          compact: true,
+        );
+        final deltaReadable = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: rootSpec,
+          epic: updatedEpic,
+          feature: deltaFeature,
+          releaseVersion: 'v0.2',
+          mode: wb.unrealArchitectureMode,
+          compact: false,
+        );
+
+        expect(
+          deltaCompact,
+          contains('@EXEC: Apply ONLY @DELTA v0.2 to ${deltaFeature.code}'),
+        );
+        expect(
+          deltaCompact,
+          contains('create missing @OWNERS if absent, else extend existing'),
+        );
+        expect(
+          deltaReadable,
+          contains('Create any missing shared Epic ownership assets if absent'),
+        );
+      },
+    );
+
+    test(
+      '16. LocalGddSyncService and WorkbenchProvider auto-write delta-only GDD updates and handle fallback/permissions',
+      () async {
+        final fakeBackend = _FakeLocalGddBackend();
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.setLocalGddBackendForTest(fakeBackend);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final origProjId = wb.activeProjectId!;
+
+        expect(wb.isLocalGddLinkSupported, isTrue);
+        expect(wb.isLocalGddLinked, isFalse);
+
+        final linkRes = await wb.linkLocalGddFile();
+        expect(linkRes.linked, isTrue);
+        expect(wb.isLocalGddLinked, isTrue);
+        expect(wb.linkedGddFileName, equals('shellbreaker_copilot_gdd.md'));
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
+        expect(fakeBackend.writeCalls, equals(1));
+
+        // Delta-only suppression when spec or GDD-external tuning has not changed GDD output
+        final wroteNoDelta = await wb.syncLinkedGddNow();
+        expect(wroteNoDelta, isFalse);
+        expect(fakeBackend.writeCalls, equals(1));
+
+        final epic = wb.activeReleaseEpics.first;
+        final f01 = epic.features.firstWhere((f) => f.code == 'F01');
+        wb.updateFeatureTuningParam(epic.id, f01.id, 0, '777');
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeBackend.writeCalls, equals(1));
+
+        // Root spec mutation updates compiled GDD and triggers auto-write
+        wb.updateRootSpecSections(
+          pitch: 'High-Speed Claw Break — Smash armored shells cleanly',
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeBackend.writeCalls, equals(2));
+        expect(
+          fakeBackend.writtenContents.last,
+          contains('High-Speed Claw Break'),
+        );
+
+        // Epic owner mutation auto-syncs updated GDD
+        wb.upsertEpicOwnership(
+          epic.id,
+          path: '/Game/Player/BP_ShellDashTrail.uasset',
+          role: 'Dash ribbon emitter',
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeBackend.writeCalls, equals(3));
+        expect(
+          fakeBackend.writtenContents.last,
+          contains('/Game/Player/BP_ShellDashTrail.uasset'),
+        );
+
+        // Unlink stops further writes
+        await wb.unlinkLocalGddFile();
+        expect(wb.isLocalGddLinked, isFalse);
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.unlinked));
+        wb.upsertEpicOwnership(
+          epic.id,
+          path: '/Game/Player/BP_IgnoredAfterUnlink.uasset',
+          role: 'Should not write',
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeBackend.writeCalls, equals(3));
+
+        // Re-link and verify switching projects clears & restores handle cleanly
+        await wb.linkLocalGddFile();
+        expect(wb.isLocalGddLinked, isTrue);
+        expect(fakeBackend.writeCalls, equals(4));
+
+        wb.createNewProject();
+        await Future<void>.delayed(Duration.zero);
+        expect(wb.isLocalGddLinked, isFalse);
+
+        wb.switchProject(origProjId);
+        await Future<void>.delayed(Duration.zero);
+        expect(wb.isLocalGddLinked, isTrue);
+        expect(wb.linkedGddFileName, equals('shellbreaker_copilot_gdd.md'));
+
+        // Permission denied sets permissionNeeded status
+        fakeBackend.denyPermission = true;
+        wb.flagFeatureFix(
+          epic.id,
+          f01.id,
+          'Dash stalls near angled arena pillar collision',
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.permissionNeeded));
+
+        // Unsupported browser falls back to download without throwing
+        final unsupportedBackend = _FakeLocalGddBackend(supported: false);
+        wb.setLocalGddBackendForTest(unsupportedBackend);
+        final fallbackRes = await wb.linkLocalGddFile();
+        expect(fallbackRes.fellBackToDownload, isTrue);
+        expect(fallbackRes.linked, isFalse);
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.fallbackDownloaded));
+      },
+    );
   });
+}
+
+class _FakeLocalGddBackend implements LocalGddFileBackend {
+  final bool supported;
+  bool denyPermission = false;
+  int writeCalls = 0;
+  final List<String> writtenContents = <String>[];
+  final Map<String, String> linkedHandles = <String, String>{};
+
+  _FakeLocalGddBackend({this.supported = true});
+
+  @override
+  bool get isSupported => supported;
+
+  @override
+  Future<LocalGddLinkResult> pickAndWriteFile({
+    required String projectId,
+    required String suggestedFilename,
+    required String content,
+  }) async {
+    linkedHandles[projectId] = suggestedFilename;
+    writeCalls++;
+    writtenContents.add(content);
+    return LocalGddLinkResult(linked: true, filename: suggestedFilename);
+  }
+
+  @override
+  Future<String?> restoreLinkedFilename(String projectId) async =>
+      linkedHandles[projectId];
+
+  @override
+  Future<LocalGddWriteResult> writeLinkedFile({
+    required String projectId,
+    required String content,
+    bool requestPermissionIfNeeded = false,
+  }) async {
+    if (!linkedHandles.containsKey(projectId)) {
+      return const LocalGddWriteResult(written: false);
+    }
+    if (denyPermission) {
+      return const LocalGddWriteResult(
+        written: false,
+        permissionDenied: true,
+      );
+    }
+    writeCalls++;
+    writtenContents.add(content);
+    return const LocalGddWriteResult(written: true);
+  }
+
+  @override
+  Future<void> unlinkProject(String projectId) async {
+    linkedHandles.remove(projectId);
+  }
 }
 
 class _FakeVaultBackend implements VaultStorageBackend {

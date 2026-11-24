@@ -496,13 +496,13 @@ class UnrealContextBuilder {
       b.writeln();
       b.writeln('### CoPilot Execution Instruction');
       b.writeln(
-        'Apply ONLY the $ver Upgrade Delta above to ${cleanFeat.code} inside ${cleanEpic.code} (${mode.fullLabel}) without regressing its locked baseline behavior or [PASSED — DO NOT REGRESS] sibling slices, then check every §05 PIE Playtest Gate item.',
+        'Apply ONLY the $ver Upgrade Delta above to ${cleanFeat.code} inside ${cleanEpic.code} (${mode.fullLabel}) without regressing its locked baseline behavior or [PASSED — DO NOT REGRESS] sibling slices, then check every §05 PIE Playtest Gate item. Create any missing shared Epic ownership assets if absent; otherwise extend the existing assets.',
       );
     } else {
       b.writeln();
       b.writeln('### CoPilot Execution Instruction');
       b.writeln(
-        'Implement ONLY ${cleanFeat.code} inside ${cleanEpic.code} using ${mode.fullLabel} conventions, wire §02 Enhanced Input actions, expose every §03 variable, and check all §05 PIE Playtest Gate criteria.',
+        'Implement ONLY ${cleanFeat.code} inside ${cleanEpic.code} using ${mode.fullLabel} conventions, wire §02 Enhanced Input actions, expose every §03 variable, and check all §05 PIE Playtest Gate criteria. Create any missing shared Epic ownership assets if absent; otherwise extend the existing assets.',
       );
     }
 

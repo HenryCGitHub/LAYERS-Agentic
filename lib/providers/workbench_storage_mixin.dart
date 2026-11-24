@@ -599,6 +599,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _offlineErrorMessage = null;
     _executionLog.clear();
     _currentStage = WorkbenchStage.projectPitch;
+    unawaited(_restoreLocalGddLinkForActiveProject());
     notifyListeners();
   }
 
@@ -723,6 +724,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final idsToRemove = _collectProjectDocumentTreeIds(projectId);
     if (idsToRemove.isEmpty) return;
 
+    unawaited(_localGddSync.unlinkProject(projectId));
     _projectCollaborators.remove(projectId);
     final user = _authService.currentUser;
     for (final id in idsToRemove) {
@@ -856,6 +858,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     } else {
       _currentStage = WorkbenchStage.projectPitch;
     }
+    unawaited(_restoreLocalGddLinkForActiveProject());
   }
 
   void _persistDocument(TierDocument doc, {bool debounce = false}) {
@@ -864,6 +867,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
         DateTime.now().millisecondsSinceEpoch.toString();
     void writeNow() {
       LocalVaultService.saveDocument(doc);
+      _scheduleLinkedGddSync();
       final uid = (testOverrideUserUid ?? _authService.currentUser?.uid)?.trim();
       if (uid != null && uid.isNotEmpty && isSessionApprovedForAi) {
         _pendingCloudWriteDocIds.add(doc.id);

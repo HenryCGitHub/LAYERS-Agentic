@@ -304,11 +304,11 @@ class UnrealPromptCompactor {
       );
     } else if (isUpgradeDelta) {
       b.writeln(
-        '@EXEC: Apply ONLY @DELTA $ver to ${cleanFeat.code} in ${cleanEpic.code} (${mode.pillLabel}) without regressing baseline or KEEP siblings; pass @PIE_GATE.',
+        '@EXEC: Apply ONLY @DELTA $ver to ${cleanFeat.code} in ${cleanEpic.code} (${mode.pillLabel}); create missing @OWNERS if absent, else extend existing; keep baseline & KEEP siblings intact; pass @PIE_GATE.',
       );
     } else {
       b.writeln(
-        '@EXEC: Implement ONLY ${cleanFeat.code} in ${cleanEpic.code} (${mode.pillLabel}); wire @INPUT & @VARS; pass @PIE_GATE.',
+        '@EXEC: Implement ONLY ${cleanFeat.code} in ${cleanEpic.code} (${mode.pillLabel}); create missing @OWNERS if absent, else extend existing; wire @INPUT & @VARS; pass @PIE_GATE.',
       );
     }
 
