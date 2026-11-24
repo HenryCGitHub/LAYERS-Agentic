@@ -121,12 +121,17 @@ class LocalGddLinkPill extends StatelessWidget {
                   : border,
             ),
           ),
-          child: Text(
-            labelText,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w600,
-              color: highlighted ? accentColor : primary,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: compact ? 170 : 240),
+            child: Text(
+              labelText,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                color: highlighted ? accentColor : primary,
+              ),
             ),
           ),
         ),

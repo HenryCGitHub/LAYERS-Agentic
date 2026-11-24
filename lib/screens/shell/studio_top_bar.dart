@@ -316,7 +316,8 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                   const SizedBox(width: 6),
                   PopupMenuButton<String>(
                     key: const ValueKey('global_bar_release_selector_btn'),
-                    tooltip: 'Switch Release Version',
+                    tooltip:
+                        'Switch Release Version · ${workbench.releaseConciseLabel(workbench.activeRelease!)}',
                     color: bgSurface,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
@@ -377,8 +378,24 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 185),
+                            child: Text(
+                              workbench.releaseConciseLabel(
+                                workbench.activeRelease!,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
                           Text(
-                            '${workbench.releaseConciseLabel(workbench.activeRelease!)} ▾',
+                            '▾',
                             style: GoogleFonts.inter(
                               fontSize: 12,
                               fontWeight: FontWeight.w500,

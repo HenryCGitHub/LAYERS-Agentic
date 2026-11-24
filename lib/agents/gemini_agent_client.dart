@@ -620,6 +620,7 @@ class GeminiAgentClient {
     ];
 
     int? lastNon200Status;
+    String? lastNon200ErrorMessage;
     String? lastPolicyErrorMessage;
     Object? lastCaughtError;
     lastErrorStatus = null;
@@ -782,6 +783,9 @@ class GeminiAgentClient {
             return null;
           }
           lastNon200Status = response.statusCode;
+          if (errMsg.isNotEmpty) {
+            lastNon200ErrorMessage = errMsg;
+          }
           if (model == primaryModel) {
             lastFallbackReason =
                 _formatHttpStatusReason(response.statusCode, errMsg);
@@ -872,6 +876,9 @@ class GeminiAgentClient {
               return null;
             }
             lastNon200Status = fallbackRes.statusCode;
+            if (errMsg.isNotEmpty) {
+              lastNon200ErrorMessage = errMsg;
+            }
             if (model == primaryModel) {
               lastFallbackReason =
                   _formatHttpStatusReason(fallbackRes.statusCode, errMsg);
@@ -887,10 +894,11 @@ class GeminiAgentClient {
       }
     }
     if (lastNon200Status != null) {
-      lastErrorStatus =
-          (lastPolicyErrorMessage != null && lastPolicyErrorMessage.isNotEmpty)
-              ? 'HTTP $lastNon200Status: $lastPolicyErrorMessage'
-              : 'HTTP $lastNon200Status';
+      final detail = (lastPolicyErrorMessage != null &&
+              lastPolicyErrorMessage.isNotEmpty)
+          ? lastPolicyErrorMessage
+          : (lastNon200ErrorMessage ?? '');
+      lastErrorStatus = _formatHttpStatusReason(lastNon200Status, detail);
     } else if (lastCaughtError != null) {
       lastErrorStatus = '$lastCaughtError';
     }
