@@ -1,0 +1,622 @@
+import 'dart:convert';
+
+import '../constants/text_style_guide.dart';
+import '../models/agent_blueprints.dart';
+import '../models/epic_spec.dart';
+import '../utils/unreal_spec_guard.dart';
+import 'gemini_agent_client.dart';
+
+/// Result returned from refining a Stage 2 [EpicSpec].
+class Stage2EpicRefineOutcome {
+  final EpicSpec? epic;
+  final String summary;
+  final Set<String> changedSections;
+  final String? errorMessage;
+  final bool usedFallback;
+
+  const Stage2EpicRefineOutcome({
+    this.epic,
+    this.summary = '',
+    this.changedSections = const <String>{},
+    this.errorMessage,
+    this.usedFallback = false,
+  });
+}
+
+/// Result returned from refining a Stage 2 [FeatureSpec].
+class Stage2FeatureRefineOutcome {
+  final FeatureSpec? feature;
+  final String summary;
+  final Set<String> changedSections;
+  final String? errorMessage;
+  final bool usedFallback;
+
+  const Stage2FeatureRefineOutcome({
+    this.feature,
+    this.summary = '',
+    this.changedSections = const <String>{},
+    this.errorMessage,
+    this.usedFallback = false,
+  });
+}
+
+/// Surgical Stage 2 Gemini 4 Hydrogen (`LOW` thinking) patch agent for individual
+/// Unreal Engine 5 Domain Epics (`§01-§04`) and Feature Slices (`§01-§05`).
+class Stage2RefineAgent {
+  const Stage2RefineAgent._();
+
+  static Map<String, dynamic> get patchEpicSpecToolSchema => <String, dynamic>{
+        'name': 'patch_unreal_epic_spec',
+        'description':
+            'Patch only the requested sections of an Unreal Engine 5 Stage 2 Epic Domain Sheet (§01 Scope, §02 Ownership, §03 State & Interrupt Rules, §04 Out-of-Scope Cuts). Omit untouched fields.',
+        'parameters': <String, dynamic>{
+          'type': 'OBJECT',
+          'required': ['summary', 'changedSections'],
+          'properties': <String, dynamic>{
+            'summary': {
+              'type': 'STRING',
+              'description': 'Short 6-12 word changelog of what changed.',
+            },
+            'changedSections': {
+              'type': 'ARRAY',
+              'items': {
+                'type': 'STRING',
+                'enum': ['s01', 's02', 's03', 's04'],
+              },
+            },
+            'title': {'type': 'STRING'},
+            'goal': {'type': 'STRING'},
+            'inScope': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'doneWhen': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'sceneOwnership': {
+              'type': 'ARRAY',
+              'items': {
+                'type': 'OBJECT',
+                'required': ['path', 'role'],
+                'properties': {
+                  'path': {'type': 'STRING'},
+                  'role': {'type': 'STRING'},
+                },
+              },
+            },
+            'stateFlow': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'interruptRules': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'outOfScope': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+          },
+        },
+      };
+
+  static Map<String, dynamic> get patchFeatureSpecToolSchema =>
+      <String, dynamic>{
+        'name': 'patch_unreal_feature_spec',
+        'description':
+            'Patch only the requested sections of an Unreal Engine 5 Stage 2 Feature Slice Sheet (§01 Scope, §02 Enhanced Input, §03 Tuning Vars in cm/cm/s, §04 Cues, §05 PIE Checks). Omit untouched fields.',
+        'parameters': <String, dynamic>{
+          'type': 'OBJECT',
+          'required': ['summary', 'changedSections'],
+          'properties': <String, dynamic>{
+            'summary': {
+              'type': 'STRING',
+              'description': 'Short 6-12 word changelog of what changed.',
+            },
+            'changedSections': {
+              'type': 'ARRAY',
+              'items': {
+                'type': 'STRING',
+                'enum': ['s01', 's02', 's03', 's04', 's05'],
+              },
+            },
+            'title': {'type': 'STRING'},
+            'goal': {'type': 'STRING'},
+            'inScope': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'doneWhen': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'releaseDelta': {'type': 'STRING'},
+            'controls': {
+              'type': 'ARRAY',
+              'items': {
+                'type': 'OBJECT',
+                'required': ['action', 'trigger', 'rule'],
+                'properties': {
+                  'action': {'type': 'STRING'},
+                  'trigger': {'type': 'STRING'},
+                  'rule': {'type': 'STRING'},
+                },
+              },
+            },
+            'tuning': {
+              'type': 'ARRAY',
+              'items': {
+                'type': 'OBJECT',
+                'required': ['key', 'value', 'unit'],
+                'properties': {
+                  'key': {'type': 'STRING'},
+                  'value': {'type': 'STRING'},
+                  'unit': {'type': 'STRING'},
+                },
+              },
+            },
+            'cues': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+            'checks': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
+          },
+        },
+      };
+
+  /// Refines [epic] using scoped JSON patching on `gemini-4-hydrogen` (`LOW` thinking),
+  /// falling back deterministically when offline / no API key is configured.
+  static Future<Stage2EpicRefineOutcome> refineEpicSpec({
+    required ProjectConceptBlueprint? rootSpec,
+    required EpicSpec epic,
+    required String instruction,
+    required String apiKey,
+    UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
+    String preferredModel = GeminiAgentClient.pinnedLiveFlashModel,
+    String thinkingLevel = GeminiAgentClient.defaultFastThinkingLevel,
+  }) async {
+    final trimmed = instruction.trim();
+    if (trimmed.isEmpty) {
+      return Stage2EpicRefineOutcome(epic: epic);
+    }
+    if (!GeminiAgentClient.hasKey(apiKey)) {
+      return _applyDeterministicEpicRefine(epic, trimmed, mode);
+    }
+
+    final compactEpic = <String, dynamic>{
+      'code': epic.code,
+      'title': epic.title,
+      'goal': epic.goal,
+      'inScope': epic.inScope,
+      'doneWhen': epic.doneWhen,
+      'sceneOwnership': [for (final o in epic.sceneOwnership) o.toJson()],
+      'stateFlow': epic.stateFlow,
+      'interruptRules': epic.interruptRules,
+      'outOfScope': epic.outOfScope,
+      'childFeatures': [
+        for (final f in epic.features) '${f.code}: ${f.title}',
+      ],
+    };
+
+    final prompt = '''
+${LayersTextStyleGuide.compactStyleRules}
+
+Patch only the requested sections (§01-§04) of this Unreal Engine 5 Epic Domain Sheet.
+PROJECT: ${rootSpec?.normalizedTitle ?? 'UE5 PROJECT'} (${mode.architectureContract})
+CODE POLICY: ${mode.codePolicyContract}
+RULES:
+- Call `patch_unreal_epic_spec` with ONLY the modified fields plus `summary` and `changedSections`.
+- Keep all asset ownership strictly Unreal Engine 5 (`/Game/...`, `Source/...`, `BP_*`, `WBP_*`, `IA_*`, `IMC_*`).
+- Stay 100% native Unreal Engine 5 using `cm` and `cm/s` units only.
+- Child Feature slices belong in Features, not inside the Epic sheet.
+
+CURRENT EPIC JSON:
+${jsonEncode(compactEpic)}
+
+USER REFINE INSTRUCTION:
+"$trimmed"
+''';
+
+    final res = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: preferredModel,
+      thinkingLevel: thinkingLevel,
+      functionDeclarations: [patchEpicSpecToolSchema],
+    );
+
+    if (res == null) {
+      return Stage2EpicRefineOutcome(
+        epic: null,
+        errorMessage: GeminiAgentClient.lastErrorStatus ??
+            'Cloud Gemini could not refine ${epic.code}. Retry when ready.',
+      );
+    }
+
+    return _applyPatchToEpic(epic, res, fallbackNote: trimmed, mode: mode);
+  }
+
+  /// Refines [feature] using scoped JSON patching on `gemini-4-hydrogen` (`LOW` thinking),
+  /// falling back deterministically when offline / no API key is configured.
+  static Future<Stage2FeatureRefineOutcome> refineFeatureSpec({
+    required ProjectConceptBlueprint? rootSpec,
+    required EpicSpec epic,
+    required FeatureSpec feature,
+    required String instruction,
+    required String apiKey,
+    UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
+    String preferredModel = GeminiAgentClient.pinnedLiveFlashModel,
+    String thinkingLevel = GeminiAgentClient.defaultFastThinkingLevel,
+  }) async {
+    final trimmed = instruction.trim();
+    if (trimmed.isEmpty) {
+      return Stage2FeatureRefineOutcome(feature: feature);
+    }
+    if (!GeminiAgentClient.hasKey(apiKey)) {
+      return _applyDeterministicFeatureRefine(feature, trimmed, mode);
+    }
+
+    final compactFeat = <String, dynamic>{
+      'code': feature.code,
+      'title': feature.title,
+      'introducedIn': feature.introducedIn,
+      'goal': feature.goal,
+      'inScope': feature.inScope,
+      'doneWhen': feature.doneWhen,
+      if (feature.releaseDelta.trim().isNotEmpty)
+        'releaseDelta': feature.releaseDelta,
+      'controls': [for (final c in feature.controls) c.toJson()],
+      'tuning': [for (final t in feature.tuning) t.toJson()],
+      'cues': feature.cues,
+      'checks': [for (final chk in feature.checks) chk.text],
+    };
+
+    final prompt = '''
+${LayersTextStyleGuide.compactStyleRules}
+
+Patch only the requested sections (§01-§05) of this Unreal Engine 5 Feature Slice Sheet.
+PROJECT: ${rootSpec?.normalizedTitle ?? 'UE5 PROJECT'} (${mode.architectureContract})
+PARENT EPIC: ${epic.code} · ${epic.title} (${epic.goal})
+RULES:
+- Call `patch_unreal_feature_spec` with ONLY the modified fields plus `summary` and `changedSections`.
+- Input bindings use Enhanced Input `IA_*` action names; tuning keys use `PascalCase` in `cm`, `cm/s`, `deg`, `s`, `hp`, `x`, or `%`.
+- Playtest checks use concise causal `Player Action -> Observable Viewport Result` syntax (<= 14 words).
+- Stay 100% native Unreal Engine 5 using `cm` and `cm/s` units only.
+
+CURRENT FEATURE JSON:
+${jsonEncode(compactFeat)}
+
+USER REFINE INSTRUCTION:
+"$trimmed"
+''';
+
+    final res = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: preferredModel,
+      thinkingLevel: thinkingLevel,
+      functionDeclarations: [patchFeatureSpecToolSchema],
+    );
+
+    if (res == null) {
+      return Stage2FeatureRefineOutcome(
+        feature: null,
+        errorMessage: GeminiAgentClient.lastErrorStatus ??
+            'Cloud Gemini could not refine ${feature.code}. Retry when ready.',
+      );
+    }
+
+    return _applyPatchToFeature(feature, res, fallbackNote: trimmed, mode: mode);
+  }
+
+  static Stage2EpicRefineOutcome _applyPatchToEpic(
+    EpicSpec source,
+    Map<String, dynamic> patch, {
+    required String fallbackNote,
+    required UnrealArchitectureMode mode,
+  }) {
+    final next = source.deepCopy();
+    final changed = _parseChangedSections(patch['changedSections']);
+
+    final rawTitle = _nonEmptyString(patch['title']);
+    if (rawTitle != null) {
+      next.title = rawTitle;
+      changed.add('s01');
+    }
+    final rawGoal = _nonEmptyString(patch['goal']);
+    if (rawGoal != null) {
+      next.goal = rawGoal;
+      changed.add('s01');
+    }
+    final parsedInScope = _parseStringArray(patch['inScope']);
+    if (parsedInScope != null) {
+      next.inScope = parsedInScope;
+      changed.add('s01');
+    }
+    final parsedDoneWhen = _parseStringArray(patch['doneWhen']);
+    if (parsedDoneWhen != null) {
+      next.doneWhen = parsedDoneWhen;
+      changed.add('s01');
+    }
+    if (patch['sceneOwnership'] is List) {
+      final owners = <EpicSceneOwnership>[
+        for (final item in (patch['sceneOwnership'] as List))
+          EpicSceneOwnership.fromJson(item),
+      ].where((o) => o.path.trim().isNotEmpty).toList();
+      next.sceneOwnership = owners;
+      changed.add('s02');
+    }
+    final parsedStates = _parseStringArray(patch['stateFlow']);
+    if (parsedStates != null) {
+      next.stateFlow = parsedStates;
+      changed.add('s03');
+    }
+    final parsedRules = _parseStringArray(patch['interruptRules']);
+    if (parsedRules != null) {
+      next.interruptRules = parsedRules;
+      changed.add('s03');
+    }
+    final parsedCuts = _parseStringArray(patch['outOfScope']);
+    if (parsedCuts != null) {
+      next.outOfScope = parsedCuts;
+      changed.add('s04');
+    }
+
+    final clean = UnrealSpecGuard.sanitizeEpicSpec(next, mode: mode);
+    final summary = _nonEmptyString(patch['summary']) ??
+        'Updated ${clean.code}: $fallbackNote';
+    return Stage2EpicRefineOutcome(
+      epic: clean,
+      summary: UnrealSpecGuard.sanitizeLine(summary, mode: mode),
+      changedSections: changed,
+    );
+  }
+
+  static Stage2FeatureRefineOutcome _applyPatchToFeature(
+    FeatureSpec source,
+    Map<String, dynamic> patch, {
+    required String fallbackNote,
+    required UnrealArchitectureMode mode,
+  }) {
+    final next = source.deepCopy();
+    final changed = _parseChangedSections(patch['changedSections']);
+
+    final rawTitle = _nonEmptyString(patch['title']);
+    if (rawTitle != null) {
+      next.title = rawTitle;
+      changed.add('s01');
+    }
+    final rawGoal = _nonEmptyString(patch['goal']);
+    if (rawGoal != null) {
+      next.goal = rawGoal;
+      changed.add('s01');
+    }
+    final parsedInScope = _parseStringArray(patch['inScope']);
+    if (parsedInScope != null) {
+      next.inScope = parsedInScope;
+      changed.add('s01');
+    }
+    final parsedDoneWhen = _parseStringArray(patch['doneWhen']);
+    if (parsedDoneWhen != null) {
+      next.doneWhen = parsedDoneWhen;
+      changed.add('s01');
+    }
+    final rawDelta = _nonEmptyString(patch['releaseDelta']);
+    if (rawDelta != null) {
+      next.releaseDelta = rawDelta;
+      changed.add('s01');
+    }
+    if (patch['controls'] is List) {
+      next.controls = <EpicControlBinding>[
+        for (final item in (patch['controls'] as List))
+          if (item is Map)
+            EpicControlBinding.fromJson(Map<String, dynamic>.from(item)),
+      ].where((c) => c.action.trim().isNotEmpty).toList();
+      changed.add('s02');
+    }
+    if (patch['tuning'] is List) {
+      next.tuning = <EpicTuningParam>[
+        for (final item in (patch['tuning'] as List))
+          if (item is Map)
+            EpicTuningParam.fromJson(Map<String, dynamic>.from(item)),
+      ].where((t) => t.key.trim().isNotEmpty).toList();
+      changed.add('s03');
+    }
+    final parsedCues = _parseStringArray(patch['cues']);
+    if (parsedCues != null) {
+      next.cues = parsedCues;
+      changed.add('s04');
+    }
+    final parsedChecks = _parseStringArray(patch['checks']);
+    if (parsedChecks != null) {
+      final passedByText = <String, EpicPieCheck>{
+        for (final existing in source.checks)
+          existing.text.trim().toLowerCase(): existing,
+      };
+      next.checks = <EpicPieCheck>[
+        for (int i = 0; i < parsedChecks.length; i++)
+          _mergePieCheck(
+            parsedChecks[i],
+            i,
+            featureId: source.id,
+            existingByText: passedByText,
+          ),
+      ];
+      changed.add('s05');
+    }
+
+    final clean = UnrealSpecGuard.sanitizeFeatureSpec(next, mode: mode);
+    final summary = _nonEmptyString(patch['summary']) ??
+        'Updated ${clean.code}: $fallbackNote';
+    return Stage2FeatureRefineOutcome(
+      feature: clean,
+      summary: UnrealSpecGuard.sanitizeLine(summary, mode: mode),
+      changedSections: changed,
+    );
+  }
+
+  static EpicPieCheck _mergePieCheck(
+    String rawText,
+    int index, {
+    required String featureId,
+    required Map<String, EpicPieCheck> existingByText,
+  }) {
+    final prior = existingByText[rawText.trim().toLowerCase()];
+    if (prior != null) {
+      return EpicPieCheck(id: prior.id, text: rawText, passed: prior.passed);
+    }
+    return EpicPieCheck(
+      id: '${featureId}_chk_${DateTime.now().microsecondsSinceEpoch}_$index',
+      text: rawText,
+    );
+  }
+
+  static Stage2EpicRefineOutcome _applyDeterministicEpicRefine(
+    EpicSpec source,
+    String instruction,
+    UnrealArchitectureMode mode,
+  ) {
+    final next = source.deepCopy();
+    final changed = <String>{};
+    final pathMatch =
+        RegExp(r'(/(?:Game|Script)/[^\s,;]+|Source/[^\s,;]+)')
+            .firstMatch(instruction);
+    if (pathMatch != null) {
+      final path = pathMatch.group(1)!;
+      if (!next.sceneOwnership.any((o) => o.path == path)) {
+        next.sceneOwnership.add(
+          EpicSceneOwnership(path: path, role: 'Shared domain owner'),
+        );
+      }
+      changed.add('s02');
+    } else if (RegExp(r'^no\s+', caseSensitive: false).hasMatch(instruction) ||
+        instruction.toLowerCase().contains('cut ')) {
+      final rawCut =
+          instruction.replaceFirst(RegExp(r'^cut\s+', caseSensitive: false), '');
+      final cleanCut = UnrealSpecGuard.sanitizeExclusion(rawCut, mode: mode);
+      if (cleanCut.isNotEmpty) {
+        next.outOfScope.add(cleanCut);
+        changed.add('s04');
+      }
+    } else if (instruction.contains('->')) {
+      final states = instruction
+          .split('->')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (states.length >= 2) {
+        next.stateFlow = states;
+        changed.add('s03');
+      }
+    } else if (instruction.toLowerCase().contains('interrupt') ||
+        instruction.toLowerCase().contains('cancel') ||
+        instruction.toLowerCase().contains('rule')) {
+      next.interruptRules.add(instruction);
+      changed.add('s03');
+    } else {
+      next.inScope.add(instruction);
+      changed.add('s01');
+    }
+
+    final clean = UnrealSpecGuard.sanitizeEpicSpec(next, mode: mode);
+    return Stage2EpicRefineOutcome(
+      epic: clean,
+      summary: 'Offline refine applied to ${clean.code}',
+      changedSections: changed,
+      usedFallback: true,
+    );
+  }
+
+  static Stage2FeatureRefineOutcome _applyDeterministicFeatureRefine(
+    FeatureSpec source,
+    String instruction,
+    UnrealArchitectureMode mode,
+  ) {
+    final next = source.deepCopy();
+    final changed = <String>{};
+    final tuneMatch = RegExp(
+      r'(?:set|tune|change|make)\s+([A-Za-z][A-Za-z0-9_]*)\s*(?:to|=)\s*([0-9]+(?:\.[0-9]+)?|true|false)\s*([A-Za-z/%]*)',
+      caseSensitive: false,
+    ).firstMatch(instruction);
+
+    if (tuneMatch != null) {
+      final rawKey = tuneMatch.group(1)!.trim();
+      final val = tuneMatch.group(2)!.trim();
+      final unit = tuneMatch.group(3)?.trim() ?? '';
+      final normKey = UnrealSpecGuard.sanitizeTuningKey(rawKey).toLowerCase();
+      final idx = next.tuning.indexWhere(
+        (t) => t.key.trim().toLowerCase() == normKey,
+      );
+      if (idx >= 0) {
+        next.tuning[idx].value = val;
+        if (unit.isNotEmpty) next.tuning[idx].unit = unit;
+      } else {
+        next.tuning.add(
+          EpicTuningParam(key: rawKey, value: val, unit: unit),
+        );
+      }
+      changed.add('s03');
+    } else if (instruction.contains('->')) {
+      next.checks.add(
+        EpicPieCheck(
+          id: '${source.id}_chk_${DateTime.now().microsecondsSinceEpoch}',
+          text: instruction,
+        ),
+      );
+      changed.add('s05');
+    } else if (RegExp(r'\bIA_[A-Za-z0-9_]+').hasMatch(instruction)) {
+      final action = RegExp(r'\b(IA_[A-Za-z0-9_]+)').firstMatch(instruction)!;
+      next.controls.add(
+        EpicControlBinding(
+          action: action.group(1)!,
+          trigger: 'Triggered',
+          rule: instruction,
+        ),
+      );
+      changed.add('s02');
+    } else if (instruction.toLowerCase().contains('cue') ||
+        instruction.toLowerCase().contains('sfx') ||
+        instruction.toLowerCase().contains('vfx') ||
+        instruction.toLowerCase().contains('audio')) {
+      next.cues.add(instruction);
+      changed.add('s04');
+    } else {
+      next.inScope.add(instruction);
+      changed.add('s01');
+    }
+
+    final clean = UnrealSpecGuard.sanitizeFeatureSpec(next, mode: mode);
+    return Stage2FeatureRefineOutcome(
+      feature: clean,
+      summary: 'Offline refine applied to ${clean.code}',
+      changedSections: changed,
+      usedFallback: true,
+    );
+  }
+
+  static String? _nonEmptyString(dynamic raw) {
+    final text = raw?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
+  }
+
+  static Set<String> _parseChangedSections(dynamic raw) {
+    if (raw is! List) return <String>{};
+    return <String>{
+      for (final item in raw)
+        if (item.toString().trim().isNotEmpty)
+          item.toString().trim().toLowerCase(),
+    };
+  }
+
+  static List<String>? _parseStringArray(dynamic raw) {
+    if (raw is! List) return null;
+    return <String>[
+      for (final item in raw)
+        if (item.toString().trim().isNotEmpty) item.toString().trim(),
+    ];
+  }
+}

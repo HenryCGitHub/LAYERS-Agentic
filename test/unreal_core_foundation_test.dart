@@ -2137,6 +2137,300 @@ void main() {
         expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.fallbackDownloaded));
       },
     );
+
+    test(
+      '17. Stage 2 Epic AI Refine routes via Gemini 4 Hydrogen LOW, sanitizes leakage, syncs linked GDD, and supports Undo',
+      () async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.resetCapabilityCacheForTest();
+        GeminiAgentClient.resetUsage();
+        GeminiAgentClient.testMockResponder = null;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+        addTearDown(() {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+          GeminiAgentClient.resetCapabilityCacheForTest();
+          GeminiAgentClient.resetUsage();
+        });
+
+        final capturedUrls = <String>[];
+        final capturedBodies = <Map<String, dynamic>>[];
+
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          capturedUrls.add(uri.toString());
+          if (body is String && body.isNotEmpty) {
+            capturedBodies.add(jsonDecode(body) as Map<String, dynamic>);
+          }
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {
+                        'functionCall': {
+                          'name': 'patch_unreal_epic_spec',
+                          'args': {
+                            'summary':
+                                'Added AC_ArmorShield component and hitstop interrupt rule',
+                            'changedSections': ['s02', 's03', 's04'],
+                            'sceneOwnership': [
+                              {
+                                'path': '/Game/Player/BP_PlayerMech.uasset',
+                                'role': 'Primary mech pawn',
+                              },
+                              {
+                                'path': '/Game/Player/AC_ArmorShield.uasset',
+                                'role': 'Armor gauge & break reaction',
+                              },
+                              {
+                                'path': 'res://legacy_player.tscn',
+                                'role': 'Legacy test actor',
+                              },
+                            ],
+                            'stateFlow': [
+                              'Idle',
+                              'Moving',
+                              'ArmoredDash',
+                              'HitstopFreeze',
+                              'Recovery',
+                            ],
+                            'interruptRules': [
+                              'HitstopFreeze pauses dash displacement for 55ms on shell crack',
+                            ],
+                            'outOfScope': [
+                              'No shield elemental weakness matrix',
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+              'usageMetadata': {
+                'promptTokenCount': 420,
+                'candidatesTokenCount': 110,
+                'thoughtsTokenCount': 30,
+              },
+            }),
+            200,
+          );
+        };
+
+        final fakeBackend = _FakeLocalGddBackend();
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.setLocalGddBackendForTest(fakeBackend);
+        wb.updateAiConfig(apiKey: 'AIzaTestKey123456');
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        await wb.linkLocalGddFile();
+        expect(fakeBackend.writeCalls, equals(1));
+
+        final origEpic = wb.activeReleaseEpics.first.deepCopy();
+        final patched = await wb.applyStage2EpicRefine(
+          origEpic.id,
+          'Add AC_ArmorShield component and hitstop interrupt rule',
+        );
+
+        expect(patched, isNotNull);
+        expect(capturedUrls.single, contains('gemini-4-hydrogen'));
+        final genCfg =
+            capturedBodies.single['generationConfig'] as Map<String, dynamic>;
+        expect(genCfg['thinkingConfig'], equals({'thinkingLevel': 'LOW'}));
+
+        expect(
+          patched!.sceneOwnership.any(
+            (o) => o.path == '/Game/Player/AC_ArmorShield.uasset',
+          ),
+          isTrue,
+        );
+        expect(UnrealSpecGuard.containsEngineLeakage(patched.goal), isFalse);
+        expect(
+          UnrealSpecGuard.containsEngineLeakage(
+            patched.sceneOwnership.map((o) => '${o.path} ${o.role}').join(' '),
+          ),
+          isFalse,
+        );
+        expect(patched.stateFlow, contains('HitstopFreeze'));
+        expect(wb.canUndoStage2Edit, isTrue);
+        expect(wb.lastStage2RefineSummary, isNotEmpty);
+        expect(wb.totalInputTokens, greaterThan(0));
+
+        await Future<void>.delayed(Duration.zero);
+        expect(fakeBackend.writeCalls, equals(2));
+        expect(
+          fakeBackend.writtenContents.last,
+          contains('/Game/Player/AC_ArmorShield.uasset'),
+        );
+
+        final undone = wb.undoStage2Edit();
+        expect(undone, isTrue);
+        expect(wb.canUndoStage2Edit, isFalse);
+        final reverted = wb.activeReleaseEpics.first;
+        expect(
+          reverted.sceneOwnership.length,
+          equals(origEpic.sceneOwnership.length),
+        );
+        expect(reverted.stateFlow, equals(origEpic.stateFlow));
+      },
+    );
+
+    test(
+      '18. Stage 2 Feature AI Refine supports Hydrogen HTTP patch, offline fallback, Undo, and locked v0.1 baseline guard',
+      () async {
+        final prevMock = GeminiAgentClient.testMockResponder;
+        final prevHttp = GeminiAgentClient.testHttpPost;
+        final prevDelay = GeminiAgentClient.testBaseRetryDelay;
+        GeminiAgentClient.resetCapabilityCacheForTest();
+        GeminiAgentClient.resetUsage();
+        GeminiAgentClient.testMockResponder = null;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+        addTearDown(() {
+          GeminiAgentClient.testMockResponder = prevMock;
+          GeminiAgentClient.testHttpPost = prevHttp;
+          GeminiAgentClient.testBaseRetryDelay = prevDelay;
+          GeminiAgentClient.resetCapabilityCacheForTest();
+          GeminiAgentClient.resetUsage();
+        });
+
+        var httpCalls = 0;
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          httpCalls++;
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {
+                        'functionCall': {
+                          'name': 'patch_unreal_feature_spec',
+                          'args': {
+                            'summary':
+                                'Extended DashDistance to 600 cm and normalized tuning variable names',
+                            'changedSections': ['s01', 's03', 's04', 's05'],
+                            'goal':
+                                'Dash 600 cm forward in BP_PlayerMech and smash shell barriers cleanly.',
+                            'tuning': [
+                              {
+                                'key': 'DashDistance',
+                                'value': '600',
+                                'unit': 'cm',
+                              },
+                              {
+                                'key': 'dash_burst',
+                                'value': '1.4',
+                                'unit': 'x',
+                              },
+                            ],
+                            'cues': [
+                              'Bright cyan shoulder thruster burst on IA_Dash press',
+                            ],
+                            'checks': [
+                              'Press IA_Dash -> Mech dashes 600 cm and cracks barrier mesh',
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        };
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.updateAiConfig(apiKey: 'AIzaTestKey123456');
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final origEpic = wb.activeReleaseEpics.first;
+        final origF02 =
+            origEpic.features.firstWhere((f) => f.code == 'F02').deepCopy();
+
+        final refined = await wb.applyStage2FeatureRefine(
+          origEpic.id,
+          origF02.id,
+          'Extend dash distance to 600 cm and add burst cue',
+        );
+
+        expect(refined, isNotNull);
+        expect(httpCalls, equals(1));
+        expect(refined!.tuning.any((t) => t.key == 'DashDistance' && t.value == '600'), isTrue);
+        expect(refined.tuning.any((t) => t.key == 'DashBurst' && t.value == '1.4'), isTrue);
+        expect(
+          wb.activeFeatureBuildPrompt(wb.activeReleaseEpics.first, refined),
+          contains('DashBurst = 1.4 x'),
+        );
+        expect(wb.canUndoStage2Edit, isTrue);
+
+        // Undo restores exact pre-refine F02
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(wb.canUndoStage2Edit, isFalse);
+        final revertedF02 = wb.activeReleaseEpics.first.features
+            .firstWhere((f) => f.code == 'F02');
+        expect(revertedF02.goal, equals(origF02.goal));
+        expect(revertedF02.tuning.length, equals(origF02.tuning.length));
+
+        // Deterministic offline fallback works with empty API key
+        final wbOffline = WorkbenchProvider(enableAutoLoad: false);
+        wbOffline.loadPresetSpark('shellbreaker');
+        wbOffline.approveRootSpecAndLaunchWorkbench();
+        final offEp = wbOffline.activeReleaseEpics.first;
+        final offF02 = offEp.features.firstWhere((f) => f.code == 'F02');
+        final offRefined = await wbOffline.applyStage2FeatureRefine(
+          offEp.id,
+          offF02.id,
+          'Set DashDistance to 550 cm',
+        );
+        expect(offRefined, isNotNull);
+        expect(
+          offRefined!.tuning.any(
+            (t) => t.key == 'DashDistance' && t.value == '550' && t.unit == 'cm',
+          ),
+          isTrue,
+        );
+        expect(wbOffline.canUndoStage2Edit, isTrue);
+
+        // Locked v0.1 baseline in v0.2+ is blocked BEFORE making any HTTP call
+        final draftV02 = await wb.openProgressiveReleaseCopilot();
+        expect(draftV02, isNotNull);
+        final v02RelId = wb.commitProgressiveReleaseDraft();
+        expect(v02RelId, isNotNull);
+        expect(wb.activeReleaseVersionTag, equals('v0.2'));
+
+        EpicSpec? lockedEp;
+        FeatureSpec? lockedFeat;
+        for (final ep in wb.activeReleaseEpics) {
+          for (final feat in wb.visibleFeaturesForEpic(ep, releaseVersion: 'v0.2')) {
+            if (feat.isLockedBaselineInRelease('v0.2')) {
+              lockedEp = ep;
+              lockedFeat = feat;
+              break;
+            }
+          }
+          if (lockedFeat != null) break;
+        }
+        expect(lockedFeat, isNotNull);
+
+        final callsBeforeLocked = httpCalls;
+        final blockedRes = await wb.applyStage2FeatureRefine(
+          lockedEp!.id,
+          lockedFeat!.id,
+          'Change walk speed to 900 cm/s',
+        );
+        expect(blockedRes, isNull);
+        expect(httpCalls, equals(callsBeforeLocked));
+        expect(wb.stage2RefineError, isNotNull);
+        expect(wb.stage2RefineError!.toLowerCase(), contains('locked'));
+      },
+    );
   });
 }
 

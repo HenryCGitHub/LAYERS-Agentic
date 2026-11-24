@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../agents/gemini_agent_client.dart';
 import '../agents/project_concept_agent.dart';
 import '../agents/release_planner_agent.dart';
+import '../agents/stage2_refine_agent.dart';
 import '../constants/tiers.dart';
 import '../models/agent_blueprints.dart';
 import '../models/epic_spec.dart';
@@ -33,6 +34,7 @@ part 'workbench_concept_mixin.dart';
 part 'workbench_release_mixin.dart';
 part 'workbench_progressive_planner_mixin.dart';
 part 'workbench_copilot_mixin.dart';
+part 'workbench_stage2_refine_mixin.dart';
 
 /// Pure 2-Stage Antigravity Studio Workflow:
 /// - [projectPitch]: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`, Spark Onboarding, Co-Designer).
@@ -256,6 +258,38 @@ class WorkbenchProvider extends ChangeNotifier {
     _lastStage1ChangedSections = const <String>{};
     _pendingSparkClarification = null;
     _stage1InlineError = null;
+    _clearStage2TransientState();
+  }
+
+  final List<_Stage2UndoEntry> _stage2UndoStack = <_Stage2UndoEntry>[];
+  String? _stage2UndoProjectId;
+  bool _isRefiningStage2 = false;
+  String? _lastStage2RefineSummary;
+  String? _stage2RefineError;
+  Set<String> _lastStage2ChangedSections = const <String>{};
+
+  void _syncStage2UndoProjectScope() {
+    if (_stage2UndoProjectId != _activeProjectId) {
+      _clearStage2TransientState();
+      _stage2UndoProjectId = _activeProjectId;
+    }
+  }
+
+  void _clearStage2TransientState() {
+    _stage2UndoStack.clear();
+    _lastStage2RefineSummary = null;
+    _stage2RefineError = null;
+    _lastStage2ChangedSections = const <String>{};
+  }
+
+  bool get isRefiningStage2 => _isRefiningStage2;
+  String? get lastStage2RefineSummary => _lastStage2RefineSummary;
+  String? get stage2RefineError => _stage2RefineError;
+  Set<String> get lastStage2ChangedSections =>
+      Set.unmodifiable(_lastStage2ChangedSections);
+  bool get canUndoStage2Edit {
+    _syncStage2UndoProjectScope();
+    return _stage2UndoStack.isNotEmpty;
   }
 
   ProgressiveReleaseDraft? _progressiveDraft;
@@ -801,4 +835,18 @@ class WorkbenchProvider extends ChangeNotifier {
     _syncActiveProjectMetadata();
     notifyListeners();
   }
+}
+
+class _Stage2UndoEntry {
+  final String epicDocId;
+  final String? featureId;
+  final String snapshotJson;
+  final String summary;
+
+  const _Stage2UndoEntry({
+    required this.epicDocId,
+    required this.featureId,
+    required this.snapshotJson,
+    required this.summary,
+  });
 }
