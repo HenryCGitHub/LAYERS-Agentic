@@ -31,28 +31,31 @@
   3. **Cloud Functions Backend ([`functions/index.js`](functions/index.js) & [`firestore.rules`](firestore.rules))**:
      - Pure Web Studio backend providing Gemini API proxy routes (`geminiProxy`), Google Sign-In/Collab invite flows, and Cloud Vault Firestore sync—zero UE5 editor link-token routes (`/godotLink/*` & `/unrealLink/*` are omitted intentionally).
 
-## 1. Composable `Auto-Goal`, `Auto-Grill`, and 2-Step `Auto GG` Workflows
-- **Bounded Hands-Off `Auto-Goal` (`/auto-goal [N] [focus]` or `"auto goal [N]"`)**:
-  - Launches [`.agents/skills/auto-goal/SKILL.md`](.agents/skills/auto-goal/SKILL.md) + [`.agents/hooks/auto_gg_hook.py`](.agents/hooks/auto_gg_hook.py) (`mode: "goal"`, `phase: "discovering"`, **default `N = 3`** rounds when omitted, or `1..50`).
-  - Runs [`discover_signals.py`](.agents/skills/auto-goal/scripts/discover_signals.py), skips `ask_question`, auto-selects the `#1` highest-confidence bug, Stage 1/2/CoPilot Prompt parity gap, `leakageHits`, or test coverage target (never inventing speculative UI features), prints a 1-line `[Round k/N Goal]` banner, executes `Red → ./scripts/verify_loop.sh → Commit`, calls `enter_plan_mode(reason='[round-complete] ...')`, and automatically stops with a `1..N` changelog after Round `N/N` (or earlier on `stop` / `"finish ... and pause"`).
-- **Standalone Targeted `Auto-Grill` (`/auto-grill <target>`)**:
-  - Launches [`.agents/skills/auto-grill/SKILL.md`](.agents/skills/auto-grill/SKILL.md) (`mode: "grill"`).
-  - Skips `discover_signals.py`, inspects affected files directly, asks `1–3` high-signal UX/scope questions via `ask_question` (`(Recommended)` first, or skips if zero UX ambiguity), locks the Goal Contract, checks changes against `./scripts/verify_loop.sh` once, and stops cleanly.
-- **Interactive 2-Step `Auto GG` Loop (`/auto-gg [N] [focus]` or `"Auto GG"`)**:
-  - Launches [`.agents/skills/auto-gg/SKILL.md`](.agents/skills/auto-gg/SKILL.md) (`mode: "gg"`), open-ended by default (`maxRounds: 0`, gated per round by `ask_question`) or bounded when `[N]` is provided: **Step 1** (`select_goal`) runs [`discover_signals.py`](.agents/skills/auto-goal/scripts/discover_signals.py) and asks **1 Goal Choice question** (`PreToolUse` denies premature `exit_plan_mode`); **Step 2** (`grill_chosen`) applies `Auto-Grill` strictly to the chosen goal (skipping if zero UX forks); then executes, checks, commits, and advances via `[round-complete]` until canceled, stopped, or Round `N/N` completes.
-- **Opt-In `SEA` Lens (`/sea` or `"SEA"` — Subtract, Enhance, Add)**:
-  - Activate [SKILL.md](.agents/skills/sea/SKILL.md) **only** when `/sea` or `SEA` is explicitly written in the prompt (including `auto gg SEA ...`) to audit, grill, and execute strictly in **Subtract → Enhance → Add** order.
-- **Auto-Goal (Self-Derived Goal Contracts — Always On)**:
-  - On any symptom report, audit request, or open-ended prompt, inspect the codebase, tests, and Cloud/workflow test scripts (`scripts/cloud_proxy_test.py`, `scripts/workflow_hook_test.py`) first to derive a concrete **Goal Contract** (`Goal`, `In Scope`, and machine-verifiable `Done When` checks).
-  - When a prompt is open-ended (e.g., *"audit LAYERS"* or a broad symptom with multiple gaps), automatically select the **#1 highest-impact safe goal** and run its check loop immediately rather than pausing on a backlog menu.
-- **Auto-Grill (Upfront Clarification via `ask_question` — Only on Real UX/Scope Forks)**:
-  - Resolve pure engineering, data-structure, and CoPilot Context contract trade-offs internally against the codebase and tests—never ask the user technical minutiae.
-  - When genuine product, UX, or scope trade-offs exist, ask 1–3 concise multiple-choice questions upfront using `ask_question` (`(Recommended)` option first) before editing.
-- **Execution Gate (When to Pause vs. Loop Immediately)**:
-  - **Clear / Small-to-Medium Tasks, Bug Fixes & `/goal` Runs**: Once Auto-Grill resolves any ambiguity (or immediately if unambiguous), write/run a failing test first, then iterate autonomously (`Edit → ./scripts/verify_loop.sh → Self-Repair`) to `0` errors without an extra `implementation_plan.md` pause.
-  - **Major UI Redesigns & Core Architecture Changes**: Present a concise `implementation_plan.md` (`Goal`, `In Scope`, `Affected Files`, `Done When`) and wait for explicit user approval before editing project code files.
-- **External User Game Projects Strictly Read-Only**:
-  - External user game projects (such as `/Users/henry/Godot/Projects/*`) are strictly **read-only** reference fixtures (enforced by `.agents/hooks.json`). Always fix LAYERS's own app code instead.
+## 1. Goal-Oriented Planning & Autonomous Routing
+
+Work backward from the desired outcome before writing any code. Keep planning concise and execution hands-free unless a real UX or scope fork requires a user decision.
+
+### Phase 1: Goal Contract (Silent Planning)
+Before editing files, define a 3-part Goal Contract in your internal plan (using Section 5's Goal / In Scope / Done When format):
+1. **End-State Goal:** One plain-English sentence naming the exact user or system outcome.
+2. **Measurable Done Criteria:** 2–4 concrete checks proving the goal is met (anchored to `./scripts/verify_loop.sh` plus targeted test, build, or CLI/UI output).
+3. **Critical Path & Independence:** Separate tightly coupled edits from independent sub-goals with zero file overlap.
+
+- **Open-Ended Prompts / Audits:** Run `PYTHONDONTWRITEBYTECODE=1 python3 scripts/discover_signals.py [focus]` first to ground the Goal Contract in live repo signals (`leakageHits`, `untestedModules`, `monolithHotspots`, `cloudProxyTest`), and pick the `#1` highest-impact safe target without inventing speculative UI.
+- **Clarification Policy (Smart Hands-Off):** Never pause for engineering trivia (helpers, data structures, tests, CoPilot prompt internals). Execute autonomously on bugs, tests, refactors, CI, and clear specs. Ask `1–2` focused multiple-choice questions (`ask_question`, `(Recommended)` first) **only** on genuine unresolved UX or scope forks—or present a concise `implementation_plan.md` before major UI redesigns or core architecture overhauls.
+
+### Phase 2: Hands-Free Execution Routing
+Select execution topology from the Goal Contract's dependency graph (using native tools):
+- **Single-Thread Default:** Coupled edits—even across 4–8 related Dart files (model + provider + screen)—run sequentially in the main thread (`Red test -> Edit -> ./scripts/verify_loop.sh`).
+- **Background Offload (`invoke_subagent` `research`):** Offload broad read-only discovery, multi-file audits (>5 files), or large log triage so noisy output stays out of the main context window.
+- **Selective Parallel Swarm (`swarm` tool):** Spawn parallel workers (`workspace: "share"` for authors, `"inherit"` for read-only auditors) **only** when the goal splits into **2+ truly independent tracks with strict non-overlapping file ownership** (e.g., CI/Docs + Tests + Read-Only Audit, or Cloud Functions + Flutter UI + Tests). Always land worker commits onto `main` and pass `./scripts/verify_loop.sh` before killing workers.
+- **2-Strike Root-Cause Escalation (`enter_plan_mode`):** If any Done Criterion fails after 2 fix attempts, stop patching blindly—hand back to Plan Mode via `enter_plan_mode` for root-cause diagnosis (and suggest `/boost` to the user when deep multi-perspective redesign is warranted).
+
+### Phase 3: Goal Proof & Handoff
+- Code written is not done—a task is complete only when every **Measurable Done Criterion** passes in observed terminal/test output (enforced on dirty code by `.agents/hooks/stop_verify_gate.py` + `./scripts/verify_loop.sh`).
+- Conclude with a brief **Goal Summary** mapping each Done Criterion to its observed proof and listing changed files with clickable `file:///` links.
+- **External Game Projects Strictly Read-Only:** Enforced by `.agents/hooks/pre_tool_guard.py`. Always fix LAYERS-Agentic workspace code instead.
+- **Built-In Modes:** Suggest native Antigravity commands when a special mode fits (`/goal` for long autonomous runs, `/grill-me` for interactive design interviews, `/teamwork` for large parallel projects, `/boost` for deep debugging).
 
 ## 2. Multi-Stack Verification & Loop Gate
 - Run `./scripts/verify_loop.sh` before committing.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fast repository signal collector for /auto-goal and /auto-gg discovery."""
+"""Fast repository signal collector for LAYERS-Agentic goal discovery and health audits."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 import re
 import subprocess
 
-REPO_ROOT = Path(__file__).resolve().parents[4]
+REPO_ROOT = Path(__file__).resolve().parents[1]
 TODO_PATTERN = re.compile(r"\b(?:TODO|FIXME)\b")
 WARNING_PATTERN = re.compile(r"(?:AssertionError|Error:|Traceback|FAIL)")
 LEAKAGE_PATTERN = re.compile(

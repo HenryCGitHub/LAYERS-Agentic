@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test verifying composable Auto-Goal, Auto-Grill & 2-Step Auto-GG workflows."""
+"""Checks surviving .agents hooks, layers-ship skill, discover_signals.py, and CI parity."""
 
 from __future__ import annotations
 
@@ -13,24 +13,19 @@ import os
 from pathlib import Path
 import re
 import subprocess
-import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-HOOK_PATH = REPO_ROOT / ".agents" / "hooks" / "auto_gg_hook.py"
-DISCOVER_PATH = REPO_ROOT / ".agents" / "skills" / "auto-goal" / "scripts" / "discover_signals.py"
+HOOKS_JSON_PATH = REPO_ROOT / ".agents" / "hooks.json"
+PRE_TOOL_GUARD_PATH = REPO_ROOT / ".agents" / "hooks" / "pre_tool_guard.py"
+STOP_VERIFY_GATE_PATH = REPO_ROOT / ".agents" / "hooks" / "stop_verify_gate.py"
+DISCOVER_PATH = REPO_ROOT / "scripts" / "discover_signals.py"
 
 
-def _run_hook(
-    event: str,
-    payload: dict,
-    *,
-    force_dirty: str = "0",
-) -> dict:
+def _run_hook_script(script_path: Path, payload: dict) -> dict:
   env = dict(os.environ)
   env["PYTHONDONTWRITEBYTECODE"] = "1"
-  env["LAYERS_HOOK_FORCE_DIRTY"] = force_dirty
   proc = subprocess.run(
-      [sys.executable, str(HOOK_PATH), "--event", event],
+      [sys.executable, str(script_path)],
       cwd=str(REPO_ROOT),
       input=json.dumps(payload),
       capture_output=True,
@@ -38,15 +33,8 @@ def _run_hook(
       timeout=15,
       env=env,
   )
-  assert proc.returncode == 0, f"Hook {event} failed ({proc.returncode}): {proc.stderr}"
+  assert proc.returncode == 0, f"{script_path.name} failed ({proc.returncode}): {proc.stderr}"
   return json.loads(proc.stdout.strip() or "{}")
-
-
-def _load_state(tmp_dir: Path) -> dict:
-  state_file = tmp_dir / "auto_gg_state.json"
-  if not state_file.is_file():
-    return {"active": False, "phase": "idle"}
-  return json.loads(state_file.read_text(encoding="utf-8"))
 
 
 def _check_frontmatter(path: Path, expected_name: str) -> None:
@@ -63,14 +51,28 @@ def _check_frontmatter(path: Path, expected_name: str) -> None:
   )
 
 
-def _verify_skills_and_discovery() -> None:
-  _check_frontmatter(REPO_ROOT / ".agents" / "skills" / "auto-goal" / "SKILL.md", "auto-goal")
-  _check_frontmatter(REPO_ROOT / ".agents" / "skills" / "auto-grill" / "SKILL.md", "auto-grill")
-  _check_frontmatter(REPO_ROOT / ".agents" / "skills" / "auto-gg" / "SKILL.md", "auto-gg")
+def _verify_hooks_and_skills() -> None:
+  assert HOOKS_JSON_PATH.is_file(), f"Missing hooks config: {HOOKS_JSON_PATH}"
+  raw_hooks_text = HOOKS_JSON_PATH.read_text(encoding="utf-8")
+  assert "auto_gg_hook" not in raw_hooks_text, "Legacy auto_gg_hook still referenced in hooks.json"
+  cfg = json.loads(raw_hooks_text)
+  assert isinstance(cfg, dict), f"Invalid hooks.json object: {type(cfg)}"
+  assert set(cfg.keys()) == {"external-project-write-guard", "goal-verify-stop-gate"}, (
+      f"Unexpected hook groups in hooks.json: {sorted(cfg.keys())}"
+  )
 
-  legacy_discover = REPO_ROOT / ".agents" / "skills" / "auto-gg" / "scripts" / "discover_signals.py"
-  assert not legacy_discover.exists(), f"Duplicate discover script still exists: {legacy_discover}"
-  assert DISCOVER_PATH.is_file(), f"Missing unified discover script: {DISCOVER_PATH}"
+  legacy_hook = REPO_ROOT / ".agents" / "hooks" / "auto_gg_hook.py"
+  assert not legacy_hook.exists(), f"Legacy hook still exists: {legacy_hook}"
+
+  for retired_skill in ("auto-goal", "auto-grill", "auto-gg", "sea"):
+    retired_dir = REPO_ROOT / ".agents" / "skills" / retired_skill
+    assert not retired_dir.exists(), f"Retired skill directory still exists: {retired_dir}"
+
+  _check_frontmatter(REPO_ROOT / ".agents" / "skills" / "layers-ship" / "SKILL.md", "layers-ship")
+
+
+def _verify_discover_signals() -> None:
+  assert DISCOVER_PATH.is_file(), f"Missing signal script: {DISCOVER_PATH}"
 
   env = dict(os.environ)
   env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -89,7 +91,7 @@ def _verify_skills_and_discovery() -> None:
       "Expected non-empty focusMatches for 'workbench'"
   )
   assert "pluginVersion" not in report and "zipParityOk" not in report, (
-      f"Removed Godot plugin fields should not appear in report: {report.keys()}"
+      f"Removed plugin fields should not appear in report: {report.keys()}"
   )
   assert isinstance(report.get("cloudProxyTest"), dict), "Expected cloudProxyTest dict"
   assert isinstance(report.get("monolithHotspots"), list), "Expected monolithHotspots list"
@@ -142,416 +144,45 @@ def _verify_skills_and_discovery() -> None:
     assert covered_part not in untested, f"Expected transitive export module covered: {covered_part}"
 
 
-def _verify_non_trigger_guards() -> None:
-  with tempfile.TemporaryDirectory() as td:
-    tmp_dir = Path(td)
-    for phrase in (
-        "auto goal should loop continuously",
-        "why auto goal should loop?",
-        "should we design separate auto goal and auto grill?",
-        "is auto gg working well right now?",
-    ):
-      out = _run_hook("pre_invocation", {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": phrase})
-      st = _load_state(tmp_dir)
-      assert not st.get("active"), f"False trigger on conversational phrase: {phrase!r} -> {st}"
-      assert out == {}, f"Expected no injectSteps on non-trigger: {out}"
+def _verify_pre_tool_guard() -> None:
+  assert PRE_TOOL_GUARD_PATH.is_file(), f"Missing hook: {PRE_TOOL_GUARD_PATH}"
+  for blocked_path in (
+      "/Users/henry/Documents/Unreal Projects/MyGame/Content/Test.uasset",
+      "/Users/henry/Godot/Projects/Demo/player.gd",
+  ):
+    out = _run_hook_script(PRE_TOOL_GUARD_PATH, {"toolCall": {"args": {"Path": blocked_path}}})
+    assert out.get("decision") == "deny", f"Expected deny for {blocked_path}: {out}"
 
-    # Explicit slash command WITH trailing question mark MUST still trigger
-    out = _run_hook(
-        "pre_invocation",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "lastUserInput": "/auto-grill should we place button left or right?",
-        },
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is True and st.get("mode") == "grill", (
-        f"Expected /auto-grill with ? to activate mode=='grill', got: {st}"
-    )
-    assert "injectSteps" in out, "Expected injectSteps for /auto-grill"
+  allowed = _run_hook_script(
+      PRE_TOOL_GUARD_PATH,
+      {"toolCall": {"args": {"Path": str(REPO_ROOT / "lib" / "main.dart")}}},
+  )
+  assert allowed.get("decision") == "allow", f"Expected allow for workspace file: {allowed}"
 
 
-def _verify_auto_goal_bounded() -> None:
-  # Default /auto-goal without [N] defaults to maxRounds == 3 hands-off discovering sweep
-  with tempfile.TemporaryDirectory() as td:
-    tmp_dir = Path(td)
-    out = _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal godot dock"},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is True and st.get("mode") == "goal", st
-    assert st.get("phase") == "discovering" and st.get("round") == 1, st
-    assert st.get("maxRounds") == 3 and st.get("focus") == "godot dock", st
-    msg1 = out["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "Round 1/3" in msg1 and "skip `ask_question`" in msg1, msg1
+def _verify_stop_verify_gate() -> None:
+  assert STOP_VERIFY_GATE_PATH.is_file(), f"Missing hook: {STOP_VERIFY_GATE_PATH}"
+  env = dict(os.environ)
+  env["PYTHONDONTWRITEBYTECODE"] = "1"
+  proc = subprocess.run(
+      [sys.executable, str(STOP_VERIFY_GATE_PATH), "--print-state"],
+      cwd=str(REPO_ROOT),
+      capture_output=True,
+      text=True,
+      timeout=15,
+      env=env,
+  )
+  assert proc.returncode == 0, f"stop_verify_gate.py --print-state failed: {proc.stderr}"
+  state_line = proc.stdout.strip()
+  assert re.match(r"^(True|False):[0-9a-f]+$", state_line), (
+      f"Unexpected stop_verify_gate --print-state output: {state_line!r}"
+  )
 
-    # Hands-off auto-goal allows exit_plan_mode immediately (unlike /auto-gg select_goal)
-    allow_out = _run_hook(
-        "pre_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "do"}}},
-    )
-    assert allow_out.get("decision") == "allow", allow_out
-
-    # Stopping while discovering nudges exit_plan_mode (never requires ask_question)
-    stop_nudge = _run_hook(
-        "stop",
-        {"artifactDirectoryPath": str(tmp_dir), "terminationReason": "NO_TOOL_CALL", "fullyIdle": True},
-        force_dirty="0",
-    )
-    assert stop_nudge.get("decision") == "continue", stop_nudge
-    assert "exit_plan_mode" in stop_nudge.get("reason", ""), stop_nudge
-
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "do"}}},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "building", st
-
-    # Mid-round review due when dirty code present and no [round-complete] marker
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "30 step review"}},
-        },
-        force_dirty="1",
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "reviewing" and st.get("round") == 1, st
-
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "resume"}}},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "building", st
-
-    # Advance Round 1 -> Round 2 (same lastUserInput on Round 2 pre_invocation still injects Round 2/3)
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped R1"}},
-        },
-        force_dirty="0",
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "discovering" and st.get("round") == 2 and st.get("maxRounds") == 3, st
-
-    out2 = _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal godot dock"},
-    )
-    msg2 = out2["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "Round 2/3" in msg2, f"Expected Round 2/3 prompt injection, got: {msg2}"
-
-    # Pause before finishing round 3 via "finsh the last loop and pause"
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "round2"}}},
-    )
-    _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "finsh the last loop and pause"},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is True and st.get("pauseAfterRound") is True, st
-
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped R2"}},
-        },
-        force_dirty="0",
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is False and st.get("phase") == "idle" and st.get("pauseAfterRound") is False, st
-    assert st.get("pendingCompletionNotice") is True, st
-
-    done_out = _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "finsh the last loop and pause"},
-    )
-    done_msg = done_out["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "[Auto-Goal Complete" in done_msg and "Shipped R1" in done_msg and "Shipped R2" in done_msg, done_msg
-    assert _load_state(tmp_dir).get("pendingCompletionNotice") is False
-
-  # Explicit count `auto goal 2 godot` + hyphenated focus guard `3-tier hierarchy`
-  with tempfile.TemporaryDirectory() as td:
-    tmp_dir = Path(td)
-    _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "auto goal 2 godot"},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is True and st.get("mode") == "goal", st
-    assert st.get("maxRounds") == 2 and st.get("focus") == "godot", st
-
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "r1"}}},
-    )
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped R1"}},
-        },
-        force_dirty="0",
-    )
-    assert _load_state(tmp_dir).get("round") == 2 and _load_state(tmp_dir).get("active") is True
-
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "r2"}}},
-    )
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] Shipped R2"}},
-        },
-        force_dirty="0",
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is False and st.get("phase") == "idle" and st.get("pendingCompletionNotice") is True, st
-    done_out = _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "auto goal 2 godot"},
-    )
-    done_msg = done_out["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "[Auto-Goal Complete — 2/2 Rounds Shipped]" in done_msg, done_msg
-    assert "Shipped R1" in done_msg and "Shipped R2" in done_msg, done_msg
-
-    # Hyphenated focus word must NOT be stripped as loop count
-    _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-goal 3-tier hierarchy"},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("maxRounds") == 3 and st.get("focus") == "3-tier hierarchy", st
-
-    # Polite conversational lead-ins activate bounded auto-goal / auto-gg cleanly
-    for phrase, exp_mode, exp_max, exp_focus in (
-        ("Okay Auto Goal 10", "goal", 10, ""),
-        ("Yes, auto goal 4", "goal", 4, ""),
-        ("Sure auto gg 2 stage 2", "gg", 2, "stage 2"),
-    ):
-      with tempfile.TemporaryDirectory() as sub_td:
-        sub_dir = Path(sub_td)
-        _run_hook(
-            "pre_invocation",
-            {"artifactDirectoryPath": str(sub_dir), "lastUserInput": phrase},
-        )
-        sub_st = _load_state(sub_dir)
-        assert (
-            sub_st.get("active") is True
-            and sub_st.get("mode") == exp_mode
-            and sub_st.get("maxRounds") == exp_max
-            and sub_st.get("focus") == exp_focus
-        ), f"Lead-in failed for {phrase!r}: {sub_st}"
-
-    # Explicit stop ends active loop immediately
-    _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "stop auto goal"},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is False and st.get("phase") == "idle", st
-
-
-def _verify_auto_grill_single_pass() -> None:
-  with tempfile.TemporaryDirectory() as td:
-    tmp_dir = Path(td)
-    out = _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-grill refine Stage 2 header"},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is True and st.get("mode") == "grill", st
-    assert st.get("phase") == "grilling_ux" and st.get("round") == 1, st
-    assert "injectSteps" in out, out
-
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "answered", st
-
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "build"}}},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "building", st
-
-    stop_out = _run_hook(
-        "stop",
-        {"artifactDirectoryPath": str(tmp_dir), "terminationReason": "NO_TOOL_CALL", "fullyIdle": True},
-        force_dirty="0",
-    )
-    assert stop_out.get("decision") == "allow", stop_out
-    st = _load_state(tmp_dir)
-    assert st.get("active") is False and st.get("phase") == "idle", st
-
-
-def _verify_auto_gg_two_step() -> None:
-  # Branch A: /auto-gg defaults to maxRounds == 0 (open-ended): select_goal -> grill_chosen -> answered -> building -> Round 2
-  with tempfile.TemporaryDirectory() as td:
-    tmp_dir = Path(td)
-    _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-gg stage 2"},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is True and st.get("mode") == "gg", st
-    assert st.get("phase") == "select_goal" and st.get("round") == 1, st
-    assert st.get("maxRounds") == 0 and st.get("focus") == "stage 2", st
-
-    deny_gg = _run_hook(
-        "pre_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "skip"}}},
-    )
-    assert deny_gg.get("decision") == "deny", deny_gg
-
-    # 1st ask_question (Goal choice) -> grill_chosen
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "grill_chosen", st
-
-    allow_gg = _run_hook(
-        "pre_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "direct"}}},
-    )
-    assert allow_gg.get("decision") == "allow", allow_gg
-
-    # 2nd ask_question (UX fork on chosen goal) -> answered
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "answered", st
-
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "run"}}},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "building", st
-
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] done"}},
-        },
-        force_dirty="0",
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("phase") == "select_goal" and st.get("round") == 2 and st.get("active") is True, st
-
-  # Branch B: /auto-gg 2 stage 2 stops automatically after Round 2 with completion notice
-  with tempfile.TemporaryDirectory() as td:
-    tmp_dir = Path(td)
-    out = _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-gg 2 stage 2"},
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is True and st.get("mode") == "gg", st
-    assert st.get("maxRounds") == 2 and st.get("focus") == "stage 2", st
-    assert "Round 1/2" in out["injectSteps"][0]["systemMessage"]["systemMessage"], out
-
-    # Round 1 complete
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
-    )
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "gg1"}}},
-    )
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] GG R1"}},
-        },
-        force_dirty="0",
-    )
-    assert _load_state(tmp_dir).get("round") == 2 and _load_state(tmp_dir).get("active") is True
-
-    # Round 2 complete -> auto-stops with completion notice
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
-    )
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "gg2"}}},
-    )
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "enter_plan_mode", "args": {"reason": "[round-complete] GG R2"}},
-        },
-        force_dirty="0",
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is False and st.get("phase") == "idle" and st.get("pendingCompletionNotice") is True, st
-    done_out = _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-gg 2 stage 2"},
-    )
-    done_msg = done_out["injectSteps"][0]["systemMessage"]["systemMessage"]
-    assert "[Auto GG Complete — 2/2 Rounds Shipped]" in done_msg, done_msg
-    assert "GG R1" in done_msg and "GG R2" in done_msg, done_msg
-
-  # Branch C: zero UX ambiguity -> exit_plan_mode directly from grill_chosen
-  with tempfile.TemporaryDirectory() as td:
-    tmp_dir = Path(td)
-    _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "Auto GG"},
-    )
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "ask_question", "args": {"questions": []}}},
-    )
-    assert _load_state(tmp_dir).get("phase") == "grill_chosen"
-
-    _run_hook(
-        "post_tool",
-        {"artifactDirectoryPath": str(tmp_dir), "toolCall": {"name": "exit_plan_mode", "args": {"plan": "direct"}}},
-    )
-    assert _load_state(tmp_dir).get("phase") == "building"
-
-  # Cancel ask_question resets active=False, phase="idle"
-  with tempfile.TemporaryDirectory() as td:
-    tmp_dir = Path(td)
-    _run_hook(
-        "pre_invocation",
-        {"artifactDirectoryPath": str(tmp_dir), "lastUserInput": "/auto-gg"},
-    )
-    _run_hook(
-        "post_tool",
-        {
-            "artifactDirectoryPath": str(tmp_dir),
-            "toolCall": {"name": "ask_question", "args": {"questions": []}},
-            "error": "User canceled",
-        },
-    )
-    st = _load_state(tmp_dir)
-    assert st.get("active") is False and st.get("phase") == "idle", st
+  non_idle = _run_hook_script(
+      STOP_VERIFY_GATE_PATH,
+      {"terminationReason": "TOOL_CALL", "fullyIdle": False},
+  )
+  assert non_idle.get("decision") == "allow", f"Expected allow when not fullyIdle: {non_idle}"
 
 
 def _verify_ci_deploy_workflow() -> None:
@@ -575,12 +206,11 @@ def _verify_ci_deploy_workflow() -> None:
 
 
 def main() -> int:
-  _verify_skills_and_discovery()
+  _verify_hooks_and_skills()
+  _verify_discover_signals()
+  _verify_pre_tool_guard()
+  _verify_stop_verify_gate()
   _verify_ci_deploy_workflow()
-  _verify_non_trigger_guards()
-  _verify_auto_goal_bounded()
-  _verify_auto_grill_single_pass()
-  _verify_auto_gg_two_step()
   print("WORKFLOW_HOOK_TEST_OK")
   return 0
 
