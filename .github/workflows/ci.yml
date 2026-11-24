@@ -1,20 +1,23 @@
-name: Deploy Flutter Web to GitHub Pages
+name: CI
 
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: deploy-gh-pages
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  build-and-deploy:
+  ci:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -55,17 +58,3 @@ jobs:
             done
             exit 1
           }
-
-      - name: Build Flutter Web (Release)
-        run: |
-          echo "Building clean public web bundle (users enter API key locally in AI Settings)."
-          flutter build web --release --base-href "/LAYERS-Agentic/" --no-web-resources-cdn --pwa-strategy=none
-          touch build/web/.nojekyll
-
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./build/web
-          force_orphan: true
-          commit_message: "Deploy LAYERS Web App (${{ github.sha }})"

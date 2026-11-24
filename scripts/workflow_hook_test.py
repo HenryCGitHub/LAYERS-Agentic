@@ -185,23 +185,26 @@ def _verify_stop_verify_gate() -> None:
   assert non_idle.get("decision") == "allow", f"Expected allow when not fullyIdle: {non_idle}"
 
 
-def _verify_ci_deploy_workflow() -> None:
-  deploy_yml = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
-  assert deploy_yml.is_file(), f"Missing CI deploy workflow: {deploy_yml}"
-  content = deploy_yml.read_text(encoding="utf-8")
+def _verify_ci_workflow() -> None:
+  ci_yml = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+  legacy_deploy_yml = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
+  assert ci_yml.is_file(), f"Missing CI workflow: {ci_yml}"
+  assert not legacy_deploy_yml.exists(), f"Legacy deploy workflow should be removed: {legacy_deploy_yml}"
+  content = ci_yml.read_text(encoding="utf-8")
   lower_content = content.lower()
-  for legacy_token in ("layers_godot_plugin", "godot_plugin"):
-    assert legacy_token not in lower_content, (
-        f"Legacy token {legacy_token!r} still present in {deploy_yml}"
+  for forbidden_token in ("layers_godot_plugin", "godot_plugin", "actions-gh-pages", "gh-pages"):
+    assert forbidden_token not in lower_content, (
+        f"Forbidden token {forbidden_token!r} present in {ci_yml}"
     )
-  for required_cmd in (
+  for required_entry in (
+      "contents: read",
       "cloud_proxy_test.py",
       "workflow_hook_test.py",
       "dart analyze",
       "flutter test",
   ):
-    assert required_cmd in content, (
-        f"Missing required CI check {required_cmd!r} in {deploy_yml}"
+    assert required_entry in content, (
+        f"Missing required CI entry {required_entry!r} in {ci_yml}"
     )
 
 
@@ -210,7 +213,7 @@ def main() -> int:
   _verify_discover_signals()
   _verify_pre_tool_guard()
   _verify_stop_verify_gate()
-  _verify_ci_deploy_workflow()
+  _verify_ci_workflow()
   print("WORKFLOW_HOOK_TEST_OK")
   return 0
 
