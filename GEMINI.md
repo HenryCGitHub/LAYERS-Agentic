@@ -3,7 +3,7 @@
 ## 0. Project Architecture & Context (Quick Onboarding for New Agent Sessions)
 - **Repository**: `https://github.com/HenryCGitHub/LAYERS-Agentic`
 - **Live Web App (GitHub Pages)**: `https://henrycgithub.github.io/LAYERS-Agentic/`
-- **Deploy Command**: Run `./scripts/deploy.sh` from the project root (builds release Flutter Web and pushes `origin/gh-pages`). Only deploy when the user asks.
+- **Push & Deploy Rule**: Whenever the user asks to "push", "deploy", or "ship", push `main` to `origin` AND immediately run `./scripts/deploy.sh` right after (builds release Flutter Web locally and pushes `origin/gh-pages`), plus `firebase deploy --only functions` whenever `functions/` changed. Never push or deploy unless the user asks.
 - **AI Model ([`lib/agents/gemini_agent_client.dart`](lib/agents/gemini_agent_client.dart) & [`lib/providers/workbench_provider.dart`](lib/providers/workbench_provider.dart))**:
   - **Dual-Tier Gemini 4 Routing**:
     - **Architect Planner Model (`Stage 1 Spark` & `Stage 2 + New Release`)**: `gemini-4-argon` (`thinkingLevel: "MEDIUM"` default; automatic failover `gemini-4-argon` → `gemini-4-hydrogen` → `gemini-flash-latest`).

@@ -1,11 +1,11 @@
 ---
 name: layers-ship
-description: Use when preparing to ship verified changes in LAYERS-Agentic across Cloud Functions, Git main, and Web Studio GitHub Pages deployment.
+description: Use whenever the user asks to push, deploy, or ship changes in LAYERS-Agentic across Cloud Functions, Git main, and local-build Web Studio GitHub Pages deployment.
 ---
 
 # LAYERS Atomic Release Loop
 
-Execute these checks in order so `main`, Cloud Functions, and GitHub Pages stay byte-synchronized.
+Whenever the user asks to **push**, **deploy**, or **ship**, run these steps together in order so `main`, Cloud Functions, and GitHub Pages (`./scripts/deploy.sh`) stay synchronized.
 
 ## Steps
 
@@ -15,8 +15,8 @@ Execute these checks in order so `main`, Cloud Functions, and GitHub Pages stay 
 2. **Deploy Cloud Functions** *(if `functions/` changed)*:
    - Run `firebase deploy --only functions` (or `/Users/henry/.npm/_npx/7750544ccf494d8b/node_modules/.bin/firebase deploy --only functions`).
 3. **Commit & Push**:
-   - Stage intended changes, commit, and push the active branch.
-4. **Deploy Web Studio** *(if `lib/` or `web/` changed)*:
-   - Run `./scripts/deploy.sh` from repo root.
+   - Stage intended changes, commit, and push `main` (`git push origin main`).
+4. **Deploy Web Studio Right After Push** *(always run after pushing)*:
+   - Immediately run `./scripts/deploy.sh` from repo root to build release Flutter Web locally and force-push `origin/gh-pages`.
 5. **Reconcile Working Tree**:
-   - Confirm `git status --short` is clean and `./scripts/verify_loop.sh --fast` passes.
+   - Confirm CI run passes on GitHub (`gh run list`), `git status --short` is clean, and `./scripts/verify_loop.sh --fast` passes.
