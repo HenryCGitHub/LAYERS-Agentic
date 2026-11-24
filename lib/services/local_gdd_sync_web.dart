@@ -194,7 +194,7 @@ class LocalGddFileBackendWeb implements LocalGddFileBackend {
       req['onerror'] = ((JSAny? _) {
         if (!completer.isCompleted) completer.complete(null);
       }).toJS;
-      return completer.future;
+      return await completer.future;
     } catch (_) {
       return null;
     }
