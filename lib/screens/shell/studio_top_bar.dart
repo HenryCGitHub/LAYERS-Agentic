@@ -5,6 +5,7 @@ import '../../theme/app_theme.dart';
 import 'cloud_ai_settings_dialog.dart';
 import 'project_manage_dialogs.dart';
 import 'studio_export_actions.dart';
+import 'studio_gdd_bar_widgets.dart';
 import 'team_invites_dialog.dart';
 
 const String _actionNewProject = '__new_project__';
@@ -20,7 +21,7 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
   const StudioTopBar({super.key, required this.workbench});
 
   @override
-  Size get preferredSize => const Size.fromHeight(50);
+  Size get preferredSize => const Size.fromHeight(46);
 
   @override
   Widget build(BuildContext context) {
@@ -416,7 +417,7 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                         ),
                       ),
                       child: Text(
-                        '1. Project Spec',
+                        '1. Plan',
                         style: GoogleFonts.inter(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
@@ -454,7 +455,7 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                         ),
                       ),
                       child: Text(
-                        '2. Release Workbench',
+                        '2. Build',
                         style: GoogleFonts.inter(
                           fontSize: 11.5,
                           fontWeight: FontWeight.w600,
@@ -477,112 +478,19 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (draft != null) ...[
-                      Builder(
-                        builder: (ctx) {
-                          final isNarrowTopBar =
-                              MediaQuery.sizeOf(ctx).width < 1040;
-                          final accentCyan = AppTheme.accentCyanFor(isDark);
-                          return Tooltip(
-                            message:
-                                'Export heading-indexed CoPilot GDD (*_copilot_gdd.md) for UE5 GDD window',
-                            child: InkWell(
-                              key: const ValueKey('top_bar_copilot_gdd_btn'),
-                              borderRadius: BorderRadius.circular(5),
-                              onTap: () => exportCoPilotGdd(context, workbench),
-                              child: Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: isNarrowTopBar ? 6 : 8,
-                                  vertical: 3.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: bgSurface,
-                                  borderRadius: BorderRadius.circular(5),
-                                  border: Border.all(
-                                    color: accentCyan.withValues(alpha: 0.45),
-                                  ),
-                                ),
-                                child: Text(
-                                  isNarrowTopBar ? '⚡ GDD' : '⚡ CoPilot GDD',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600,
-                                    color: accentCyan,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
+                      LocalGddLinkPill(
+                        workbench: workbench,
+                        isDark: isDark,
                       ),
                       const SizedBox(width: 4),
-                      PopupMenuButton<String>(
-                        key: const ValueKey('global_export_spec_btn'),
-                        tooltip:
-                            'Export CoPilot GDD, Human Spec (.md), or Vault Backup (.layers.json)',
-                        constraints: const BoxConstraints(
-                          minWidth: 280,
-                          maxWidth: 340,
-                        ),
-                        color: bgSurface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(6),
-                          side: BorderSide(color: borderColor),
-                        ),
-                        onSelected: (val) {
-                          if (val == 'copilot_gdd') {
-                            exportCoPilotGdd(context, workbench);
-                          } else if (val == 'spec') {
-                            exportFullProjectSpec(context, workbench);
-                          } else if (val == 'json_export') {
-                            exportActiveProjectJson(context, workbench);
-                          } else if (val == 'json_import') {
-                            showImportProjectJsonDialog(context, workbench);
-                          }
-                        },
-                        itemBuilder: (ctx) => [
-                          _buildExportMenuItem(
-                            value: 'copilot_gdd',
-                            icon: Icons.bolt_rounded,
-                            iconColor: AppTheme.accentCyanFor(isDark),
-                            label: 'Export CoPilot GDD (.md)',
-                            textColor: textPrimary,
-                          ),
-                          _buildExportMenuItem(
-                            value: 'spec',
-                            icon: Icons.copy_rounded,
-                            iconColor: textSecondary,
-                            label: 'Copy Full Project Spec (.md)',
-                            textColor: textPrimary,
-                          ),
-                          _buildExportMenuItem(
-                            value: 'json_export',
-                            icon: Icons.download_rounded,
-                            iconColor: textSecondary,
-                            label: 'Export Project Vault (.layers.json)',
-                            textColor: textPrimary,
-                          ),
-                          _buildExportMenuItem(
-                            value: 'json_import',
-                            icon: Icons.file_upload_outlined,
-                            iconColor: textSecondary,
-                            label: 'Import Project Backup (.layers.json)',
-                            textColor: textPrimary,
-                          ),
-                        ],
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 4,
-                          ),
-                          child: Text(
-                            'Export ▾',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w500,
-                              color: textMuted,
-                            ),
-                          ),
-                        ),
+                      CoPilotGddInspectPill(
+                        workbench: workbench,
+                        isDark: isDark,
+                      ),
+                      const SizedBox(width: 4),
+                      StudioExportMenuButton(
+                        workbench: workbench,
+                        isDark: isDark,
                       ),
                       const SizedBox(width: 4),
                     ],
@@ -858,37 +766,5 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
           },
         ),
       );
-  }
-
-  PopupMenuItem<String> _buildExportMenuItem({
-    Key? key,
-    required String value,
-    required IconData icon,
-    required Color iconColor,
-    required String label,
-    required Color textColor,
-  }) {
-    return PopupMenuItem<String>(
-      key: key,
-      value: value,
-      child: Row(
-        children: [
-          Icon(icon, size: 13, color: iconColor),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: textColor,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 }

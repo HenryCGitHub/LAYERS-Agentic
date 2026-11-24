@@ -1731,6 +1731,13 @@ void main() {
         expect(
           find.descendant(
             of: badgeFinder,
+            matching: find.textContaining('Paste size:'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: badgeFinder,
             matching: find.textContaining('tok'),
           ),
           findsOneWidget,
@@ -1740,6 +1747,10 @@ void main() {
             of: badgeFinder,
             matching: find.textContaining('% vs MD'),
           ),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('copilot_preview_local_note')),
           findsOneWidget,
         );
         expect(
@@ -1786,8 +1797,20 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        // Epic Architecture Brief Preview: Compact DSL default + Readable View toggle
+        // Epic header drops confusing primary Copy Epic Brief & moves Architecture Brief into ⋯ menu
         wb.selectEpic(e01.id);
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('copy_epic_brief_btn')),
+          findsNothing,
+        );
+        expect(find.textContaining('Auto-included in'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('epic_more_menu_btn')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('epic_more_menu_btn')));
         await tester.pumpAndSettle();
 
         expect(
@@ -2429,6 +2452,152 @@ void main() {
         expect(httpCalls, equals(callsBeforeLocked));
         expect(wb.stage2RefineError, isNotNull);
         expect(wb.stage2RefineError!.toLowerCase(), contains('locked'));
+      },
+    );
+
+    testWidgets(
+      '19. Flight Deck Top Bar (1. Plan / 2. Build), Link Local GDD, GDD Inspector, Release Complete Banner & Stage 2 Floating AI Refine Dock',
+      (tester) async {
+        tester.view.physicalSize = const Size(1440, 1000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(() {
+          tester.view.resetPhysicalSize();
+          tester.view.resetDevicePixelRatio();
+        });
+
+        final fakeBackend = _FakeLocalGddBackend();
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.setLocalGddBackendForTest(fakeBackend);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final firstEpic = wb.activeReleaseEpics.first;
+        final f02 = firstEpic.features.firstWhere((f) => f.code == 'F02');
+        wb.selectFeature(firstEpic.id, f02.id);
+
+        await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        // Top Bar stage pills & Link Local GDD
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('nav_stage_1_btn')),
+            matching: find.text('1. Plan'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('nav_stage_2_btn')),
+            matching: find.text('2. Build'),
+          ),
+          findsOneWidget,
+        );
+
+        final linkBtn = find.byKey(const ValueKey('top_bar_link_local_gdd_btn'));
+        expect(linkBtn, findsOneWidget);
+        await tester.tap(linkBtn);
+        await tester.pumpAndSettle();
+        expect(wb.isLocalGddLinked, isTrue);
+        expect(
+          find.descendant(of: linkBtn, matching: find.textContaining('Live')),
+          findsOneWidget,
+        );
+
+        // Open GDD Inspector modal via Top Bar ⚡ GDD button
+        await tester.tap(find.byKey(const ValueKey('top_bar_copilot_gdd_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('gdd_inspector_dialog')),
+          findsOneWidget,
+        );
+        expect(
+          find.textContaining('# PROJECT GDD · SHELLBREAKER'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('Paste size:'), findsOneWidget);
+        expect(find.textContaining('0 AI tokens'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('close_gdd_inspector_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('gdd_inspector_dialog')),
+          findsNothing,
+        );
+
+        // Stage 2 Floating AI Refine Dock (ideas tucked away until Ideas button tapped)
+        expect(
+          find.byKey(const ValueKey('stage2_ai_refine_input')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('stage2_ai_ideas_strip')),
+          findsNothing,
+        );
+
+        await tester.tap(find.byKey(const ValueKey('stage2_ai_ideas_btn')));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('stage2_ai_ideas_strip')),
+          findsOneWidget,
+        );
+
+        final origVal = wb.selectedFeatureSpec!.tuning
+            .firstWhere((t) => t.key == 'DashDistance')
+            .value;
+        await tester.enterText(
+          find.byKey(const ValueKey('stage2_ai_refine_input')),
+          'Set DashDistance to 580 cm',
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('stage2_ai_refine_apply_btn')),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          wb.selectedFeatureSpec!.tuning
+              .firstWhere((t) => t.key == 'DashDistance')
+              .value,
+          equals('580'),
+        );
+        expect(
+          find.byKey(const ValueKey('stage2_ai_refine_undo_btn')),
+          findsOneWidget,
+        );
+
+        await tester.tap(
+          find.byKey(const ValueKey('stage2_ai_refine_undo_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          wb.selectedFeatureSpec!.tuning
+              .firstWhere((t) => t.key == 'DashDistance')
+              .value,
+          equals(origVal),
+        );
+
+        // Passing all slices surfaces Release Complete banner + next release CTA
+        for (final ep in wb.activeReleaseEpics) {
+          for (final feat in wb.visibleFeaturesForEpic(ep)) {
+            for (final chk in feat.effectiveChecksForRelease('v0.1')) {
+              if (!chk.passed) {
+                wb.toggleFeatureCheck(ep.id, feat.id, chk.id, true);
+              }
+            }
+            wb.passFeature(ep.id, feat.id);
+          }
+        }
+        await tester.pumpAndSettle();
+
+        expect(wb.isActiveReleaseComplete, isTrue);
+        expect(
+          find.byKey(const ValueKey('release_complete_banner')),
+          findsOneWidget,
+        );
+        expect(
+          find.byKey(const ValueKey('release_complete_plan_next_btn')),
+          findsOneWidget,
+        );
       },
     );
   });

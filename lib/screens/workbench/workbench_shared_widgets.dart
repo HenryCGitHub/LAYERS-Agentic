@@ -46,9 +46,9 @@ Future<void> showCoPilotPromptPreviewDialog(
             (showReadable && hasReadable) ? readableText : promptText;
         final badgeLabel = (savings != null && savings.savedPercent > 0)
             ? (showReadable
-                ? '~${savings.readableTokens} tok (Human MD)'
-                : '~$compactTokens tok · -${savings.savedPercent}% vs MD')
-            : '~$compactTokens tok';
+                ? 'Paste size: ~${savings.readableTokens} tok (Human MD)'
+                : 'Paste size: ~$compactTokens tok · -${savings.savedPercent}% vs MD')
+            : 'Paste size: ~$compactTokens tok';
         final highlightSaved =
             !showReadable && savings != null && savings.savedPercent > 0;
 
@@ -156,6 +156,12 @@ Future<void> showCoPilotPromptPreviewDialog(
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Compiled locally in memory (0 AI tokens spent by LAYERS)',
+                    key: const ValueKey('copilot_preview_local_note'),
+                    style: TextStyle(fontSize: 11, color: muted),
                   ),
                   const SizedBox(height: 10),
                   Expanded(
