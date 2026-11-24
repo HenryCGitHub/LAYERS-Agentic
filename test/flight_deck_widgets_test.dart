@@ -9,6 +9,7 @@ import 'package:layers_agentic/agents/stage2_refine_agent.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/project_pitch_screen.dart';
+import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/screens/shell/gdd_inspector_dialog.dart';
 import 'package:layers_agentic/screens/shell/studio_gdd_bar_widgets.dart';
 import 'package:layers_agentic/screens/shell/studio_top_bar.dart';
@@ -770,12 +771,12 @@ void main() {
               );
               expect(find.text('Link Local GDD'), findsWidgets);
 
-              // Synced long filename checks compact truncation below 1180px
+              // Synced long filename checks compact truncation below 1280px
               backend.forcedFilename = 'shellbreaker_very_long_copilot_gdd.md';
               await wb.linkLocalGddFile();
               await tester.pumpAndSettle();
 
-              if (size.width < 1180) {
+              if (size.width < 1280) {
                 expect(
                   find.text('● Live · shellbreaker_very_l…'),
                   findsWidgets,
@@ -792,7 +793,7 @@ void main() {
               await wb.syncLinkedGddNow(force: true);
               await tester.pumpAndSettle();
               expect(
-                find.text(size.width < 1180 ? 'Grant GDD' : 'Grant GDD Write'),
+                find.text(size.width < 1280 ? 'Grant GDD' : 'Grant GDD Write'),
                 findsWidgets,
               );
 
@@ -2435,6 +2436,271 @@ void main() {
               findsOneWidget,
             );
           }
+        });
+      },
+    );
+  });
+
+  group('7. P2 polish regression tests', () {
+    testWidgets(
+      'Stage 1 §03 Trade-Offs validates malformed lines, clears error on Cancel/reopen/project switch, and allows clearing to []',
+      (tester) async {
+        await _runWithViewport(tester, const Size(1440, 900), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          addTearDown(wb.dispose);
+          wb.loadPresetSpark('shellbreaker');
+          final projectAId = wb.activeProjectId!;
+          expect(wb.conceptDraft!.tradeOffs, isNotEmpty);
+          final originalTradeOffCount = wb.conceptDraft!.tradeOffs.length;
+
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(16),
+                child: AnimatedBuilder(
+                  animation: wb,
+                  builder: (_, __) => Stage1SpecDocument(
+                    workbench: wb,
+                    spec: wb.conceptDraft!,
+                    activeProjectId: wb.activeProjectId,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          // Open Edit Pillars & enter a malformed Trade-Off line
+          final editPillarsBtn = find.byKey(
+            const ValueKey('stage1_edit_pillars_btn'),
+          );
+          await tester.ensureVisible(editPillarsBtn);
+          await tester.tap(editPillarsBtn);
+          await tester.pumpAndSettle();
+
+          await tester.enterText(
+            find.byKey(const ValueKey('stage1_pillars_input')),
+            'Edited Pillar One\nEdited Pillar Two',
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('stage1_tradeoffs_input')),
+            'Responsive Dash OVER Heavy Drift\nMissing separator line',
+          );
+          final savePillarsBtn = find.byKey(
+            const ValueKey('stage1_pillars_save_btn'),
+          );
+          await tester.ensureVisible(savePillarsBtn);
+          await tester.tap(savePillarsBtn);
+          await tester.pumpAndSettle();
+
+          // Error shown in red, editor stays open, unsaved edits preserved, model untouched
+          final errFinder = find.byKey(const ValueKey('stage1_tradeoffs_error'));
+          expect(errFinder, findsOneWidget);
+          final errWidget = tester.widget<Text>(errFinder);
+          expect(
+            errWidget.data,
+            equals(
+              'Use "<Prefer> OVER <Avoid>" on each line (or leave blank to clear).',
+            ),
+          );
+          expect(errWidget.style?.color, equals(AppTheme.accentRedFor(true)));
+          expect(
+            find.byKey(const ValueKey('stage1_tradeoffs_input')),
+            findsOneWidget,
+          );
+          expect(
+            tester
+                .widget<TextField>(
+                  find.byKey(const ValueKey('stage1_tradeoffs_input')),
+                )
+                .controller!
+                .text,
+            contains('Missing separator line'),
+          );
+          expect(
+            wb.conceptDraft!.tradeOffs.length,
+            equals(originalTradeOffCount),
+          );
+
+          // Cancel clears error; reopening Edit Pillars has no stale error
+          await tester.tap(find.text('Cancel').last);
+          await tester.pumpAndSettle();
+          expect(errFinder, findsNothing);
+
+          await tester.ensureVisible(editPillarsBtn);
+          await tester.tap(editPillarsBtn);
+          await tester.pumpAndSettle();
+          expect(errFinder, findsNothing);
+
+          // Trigger error again, then switch project -> didUpdateWidget clears error & closes editor
+          await tester.enterText(
+            find.byKey(const ValueKey('stage1_tradeoffs_input')),
+            'Bad line without keyword',
+          );
+          await tester.ensureVisible(savePillarsBtn);
+          await tester.tap(savePillarsBtn);
+          await tester.pumpAndSettle();
+          expect(errFinder, findsOneWidget);
+
+          wb.createNewProject();
+          wb.loadPresetSpark('railjack');
+          await tester.pumpAndSettle();
+          expect(wb.activeProjectId, isNot(equals(projectAId)));
+          expect(errFinder, findsNothing);
+          expect(
+            find.byKey(const ValueKey('stage1_tradeoffs_input')),
+            findsNothing,
+          );
+
+          // Clearing Trade-Offs input saves tradeOffs: const []
+          expect(wb.conceptDraft!.tradeOffs, isNotEmpty);
+          await tester.ensureVisible(editPillarsBtn);
+          await tester.tap(editPillarsBtn);
+          await tester.pumpAndSettle();
+          await tester.enterText(
+            find.byKey(const ValueKey('stage1_tradeoffs_input')),
+            '   \n  ',
+          );
+          await tester.ensureVisible(savePillarsBtn);
+          await tester.tap(savePillarsBtn);
+          await tester.pumpAndSettle();
+
+          expect(errFinder, findsNothing);
+          expect(wb.conceptDraft!.tradeOffs, isEmpty);
+          expect(
+            find.byKey(const ValueKey('stage1_tradeoffs_input')),
+            findsNothing,
+          );
+        });
+      },
+    );
+
+    testWidgets(
+      'StudioTopBar compacts cleanly at 1200x800 and 1040x768 with zero overflow and functional Invite & Theme controls',
+      (tester) async {
+        const cases = <({Size size, bool expectSignIn, bool expectInspectFull})>[
+          (size: Size(1440, 900), expectSignIn: true, expectInspectFull: true),
+          (size: Size(1200, 800), expectSignIn: false, expectInspectFull: true),
+          (size: Size(1040, 768), expectSignIn: false, expectInspectFull: false),
+        ];
+
+        final rightEdges = <double>[];
+        for (final isDark in const [true, false]) {
+          for (final tc in cases) {
+            await _runWithViewport(tester, tc.size, () async {
+              final backend = _TestLocalGddBackend();
+              backend.forcedFilename = 'shellbreaker_very_long_copilot_gdd.md';
+              final wb = WorkbenchProvider(enableAutoLoad: false);
+              addTearDown(wb.dispose);
+              wb.setLocalGddBackendForTest(backend);
+              if (!isDark) wb.toggleTheme();
+              wb.setAiAccessRecordsForTest(
+                const [],
+                overrideEmail: WorkbenchProvider.ownerAdminEmail,
+              );
+              wb.loadPresetSpark('shellbreaker');
+              wb.approveRootSpecAndLaunchWorkbench();
+              await wb.linkLocalGddFile();
+
+              await tester.pumpWidget(
+                _testHost(
+                  isDark: isDark,
+                  child: AnimatedBuilder(
+                    animation: wb,
+                    builder: (_, __) => Column(
+                      children: [
+                        StudioTopBar(workbench: wb),
+                        const Expanded(child: SizedBox.shrink()),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+              await tester.pumpAndSettle();
+
+              if (tc.expectSignIn) {
+                expect(find.text('Sign in'), findsOneWidget);
+              } else {
+                expect(find.text('Sign in'), findsNothing);
+              }
+
+              if (tc.expectInspectFull) {
+                expect(find.text('⚡ Inspect GDD'), findsOneWidget);
+              } else {
+                expect(find.text('⚡ GDD'), findsOneWidget);
+              }
+
+              if (tc.size.width < 1280) {
+                expect(
+                  find.text('● Live · shellbreaker_very_l…'),
+                  findsOneWidget,
+                );
+              } else {
+                expect(
+                  find.text('● Live · shellbreaker_very_long_copilot_gdd.md'),
+                  findsOneWidget,
+                );
+              }
+
+              final inviteFinder = find.byKey(const ValueKey('team_invites_btn'));
+              final themeFinder = find.byIcon(
+                isDark
+                    ? Icons.light_mode_outlined
+                    : Icons.dark_mode_outlined,
+              );
+              expect(inviteFinder, findsOneWidget);
+              expect(themeFinder, findsOneWidget);
+
+              if (isDark) {
+                rightEdges.add(tester.getRect(themeFinder).right);
+              }
+
+              // Theme toggle remains reachable and toggles theme without overflow
+              await tester.ensureVisible(themeFinder);
+              await tester.tap(themeFinder);
+              await tester.pumpAndSettle();
+              expect(wb.isDark, equals(!isDark));
+            });
+          }
+        }
+
+        // Compaction at 1200px (<1240 & <1280) and 1040px (<1140) measurably narrows the bar
+        expect(rightEdges, hasLength(3));
+        expect(rightEdges[1], lessThan(rightEdges[0]));
+        expect(rightEdges[2], lessThan(rightEdges[1]));
+      },
+    );
+
+    testWidgets(
+      'ReleaseWorkbenchScreen safely disposes when unmounted immediately after a selection change',
+      (tester) async {
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker')
+            ..approveRootSpecAndLaunchWorkbench();
+          addTearDown(wb.dispose);
+
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: AnimatedBuilder(
+                animation: wb,
+                builder: (_, __) => ReleaseWorkbenchScreen(workbench: wb),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final ep = wb.activeReleaseEpics.first;
+          wb.selectFeature(ep.id, ep.features.first.id);
+          await tester.pump();
+
+          // Unmount immediately while selection post-frame callback is scheduled
+          await tester.pumpWidget(
+            _testHost(isDark: true, child: const SizedBox.shrink()),
+          );
+          await tester.pumpAndSettle();
         });
       },
     );

@@ -55,9 +55,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       _lastSelectionKey = selectionKey;
       _passGateHint = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_specScrollController.hasClients) {
-          _specScrollController.jumpTo(0);
-        }
+        if (!mounted || !_specScrollController.hasClients) return;
+        _specScrollController.jumpTo(0);
       });
     }
 

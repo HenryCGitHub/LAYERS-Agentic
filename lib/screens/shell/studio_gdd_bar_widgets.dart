@@ -34,7 +34,7 @@ class LocalGddLinkPill extends StatelessWidget {
     final hasLinkedFile = workbench.linkedGddFileName != null &&
         workbench.linkedGddFileName!.isNotEmpty;
     final fileName = workbench.linkedGddFileName ?? 'copilot_gdd.md';
-    final compact = MediaQuery.sizeOf(context).width < 1180;
+    final compact = MediaQuery.sizeOf(context).width < 1280;
 
     final Color accentColor;
     final String labelText;

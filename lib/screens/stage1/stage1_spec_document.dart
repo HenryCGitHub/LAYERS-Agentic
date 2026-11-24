@@ -36,6 +36,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
   bool _editingContracts = false;
   bool _editingPillars = false;
   bool _addingCut = false;
+  String? _tradeoffsError;
 
   String? _lastSyncedPitch;
   String? _lastSyncedCamera;
@@ -50,6 +51,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
     _editingContracts = false;
     _editingPillars = false;
     _addingCut = false;
+    _tradeoffsError = null;
   }
 
   static String _formatTradeOffs(List<TradeOffRule> rules) =>
@@ -123,6 +125,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
               _lastSyncedTradeoffs != nextTradeoffs)) {
         _tradeoffsCtrl.text = nextTradeoffs;
         _lastSyncedTradeoffs = nextTradeoffs;
+        _tradeoffsError = null;
       }
     }
   }
@@ -500,7 +503,10 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                       _lastSyncedPillars = pillarsText;
                       _lastSyncedTradeoffs = tradeoffsText;
                     }
-                    setState(() => _editingPillars = !_editingPillars);
+                    setState(() {
+                      _tradeoffsError = null;
+                      _editingPillars = !_editingPillars;
+                    });
                   },
             style: TextButton.styleFrom(
               visualDensity: VisualDensity.compact,
@@ -581,13 +587,26 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                           isDense: true,
                         ),
                       ),
+                      if (_tradeoffsError != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          _tradeoffsError!,
+                          key: const ValueKey('stage1_tradeoffs_error'),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: AppTheme.accentRedFor(isDark),
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 10),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           TextButton(
-                            onPressed: () =>
-                                setState(() => _editingPillars = false),
+                            onPressed: () => setState(() {
+                              _editingPillars = false;
+                              _tradeoffsError = null;
+                            }),
                             child: const Text('Cancel'),
                           ),
                           const SizedBox(width: 8),
@@ -599,13 +618,34 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                                   .map((s) => s.trim())
                                   .where((s) => s.isNotEmpty)
                                   .toList();
-                              final rules =
-                                  _parseTradeOffLines(_tradeoffsCtrl.text);
+                              final List<TradeOffRule> nextTradeOffs;
+                              if (_tradeoffsCtrl.text.trim().isEmpty) {
+                                nextTradeOffs = const <TradeOffRule>[];
+                              } else {
+                                final nonEmptyLines = _tradeoffsCtrl.text
+                                    .split('\n')
+                                    .map((s) => s.trim())
+                                    .where((s) => s.isNotEmpty)
+                                    .toList();
+                                final rules =
+                                    _parseTradeOffLines(_tradeoffsCtrl.text);
+                                if (rules.length < nonEmptyLines.length) {
+                                  setState(() {
+                                    _tradeoffsError =
+                                        'Use "<Prefer> OVER <Avoid>" on each line (or leave blank to clear).';
+                                  });
+                                  return;
+                                }
+                                nextTradeOffs = rules;
+                              }
                               wb.updateRootSpecSections(
                                 pillars: lines,
-                                tradeOffs: rules.isNotEmpty ? rules : null,
+                                tradeOffs: nextTradeOffs,
                               );
-                              setState(() => _editingPillars = false);
+                              setState(() {
+                                _tradeoffsError = null;
+                                _editingPillars = false;
+                              });
                             },
                             child: const Text(
                               'Save Pillars',

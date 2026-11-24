@@ -162,9 +162,12 @@ class LocalGddFileBackendWeb implements LocalGddFileBackend {
       final req = (idb as JSObject)
           .callMethod<JSObject>('open'.toJS, _dbName.toJS, _dbVersion.toJS);
       final completer = Completer<JSObject?>();
-      req['onupgradeneeded'] = ((JSObject event) {
+      req['onupgradeneeded'] = ((JSAny? event) {
         try {
-          final target = event['target'];
+          if (!event.isDefinedAndNotNull || !event.typeofEquals('object')) {
+            return;
+          }
+          final target = (event as JSObject)['target'];
           if (!target.isDefinedAndNotNull || !target.typeofEquals('object')) {
             return;
           }
@@ -194,7 +197,13 @@ class LocalGddFileBackendWeb implements LocalGddFileBackend {
       req['onerror'] = ((JSAny? _) {
         if (!completer.isCompleted) completer.complete(null);
       }).toJS;
-      return await completer.future;
+      req['onblocked'] = ((JSAny? _) {
+        if (!completer.isCompleted) completer.complete(null);
+      }).toJS;
+      return await completer.future.timeout(
+        const Duration(seconds: 5),
+        onTimeout: () => null,
+      );
     } catch (_) {
       return null;
     }

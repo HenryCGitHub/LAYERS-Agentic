@@ -497,7 +497,7 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                     // Google Account & Cloud Sync Badge
                     Builder(
                       builder: (ctx) {
-                        final isNarrow = MediaQuery.sizeOf(ctx).width < 1040;
+                        final isNarrow = MediaQuery.sizeOf(ctx).width < 1240;
                         final isSynced = workbench.isCloudSynced;
                         final email = workbench.userEmail ?? '';
                         final initial = email.isNotEmpty ? email[0].toUpperCase() : 'G';
