@@ -91,6 +91,12 @@ extension WorkbenchCopilotMixin on WorkbenchProvider {
       );
     }
     final prevStatus = _gddSyncStatus;
+    final prevWasLinked = _linkedGddProjectId == projId &&
+        _linkedGddFileName != null &&
+        _linkedGddFileName!.isNotEmpty &&
+        prevStatus != LocalGddSyncStatus.unlinked &&
+        prevStatus != LocalGddSyncStatus.fallbackDownloaded &&
+        prevStatus != LocalGddSyncStatus.error;
     _gddSyncStatus = LocalGddSyncStatus.syncing;
     _gddSyncError = null;
     notifyListeners();
@@ -101,11 +107,11 @@ extension WorkbenchCopilotMixin on WorkbenchProvider {
       suggestedFilename: bundle.filename,
       content: bundle.content,
     );
-    if (_isDisposed) return res;
+    if (_isDisposed || _activeProjectId != projId) return res;
 
     if (res.cancelled) {
       _gddSyncStatus =
-          isLocalGddLinked ? prevStatus : LocalGddSyncStatus.unlinked;
+          prevWasLinked ? prevStatus : LocalGddSyncStatus.unlinked;
     } else if (res.fellBackToDownload) {
       _linkedGddProjectId = null;
       _linkedGddFileName = res.filename ?? bundle.filename;
@@ -146,9 +152,13 @@ extension WorkbenchCopilotMixin on WorkbenchProvider {
     bool requestPermissionIfNeeded = false,
   }) async {
     final projId = _activeProjectId;
+    final canRetryErrorWithFile = _gddSyncStatus == LocalGddSyncStatus.error &&
+        _linkedGddProjectId == projId &&
+        _linkedGddFileName != null &&
+        _linkedGddFileName!.isNotEmpty;
     if (_isDisposed ||
         projId == null ||
-        !isLocalGddLinked ||
+        (!isLocalGddLinked && !canRetryErrorWithFile) ||
         _linkedGddProjectId != projId) {
       return false;
     }
@@ -187,6 +197,10 @@ extension WorkbenchCopilotMixin on WorkbenchProvider {
       notifyListeners();
       return true;
     }
+    _gddSyncStatus = _lastGddSyncAt != null
+        ? LocalGddSyncStatus.synced
+        : LocalGddSyncStatus.linked;
+    notifyListeners();
     return false;
   }
 
@@ -213,22 +227,30 @@ extension WorkbenchCopilotMixin on WorkbenchProvider {
     if (projId != null &&
         projId == _linkedGddProjectId &&
         _linkedGddFileName != null &&
-        _linkedGddFileName!.isNotEmpty) {
+        _linkedGddFileName!.isNotEmpty &&
+        _gddSyncStatus != LocalGddSyncStatus.error) {
       return;
     }
+    final wasError = _gddSyncStatus == LocalGddSyncStatus.error;
     _localGddDebounceTimer?.cancel();
     _linkedGddProjectId = projId;
     _linkedGddFileName = null;
     _gddSyncStatus = LocalGddSyncStatus.unlinked;
     _lastGddSyncAt = null;
     _gddSyncError = null;
-    if (projId == null || !isLocalGddLinkSupported) return;
+    if (projId == null || !isLocalGddLinkSupported) {
+      if (wasError) notifyListeners();
+      return;
+    }
 
     final restored = await _localGddSync.restoreLinkedFilename(projId);
     if (_isDisposed ||
         _activeProjectId != projId ||
         restored == null ||
         restored.trim().isEmpty) {
+      if (wasError && !_isDisposed && _activeProjectId == projId) {
+        notifyListeners();
+      }
       return;
     }
     _linkedGddProjectId = projId;

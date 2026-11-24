@@ -37,12 +37,23 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
   bool _editingPillars = false;
   bool _addingCut = false;
 
+  String? _lastSyncedPitch;
+  String? _lastSyncedCamera;
+  String? _lastSyncedScale;
+  String? _lastSyncedInputContract;
+  String? _lastSyncedAssetPolicy;
+  String? _lastSyncedPillars;
+  String? _lastSyncedTradeoffs;
+
   void _resetInlineFlags() {
     _editingPitch = false;
     _editingContracts = false;
     _editingPillars = false;
     _addingCut = false;
   }
+
+  static String _formatTradeOffs(List<TradeOffRule> rules) =>
+      rules.map((t) => '${t.prefer} OVER ${t.avoid}').join('\n');
 
   @override
   void didUpdateWidget(covariant Stage1SpecDocument oldWidget) {
@@ -62,6 +73,57 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
       _assetPolicyCtrl.clear();
       _pillarsCtrl.clear();
       _tradeoffsCtrl.clear();
+      return;
+    }
+    if (_editingPitch &&
+        (oldWidget.spec.pitch != widget.spec.pitch ||
+            (_lastSyncedPitch != null &&
+                _lastSyncedPitch != widget.spec.pitch))) {
+      _pitchController.text = widget.spec.pitch;
+      _lastSyncedPitch = widget.spec.pitch;
+    }
+    if (_editingContracts) {
+      if (oldWidget.spec.cameraContract != widget.spec.cameraContract ||
+          (_lastSyncedCamera != null &&
+              _lastSyncedCamera != widget.spec.cameraContract)) {
+        _cameraCtrl.text = widget.spec.cameraContract;
+        _lastSyncedCamera = widget.spec.cameraContract;
+      }
+      if (oldWidget.spec.characterScale != widget.spec.characterScale ||
+          (_lastSyncedScale != null &&
+              _lastSyncedScale != widget.spec.characterScale)) {
+        _scaleCtrl.text = widget.spec.characterScale;
+        _lastSyncedScale = widget.spec.characterScale;
+      }
+      if (oldWidget.spec.inputContract != widget.spec.inputContract ||
+          (_lastSyncedInputContract != null &&
+              _lastSyncedInputContract != widget.spec.inputContract)) {
+        _inputContractCtrl.text = widget.spec.inputContract;
+        _lastSyncedInputContract = widget.spec.inputContract;
+      }
+      if (oldWidget.spec.assetPolicy != widget.spec.assetPolicy ||
+          (_lastSyncedAssetPolicy != null &&
+              _lastSyncedAssetPolicy != widget.spec.assetPolicy)) {
+        _assetPolicyCtrl.text = widget.spec.assetPolicy;
+        _lastSyncedAssetPolicy = widget.spec.assetPolicy;
+      }
+    }
+    if (_editingPillars) {
+      final oldPillars = oldWidget.spec.pillars.join('\n');
+      final nextPillars = widget.spec.pillars.join('\n');
+      if (oldPillars != nextPillars ||
+          (_lastSyncedPillars != null && _lastSyncedPillars != nextPillars)) {
+        _pillarsCtrl.text = nextPillars;
+        _lastSyncedPillars = nextPillars;
+      }
+      final oldTradeoffs = _formatTradeOffs(oldWidget.spec.tradeOffs);
+      final nextTradeoffs = _formatTradeOffs(widget.spec.tradeOffs);
+      if (oldTradeoffs != nextTradeoffs ||
+          (_lastSyncedTradeoffs != null &&
+              _lastSyncedTradeoffs != nextTradeoffs)) {
+        _tradeoffsCtrl.text = nextTradeoffs;
+        _lastSyncedTradeoffs = nextTradeoffs;
+      }
     }
   }
 
@@ -204,6 +266,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                           ? null
                           : () {
                               _pitchController.text = spec.pitch;
+                              _lastSyncedPitch = spec.pitch;
                               setState(() => _editingPitch = true);
                             },
                     ),
@@ -260,6 +323,10 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                       _scaleCtrl.text = spec.characterScale;
                       _inputContractCtrl.text = spec.inputContract;
                       _assetPolicyCtrl.text = spec.assetPolicy;
+                      _lastSyncedCamera = spec.cameraContract;
+                      _lastSyncedScale = spec.characterScale;
+                      _lastSyncedInputContract = spec.inputContract;
+                      _lastSyncedAssetPolicy = spec.assetPolicy;
                     }
                     setState(() => _editingContracts = !_editingContracts);
                   },
@@ -426,10 +493,12 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                 ? null
                 : () {
                     if (!_editingPillars) {
-                      _pillarsCtrl.text = spec.pillars.join('\n');
-                      _tradeoffsCtrl.text = spec.tradeOffs
-                          .map((t) => '${t.prefer} OVER ${t.avoid}')
-                          .join('\n');
+                      final pillarsText = spec.pillars.join('\n');
+                      final tradeoffsText = _formatTradeOffs(spec.tradeOffs);
+                      _pillarsCtrl.text = pillarsText;
+                      _tradeoffsCtrl.text = tradeoffsText;
+                      _lastSyncedPillars = pillarsText;
+                      _lastSyncedTradeoffs = tradeoffsText;
                     }
                     setState(() => _editingPillars = !_editingPillars);
                   },
@@ -637,9 +706,11 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        spec.outOfScope[i],
-                        style: TextStyle(fontSize: 12.5, color: textPrimary),
+                      Flexible(
+                        child: Text(
+                          spec.outOfScope[i],
+                          style: TextStyle(fontSize: 12.5, color: textPrimary),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       InkWell(

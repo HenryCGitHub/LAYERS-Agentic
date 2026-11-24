@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import '../utils/markdown_exporter.dart';
 import 'local_gdd_sync_stub.dart'
     if (dart.library.js_interop) 'local_gdd_sync_web.dart';
@@ -69,6 +71,7 @@ abstract class LocalGddFileBackend {
 class LocalGddSyncService {
   final LocalGddFileBackend _backend;
   final Map<String, String> _lastWrittenByProject = <String, String>{};
+  final Map<String, Future<void>> _writeQueues = <String, Future<void>>{};
 
   LocalGddSyncService({LocalGddFileBackend? backend})
       : _backend = backend ?? createLocalGddFileBackend();
@@ -77,6 +80,35 @@ class LocalGddSyncService {
 
   bool hasDelta(String projectId, String content) =>
       _lastWrittenByProject[projectId] != content;
+
+  /// Serializes per-project file writes/unlinks so concurrent calls never overlap
+  /// and a failed task never poisons subsequent queued operations.
+  Future<T> _enqueueWrite<T>(
+    String projectId,
+    Future<T> Function() task,
+  ) {
+    final prev = _writeQueues[projectId] ?? Future<void>.value();
+    final completer = Completer<T>();
+    late final Future<void> next;
+    next = prev.catchError((Object _) {}).then((_) async {
+      try {
+        final result = await task();
+        if (!completer.isCompleted) {
+          completer.complete(result);
+        }
+      } catch (e, st) {
+        if (!completer.isCompleted) {
+          completer.completeError(e, st);
+        }
+      } finally {
+        if (identical(_writeQueues[projectId], next)) {
+          _writeQueues.remove(projectId);
+        }
+      }
+    });
+    _writeQueues[projectId] = next;
+    return completer.future;
+  }
 
   /// Opens the local save picker (when supported) or falls back to direct file download.
   Future<LocalGddLinkResult> linkProjectFile({
@@ -96,15 +128,17 @@ class LocalGddSyncService {
       );
     }
 
-    final result = await _backend.pickAndWriteFile(
-      projectId: projectId,
-      suggestedFilename: suggestedFilename,
-      content: content,
-    );
-    if (result.linked) {
-      _lastWrittenByProject[projectId] = content;
-    }
-    return result;
+    return _enqueueWrite(projectId, () async {
+      final result = await _backend.pickAndWriteFile(
+        projectId: projectId,
+        suggestedFilename: suggestedFilename,
+        content: content,
+      );
+      if (result.linked) {
+        _lastWrittenByProject[projectId] = content;
+      }
+      return result;
+    });
   }
 
   /// Restores a previously linked filename handle for [projectId], if persisted.
@@ -117,24 +151,26 @@ class LocalGddSyncService {
     required String content,
     bool force = false,
     bool requestPermissionIfNeeded = false,
-  }) async {
-    if (!force && !hasDelta(projectId, content)) {
-      return const LocalGddWriteResult(written: false);
-    }
-    final result = await _backend.writeLinkedFile(
-      projectId: projectId,
-      content: content,
-      requestPermissionIfNeeded: requestPermissionIfNeeded,
-    );
-    if (result.written) {
-      _lastWrittenByProject[projectId] = content;
-    }
-    return result;
-  }
+  }) =>
+      _enqueueWrite(projectId, () async {
+        if (!force && !hasDelta(projectId, content)) {
+          return const LocalGddWriteResult(written: false);
+        }
+        final result = await _backend.writeLinkedFile(
+          projectId: projectId,
+          content: content,
+          requestPermissionIfNeeded: requestPermissionIfNeeded,
+        );
+        if (result.written) {
+          _lastWrittenByProject[projectId] = content;
+        }
+        return result;
+      });
 
   /// Removes any cached hash and stored file handle for [projectId].
-  Future<void> unlinkProject(String projectId) async {
-    _lastWrittenByProject.remove(projectId);
-    await _backend.unlinkProject(projectId);
-  }
+  Future<void> unlinkProject(String projectId) =>
+      _enqueueWrite(projectId, () async {
+        _lastWrittenByProject.remove(projectId);
+        await _backend.unlinkProject(projectId);
+      });
 }

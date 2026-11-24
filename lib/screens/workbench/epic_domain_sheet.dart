@@ -57,6 +57,39 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
       _ownerRoleController.clear();
       _statesController.clear();
       _interruptsController.clear();
+      return;
+    }
+    if (_editingStateRules) {
+      final oldStates = oldWidget.epic.stateFlow.join(' -> ');
+      final nextStates = widget.epic.stateFlow.join(' -> ');
+      if (oldStates != nextStates && _statesController.text != nextStates) {
+        _statesController.text = nextStates;
+      }
+      final oldRules = oldWidget.epic.interruptRules.join('\n');
+      final nextRules = widget.epic.interruptRules.join('\n');
+      if (oldRules != nextRules && _interruptsController.text != nextRules) {
+        _interruptsController.text = nextRules;
+      }
+    }
+    if (_showOwnerForm && _editingOwnerIndex != null) {
+      final idx = _editingOwnerIndex!;
+      if (idx >= widget.epic.sceneOwnership.length) {
+        _showOwnerForm = false;
+        _editingOwnerIndex = null;
+        _ownerPathController.clear();
+        _ownerRoleController.clear();
+      } else if (idx < oldWidget.epic.sceneOwnership.length) {
+        final oldOwner = oldWidget.epic.sceneOwnership[idx];
+        final nextOwner = widget.epic.sceneOwnership[idx];
+        if (oldOwner.path != nextOwner.path &&
+            _ownerPathController.text != nextOwner.path) {
+          _ownerPathController.text = nextOwner.path;
+        }
+        if (oldOwner.role != nextOwner.role &&
+            _ownerRoleController.text != nextOwner.role) {
+          _ownerRoleController.text = nextOwner.role;
+        }
+      }
     }
   }
 
@@ -432,6 +465,11 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                                 _ownerPathController.clear();
                                 _ownerRoleController.clear();
                               });
+                            } else if (_editingOwnerIndex != null &&
+                                _editingOwnerIndex! > i) {
+                              setState(() {
+                                _editingOwnerIndex = _editingOwnerIndex! - 1;
+                              });
                             }
                             wb.removeEpicOwnership(epic.id, i);
                           },
@@ -672,9 +710,11 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Text(
-                              epic.outOfScope[i],
-                              style: TextStyle(fontSize: 12, color: primary),
+                            Flexible(
+                              child: Text(
+                                epic.outOfScope[i],
+                                style: TextStyle(fontSize: 12, color: primary),
+                              ),
                             ),
                             const SizedBox(width: 6),
                             InkWell(
@@ -805,107 +845,17 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                 )
               else
                 for (final feat in visibleFeatures)
-                  _buildEpicChildFeatureCard(
-                    wb: wb,
-                    epic: epic,
+                  EpicChildFeatureCard(
                     feat: feat,
                     relVer: relVer,
                     isDark: isDark,
-                    primary: primary,
-                    secondary: secondary,
-                    muted: muted,
-                    border: border,
-                    cyan: cyan,
-                    green: green,
-                    red: red,
+                    onTap: () => wb.selectFeature(epic.id, feat.id),
                   ),
             ],
           ),
         ),
         const SizedBox(height: 36),
       ],
-    );
-  }
-
-  Widget _buildEpicChildFeatureCard({
-    required WorkbenchProvider wb,
-    required EpicSpec epic,
-    required FeatureSpec feat,
-    required String relVer,
-    required bool isDark,
-    required Color primary,
-    required Color secondary,
-    required Color muted,
-    required Color border,
-    required Color cyan,
-    required Color green,
-    required Color red,
-  }) {
-    final effChecks = feat.effectiveChecksForRelease(relVer);
-    final passedCount = effChecks.where((c) => c.passed).length;
-    final passedFeature = feat.isPassedForRelease(relVer);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        key: ValueKey('epic_feature_card_${feat.id}'),
-        onTap: () => wb.selectFeature(epic.id, feat.id),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.bgSurfaceFor(isDark),
-            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            border: Border.all(
-              color: passedFeature ? green.withValues(alpha: 0.4) : border,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  Text(
-                    '${feat.code} · ${feat.sliceTime}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: cyan,
-                    ),
-                  ),
-                  Text(
-                    '$passedCount/${effChecks.length} checks${feat.openFixesCount > 0 ? ' · ${feat.openFixesCount} [FIX]' : ''}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: feat.openFixesCount > 0
-                          ? red
-                          : (passedFeature ? green : muted),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                feat.title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: primary,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                feat.goal,
-                style: TextStyle(fontSize: 12.5, color: secondary),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

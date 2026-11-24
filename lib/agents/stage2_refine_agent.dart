@@ -164,6 +164,10 @@ class Stage2RefineAgent {
               'type': 'ARRAY',
               'items': {'type': 'STRING'},
             },
+            'releaseDeltaChecks': {
+              'type': 'ARRAY',
+              'items': {'type': 'STRING'},
+            },
           },
         },
       };
@@ -248,6 +252,7 @@ USER REFINE INSTRUCTION:
     required FeatureSpec feature,
     required String instruction,
     required String apiKey,
+    String releaseVersion = 'v0.1',
     UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
     String preferredModel = GeminiAgentClient.pinnedLiveFlashModel,
     String thinkingLevel = GeminiAgentClient.defaultFastThinkingLevel,
@@ -256,8 +261,18 @@ USER REFINE INSTRUCTION:
     if (trimmed.isEmpty) {
       return Stage2FeatureRefineOutcome(feature: feature);
     }
+    final relVer = releaseVersion.trim();
+    final isDeltaTarget = relVer.isNotEmpty &&
+        relVer != 'v0.1' &&
+        feature.introducedIn.trim() != relVer &&
+        feature.releaseDelta.trim().isNotEmpty;
     if (!GeminiAgentClient.hasKey(apiKey)) {
-      return _applyDeterministicFeatureRefine(feature, trimmed, mode);
+      return _applyDeterministicFeatureRefine(
+        feature,
+        trimmed,
+        mode,
+        isDeltaTarget: isDeltaTarget,
+      );
     }
 
     final compactFeat = <String, dynamic>{
@@ -273,7 +288,15 @@ USER REFINE INSTRUCTION:
       'tuning': [for (final t in feature.tuning) t.toJson()],
       'cues': feature.cues,
       'checks': [for (final chk in feature.checks) chk.text],
+      if (isDeltaTarget)
+        'releaseDeltaChecks': [
+          for (final chk in feature.releaseDeltaChecks) chk.text,
+        ],
     };
+
+    final deltaRule = isDeltaTarget
+        ? '\n- Because this slice is a $relVer delta upgrade, place new or updated playtest gate checks in `releaseDeltaChecks` and leave `${feature.introducedIn}` baseline `checks` unchanged.'
+        : '';
 
     final prompt = '''
 ${LayersTextStyleGuide.compactStyleRules}
@@ -285,7 +308,7 @@ RULES:
 - Call `patch_unreal_feature_spec` with ONLY the modified fields plus `summary` and `changedSections`.
 - Input bindings use Enhanced Input `IA_*` action names; tuning keys use `PascalCase` in `cm`, `cm/s`, `deg`, `s`, `hp`, `x`, or `%`.
 - Playtest checks use concise causal `Player Action -> Observable Viewport Result` syntax (<= 14 words).
-- Stay 100% native Unreal Engine 5 using `cm` and `cm/s` units only.
+- Stay 100% native Unreal Engine 5 using `cm` and `cm/s` units only.$deltaRule
 
 CURRENT FEATURE JSON:
 ${jsonEncode(compactFeat)}
@@ -310,7 +333,13 @@ USER REFINE INSTRUCTION:
       );
     }
 
-    return _applyPatchToFeature(feature, res, fallbackNote: trimmed, mode: mode);
+    return _applyPatchToFeature(
+      feature,
+      res,
+      fallbackNote: trimmed,
+      mode: mode,
+      isDeltaTarget: isDeltaTarget,
+    );
   }
 
   static Stage2EpicRefineOutcome _applyPatchToEpic(
@@ -381,6 +410,7 @@ USER REFINE INSTRUCTION:
     Map<String, dynamic> patch, {
     required String fallbackNote,
     required UnrealArchitectureMode mode,
+    bool isDeltaTarget = false,
   }) {
     final next = source.deepCopy();
     final changed = _parseChangedSections(patch['changedSections']);
@@ -431,22 +461,43 @@ USER REFINE INSTRUCTION:
       next.cues = parsedCues;
       changed.add('s04');
     }
-    final parsedChecks = _parseStringArray(patch['checks']);
-    if (parsedChecks != null) {
-      final passedByText = <String, EpicPieCheck>{
-        for (final existing in source.checks)
-          existing.text.trim().toLowerCase(): existing,
-      };
-      next.checks = <EpicPieCheck>[
-        for (int i = 0; i < parsedChecks.length; i++)
-          _mergePieCheck(
-            parsedChecks[i],
-            i,
-            featureId: source.id,
-            existingByText: passedByText,
-          ),
-      ];
-      changed.add('s05');
+    if (isDeltaTarget) {
+      final parsedDeltaChecks = _parseStringArray(patch['releaseDeltaChecks']) ??
+          _parseStringArray(patch['checks']);
+      if (parsedDeltaChecks != null) {
+        final passedByText = <String, EpicPieCheck>{
+          for (final existing in source.releaseDeltaChecks)
+            existing.text.trim().toLowerCase(): existing,
+        };
+        next.releaseDeltaChecks = <EpicPieCheck>[
+          for (int i = 0; i < parsedDeltaChecks.length; i++)
+            _mergePieCheck(
+              parsedDeltaChecks[i],
+              i,
+              featureId: '${source.id}_delta',
+              existingByText: passedByText,
+            ),
+        ];
+        changed.add('s05');
+      }
+    } else {
+      final parsedChecks = _parseStringArray(patch['checks']);
+      if (parsedChecks != null) {
+        final passedByText = <String, EpicPieCheck>{
+          for (final existing in source.checks)
+            existing.text.trim().toLowerCase(): existing,
+        };
+        next.checks = <EpicPieCheck>[
+          for (int i = 0; i < parsedChecks.length; i++)
+            _mergePieCheck(
+              parsedChecks[i],
+              i,
+              featureId: source.id,
+              existingByText: passedByText,
+            ),
+        ];
+        changed.add('s05');
+      }
     }
 
     final clean = UnrealSpecGuard.sanitizeFeatureSpec(next, mode: mode);
@@ -534,8 +585,9 @@ USER REFINE INSTRUCTION:
   static Stage2FeatureRefineOutcome _applyDeterministicFeatureRefine(
     FeatureSpec source,
     String instruction,
-    UnrealArchitectureMode mode,
-  ) {
+    UnrealArchitectureMode mode, {
+    bool isDeltaTarget = false,
+  }) {
     final next = source.deepCopy();
     final changed = <String>{};
     final tuneMatch = RegExp(
@@ -561,12 +613,15 @@ USER REFINE INSTRUCTION:
       }
       changed.add('s03');
     } else if (instruction.contains('->')) {
-      next.checks.add(
-        EpicPieCheck(
-          id: '${source.id}_chk_${DateTime.now().microsecondsSinceEpoch}',
-          text: instruction,
-        ),
+      final newCheck = EpicPieCheck(
+        id: '${source.id}_${isDeltaTarget ? 'dchk' : 'chk'}_${DateTime.now().microsecondsSinceEpoch}',
+        text: instruction,
       );
+      if (isDeltaTarget) {
+        next.releaseDeltaChecks.add(newCheck);
+      } else {
+        next.checks.add(newCheck);
+      }
       changed.add('s05');
     } else if (RegExp(r'\bIA_[A-Za-z0-9_]+').hasMatch(instruction)) {
       final action = RegExp(r'\b(IA_[A-Za-z0-9_]+)').firstMatch(instruction)!;

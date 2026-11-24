@@ -93,9 +93,14 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
     if (text.isEmpty) return;
     await widget.onApply(text);
     if (!mounted) return;
-    if (widget.externalController == null && widget.errorText == null) {
-      _ctrl.clear();
-    }
+    WidgetsBinding.instance.ensureVisualUpdate();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted &&
+          widget.externalController == null &&
+          (widget.errorText == null || widget.errorText!.trim().isEmpty)) {
+        _ctrl.clear();
+      }
+    });
   }
 
   @override

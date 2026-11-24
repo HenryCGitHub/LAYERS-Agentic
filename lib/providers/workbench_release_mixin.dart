@@ -138,6 +138,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       }
     }
     _syncActiveProjectMetadata();
+    _syncStage2UndoProjectScope();
     notifyListeners();
   }
 
@@ -190,6 +191,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       _selectedFeatureId = null;
     }
     _syncActiveProjectMetadata();
+    _syncStage2UndoProjectScope();
     notifyListeners();
   }
 
@@ -214,6 +216,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     match ??= _findFeatureByIdOrCode(spec, featureId);
     _selectedFeatureId = match?.id;
     _syncActiveProjectMetadata();
+    _syncStage2UndoProjectScope();
     notifyListeners();
   }
 
@@ -266,71 +269,6 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     _persistDocument(updatedDoc, debounce: debounce);
     notifyListeners();
     return true;
-  }
-
-  void updateFeatureTuningParam(
-    String epicId,
-    String featureId,
-    int paramIndex,
-    String newValue,
-  ) {
-    final cleanVal = newValue.trim();
-    _updateAndPersistFeature(
-      epicId,
-      featureId,
-      (spec, feat, _) {
-        if (paramIndex < 0 || paramIndex >= feat.tuning.length) return;
-        final param = feat.tuning[paramIndex];
-        param.value = cleanVal;
-        for (final parentParam in spec.tuning) {
-          if (parentParam.key.trim().toLowerCase() ==
-              param.key.trim().toLowerCase()) {
-            parentParam.value = cleanVal;
-          }
-        }
-      },
-      debounce: true,
-    );
-  }
-
-  void addFeatureTuningParam(
-    String epicId,
-    String featureId, {
-    required String key,
-    required String value,
-    required String unit,
-  }) {
-    final cleanKey = UnrealSpecGuard.sanitizeTuningKey(key, fallback: '');
-    if (cleanKey.isEmpty) return;
-    _updateAndPersistFeature(epicId, featureId, (spec, feat, _) {
-      final nextVal = UnrealSpecGuard.scaleTuningValue(
-        value.trim().isEmpty ? '0' : value.trim(),
-        unit,
-      );
-      final nextUnit = UnrealSpecGuard.normalizeUnrealUnit(cleanKey, unit);
-      final existingIdx = feat.tuning.indexWhere(
-        (t) => t.key.trim().toLowerCase() == cleanKey.toLowerCase(),
-      );
-      if (existingIdx >= 0) {
-        final existing = feat.tuning[existingIdx];
-        existing.value = nextVal;
-        existing.unit = unit.trim().isEmpty ? existing.unit : nextUnit;
-      } else {
-        feat.tuning.add(
-          EpicTuningParam(
-            key: cleanKey,
-            value: nextVal,
-            unit: nextUnit,
-          ),
-        );
-      }
-      for (final parentParam in spec.tuning) {
-        if (parentParam.key.trim().toLowerCase() == cleanKey.toLowerCase()) {
-          parentParam.value = nextVal;
-          parentParam.unit = nextUnit;
-        }
-      }
-    });
   }
 
   void updateFeatureSections(
@@ -517,6 +455,13 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     sanitized.status = FeatureStatus.active;
 
     _updateAndPersistEpic(epicId, (spec) {
+      _pushStage2UndoSnapshot(
+        epicDocId: epicId,
+        featureId: sanitized.id,
+        snapshot: spec.deepCopy(),
+        summary: 'Added ${sanitized.code}: ${sanitized.title}',
+      );
+      _lastStage2RefineSummary = 'Added ${sanitized.code}: ${sanitized.title}';
       spec.features.add(sanitized);
       _syncEpicLifecycleFromFeatures(spec, relVer);
     });
@@ -742,56 +687,6 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       },
       debounce: true,
     );
-  }
-
-  List<String> _cleanSpecList(List<String> raw, UnrealArchitectureMode mode) =>
-      raw
-          .map((s) => UnrealSpecGuard.sanitizeLine(s, mode: mode).trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-
-  void upsertEpicOwnership(
-    String epicId, {
-    int? index,
-    required String path,
-    String role = '',
-  }) {
-    final mode = unrealArchitectureMode;
-    final cleanPath = UnrealSpecGuard.sanitizeLine(path, mode: mode).trim();
-    if (cleanPath.isEmpty) return;
-    final cleanRole = UnrealSpecGuard.sanitizeLine(role, mode: mode).trim();
-    _updateAndPersistEpic(epicId, (spec) {
-      final entry = EpicSceneOwnership(path: cleanPath, role: cleanRole);
-      if (index != null && index >= 0 && index < spec.sceneOwnership.length) {
-        spec.sceneOwnership[index] = entry;
-      } else {
-        spec.sceneOwnership.add(entry);
-      }
-    });
-  }
-
-  void removeEpicOwnership(String epicId, int index) {
-    _updateAndPersistEpic(epicId, (spec) {
-      if (index >= 0 && index < spec.sceneOwnership.length) {
-        spec.sceneOwnership.removeAt(index);
-      }
-    });
-  }
-
-  void updateEpicStateRules(
-    String epicId, {
-    List<String>? stateFlow,
-    List<String>? interruptRules,
-  }) {
-    final mode = unrealArchitectureMode;
-    _updateAndPersistEpic(epicId, (spec) {
-      if (stateFlow != null) {
-        spec.stateFlow = _cleanSpecList(stateFlow, mode);
-      }
-      if (interruptRules != null) {
-        spec.interruptRules = _cleanSpecList(interruptRules, mode);
-      }
-    });
   }
 
   void flagEpicFix(String epicId, String fixText) {

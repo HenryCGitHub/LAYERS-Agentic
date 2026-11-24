@@ -35,13 +35,17 @@ Future<void> showGddInspectorDialog(
         final cyan = AppTheme.accentCyanFor(isDark);
         final green = AppTheme.accentGreenFor(isDark);
         final amber = AppTheme.accentAmberFor(isDark);
+        final red = AppTheme.accentRedFor(isDark);
 
         final bundle = workbench.buildCoPilotGddExport();
         final tokens = UnrealPromptCompactor.estimateTokens(bundle.content);
         final isLinked = workbench.isLocalGddLinked;
         final needsPerm =
             workbench.gddSyncStatus == LocalGddSyncStatus.permissionNeeded;
+        final isError = workbench.gddSyncStatus == LocalGddSyncStatus.error;
         final linkedName = workbench.linkedGddFileName;
+        final hasLinkedFile = linkedName != null && linkedName.isNotEmpty;
+        final errorLabel = workbench.gddSyncError ?? 'Local GDD write failed.';
 
         return Dialog(
           key: const ValueKey('gdd_inspector_dialog'),
@@ -118,32 +122,42 @@ Future<void> showGddInspectorDialog(
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: needsPerm
-                              ? amber.withValues(alpha: 0.12)
-                              : (isLinked
-                                  ? green.withValues(alpha: 0.12)
-                                  : AppTheme.bgSurfaceRecessedFor(isDark)),
+                          color: isError
+                              ? red.withValues(alpha: 0.12)
+                              : (needsPerm
+                                  ? amber.withValues(alpha: 0.12)
+                                  : (isLinked
+                                      ? green.withValues(alpha: 0.12)
+                                      : AppTheme.bgSurfaceRecessedFor(isDark))),
                           borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                           border: Border.all(
-                            color: needsPerm
-                                ? amber.withValues(alpha: 0.45)
-                                : (isLinked
-                                    ? green.withValues(alpha: 0.45)
-                                    : border),
+                            color: isError
+                                ? red.withValues(alpha: 0.45)
+                                : (needsPerm
+                                    ? amber.withValues(alpha: 0.45)
+                                    : (isLinked
+                                        ? green.withValues(alpha: 0.45)
+                                        : border)),
                           ),
                         ),
                         child: Text(
-                          needsPerm
-                              ? 'Permission needed: $linkedName'
-                              : (isLinked
-                                  ? 'Live · $linkedName'
-                                  : 'Not linked to local disk yet'),
+                          isError
+                              ? (hasLinkedFile
+                                  ? 'Sync error ($linkedName): $errorLabel'
+                                  : 'Sync error: $errorLabel')
+                              : (needsPerm
+                                  ? 'Permission needed: $linkedName'
+                                  : (isLinked
+                                      ? 'Live · $linkedName'
+                                      : 'Not linked to local disk yet')),
                           style: GoogleFonts.jetBrainsMono(
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
-                            color: needsPerm
-                                ? amber
-                                : (isLinked ? green : muted),
+                            color: isError
+                                ? red
+                                : (needsPerm
+                                    ? amber
+                                    : (isLinked ? green : muted)),
                           ),
                         ),
                       ),
@@ -179,6 +193,7 @@ Future<void> showGddInspectorDialog(
                     children: [
                       if (needsPerm)
                         OutlinedButton.icon(
+                          key: const ValueKey('gdd_inspector_grant_perm_btn'),
                           onPressed: () async {
                             await workbench.syncLinkedGddNow(
                               force: true,
@@ -188,14 +203,25 @@ Future<void> showGddInspectorDialog(
                           icon: Icon(Icons.lock_open_rounded,
                               size: 14, color: amber),
                           label: const Text('Grant Write Permission'),
-                        )
-                      else if (isLinked)
+                        ),
+                      if (isError && hasLinkedFile)
                         OutlinedButton.icon(
+                          key: const ValueKey('gdd_inspector_retry_btn'),
+                          onPressed: () async {
+                            await workbench.syncLinkedGddNow(force: true);
+                          },
+                          icon: Icon(Icons.refresh_rounded,
+                              size: 14, color: red),
+                          label: const Text('Retry Sync'),
+                        ),
+                      if (isLinked || needsPerm || isError)
+                        OutlinedButton.icon(
+                          key: const ValueKey('gdd_inspector_unlink_btn'),
                           onPressed: () => workbench.unlinkLocalGddFile(),
                           icon: const Icon(Icons.link_off_rounded, size: 14),
                           label: const Text('Unlink Local File'),
-                        )
-                      else
+                        ),
+                      if (!isLinked && !needsPerm && !(isError && hasLinkedFile))
                         OutlinedButton.icon(
                           key: const ValueKey('gdd_inspector_link_btn'),
                           onPressed: () async {
@@ -212,6 +238,13 @@ Future<void> showGddInspectorDialog(
                                 dialogCtx,
                                 'Downloaded ${bundle.filename} (browser lacks file-link API)',
                                 isDark: isDark,
+                              );
+                            } else if (!res.cancelled && res.error != null) {
+                              AppToast.show(
+                                dialogCtx,
+                                res.error!,
+                                isDark: isDark,
+                                accentColor: red,
                               );
                             }
                           },

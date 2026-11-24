@@ -146,8 +146,12 @@ class LocalGddFileBackendWeb implements LocalGddFileBackend {
       await writable
           .callMethod<JSPromise<JSAny?>>('write'.toJS, content.toJS)
           .toDart;
-    } finally {
       await writable.callMethod<JSPromise<JSAny?>>('close'.toJS).toDart;
+    } catch (_) {
+      try {
+        await writable.callMethod<JSPromise<JSAny?>>('abort'.toJS).toDart;
+      } catch (_) {}
+      rethrow;
     }
   }
 

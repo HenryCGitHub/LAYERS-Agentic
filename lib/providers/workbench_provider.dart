@@ -264,15 +264,18 @@ class WorkbenchProvider extends ChangeNotifier {
 
   final List<_Stage2UndoEntry> _stage2UndoStack = <_Stage2UndoEntry>[];
   String? _stage2UndoProjectId;
+  String? _stage2UndoReleaseId;
   bool _isRefiningStage2 = false;
   String? _lastStage2RefineSummary;
   String? _stage2RefineError;
   Set<String> _lastStage2ChangedSections = const <String>{};
 
   void _syncStage2UndoProjectScope() {
-    if (_stage2UndoProjectId != _activeProjectId) {
+    if (_stage2UndoProjectId != _activeProjectId ||
+        _stage2UndoReleaseId != _activeReleaseId) {
       _clearStage2TransientState();
       _stage2UndoProjectId = _activeProjectId;
+      _stage2UndoReleaseId = _activeReleaseId;
     }
   }
 

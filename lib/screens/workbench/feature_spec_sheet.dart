@@ -50,6 +50,10 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
       _addingTuning = false;
       _addingCue = false;
       _addingCheck = false;
+    } else if (_editingControlIndex != null &&
+        _editingControlIndex! >= widget.feature.controls.length) {
+      _showControlForm = false;
+      _editingControlIndex = null;
     }
   }
 
@@ -410,11 +414,25 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                                   ),
                                   InkWell(
                                     key: ValueKey('feature_control_delete_$i'),
-                                    onTap: () => wb.removeFeatureControl(
-                                      epic.id,
-                                      feat.id,
-                                      i,
-                                    ),
+                                    onTap: () {
+                                      if (_editingControlIndex == i) {
+                                        setState(() {
+                                          _showControlForm = false;
+                                          _editingControlIndex = null;
+                                        });
+                                      } else if (_editingControlIndex != null &&
+                                          _editingControlIndex! > i) {
+                                        setState(() {
+                                          _editingControlIndex =
+                                              _editingControlIndex! - 1;
+                                        });
+                                      }
+                                      wb.removeFeatureControl(
+                                        epic.id,
+                                        feat.id,
+                                        i,
+                                      );
+                                    },
                                     child: Padding(
                                       padding: const EdgeInsets.all(4),
                                       child: Icon(
@@ -700,7 +718,12 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                         ),
                       ),
                     ),
-                    if (!isLockedBaseline)
+                    if (!isLockedBaseline &&
+                        !(relVer.trim() != feat.introducedIn.trim() &&
+                            feat.releaseDelta.trim().isNotEmpty &&
+                            feat.checks.any(
+                              (b) => identical(b, chk) || b.id == chk.id,
+                            )))
                       IconButton(
                         key: ValueKey('feature_check_delete_${chk.id}'),
                         icon: Icon(Icons.close_rounded, size: 15, color: muted),

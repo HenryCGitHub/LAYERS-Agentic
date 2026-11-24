@@ -3,6 +3,12 @@ part of 'workbench_provider.dart';
 /// Direct inline manual CRUD operations for Stage 2 Epics (`§01-§04`) and
 /// Feature Slices (`§01-§05`) with Undo snapshots and UnrealSpecGuard sanitization.
 extension WorkbenchSpecEditMixin on WorkbenchProvider {
+  List<String> _cleanSpecList(List<String> raw, UnrealArchitectureMode mode) =>
+      raw
+          .map((s) => UnrealSpecGuard.sanitizeLine(s, mode: mode).trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+
   void _captureEpicUndoBeforeEdit(
     String epicId, {
     String? featureId,
@@ -47,6 +53,77 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
     });
   }
 
+  /// Inserts or updates a shared UE5 Blueprint/level/class owner in Epic `§02`.
+  void upsertEpicOwnership(
+    String epicId, {
+    int? index,
+    required String path,
+    String role = '',
+  }) {
+    final mode = unrealArchitectureMode;
+    final cleanPath = UnrealSpecGuard.sanitizeLine(path, mode: mode).trim();
+    if (cleanPath.isEmpty) return;
+    final cleanRole = UnrealSpecGuard.sanitizeLine(role, mode: mode).trim();
+    final isUpdate = index != null && index >= 0;
+    _updateAndPersistEpic(epicId, (spec) {
+      final hasTarget = isUpdate && index < spec.sceneOwnership.length;
+      final summary = hasTarget ? 'Updated Epic owner' : 'Added Epic owner';
+      _pushStage2UndoSnapshot(
+        epicDocId: epicId,
+        featureId: null,
+        snapshot: spec.deepCopy(),
+        summary: summary,
+      );
+      _lastStage2RefineSummary = summary;
+      final entry = EpicSceneOwnership(path: cleanPath, role: cleanRole);
+      if (hasTarget) {
+        spec.sceneOwnership[index] = entry;
+      } else {
+        spec.sceneOwnership.add(entry);
+      }
+    });
+  }
+
+  /// Removes a shared UE5 asset/class owner at [index] from Epic `§02`.
+  void removeEpicOwnership(String epicId, int index) {
+    _updateAndPersistEpic(epicId, (spec) {
+      if (index < 0 || index >= spec.sceneOwnership.length) return;
+      _pushStage2UndoSnapshot(
+        epicDocId: epicId,
+        featureId: null,
+        snapshot: spec.deepCopy(),
+        summary: 'Removed Epic owner',
+      );
+      _lastStage2RefineSummary = 'Removed Epic owner';
+      spec.sceneOwnership.removeAt(index);
+    });
+  }
+
+  /// Updates an Epic's `§03` shared state flow and interrupt rules cleanly.
+  void updateEpicStateRules(
+    String epicId, {
+    List<String>? stateFlow,
+    List<String>? interruptRules,
+  }) {
+    final mode = unrealArchitectureMode;
+    _updateAndPersistEpic(epicId, (spec) {
+      final nextStates =
+          stateFlow != null ? _cleanSpecList(stateFlow, mode) : null;
+      final nextRules =
+          interruptRules != null ? _cleanSpecList(interruptRules, mode) : null;
+      if (nextStates == null && nextRules == null) return;
+      _pushStage2UndoSnapshot(
+        epicDocId: epicId,
+        featureId: null,
+        snapshot: spec.deepCopy(),
+        summary: 'Edited Epic state rules',
+      );
+      _lastStage2RefineSummary = 'Edited Epic state rules';
+      if (nextStates != null) spec.stateFlow = nextStates;
+      if (nextRules != null) spec.interruptRules = nextRules;
+    });
+  }
+
   /// Appends a sanitized `No ...` exclusion rule to an Epic's `§04` Out-of-Scope cuts.
   void addEpicOutOfScopeCut(String epicId, String rawCut) {
     final cleanCut = UnrealSpecGuard.sanitizeExclusion(
@@ -54,23 +131,35 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
       mode: unrealArchitectureMode,
     );
     if (cleanCut.isEmpty) return;
-    _captureEpicUndoBeforeEdit(epicId, summary: 'Added Epic cut: $cleanCut');
     _updateAndPersistEpic(epicId, (spec) {
-      if (!spec.outOfScope.any(
+      if (spec.outOfScope.any(
         (c) => c.trim().toLowerCase() == cleanCut.toLowerCase(),
       )) {
-        spec.outOfScope.add(cleanCut);
+        return;
       }
+      _pushStage2UndoSnapshot(
+        epicDocId: epicId,
+        featureId: null,
+        snapshot: spec.deepCopy(),
+        summary: 'Added Epic cut: $cleanCut',
+      );
+      _lastStage2RefineSummary = 'Added Epic cut: $cleanCut';
+      spec.outOfScope.add(cleanCut);
     });
   }
 
   /// Removes an out-of-scope cut at [index] from an Epic's `§04` list.
   void removeEpicOutOfScopeCut(String epicId, int index) {
-    _captureEpicUndoBeforeEdit(epicId, summary: 'Removed Epic scope cut');
     _updateAndPersistEpic(epicId, (spec) {
-      if (index >= 0 && index < spec.outOfScope.length) {
-        spec.outOfScope.removeAt(index);
-      }
+      if (index < 0 || index >= spec.outOfScope.length) return;
+      _pushStage2UndoSnapshot(
+        epicDocId: epicId,
+        featureId: null,
+        snapshot: spec.deepCopy(),
+        summary: 'Removed Epic scope cut',
+      );
+      _lastStage2RefineSummary = 'Removed Epic scope cut';
+      spec.outOfScope.removeAt(index);
     });
   }
 
@@ -85,7 +174,7 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
     String? releaseDelta,
   }) {
     final mode = unrealArchitectureMode;
-    _updateAndPersistFeature(epicId, featureId, (spec, feat, _) {
+    _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
       _pushStage2UndoSnapshot(
         epicDocId: epicId,
         featureId: feat.id,
@@ -106,10 +195,14 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
         feat.doneWhen = _cleanSpecList(doneWhen, mode);
       }
       if (releaseDelta != null) {
-        feat.releaseDelta = UnrealSpecGuard.sanitizeLine(
+        final cleanDelta = UnrealSpecGuard.sanitizeLine(
           releaseDelta,
           mode: mode,
-        );
+        ).trim();
+        if (relVer.trim() == feat.introducedIn.trim() ||
+            cleanDelta.isNotEmpty) {
+          feat.releaseDelta = cleanDelta;
+        }
       }
     });
   }
@@ -162,6 +255,88 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
       );
       _lastStage2RefineSummary = 'Removed input from ${feat.code}';
       feat.controls.removeAt(index);
+    });
+  }
+
+  /// Updates an exposed tuning variable value in Feature `§03`.
+  void updateFeatureTuningParam(
+    String epicId,
+    String featureId,
+    int paramIndex,
+    String newValue,
+  ) {
+    final cleanVal = newValue.trim();
+    _updateAndPersistFeature(
+      epicId,
+      featureId,
+      (spec, feat, _) {
+        if (paramIndex < 0 || paramIndex >= feat.tuning.length) return;
+        final param = feat.tuning[paramIndex];
+        if (param.value == cleanVal) return;
+        _pushStage2UndoSnapshot(
+          epicDocId: epicId,
+          featureId: feat.id,
+          snapshot: spec.deepCopy(),
+          summary: 'Updated ${param.key} = $cleanVal',
+        );
+        _lastStage2RefineSummary = 'Updated ${param.key} = $cleanVal';
+        param.value = cleanVal;
+        for (final parentParam in spec.tuning) {
+          if (parentParam.key.trim().toLowerCase() ==
+              param.key.trim().toLowerCase()) {
+            parentParam.value = cleanVal;
+          }
+        }
+      },
+      debounce: true,
+    );
+  }
+
+  /// Adds or updates an exposed tuning variable in Feature `§03` with UE5 units.
+  void addFeatureTuningParam(
+    String epicId,
+    String featureId, {
+    required String key,
+    required String value,
+    required String unit,
+  }) {
+    final cleanKey = UnrealSpecGuard.sanitizeTuningKey(key, fallback: '');
+    if (cleanKey.isEmpty) return;
+    _updateAndPersistFeature(epicId, featureId, (spec, feat, _) {
+      _pushStage2UndoSnapshot(
+        epicDocId: epicId,
+        featureId: feat.id,
+        snapshot: spec.deepCopy(),
+        summary: 'Updated tuning var $cleanKey',
+      );
+      _lastStage2RefineSummary = 'Updated tuning var $cleanKey';
+      final nextVal = UnrealSpecGuard.scaleTuningValue(
+        value.trim().isEmpty ? '0' : value.trim(),
+        unit,
+      );
+      final nextUnit = UnrealSpecGuard.normalizeUnrealUnit(cleanKey, unit);
+      final existingIdx = feat.tuning.indexWhere(
+        (t) => t.key.trim().toLowerCase() == cleanKey.toLowerCase(),
+      );
+      if (existingIdx >= 0) {
+        final existing = feat.tuning[existingIdx];
+        existing.value = nextVal;
+        existing.unit = unit.trim().isEmpty ? existing.unit : nextUnit;
+      } else {
+        feat.tuning.add(
+          EpicTuningParam(
+            key: cleanKey,
+            value: nextVal,
+            unit: nextUnit,
+          ),
+        );
+      }
+      for (final parentParam in spec.tuning) {
+        if (parentParam.key.trim().toLowerCase() == cleanKey.toLowerCase()) {
+          parentParam.value = nextVal;
+          parentParam.unit = nextUnit;
+        }
+      }
     });
   }
 
@@ -248,7 +423,9 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
   /// Removes a PIE Playtest check by [checkId] from Feature `§05`.
   void removeFeatureCheck(String epicId, String featureId, String checkId) {
     _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
-      final hasBase = feat.checks.any((c) => c.id == checkId);
+      final isDeltaSlice = relVer.trim() != feat.introducedIn.trim() &&
+          feat.releaseDelta.trim().isNotEmpty;
+      final hasBase = !isDeltaSlice && feat.checks.any((c) => c.id == checkId);
       final hasDelta = feat.releaseDeltaChecks.any((c) => c.id == checkId);
       if (!hasBase && !hasDelta) return;
       _pushStage2UndoSnapshot(
@@ -258,7 +435,9 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
         summary: 'Removed PIE check from ${feat.code}',
       );
       _lastStage2RefineSummary = 'Removed PIE check from ${feat.code}';
-      feat.checks.removeWhere((c) => c.id == checkId);
+      if (!isDeltaSlice) {
+        feat.checks.removeWhere((c) => c.id == checkId);
+      }
       feat.releaseDeltaChecks.removeWhere((c) => c.id == checkId);
       _syncEpicLifecycleFromFeatures(spec, relVer);
     });

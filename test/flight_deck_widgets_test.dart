@@ -8,12 +8,17 @@ import 'package:layers_agentic/agents/gemini_agent_client.dart';
 import 'package:layers_agentic/agents/stage2_refine_agent.dart';
 import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
+import 'package:layers_agentic/screens/project_pitch_screen.dart';
+import 'package:layers_agentic/screens/shell/gdd_inspector_dialog.dart';
 import 'package:layers_agentic/screens/shell/studio_gdd_bar_widgets.dart';
 import 'package:layers_agentic/screens/shell/studio_top_bar.dart';
 import 'package:layers_agentic/screens/stage1/stage1_epic_preview_section.dart';
+import 'package:layers_agentic/screens/stage1/stage1_spec_document.dart';
+import 'package:layers_agentic/screens/workbench/epic_domain_sheet.dart';
 import 'package:layers_agentic/screens/workbench/feature_spec_sheet.dart';
 import 'package:layers_agentic/screens/workbench/floating_ai_refine_dock.dart';
 import 'package:layers_agentic/screens/workbench/stage2_inline_editors.dart';
+import 'package:layers_agentic/services/local_gdd_sync_service.dart';
 import 'package:layers_agentic/theme/app_theme.dart';
 
 void main() {
@@ -601,15 +606,58 @@ void main() {
           expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
           expect(backend.lastRequestPermissionFlag, isTrue);
 
-          // 6) Error state on write and on link
+          // 6) Error state on write (preserves filename -> inspector retry/unlink) and on unlinked link
           backend.writeError = 'Disk read-only';
           expect(await wb.syncLinkedGddNow(force: true), isFalse);
           await tester.pumpAndSettle();
           expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.error));
           expect(wb.gddSyncError, equals('Disk read-only'));
-          expect(find.text('Link Local GDD'), findsOneWidget);
+          expect(
+            wb.linkedGddFileName,
+            equals('shellbreaker_copilot_gdd.md'),
+          );
+          expect(find.text('GDD Error · Retry'), findsOneWidget);
+
+          // Tapping error pill with preserved filename opens GDD Inspector with Retry & Unlink
+          await tester.tap(
+            find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('gdd_inspector_dialog')),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining('Sync error (shellbreaker_copilot_gdd.md)'),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('gdd_inspector_retry_btn')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('gdd_inspector_unlink_btn')),
+            findsOneWidget,
+          );
 
           backend.writeError = null;
+          await tester.tap(
+            find.byKey(const ValueKey('gdd_inspector_retry_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
+
+          // Unlinking from inspector detaches cleanly, then linkError displays GDD Error · Retry + toast
+          await tester.tap(
+            find.byKey(const ValueKey('gdd_inspector_unlink_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.unlinked));
+          await tester.tap(
+            find.byKey(const ValueKey('close_gdd_inspector_btn')),
+          );
+          await tester.pumpAndSettle();
+
           backend.linkError = 'Save picker failed';
           await tester.tap(
             find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
@@ -617,7 +665,8 @@ void main() {
           await tester.pumpAndSettle();
           expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.error));
           expect(wb.gddSyncError, equals('Save picker failed'));
-          expect(find.text('Link Local GDD'), findsOneWidget);
+          expect(find.text('GDD Error · Retry'), findsOneWidget);
+          expect(find.text('Save picker failed'), findsOneWidget);
 
           // 7) CoPilotGddInspectPill tap opens GDD Inspector modal
           await tester.tap(
@@ -1532,6 +1581,864 @@ void main() {
       },
     );
   });
+
+  group('6. Post-deploy P0/P1 regression tests', () {
+    test(
+      'LocalGddSyncService serializes per-project writes, recovers from errors, and WorkbenchProvider unsticks syncing',
+      () async {
+        final backend = _SerializedTestGddBackend();
+        final service = LocalGddSyncService(backend: backend);
+
+        // Concurrent same-content writes execute sequentially and second skips duplicate disk write
+        final firstGate = Completer<void>();
+        backend.nextWriteGate = firstGate;
+        final f1 = service.syncIfChanged(projectId: 'p1', content: 'GDD_V1');
+        final f2 = service.syncIfChanged(projectId: 'p1', content: 'GDD_V1');
+        await Future<void>.delayed(Duration.zero);
+        expect(backend.writeStartCount, equals(1));
+        expect(backend.maxConcurrentWrites, equals(1));
+        firstGate.complete();
+
+        final r1 = await f1;
+        final r2 = await f2;
+        expect(r1.written, isTrue);
+        expect(r2.written, isFalse);
+        expect(backend.writeStartCount, equals(1));
+
+        // Concurrent differing writes never overlap and preserve order
+        final secondGate = Completer<void>();
+        backend.nextWriteGate = secondGate;
+        final f3 = service.syncIfChanged(projectId: 'p1', content: 'GDD_V2');
+        final f4 = service.syncIfChanged(projectId: 'p1', content: 'GDD_V3');
+        await Future<void>.delayed(Duration.zero);
+        expect(backend.maxConcurrentWrites, equals(1));
+        secondGate.complete();
+        expect((await f3).written, isTrue);
+        expect((await f4).written, isTrue);
+        expect(backend.writtenLog, equals(['GDD_V1', 'GDD_V2', 'GDD_V3']));
+
+        // A failed queued task propagates error without poisoning subsequent writes
+        backend.throwNextWrite = true;
+        await expectLater(
+          service.syncIfChanged(projectId: 'p1', content: 'GDD_FAIL'),
+          throwsException,
+        );
+        backend.throwNextWrite = false;
+        final recovered = await service.syncIfChanged(
+          projectId: 'p1',
+          content: 'GDD_RECOVERED',
+        );
+        expect(recovered.written, isTrue);
+        expect(backend.writtenLog.last, equals('GDD_RECOVERED'));
+
+        // WorkbenchProvider: link cancel restores unlinked (not syncing), no-op sync unsticks syncing,
+        // and switching back after error clears stuck error state.
+        final wbBackend = _TestLocalGddBackend();
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        addTearDown(wb.dispose);
+        wb.setLocalGddBackendForTest(wbBackend);
+        wb.loadPresetSpark('shellbreaker');
+        final p1Id = wb.activeProjectId!;
+
+        final cancelPick = Completer<LocalGddLinkResult>();
+        wbBackend.nextPickCompleter = cancelPick;
+        final linkFuture = wb.linkLocalGddFile();
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.syncing));
+        cancelPick.complete(const LocalGddLinkResult(linked: false, cancelled: true));
+        await linkFuture;
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.unlinked));
+
+        // Link successfully, then trigger force no-op write (backend returns written: false)
+        await wb.linkLocalGddFile();
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
+        final noopCompleter = Completer<LocalGddWriteResult>();
+        wbBackend.nextWriteCompleter = noopCompleter;
+        final syncFuture = wb.syncLinkedGddNow(force: true);
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.syncing));
+        noopCompleter.complete(const LocalGddWriteResult(written: false));
+        expect(await syncFuture, isFalse);
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
+
+        // Error preserves filename, and switching project + back clears stale error cleanly
+        wbBackend.writeError = 'Disk temporarily busy';
+        await wb.syncLinkedGddNow(force: true);
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.error));
+        expect(wb.linkedGddFileName, equals('shellbreaker_copilot_gdd.md'));
+
+        wbBackend.writeError = null;
+        wb.createNewProject();
+        await Future<void>.delayed(Duration.zero);
+        wb.switchProject(p1Id);
+        await Future<void>.delayed(Duration.zero);
+        expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.linked));
+        expect(wb.gddSyncError, isNull);
+      },
+    );
+
+    testWidgets(
+      'GDD Inspector allows Unlink during permissionNeeded and FloatingAiRefineDock keeps prompt on async error',
+      (tester) async {
+        await _runWithViewport(tester, const Size(1280, 820), () async {
+          final backend = _TestLocalGddBackend();
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          addTearDown(wb.dispose);
+          wb.setLocalGddBackendForTest(backend);
+          wb.loadPresetSpark('shellbreaker');
+          await wb.linkLocalGddFile();
+          backend.denyPermission = true;
+          await wb.syncLinkedGddNow(force: true);
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.permissionNeeded));
+
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: Builder(
+                builder: (ctx) => ElevatedButton(
+                  key: const ValueKey('open_insp_btn'),
+                  onPressed: () => showGddInspectorDialog(ctx, wb),
+                  child: const Text('Inspect'),
+                ),
+              ),
+            ),
+          );
+          await tester.tap(find.byKey(const ValueKey('open_insp_btn')));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const ValueKey('gdd_inspector_grant_perm_btn')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('gdd_inspector_unlink_btn')),
+            findsOneWidget,
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('gdd_inspector_unlink_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.unlinked));
+          await tester.tap(
+            find.byKey(const ValueKey('close_gdd_inspector_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          // FloatingAiRefineDock preserves user input when errorText is set asynchronously in onApply
+          String? err;
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: StatefulBuilder(
+                builder: (ctx, setState) => FloatingAiRefineDock(
+                  isDark: true,
+                  targetBadge: 'AI · F02',
+                  hintText: 'Refine...',
+                  isBusy: false,
+                  canUndo: false,
+                  errorText: err,
+                  inputKey: const ValueKey('reg_dock_input'),
+                  applyBtnKey: const ValueKey('reg_dock_apply'),
+                  onApply: (text) async {
+                    await Future<void>.delayed(Duration.zero);
+                    setState(() => err = 'HTTP 429 rate limit');
+                  },
+                ),
+              ),
+            ),
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('reg_dock_input')),
+            'Keep my prompt text on error',
+          );
+          await tester.tap(find.byKey(const ValueKey('reg_dock_apply')));
+          await tester.pumpAndSettle();
+
+          final tf = tester.widget<TextField>(
+            find.byKey(const ValueKey('reg_dock_input')),
+          );
+          expect(tf.controller!.text, equals('Keep my prompt text on error'));
+          expect(find.text('HTTP 429 rate limit'), findsOneWidget);
+        });
+      },
+    );
+
+    testWidgets(
+      'Long §04 cut chips and Stage 1 project title truncate/wrap at 1024x768 with zero overflow',
+      (tester) async {
+        await _runWithViewport(tester, const Size(1024, 768), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          addTearDown(wb.dispose);
+          wb.loadPresetSpark('shellbreaker');
+          wb.updateRootSpecSections(
+            gameTitle:
+                'ULTRA LONG MECH ARENA PROTOTYPE TITLE FOR OVERFLOW BOUNDARY REGRESSION CHECK',
+          );
+          wb.addStage1OutOfScopeCut(
+            'No sprawling open world crafting inventory trees or persistent multiplayer hub lobbies across regions',
+          );
+
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: AnimatedBuilder(
+                animation: wb,
+                builder: (_, __) => ProjectPitchScreen(workbench: wb),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          wb.approveRootSpecAndLaunchWorkbench();
+          final epic = wb.selectedEpicSpec!;
+          wb.addEpicOutOfScopeCut(
+            epic.id,
+            'No multi-phase procedural weather simulation or dynamic destructible foliage streaming systems',
+          );
+
+          await tester.pumpWidget(
+            _testHost(
+              isDark: false,
+              child: SingleChildScrollView(
+                child: EpicDomainSheet(
+                  workbench: wb,
+                  epic: wb.selectedEpicSpec!,
+                  isDark: false,
+                  selectionKey: '${epic.id}_long',
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+        });
+      },
+    );
+
+    testWidgets(
+      'Deleting input and owner rows shifts active edit index cleanly or closes active edit row',
+      (tester) async {
+        await _runWithViewport(tester, const Size(1440, 900), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          addTearDown(wb.dispose);
+          wb.loadPresetSpark('shellbreaker');
+          wb.approveRootSpecAndLaunchWorkbench();
+
+          final epic = wb.activeReleaseEpics.first;
+          final f01 = epic.features.first;
+          wb.selectFeature(epic.id, f01.id);
+          wb.upsertFeatureControl(
+            epic.id,
+            f01.id,
+            action: 'IA_FirstInput',
+            trigger: 'Pressed',
+            rule: 'First rule before delete',
+          );
+          wb.upsertFeatureControl(
+            epic.id,
+            f01.id,
+            action: 'IA_SecondInput',
+            trigger: 'Pressed',
+            rule: 'Second rule before delete',
+          );
+          final startControlCount = wb.selectedFeatureSpec!.controls.length;
+          expect(startControlCount, greaterThanOrEqualTo(2));
+
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: AnimatedBuilder(
+                animation: wb,
+                builder: (_, __) => SingleChildScrollView(
+                  child: FeatureSpecSheet(
+                    workbench: wb,
+                    epic: wb.selectedEpicSpec!,
+                    feature: wb.selectedFeatureSpec!,
+                    isLockedBaseline: false,
+                    isDark: true,
+                    selectionKey: '${wb.selectedEpicSpec!.id}_${wb.selectedFeatureSpec!.id}',
+                    passGateHint: null,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          // Edit last row, then delete row 0 -> shifts edit index to last-1 and updates cleanly
+          final targetCtrlIdx = startControlCount - 1;
+          final editCtrlTarget =
+              find.byKey(ValueKey('feature_control_edit_$targetCtrlIdx'));
+          await tester.ensureVisible(editCtrlTarget);
+          await tester.tap(editCtrlTarget);
+          await tester.pumpAndSettle();
+
+          final delCtrl0 = find.byKey(const ValueKey('feature_control_delete_0'));
+          await tester.ensureVisible(delCtrl0);
+          await tester.tap(delCtrl0);
+          await tester.pumpAndSettle();
+
+          final ruleInput = find.byKey(
+            const ValueKey('feature_control_rule_input'),
+          );
+          expect(ruleInput, findsOneWidget);
+          await tester.enterText(ruleInput, 'Updated shifted control rule');
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('feature_control_save_btn')),
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('feature_control_save_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          expect(
+            wb.selectedFeatureSpec!.controls.length,
+            equals(startControlCount - 1),
+          );
+          expect(
+            wb.selectedFeatureSpec!.controls.last.rule,
+            equals('Updated shifted control rule'),
+          );
+
+          // Edit row 0, then delete row 0 -> closes editor form cleanly
+          await tester.tap(find.byKey(const ValueKey('feature_control_edit_0')));
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('feature_control_delete_0')),
+          );
+          await tester.pumpAndSettle();
+          expect(ruleInput, findsNothing);
+
+          // EpicDomainSheet owner row shift + close regression
+          wb.upsertEpicOwnership(
+            epic.id,
+            path: '/Game/Player/BP_SecondaryOwner.uasset',
+            role: 'Secondary owner',
+          );
+          wb.selectEpic(epic.id);
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: AnimatedBuilder(
+                animation: wb,
+                builder: (_, __) => SingleChildScrollView(
+                  child: EpicDomainSheet(
+                    workbench: wb,
+                    epic: wb.selectedEpicSpec!,
+                    isDark: true,
+                    selectionKey: wb.selectedEpicSpec!.id,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          final targetIdx = wb.selectedEpicSpec!.sceneOwnership.length - 1;
+          await tester.ensureVisible(
+            find.byKey(ValueKey('epic_owner_edit_$targetIdx')),
+          );
+          await tester.tap(find.byKey(ValueKey('epic_owner_edit_$targetIdx')));
+          await tester.pumpAndSettle();
+
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('epic_owner_delete_0')),
+          );
+          await tester.tap(find.byKey(const ValueKey('epic_owner_delete_0')));
+          await tester.pumpAndSettle();
+
+          final roleInput = find.byKey(const ValueKey('epic_owner_role_input'));
+          expect(roleInput, findsOneWidget);
+          await tester.enterText(roleInput, 'Shifted owner role');
+          await tester.tap(find.byKey(const ValueKey('epic_owner_save_btn')));
+          await tester.pumpAndSettle();
+          expect(
+            wb.selectedEpicSpec!.sceneOwnership.last.role,
+            equals('Shifted owner role'),
+          );
+        });
+      },
+    );
+
+    test(
+      'Release-scoped Stage 2 Undo, moved edit methods, no-op guards, async race guard, PASSED demotion, and v0.2+ delta protection',
+      () async {
+        GeminiAgentClient.resetCapabilityCacheForTest();
+        GeminiAgentClient.resetUsage();
+        GeminiAgentClient.testMockResponder = null;
+        GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+        addTearDown(() {
+          GeminiAgentClient.testHttpPost = null;
+          GeminiAgentClient.testMockResponder = null;
+          GeminiAgentClient.testBaseRetryDelay = null;
+          GeminiAgentClient.resetCapabilityCacheForTest();
+          GeminiAgentClient.resetUsage();
+        });
+
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.updateAiConfig(apiKey: 'AIzaTestKey123456');
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+
+        final e01 = wb.activeReleaseEpics.first;
+        final f01 = e01.features.first;
+        final v01RelId = wb.activeReleaseId!;
+
+        // 1) All moved Stage 2 methods + addFeatureSlice push Undo and revert cleanly
+        final origTuneVal = f01.tuning.first.value;
+        wb.updateFeatureTuningParam(e01.id, f01.id, 0, '777');
+        expect(wb.canUndoStage2Edit, isTrue);
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(wb.selectedEpicSpec!.features.first.tuning.first.value, equals(origTuneVal));
+
+        final origTuneLen = wb.selectedEpicSpec!.features.first.tuning.length;
+        wb.addFeatureTuningParam(e01.id, f01.id, key: 'ExtraRange', value: '120', unit: 'cm');
+        expect(wb.selectedEpicSpec!.features.first.tuning.length, equals(origTuneLen + 1));
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(wb.selectedEpicSpec!.features.first.tuning.length, equals(origTuneLen));
+
+        final origOwnersLen = wb.selectedEpicSpec!.sceneOwnership.length;
+        wb.upsertEpicOwnership(e01.id, path: '/Game/Test/BP_Extra.uasset', role: 'Extra');
+        expect(wb.selectedEpicSpec!.sceneOwnership.length, equals(origOwnersLen + 1));
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(wb.selectedEpicSpec!.sceneOwnership.length, equals(origOwnersLen));
+
+        wb.removeEpicOwnership(e01.id, 0);
+        expect(wb.selectedEpicSpec!.sceneOwnership.length, equals(origOwnersLen - 1));
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(wb.selectedEpicSpec!.sceneOwnership.length, equals(origOwnersLen));
+
+        final origStates = List<String>.from(wb.selectedEpicSpec!.stateFlow);
+        wb.updateEpicStateRules(e01.id, stateFlow: const ['Idle', 'Burst']);
+        expect(wb.selectedEpicSpec!.stateFlow, equals(const ['Idle', 'Burst']));
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(wb.selectedEpicSpec!.stateFlow, equals(origStates));
+
+        final addedSlice = wb.addFeatureSlice(
+          e01.id,
+          title: 'Undoable Slice',
+          goal: 'Check undo clears selected feature id.',
+        );
+        expect(wb.selectedFeatureId, equals(addedSlice!.id));
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(wb.selectedFeatureId, isNull);
+
+        // No-op cut add/remove does not push junk undo entries
+        wb.addEpicOutOfScopeCut(e01.id, 'No test cut alpha');
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(wb.canUndoStage2Edit, isFalse);
+        wb.addEpicOutOfScopeCut(e01.id, 'No unique cut');
+        expect(wb.undoStage2Edit(), isTrue);
+        wb.removeEpicOutOfScopeCut(e01.id, 999);
+        expect(wb.canUndoStage2Edit, isFalse);
+
+        // Orphaned undo notifies listeners and returns false
+        wb.addEpicOutOfScopeCut(e01.id, 'No orphan test');
+        final tempDoc = wb.documents.remove(e01.id)!;
+        var notifiedCount = 0;
+        wb.addListener(() => notifiedCount++);
+        expect(wb.undoStage2Edit(), isFalse);
+        expect(notifiedCount, greaterThan(0));
+        wb.documents[e01.id] = tempDoc;
+
+        // 2) PASSED feature demotes to active when AI refine adds unchecked check
+        final f02 = wb.activeReleaseEpics.first.features.firstWhere((f) => f.code == 'F02');
+        for (final c in f02.checks) {
+          wb.toggleFeatureCheck(e01.id, f02.id, c.id, true);
+        }
+        expect(wb.passFeature(e01.id, f02.id), isTrue);
+        expect(
+          wb.activeReleaseEpics.first.features
+              .firstWhere((f) => f.id == f02.id)
+              .status,
+          equals(FeatureStatus.passed),
+        );
+
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {
+                        'functionCall': {
+                          'name': 'patch_unreal_feature_spec',
+                          'args': {
+                            'summary': 'Added new unchecked playtest check',
+                            'changedSections': ['s05'],
+                            'checks': [
+                              ...f02.checks.map((c) => c.text),
+                              'Dash into shield -> Shockwave triggers cleanly',
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        };
+        final refinedPassed = await wb.applyStage2FeatureRefine(
+          e01.id,
+          f02.id,
+          'Add shockwave check',
+        );
+        expect(refinedPassed, isNotNull);
+        expect(refinedPassed!.status, equals(FeatureStatus.active));
+
+        // 3) Release-scoped Undo & v0.2+ [+DELTA] protections
+        await wb.openProgressiveReleaseCopilot();
+        final v02RelId = wb.commitProgressiveReleaseDraft()!;
+        expect(wb.activeReleaseVersionTag, equals('v0.2'));
+        // Undo stack from v0.1 is scoped out in v0.2
+        expect(wb.canUndoStage2Edit, isFalse);
+
+        EpicSpec? deltaEp;
+        FeatureSpec? deltaFeat;
+        for (final ep in wb.activeReleaseEpics) {
+          for (final feat in wb.visibleFeaturesForEpic(ep, releaseVersion: 'v0.2')) {
+            if (feat.releaseDelta.trim().isNotEmpty &&
+                feat.introducedIn.trim() != 'v0.2') {
+              deltaEp = ep;
+              deltaFeat = feat;
+              break;
+            }
+          }
+          if (deltaFeat != null) break;
+        }
+        expect(deltaFeat, isNotNull);
+        final origDeltaText = deltaFeat!.releaseDelta;
+        final origBaseCheckCount = deltaFeat.checks.length;
+        final baseCheckId = deltaFeat.checks.first.id;
+
+        // Empty releaseDelta is rejected on v0.2 upgraded slice so it won't accidentally lock
+        wb.updateFeatureScope(deltaEp!.id, deltaFeat.id, releaseDelta: '   ');
+        final afterEmptyDelta = wb.activeReleaseEpics
+            .firstWhere((e) => e.id == deltaEp!.id)
+            .features
+            .firstWhere((f) => f.id == deltaFeat!.id);
+        expect(afterEmptyDelta.releaseDelta, equals(origDeltaText));
+        expect(afterEmptyDelta.isLockedBaselineInRelease('v0.2'), isFalse);
+
+        // removeFeatureCheck refuses to delete v0.1 baseline checks in v0.2 delta slice
+        wb.removeFeatureCheck(deltaEp.id, deltaFeat.id, baseCheckId);
+        final afterBaseDelAttempt = wb.activeReleaseEpics
+            .firstWhere((e) => e.id == deltaEp!.id)
+            .features
+            .firstWhere((f) => f.id == deltaFeat!.id);
+        expect(afterBaseDelAttempt.checks.length, equals(origBaseCheckCount));
+
+        // AI refine on v0.2 delta slice patches releaseDeltaChecks without touching v0.1 baseline checks
+        GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+          return http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {
+                        'functionCall': {
+                          'name': 'patch_unreal_feature_spec',
+                          'args': {
+                            'summary': 'Updated v0.2 delta check',
+                            'changedSections': ['s05'],
+                            'releaseDeltaChecks': [
+                              'Trigger v0.2 delta -> Hitstop triggers cleanly',
+                            ],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        };
+        final deltaAiRes = await wb.applyStage2FeatureRefine(
+          deltaEp.id,
+          deltaFeat.id,
+          'Update delta check',
+        );
+        expect(deltaAiRes, isNotNull);
+        expect(deltaAiRes!.checks.length, equals(origBaseCheckCount));
+        expect(
+          deltaAiRes.releaseDeltaChecks.single.text,
+          equals('Trigger v0.2 delta -> Hitstop triggers cleanly'),
+        );
+
+        // Offline deterministic fallback on v0.2 delta slice appends to releaseDeltaChecks, not v0.1 checks
+        final offlineDelta = await Stage2RefineAgent.refineFeatureSpec(
+          rootSpec: wb.conceptDraft,
+          epic: deltaEp,
+          feature: deltaAiRes,
+          instruction: 'Release dash early -> Cancel window stays crisp',
+          apiKey: '',
+          releaseVersion: 'v0.2',
+        );
+        expect(offlineDelta.feature, isNotNull);
+        expect(offlineDelta.feature!.checks.length, equals(origBaseCheckCount));
+        expect(
+          offlineDelta.feature!.releaseDeltaChecks.last.text,
+          equals('Release dash early -> Cancel window stays crisp'),
+        );
+
+        // Concurrent Epic edit during async refine await is preserved when AI patch lands
+        final mergeGate = Completer<http.Response>();
+        GeminiAgentClient.testHttpPost = (_, {headers, body}) => mergeGate.future;
+        final mergeFuture = wb.applyStage2EpicRefine(
+          deltaEp.id,
+          'Add cut',
+        );
+        await Future<void>.delayed(Duration.zero);
+        wb.addEpicOutOfScopeCut(deltaEp.id, 'No concurrent cut overwrite');
+        mergeGate.complete(
+          http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {
+                        'functionCall': {
+                          'name': 'patch_unreal_epic_spec',
+                          'args': {
+                            'summary': 'Updated Epic goal concurrently',
+                            'changedSections': ['s01'],
+                            'goal': 'Merged concurrent Epic domain goal.',
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          ),
+        );
+        final mergedEpic = await mergeFuture;
+        expect(mergedEpic, isNotNull);
+        expect(mergedEpic!.goal, equals('Merged concurrent Epic domain goal.'));
+        expect(
+          mergedEpic.outOfScope,
+          contains('No concurrent cut overwrite'),
+        );
+
+        // Undo in v0.2 never touches v0.1; switching back to v0.1 does not inherit v0.2 undo
+        expect(wb.canUndoStage2Edit, isTrue);
+        wb.selectActiveRelease(v01RelId);
+        expect(wb.canUndoStage2Edit, isFalse);
+
+        // 4) Async Stage 2 AI refine drops result cleanly if release/project switches mid-flight
+        wb.selectActiveRelease(v02RelId);
+        final gate = Completer<http.Response>();
+        GeminiAgentClient.testHttpPost = (_, {headers, body}) => gate.future;
+        final pendingEpicRefine = wb.applyStage2EpicRefine(
+          deltaEp.id,
+          'Add shared /Game/Player/BP_Ghost.uasset',
+        );
+        await Future<void>.delayed(Duration.zero);
+        expect(wb.isRefiningStage2, isTrue);
+        wb.selectActiveRelease(v01RelId);
+        gate.complete(
+          http.Response(
+            jsonEncode({
+              'candidates': [
+                {
+                  'content': {
+                    'parts': [
+                      {
+                        'functionCall': {
+                          'name': 'patch_unreal_epic_spec',
+                          'args': {
+                            'summary': 'Should be discarded',
+                            'changedSections': ['s04'],
+                            'outOfScope': ['No ghost leaks'],
+                          },
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          ),
+        );
+        expect(await pendingEpicRefine, isNull);
+        expect(wb.isRefiningStage2, isFalse);
+        expect(wb.canUndoStage2Edit, isFalse);
+      },
+    );
+
+    testWidgets(
+      'v0.2+ delta FeatureSpecSheet hides baseline check delete buttons and external AI refine refreshes open inline editors',
+      (tester) async {
+        await _runWithViewport(tester, const Size(1440, 900), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          addTearDown(wb.dispose);
+          wb.loadPresetSpark('shellbreaker');
+          wb.approveRootSpecAndLaunchWorkbench();
+
+          // Open Stage 1 inline Pitch, Contracts, and Pillars editors -> AI refine updates open controllers
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: AnimatedBuilder(
+                animation: wb,
+                builder: (_, __) => SingleChildScrollView(
+                  child: Stage1SpecDocument(
+                    workbench: wb,
+                    spec: wb.conceptDraft!,
+                    activeProjectId: wb.activeProjectId,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const ValueKey('stage1_edit_pitch_btn')));
+          await tester.tap(find.byKey(const ValueKey('stage1_edit_contracts_btn')));
+          await tester.tap(find.byKey(const ValueKey('stage1_edit_pillars_btn')));
+          await tester.pumpAndSettle();
+
+          wb.updateRootSpecSections(
+            pitch: 'Refreshed Stage 1 Pitch — Updated externally',
+            cameraContract: 'Top-down 60 deg fixed arm 1600 cm',
+            pillars: const ['Refreshed Pillar Alpha'],
+          );
+          await tester.pumpAndSettle();
+
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('stage1_pitch_input')))
+                .controller!
+                .text,
+            equals('Refreshed Stage 1 Pitch — Updated externally'),
+          );
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('stage1_camera_input')))
+                .controller!
+                .text,
+            equals('Top-down 60 deg fixed arm 1600 cm'),
+          );
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('stage1_pillars_input')))
+                .controller!
+                .text,
+            equals('Refreshed Pillar Alpha'),
+          );
+
+          // Stage 2 EpicDomainSheet open State Rules & InlineScopeEditorBox refresh on external refine
+          final ep = wb.activeReleaseEpics.first;
+          wb.selectEpic(ep.id);
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: AnimatedBuilder(
+                animation: wb,
+                builder: (_, __) => SingleChildScrollView(
+                  child: EpicDomainSheet(
+                    workbench: wb,
+                    epic: wb.selectedEpicSpec!,
+                    isDark: true,
+                    selectionKey: wb.selectedEpicSpec!.id,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          await tester.tap(find.byKey(const ValueKey('epic_edit_scope_btn')));
+          await tester.ensureVisible(
+            find.byKey(const ValueKey('epic_edit_states_btn')),
+          );
+          await tester.tap(find.byKey(const ValueKey('epic_edit_states_btn')));
+          await tester.pumpAndSettle();
+
+          await wb.applyStage2EpicRefine(ep.id, 'Idle -> Dash -> Recover');
+          wb.updateEpicScope(ep.id, goal: 'Updated external Epic goal.');
+          await tester.pumpAndSettle();
+
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('epic_scope_goal_input')))
+                .controller!
+                .text,
+            equals('Updated external Epic goal.'),
+          );
+          expect(
+            tester
+                .widget<TextField>(find.byKey(const ValueKey('epic_states_input')))
+                .controller!
+                .text,
+            equals('Idle -> Dash -> Recover'),
+          );
+
+          // v0.2+ delta FeatureSpecSheet hides delete × on v0.1 baseline checks but shows it on delta checks
+          await wb.openProgressiveReleaseCopilot();
+          wb.commitProgressiveReleaseDraft();
+          EpicSpec? deltaEp;
+          FeatureSpec? deltaFeat;
+          for (final e in wb.activeReleaseEpics) {
+            for (final f in wb.visibleFeaturesForEpic(e, releaseVersion: 'v0.2')) {
+              if (f.releaseDelta.trim().isNotEmpty &&
+                  f.introducedIn.trim() != 'v0.2' &&
+                  f.releaseDeltaChecks.isNotEmpty) {
+                deltaEp = e;
+                deltaFeat = f;
+                break;
+              }
+            }
+            if (deltaFeat != null) break;
+          }
+          expect(deltaFeat, isNotNull);
+          wb.selectFeature(deltaEp!.id, deltaFeat!.id);
+
+          await tester.pumpWidget(
+            _testHost(
+              isDark: true,
+              child: AnimatedBuilder(
+                animation: wb,
+                builder: (_, __) => SingleChildScrollView(
+                  child: FeatureSpecSheet(
+                    workbench: wb,
+                    epic: wb.selectedEpicSpec!,
+                    feature: wb.selectedFeatureSpec!,
+                    isLockedBaseline: false,
+                    isDark: true,
+                    selectionKey: '${wb.selectedEpicSpec!.id}_${wb.selectedFeatureSpec!.id}',
+                    passGateHint: null,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+
+          for (final baseChk in deltaFeat.checks) {
+            expect(
+              find.byKey(ValueKey('feature_check_delete_${baseChk.id}')),
+              findsNothing,
+            );
+          }
+          for (final deltaChk in deltaFeat.releaseDeltaChecks) {
+            expect(
+              find.byKey(ValueKey('feature_check_delete_${deltaChk.id}')),
+              findsOneWidget,
+            );
+          }
+        });
+      },
+    );
+  });
 }
 
 Widget _testHost({required bool isDark, required Widget child}) {
@@ -1657,4 +2564,57 @@ class _TestLocalGddBackend implements LocalGddFileBackend {
   Future<void> unlinkProject(String projectId) async {
     linkedHandles.remove(projectId);
   }
+}
+
+class _SerializedTestGddBackend implements LocalGddFileBackend {
+  Completer<void>? nextWriteGate;
+  bool throwNextWrite = false;
+  int writeStartCount = 0;
+  int _activeWrites = 0;
+  int maxConcurrentWrites = 0;
+  final List<String> writtenLog = <String>[];
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<LocalGddLinkResult> pickAndWriteFile({
+    required String projectId,
+    required String suggestedFilename,
+    required String content,
+  }) async =>
+      LocalGddLinkResult(linked: true, filename: suggestedFilename);
+
+  @override
+  Future<String?> restoreLinkedFilename(String projectId) async => null;
+
+  @override
+  Future<LocalGddWriteResult> writeLinkedFile({
+    required String projectId,
+    required String content,
+    bool requestPermissionIfNeeded = false,
+  }) async {
+    writeStartCount++;
+    _activeWrites++;
+    if (_activeWrites > maxConcurrentWrites) {
+      maxConcurrentWrites = _activeWrites;
+    }
+    try {
+      final gate = nextWriteGate;
+      if (gate != null) {
+        nextWriteGate = null;
+        await gate.future;
+      }
+      if (throwNextWrite) {
+        throw Exception('Simulated write failure');
+      }
+      writtenLog.add(content);
+      return const LocalGddWriteResult(written: true);
+    } finally {
+      _activeWrites--;
+    }
+  }
+
+  @override
+  Future<void> unlinkProject(String projectId) async {}
 }

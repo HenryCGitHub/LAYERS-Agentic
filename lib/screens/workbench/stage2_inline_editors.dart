@@ -61,6 +61,29 @@ class _InlineScopeEditorBoxState extends State<InlineScopeEditorBox> {
   }
 
   @override
+  void didUpdateWidget(covariant InlineScopeEditorBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialGoal != widget.initialGoal &&
+        _goalCtrl.text != widget.initialGoal) {
+      _goalCtrl.text = widget.initialGoal;
+    }
+    final oldInScope = oldWidget.initialInScope.join('\n');
+    final nextInScope = widget.initialInScope.join('\n');
+    if (oldInScope != nextInScope && _inScopeCtrl.text != nextInScope) {
+      _inScopeCtrl.text = nextInScope;
+    }
+    final oldDoneWhen = oldWidget.initialDoneWhen.join('\n');
+    final nextDoneWhen = widget.initialDoneWhen.join('\n');
+    if (oldDoneWhen != nextDoneWhen && _doneWhenCtrl.text != nextDoneWhen) {
+      _doneWhenCtrl.text = nextDoneWhen;
+    }
+    if (oldWidget.initialDelta != widget.initialDelta &&
+        _deltaCtrl.text != widget.initialDelta) {
+      _deltaCtrl.text = widget.initialDelta;
+    }
+  }
+
+  @override
   void dispose() {
     _goalCtrl.dispose();
     _inScopeCtrl.dispose();

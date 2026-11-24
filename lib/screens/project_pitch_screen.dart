@@ -275,13 +275,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        spec.normalizedTitle,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTheme.displayFont(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
+                      Flexible(
+                        child: Text(
+                          spec.normalizedTitle,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.displayFont(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: textPrimary,
+                          ),
                         ),
                       ),
                       IconButton(

@@ -593,3 +593,97 @@ class LiveTuningChipState extends State<LiveTuningChip> {
     );
   }
 }
+
+/// Clickable summary card for a child [FeatureSpec] inside an Epic Domain Sheet.
+class EpicChildFeatureCard extends StatelessWidget {
+  final FeatureSpec feat;
+  final String relVer;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const EpicChildFeatureCard({
+    super.key,
+    required this.feat,
+    required this.relVer,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = AppTheme.textPrimaryFor(isDark);
+    final secondary = AppTheme.textSecondaryFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+    final border = AppTheme.borderFor(isDark);
+    final cyan = AppTheme.accentCyanFor(isDark);
+    final green = AppTheme.accentGreenFor(isDark);
+    final red = AppTheme.accentRedFor(isDark);
+
+    final effChecks = feat.effectiveChecksForRelease(relVer);
+    final passedCount = effChecks.where((c) => c.passed).length;
+    final passedFeature = feat.isPassedForRelease(relVer);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: InkWell(
+        key: ValueKey('epic_feature_card_${feat.id}'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.bgSurfaceFor(isDark),
+            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+            border: Border.all(
+              color: passedFeature ? green.withValues(alpha: 0.4) : border,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    '${feat.code} · ${feat.sliceTime}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: cyan,
+                    ),
+                  ),
+                  Text(
+                    '$passedCount/${effChecks.length} checks${feat.openFixesCount > 0 ? ' · ${feat.openFixesCount} [FIX]' : ''}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      color: feat.openFixesCount > 0
+                          ? red
+                          : (passedFeature ? green : muted),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                feat.title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: primary,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                feat.goal,
+                style: TextStyle(fontSize: 12.5, color: secondary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

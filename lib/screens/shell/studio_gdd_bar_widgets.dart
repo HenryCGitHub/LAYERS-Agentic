@@ -23,19 +23,27 @@ class LocalGddLinkPill extends StatelessWidget {
     final border = AppTheme.borderFor(isDark);
     final green = AppTheme.accentGreenFor(isDark);
     final amber = AppTheme.accentAmberFor(isDark);
+    final red = AppTheme.accentRedFor(isDark);
     final primary = AppTheme.textPrimaryFor(isDark);
     final secondary = AppTheme.textSecondaryFor(isDark);
 
     final status = workbench.gddSyncStatus;
     final needsPerm = status == LocalGddSyncStatus.permissionNeeded;
+    final isError = status == LocalGddSyncStatus.error;
     final isLinked = workbench.isLocalGddLinked;
+    final hasLinkedFile = workbench.linkedGddFileName != null &&
+        workbench.linkedGddFileName!.isNotEmpty;
     final fileName = workbench.linkedGddFileName ?? 'copilot_gdd.md';
     final compact = MediaQuery.sizeOf(context).width < 1180;
 
     final Color accentColor;
     final String labelText;
     final String tooltip;
-    if (needsPerm) {
+    if (isError) {
+      accentColor = red;
+      labelText = compact ? 'GDD Error' : 'GDD Error · Retry';
+      tooltip = workbench.gddSyncError ?? 'Local GDD sync error';
+    } else if (needsPerm) {
       accentColor = amber;
       labelText = compact ? 'Grant GDD' : 'Grant GDD Write';
       tooltip = 'Re-authorize write access to local $fileName';
@@ -54,6 +62,7 @@ class LocalGddLinkPill extends StatelessWidget {
           ? 'Pick local *_copilot_gdd.md in your UE5 Content/Docs folder for delta-only auto-writes'
           : 'Download *_copilot_gdd.md (use Chrome/Edge/Arc for live disk auto-sync)';
     }
+    final highlighted = isLinked || needsPerm || isError;
 
     return Tooltip(
       message: tooltip,
@@ -61,6 +70,10 @@ class LocalGddLinkPill extends StatelessWidget {
         key: const ValueKey('top_bar_link_local_gdd_btn'),
         borderRadius: BorderRadius.circular(5),
         onTap: () async {
+          if (isError && hasLinkedFile) {
+            await showGddInspectorDialog(context, workbench);
+            return;
+          }
           if (needsPerm) {
             await workbench.syncLinkedGddNow(
               force: true,
@@ -86,17 +99,24 @@ class LocalGddLinkPill extends StatelessWidget {
               'Downloaded ${res.filename ?? 'CoPilot GDD'}',
               isDark: isDark,
             );
+          } else if (!res.cancelled && res.error != null) {
+            AppToast.show(
+              context,
+              res.error!,
+              isDark: isDark,
+              accentColor: red,
+            );
           }
         },
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
           decoration: BoxDecoration(
-            color: (isLinked || needsPerm)
+            color: highlighted
                 ? accentColor.withValues(alpha: 0.11)
                 : bgSurface,
             borderRadius: BorderRadius.circular(5),
             border: Border.all(
-              color: (isLinked || needsPerm)
+              color: highlighted
                   ? accentColor.withValues(alpha: 0.48)
                   : border,
             ),
@@ -106,7 +126,7 @@ class LocalGddLinkPill extends StatelessWidget {
             style: GoogleFonts.jetBrainsMono(
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
-              color: (isLinked || needsPerm) ? accentColor : primary,
+              color: highlighted ? accentColor : primary,
             ),
           ),
         ),
