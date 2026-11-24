@@ -554,8 +554,29 @@ def _verify_auto_gg_two_step() -> None:
     assert st.get("active") is False and st.get("phase") == "idle", st
 
 
+def _verify_ci_deploy_workflow() -> None:
+  deploy_yml = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
+  assert deploy_yml.is_file(), f"Missing CI deploy workflow: {deploy_yml}"
+  content = deploy_yml.read_text(encoding="utf-8")
+  lower_content = content.lower()
+  for legacy_token in ("layers_godot_plugin", "godot_plugin"):
+    assert legacy_token not in lower_content, (
+        f"Legacy token {legacy_token!r} still present in {deploy_yml}"
+    )
+  for required_cmd in (
+      "cloud_proxy_test.py",
+      "workflow_hook_test.py",
+      "dart analyze",
+      "flutter test",
+  ):
+    assert required_cmd in content, (
+        f"Missing required CI check {required_cmd!r} in {deploy_yml}"
+    )
+
+
 def main() -> int:
   _verify_skills_and_discovery()
+  _verify_ci_deploy_workflow()
   _verify_non_trigger_guards()
   _verify_auto_goal_bounded()
   _verify_auto_grill_single_pass()
