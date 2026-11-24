@@ -30,6 +30,7 @@ export '../services/local_gdd_sync_service.dart'
         LocalGddWriteResult;
 
 part 'workbench_storage_mixin.dart';
+part 'workbench_cloud_sync_mixin.dart';
 part 'workbench_concept_mixin.dart';
 part 'workbench_release_mixin.dart';
 part 'workbench_progressive_planner_mixin.dart';
