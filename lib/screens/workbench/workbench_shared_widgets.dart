@@ -417,47 +417,48 @@ class EpicSectionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LayoutBuilder(
-            builder: (context, cardConstraints) {
+          Builder(
+            builder: (context) {
               final titleStyle = AppTheme.displayFont(
                 fontSize: 15.5,
                 fontWeight: FontWeight.w700,
                 color: AppTheme.textPrimaryFor(isDark),
               );
-              final codeWidget = Text(
-                code,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppTheme.accentCyanFor(isDark),
+              final codeWidget = Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  code,
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.accentCyanFor(isDark),
+                  ),
                 ),
               );
-              if (trailing != null && cardConstraints.maxWidth < 420) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        codeWidget,
-                        const SizedBox(width: 8),
-                        Expanded(child: Text(title, style: titleStyle)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    trailing!,
-                  ],
-                );
-              }
               return Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   codeWidget,
                   const SizedBox(width: 8),
-                  Expanded(child: Text(title, style: titleStyle)),
-                  if (trailing != null) ...[
-                    const SizedBox(width: 8),
-                    trailing!,
-                  ],
+                  Expanded(
+                    child: trailing == null
+                        ? Text(title, style: titleStyle)
+                        : LayoutBuilder(
+                            builder: (context, rightConstraints) => SizedBox(
+                              width: rightConstraints.maxWidth,
+                              child: Wrap(
+                                alignment: WrapAlignment.spaceBetween,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 12,
+                                runSpacing: 6,
+                                children: [
+                                  Text(title, style: titleStyle),
+                                  trailing!,
+                                ],
+                              ),
+                            ),
+                          ),
+                  ),
                 ],
               );
             },
