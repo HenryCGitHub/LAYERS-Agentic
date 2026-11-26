@@ -1579,19 +1579,53 @@ void main() {
             ..updateAiConfig(apiKey: 'test-key-1234');
           String capturedPrompt = '';
 
-          // 1) Clarification picks survive AI failure & Retry re-submits them
-          GeminiAgentClient.testMockResponder = (prompt, model) async => null;
-          await wb.handleStage1SparkSubmit('robot arena');
-          expect(wb.pendingSparkClarification, isNotNull);
-          final chosenArch = SparkClarificationDraft.archetypeOptions.last;
-          wb.updateSparkClarification(archetypeId: chosenArch.id);
-          final failedDraft = await wb.confirmSparkClarification();
+          // 1) Chosen angle & steers survive Argon failure and Retry re-submits them
+          GeminiAgentClient.testMockResponder = (prompt, model) async {
+            if (prompt.contains(SparkAngleAgent.proposeAnglesToolName)) {
+              return <String, dynamic>{
+                'angles': <Map<String, dynamic>>[
+                  {
+                    'id': 'arcade',
+                    'styleTag': 'ARCADE DUEL',
+                    'title': 'Claw Arena Blitz',
+                    'pitch':
+                        'Top-down arena brawler — shatter armored shells cleanly',
+                    'cameraHint': 'Isometric Arena',
+                    'viewChoiceId': 'isometric',
+                    'sliceHint': '1 Greybox Arena',
+                  },
+                  {
+                    'id': 'tactical',
+                    'styleTag': 'TACTICAL PUZZLE',
+                    'title': 'Magnetic Relay Rig',
+                    'pitch':
+                        'Push magnetized crates across turret corridors cleanly',
+                    'cameraHint': 'Top-Down Tactical',
+                    'viewChoiceId': 'topdown',
+                    'sliceHint': '1 Relay Room',
+                  },
+                  {
+                    'id': 'atmospheric',
+                    'styleTag': 'STEALTH SHIFT',
+                    'title': 'Factory Blackout',
+                    'pitch':
+                        'Slip behind searchlights on silent treads in dark bays',
+                    'cameraHint': 'Third-Person Follow',
+                    'viewChoiceId': 'tps',
+                    'sliceHint': '1 Foundry Sector',
+                  },
+                ],
+              };
+            }
+            return null;
+          };
+          await wb.exploreSparkAngles('robot arena');
+          expect(wb.pendingAngleDeck, isNotNull);
+          wb.selectSparkAngle('tactical');
+          final failedDraft = await wb.draftSpecFromSelectedAngle();
           expect(failedDraft, isNull);
-          expect(wb.pendingSparkClarification, isNotNull);
-          expect(
-            wb.pendingSparkClarification!.archetypeId,
-            equals(chosenArch.id),
-          );
+          expect(wb.pendingAngleDeck, isNotNull);
+          expect(wb.pendingAngleDeck!.selectedAngleId, equals('tactical'));
 
           final seedSb = UnrealSparkPresets.byId('shellbreaker');
           GeminiAgentClient.testMockResponder = (prompt, model) async {
@@ -1609,7 +1643,7 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(wb.conceptDraft?.hasSpec, isTrue);
-          expect(capturedPrompt, contains(chosenArch.label));
+          expect(capturedPrompt, contains('Magnetic Relay Rig'));
 
           // 2) Stage 1 inline edit closes cleanly when switching projects / loading preset
           final editPitchBtn =

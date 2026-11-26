@@ -1,7 +1,7 @@
 part of 'workbench_provider.dart';
 
-/// Stage 1 actions: Spark Onboarding, Preset Packs, Blueprint-First | C++ & BP Hybrid toggle,
-/// vague-spark clarification forks, scoped Co-Designer edits, Undo stack,
+/// Stage 1 actions: Idea Workbench (`3-Angles Picker` + steer/reroll), Preset Packs,
+/// Blueprint-First | C++ & BP Hybrid toggle, Co-Designer edits, Undo stack,
 /// lean inline edits, and `Approve & Launch Release Workbench`.
 extension WorkbenchConceptMixin on WorkbenchProvider {
   void _pushStage1UndoSnapshot() {
@@ -53,9 +53,9 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
   void previewArchitectureModeFromSparkText(String rawText) {
     var changed = false;
-    if (_pendingSparkClarification != null &&
-        _pendingSparkClarification!.rawSpark != rawText.trim()) {
-      _pendingSparkClarification = null;
+    if (_pendingAngleDeck != null &&
+        _pendingAngleDeck!.rawSpark != rawText.trim()) {
+      _pendingAngleDeck = null;
       changed = true;
     }
     if (_stage1InlineError != null) {
@@ -136,76 +136,142 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   Future<ProjectConceptBlueprint?> handleStage1SparkSubmit(
     String sparkPrompt,
   ) async {
-    final cleanPrompt = sparkPrompt.trim();
+    await exploreSparkAngles(sparkPrompt);
+    return null;
+  }
+
+  /// Calls Hydrogen (`LOW`) to propose or steer/reroll 3 playable game angles for [rawSpark].
+  Future<SparkAngleDeck?> exploreSparkAngles(
+    String rawSpark, {
+    String? steerNote,
+    bool reroll = false,
+  }) async {
+    final cleanPrompt = rawSpark.trim();
     if (cleanPrompt.isEmpty || _isAgentBusy) return null;
+
+    final savedDeck = _pendingAngleDeck;
+    final matchingPrevious =
+        savedDeck != null && savedDeck.rawSpark == cleanPrompt
+            ? savedDeck
+            : null;
+    final cleanSteer = steerNote?.trim();
+    final startProjectId = _activeProjectId;
+
+    _isAgentBusy = true;
+    _isExploringAngles = true;
+    _lastStage1IntakeOp = 'explore';
+    _lastAngleSteerNote =
+        cleanSteer != null && cleanSteer.isNotEmpty ? cleanSteer : null;
+    _lastAngleReroll = reroll;
     _stage1InlineError = null;
     _offlineErrorMessage = null;
-    if (SparkClarificationDraft.isSparkVague(cleanPrompt)) {
-      _pendingSparkClarification = SparkClarificationDraft.suggestFromSpark(
-        cleanPrompt,
-        pinnedMode: _userPinnedMode ? unrealArchitectureMode : null,
+    _agentProgressStep = reroll
+        ? 'Hydrogen rerolling 3 angles...'
+        : (_lastAngleSteerNote != null
+            ? 'Hydrogen steering 3 angles...'
+            : 'Hydrogen proposing 3 angles...');
+    notifyListeners();
+
+    try {
+      final outcome = await SparkAngleAgent.proposeAngles(
+        rawSpark: cleanPrompt,
+        apiKey: _apiKey,
+        mode: unrealArchitectureMode,
+        steerNote: _lastAngleSteerNote,
+        reroll: reroll,
+        previousDeck: matchingPrevious,
+        preferredModel: _conversationModel,
+        thinkingLevel: GeminiAgentClient.defaultFastThinkingLevel,
       );
-      notifyListeners();
+      if (_isDisposed || _activeProjectId != startProjectId) return null;
+      if (outcome.deck == null) {
+        final msg = outcome.errorMessage ??
+            'Cloud Gemini could not propose game angles. Retry when ready.';
+        _stage1InlineError = msg;
+        _offlineErrorMessage = msg;
+        _pendingAngleDeck = savedDeck;
+        return null;
+      }
+      _pendingAngleDeck = outcome.deck;
+      _stage1InlineError = null;
+      _offlineErrorMessage = null;
+      return outcome.deck;
+    } catch (e) {
+      if (_isDisposed || _activeProjectId != startProjectId) return null;
+      final msg = 'Angle generation error: $e';
+      _stage1InlineError = msg;
+      _offlineErrorMessage = msg;
+      _pendingAngleDeck = savedDeck;
       return null;
+    } finally {
+      if (!_isDisposed) {
+        _isAgentBusy = false;
+        _isExploringAngles = false;
+        _agentProgressStep = null;
+        flushDeferredRemoteSnapshotIfIdle();
+        notifyListeners();
+      }
     }
-    _pendingSparkClarification = null;
-    return generateSpecFromSpark(cleanPrompt);
   }
 
-  void updateSparkClarification({
-    UnrealArchitectureMode? architectureMode,
-    String? viewChoiceId,
-    String? archetypeId,
-    String? prototypeHookId,
-  }) {
-    final pending = _pendingSparkClarification;
-    if (pending == null) return;
-    if (architectureMode != null) {
-      _userPinnedMode = true;
-      setArchitectureMode(architectureMode);
-    }
-    _pendingSparkClarification = pending.copyWith(
-      architectureMode: architectureMode,
-      viewChoiceId: viewChoiceId,
-      archetypeId: archetypeId,
-      prototypeHookId: prototypeHookId,
-    );
+  void selectSparkAngle(String angleId) {
+    final deck = _pendingAngleDeck;
+    if (deck == null || deck.selectedAngleId == angleId) return;
+    if (!deck.angles.any((a) => a.id == angleId)) return;
+    _pendingAngleDeck = deck.copyWith(selectedAngleId: angleId);
     notifyListeners();
   }
 
-  void dismissSparkClarification() {
-    if (_pendingSparkClarification == null) return;
-    _pendingSparkClarification = null;
-    notifyListeners();
-  }
-
-  Future<ProjectConceptBlueprint?> confirmSparkClarification({
-    bool skipPicks = false,
-  }) async {
-    final pending = _pendingSparkClarification;
-    if (pending == null || _isAgentBusy) return null;
-    final savedPending = pending;
-    _pendingSparkClarification = null;
+  void dismissSparkAngles() {
+    if (_pendingAngleDeck == null) return;
+    _pendingAngleDeck = null;
     _stage1InlineError = null;
     notifyListeners();
-    final ProjectConceptBlueprint? result = skipPicks
-        ? await generateSpecFromSpark(
-            savedPending.rawSpark,
-            explicitMode: _userPinnedMode ? unrealArchitectureMode : null,
-          )
-        : await generateSpecFromSpark(
-            savedPending.buildEnrichedSpark(),
-            explicitMode: savedPending.architectureMode,
-            archetypeId: savedPending.archetypeId,
-            viewChoiceId: savedPending.viewChoiceId,
-            prototypeHookId: savedPending.prototypeHookId,
-          );
-    if (result == null &&
-        (_conceptDraft == null || !_conceptDraft!.hasSpec)) {
-      _pendingSparkClarification = savedPending;
-      notifyListeners();
+  }
+
+  /// Locks the currently chosen angle and hands it to Argon (`MEDIUM`) to draft `PROJECT_SPEC.md`.
+  Future<ProjectConceptBlueprint?> draftSpecFromSelectedAngle() async {
+    final deck = _pendingAngleDeck;
+    if (deck == null || _isAgentBusy) return null;
+    _lastStage1IntakeOp = 'draft_angle';
+    return generateSpecFromSpark(
+      deck.buildSelectedHandoffPrompt(),
+      explicitMode: deck.architectureMode,
+      viewChoiceId: deck.selectedAngle.viewChoiceId,
+    );
+  }
+
+  /// Bypasses the 3-Angles Picker and drafts `PROJECT_SPEC.md` directly from raw spark text.
+  Future<ProjectConceptBlueprint?> draftSpecDirectlyFromSpark(
+    String sparkPrompt,
+  ) async {
+    final clean = sparkPrompt.trim();
+    if (clean.isEmpty || _isAgentBusy) return null;
+    _pendingAngleDeck = null;
+    _lastStage1IntakeOp = 'draft_direct';
+    notifyListeners();
+    return generateSpecFromSpark(
+      clean,
+      explicitMode: _userPinnedMode ? unrealArchitectureMode : null,
+    );
+  }
+
+  /// Retries the most recent failed Stage 1 intake operation (`explore`, `draft_angle`, or `draft_direct`).
+  Future<void> retryLastStage1Intake(String currentSparkText) async {
+    if (_isAgentBusy) return;
+    if (_lastStage1IntakeOp == 'draft_angle' && _pendingAngleDeck != null) {
+      await draftSpecFromSelectedAngle();
+      return;
     }
-    return result;
+    if (_lastStage1IntakeOp == 'draft_direct') {
+      await draftSpecDirectlyFromSpark(currentSparkText);
+      return;
+    }
+    await exploreSparkAngles(
+      currentSparkText,
+      steerNote: _lastAngleSteerNote,
+      reroll: _lastAngleReroll,
+    );
   }
 
   Future<ProjectConceptBlueprint?> generateSpecFromSpark(
@@ -250,7 +316,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
       }
       _stage1UndoStack.clear();
       _lastStage1ChangedSections = const <String>{};
-      _pendingSparkClarification = null;
+      _pendingAngleDeck = null;
       _stage1InlineError = null;
       _offlineErrorMessage = null;
       _conceptDraft = outcome.blueprint;
@@ -356,9 +422,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
         activeProject!.sections['unreal_arch_mode'] = mode.id;
       }
     }
-    if (_pendingSparkClarification != null) {
-      _pendingSparkClarification =
-          _pendingSparkClarification!.copyWith(architectureMode: mode);
+    if (_pendingAngleDeck != null) {
+      _pendingAngleDeck = _pendingAngleDeck!.copyWith(architectureMode: mode);
     }
     if (activeProject != null && _conceptDraft != null) {
       _ensureActiveProjectDocument(_conceptDraft!);

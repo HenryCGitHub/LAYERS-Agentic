@@ -4,6 +4,7 @@ import '../agents/project_concept_agent.dart';
 import '../models/agent_blueprints.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
+import 'stage1/stage1_idea_angles_card.dart';
 import 'stage1/stage1_shared_widgets.dart';
 import 'stage1/stage1_spec_document.dart';
 import 'workbench/floating_ai_refine_dock.dart';
@@ -113,22 +114,20 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                           textMuted: textMuted,
                           cyan: cyan,
                         )
-                      else
+                      else ...[
                         _buildSparkContextCaption(
                           spec: draft,
                           isDark: isDark,
                           textMuted: textMuted,
                           border: border,
                         ),
-                      const SizedBox(height: 16),
-                      if (!hasSpec)
-                        Stage1EmptyBlueprintOutline(isDark: isDark)
-                      else
+                        const SizedBox(height: 16),
                         Stage1SpecDocument(
                           workbench: wb,
                           spec: draft,
                           activeProjectId: wb.activeProjectId,
                         ),
+                      ],
                     ],
                   ),
                 ),
@@ -391,7 +390,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             border: Border.all(color: cyan.withValues(alpha: 0.35)),
           ),
           child: Text(
-            'STAGE 1 · PROJECT SPEC',
+            'STAGE 1 · IDEA WORKBENCH',
             style: GoogleFonts.jetBrainsMono(
               fontSize: 11,
               fontWeight: FontWeight.w600,
@@ -401,7 +400,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         ),
         const SizedBox(height: 16),
         Text(
-          'Describe the game you want to build.',
+          'Shape your game idea.',
           style: AppTheme.displayFont(
             fontSize: 30,
             fontWeight: FontWeight.w700,
@@ -411,7 +410,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Turn a one-sentence idea into a playable v0.1 Unreal Engine 5 spec — camera, Enhanced Input, tuning, and first Epics.',
+          'Drop 2–5 rough words to explore 3 playable angles with Hydrogen, or skip straight to drafting your UE5 spec.',
           style: TextStyle(
             fontSize: 14,
             color: textSecondary,
@@ -437,7 +436,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 style: TextStyle(fontSize: 15, color: textPrimary),
                 decoration: InputDecoration(
                   hintText:
-                      'e.g. Top-down mech arena brawler where a forward claw dash shatters enemy shell armor...',
+                      'e.g. horror fishing, cozy goblin bakery, mech courier...',
                   hintStyle: TextStyle(color: textMuted, fontSize: 14),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
@@ -448,7 +447,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                 onChanged: wb.previewArchitectureModeFromSparkText,
                 onSubmitted: (val) async {
                   if (!wb.isAgentBusy && val.trim().isNotEmpty) {
-                    await wb.handleStage1SparkSubmit(val);
+                    await wb.exploreSparkAngles(val);
                   }
                 },
               ),
@@ -464,35 +463,62 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                     isDark: isDark,
                     onChanged: wb.isAgentBusy ? null : wb.setArchitectureMode,
                   ),
-                  ElevatedButton.icon(
-                    key: const ValueKey('draft_spark_btn'),
-                    onPressed: wb.isAgentBusy
-                        ? null
-                        : () async {
-                            final text = _sparkController.text.trim();
-                            if (text.isEmpty) {
-                              AppToast.show(
-                                context,
-                                'Enter a one-sentence game idea to draft your spec.',
-                                isDark: isDark,
-                                accentColor: AppTheme.accentRedFor(isDark),
-                              );
-                              return;
-                            }
-                            await wb.handleStage1SparkSubmit(text);
-                          },
-                    icon: wb.isAgentBusy
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.auto_awesome, size: 15),
-                    label: Text(
-                      wb.isAgentBusy
-                          ? (wb.agentProgressStep ?? 'Drafting...')
-                          : 'Draft Project Spec',
-                    ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      OutlinedButton(
+                        key: const ValueKey('draft_spark_btn'),
+                        onPressed: wb.isAgentBusy
+                            ? null
+                            : () async {
+                                final text = _sparkController.text.trim();
+                                if (text.isEmpty) {
+                                  AppToast.show(
+                                    context,
+                                    'Enter a short game idea first.',
+                                    isDark: isDark,
+                                    accentColor: AppTheme.accentRedFor(isDark),
+                                  );
+                                  return;
+                                }
+                                await wb.draftSpecDirectlyFromSpark(text);
+                              },
+                        child: const Text('Skip → Draft Spec'),
+                      ),
+                      ElevatedButton.icon(
+                        key: const ValueKey('explore_angles_btn'),
+                        onPressed: wb.isAgentBusy
+                            ? null
+                            : () async {
+                                final text = _sparkController.text.trim();
+                                if (text.isEmpty) {
+                                  AppToast.show(
+                                    context,
+                                    'Enter a short game idea to explore 3 angles.',
+                                    isDark: isDark,
+                                    accentColor: AppTheme.accentRedFor(isDark),
+                                  );
+                                  return;
+                                }
+                                await wb.exploreSparkAngles(text);
+                              },
+                        icon: wb.isAgentBusy
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.auto_awesome, size: 15),
+                        label: Text(
+                          wb.isAgentBusy
+                              ? (wb.agentProgressStep ?? 'Thinking...')
+                              : (wb.pendingAngleDeck != null
+                                  ? 'Re-Explore'
+                                  : 'Explore Angles'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -506,21 +532,16 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             isDark: isDark,
             textPrimary: textPrimary,
             retryKey: const ValueKey('stage1_intake_retry_btn'),
-            onRetry: () => wb.pendingSparkClarification != null
-                ? wb.confirmSparkClarification()
-                : wb.handleStage1SparkSubmit(_sparkController.text),
+            onRetry: () => wb.retryLastStage1Intake(_sparkController.text),
           ),
         ],
-        if (wb.pendingSparkClarification != null) ...[
+        if (wb.pendingAngleDeck != null) ...[
           const SizedBox(height: 12),
-          _buildSparkClarifyCard(
-            wb: wb,
-            pending: wb.pendingSparkClarification!,
+          Stage1IdeaAnglesCard(
+            workbench: wb,
+            deck: wb.pendingAngleDeck!,
+            activeProjectId: wb.activeProjectId,
             isDark: isDark,
-            textPrimary: textPrimary,
-            textSecondary: textSecondary,
-            textMuted: textMuted,
-            cyan: cyan,
           ),
         ],
         const SizedBox(height: 12),
@@ -593,162 +614,6 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
             icon: const Icon(Icons.close_rounded, size: 15),
             onPressed: wb.dismissStage1InlineError,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSparkClarifyCard({
-    required WorkbenchProvider wb,
-    required SparkClarificationDraft pending,
-    required bool isDark,
-    required Color textPrimary,
-    required Color textSecondary,
-    required Color textMuted,
-    required Color cyan,
-  }) {
-    final border = AppTheme.borderFor(isDark);
-    return Container(
-      key: const ValueKey('stage1_spark_clarify_card'),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.bgPanelFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: cyan.withValues(alpha: 0.45)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.tune_rounded, size: 16, color: cyan),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Quick Forks · Sharpen "${pending.rawSpark}"',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: textPrimary,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: 'Close quick forks',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                icon: Icon(Icons.close_rounded, size: 15, color: textMuted),
-                onPressed:
-                    wb.isAgentBusy ? null : wb.dismissSparkClarification,
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Camera View:',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              for (final opt in pending.viewOptions)
-                ChoiceChip(
-                  key: ValueKey('clarify_view_${opt.id}'),
-                  label: Text(opt.label),
-                  selected: pending.viewChoiceId == opt.id,
-                  onSelected: wb.isAgentBusy
-                      ? null
-                      : (_) => wb.updateSparkClarification(
-                            viewChoiceId: opt.id,
-                          ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Core Loop Focus:',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              for (final opt in SparkClarificationDraft.archetypeOptions)
-                ChoiceChip(
-                  key: ValueKey('clarify_archetype_${opt.id}'),
-                  label: Text(opt.label),
-                  selected: pending.archetypeId == opt.id,
-                  onSelected: wb.isAgentBusy
-                      ? null
-                      : (_) => wb.updateSparkClarification(
-                            archetypeId: opt.id,
-                          ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'v0.1 Prototype Goal:',
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: textSecondary,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              for (final opt in SparkClarificationDraft.prototypeHookOptions)
-                ChoiceChip(
-                  key: ValueKey('clarify_hook_${opt.id}'),
-                  label: Text(opt.label),
-                  selected: pending.prototypeHookId == opt.id,
-                  onSelected: wb.isAgentBusy
-                      ? null
-                      : (_) => wb.updateSparkClarification(
-                            prototypeHookId: opt.id,
-                          ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Divider(height: 1, color: border),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              TextButton(
-                key: const ValueKey('stage1_clarify_skip_btn'),
-                onPressed: wb.isAgentBusy
-                    ? null
-                    : () => wb.confirmSparkClarification(skipPicks: true),
-                child: const Text('Skip → Draft Now'),
-              ),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                key: const ValueKey('stage1_clarify_confirm_btn'),
-                onPressed: wb.isAgentBusy
-                    ? null
-                    : () => wb.confirmSparkClarification(skipPicks: false),
-                icon: const Icon(Icons.auto_awesome, size: 15),
-                label: const Text('Draft with Picks'),
-              ),
-            ],
           ),
         ],
       ),

@@ -248,9 +248,16 @@ class WorkbenchProvider extends ChangeNotifier {
   Set<String> get lastStage1ChangedSections =>
       Set.unmodifiable(_lastStage1ChangedSections);
 
-  SparkClarificationDraft? _pendingSparkClarification;
-  SparkClarificationDraft? get pendingSparkClarification =>
-      _pendingSparkClarification;
+  SparkAngleDeck? _pendingAngleDeck;
+  SparkAngleDeck? get pendingAngleDeck => _pendingAngleDeck;
+
+  bool _isExploringAngles = false;
+  bool get isExploringAngles => _isExploringAngles;
+
+  String? _lastAngleSteerNote;
+  bool _lastAngleReroll = false;
+  String _lastStage1IntakeOp = 'explore';
+  String get lastStage1IntakeOp => _lastStage1IntakeOp;
 
   String? _stage1InlineError;
   String? get stage1InlineError => _stage1InlineError;
@@ -258,7 +265,11 @@ class WorkbenchProvider extends ChangeNotifier {
   void _clearStage1TransientState() {
     _stage1UndoStack.clear();
     _lastStage1ChangedSections = const <String>{};
-    _pendingSparkClarification = null;
+    _pendingAngleDeck = null;
+    _isExploringAngles = false;
+    _lastAngleSteerNote = null;
+    _lastAngleReroll = false;
+    _lastStage1IntakeOp = 'explore';
     _stage1InlineError = null;
     _clearStage2TransientState();
   }

@@ -1,5 +1,6 @@
 import 'epic_spec.dart';
 
+export '../agents/concept/spark_angle_agent.dart';
 export '../agents/concept/spark_clarifier.dart';
 export 'presets/spark_presets.dart';
 

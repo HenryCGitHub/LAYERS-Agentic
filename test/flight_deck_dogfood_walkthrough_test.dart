@@ -250,6 +250,14 @@ void main() {
           expect(find.byType(ProjectPitchScreen), findsOneWidget);
           expect(
             find.byKey(const ValueKey('stage1_blueprint_empty_outline')),
+            findsNothing,
+          );
+          expect(
+            find.byKey(const ValueKey('explore_angles_btn')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('draft_spark_btn')),
             findsOneWidget,
           );
 

@@ -26,6 +26,7 @@ void main() {
 
         var failStage1Refine = true;
         var failStage2Refine = true;
+        var angleCalls = 0;
         var progressiveCalls = 0;
 
         _installScratchHooks(
@@ -55,7 +56,63 @@ void main() {
               model = 'gemini-flash-latest';
             }
 
-            // 1) Simulate 503 outage on gemini-4-argon so Draft Spark fails over to gemini-4-hydrogen
+            // 0) Stage 1 Idea Workbench: Hydrogen (LOW) proposes 3 playable angles + steer
+            if (toolName == 'propose_spark_angles') {
+              angleCalls++;
+              geminiCalls.add((
+                model: model,
+                thinkingLevel: thinkingLevel,
+                tool: toolName,
+                status: 200,
+              ));
+              final steered = angleCalls > 1;
+              return _geminiFunctionResponse(
+                modelVersion: 'gemini-4-hydrogen-preview',
+                inputTokens: steered ? 340 : 280,
+                outputTokens: 190,
+                thinkingTokens: 25,
+                toolName: toolName,
+                args: <String, dynamic>{
+                  'angles': <Map<String, dynamic>>[
+                    {
+                      'id': 'arcade',
+                      'styleTag': 'ARCADE FLOW',
+                      'title': steered
+                          ? 'Skyhook Crane Slingshot'
+                          : 'Skyhook Sling Runner',
+                      'pitch': steered
+                          ? 'Rooftop hook courier — swing off overhead cranes and wingsuit-dive across gaps cleanly'
+                          : 'Rooftop grapple courier — chain crane hooks and wingsuit glides across skyline drops',
+                      'cameraHint': 'Third-Person Pursuit',
+                      'viewChoiceId': 'tps',
+                      'sliceHint': '1 Rooftop Course + 2 Pads',
+                    },
+                    {
+                      'id': 'tactical',
+                      'styleTag': 'PHYSICS RIG',
+                      'title': 'Heavy Cargo Walker',
+                      'pitch':
+                          'Physics-weighted rig — balance reactor crates on narrow skybridges with jet vents',
+                      'cameraHint': 'Over-Shoulder Aim',
+                      'viewChoiceId': 'tps',
+                      'sliceHint': '1 Skybridge + Vent Heat',
+                    },
+                    {
+                      'id': 'atmospheric',
+                      'styleTag': 'STORM SHIFT',
+                      'title': 'Cloudline Night Run',
+                      'pitch':
+                          'Fog-bound rooftop run — read storm beacons through crosswinds to stamp pads',
+                      'cameraHint': 'Third-Person Pursuit',
+                      'viewChoiceId': 'tps',
+                      'sliceHint': '60s Wind Corridor',
+                    },
+                  ],
+                },
+              );
+            }
+
+            // 1) Simulate 503 outage on gemini-4-argon so Draft Selected Angle fails over to gemini-4-hydrogen
             if (toolName == 'commit_unreal_root_spec' &&
                 model == GeminiAgentClient.pinnedArchitectModel) {
               geminiCalls.add((
@@ -218,36 +275,50 @@ void main() {
           expect(find.byType(ProjectPitchScreen), findsOneWidget);
           expect(
             find.byKey(const ValueKey('stage1_blueprint_empty_outline')),
-            findsOneWidget,
+            findsNothing,
           );
 
-          // 2) Enter vague 2-word Spark -> Quick Forks -> pick C++ & BP Hybrid -> 503 failover -> SKYHOOK COURIER
+          // 2) Enter rough 2-word Spark -> Explore 3 Angles (Hydrogen) -> Steer -> pick C++ & BP Hybrid -> Draft Selected Angle (503 failover) -> SKYHOOK COURIER
           await tester.enterText(
             find.byKey(const ValueKey('spark_prompt_input')),
             'mech courier',
           );
           await tester.pumpAndSettle();
-          await tester.tap(find.byKey(const ValueKey('draft_spark_btn')));
+          await tester.tap(find.byKey(const ValueKey('explore_angles_btn')));
           await tester.pumpAndSettle();
 
           expect(
-            find.byKey(const ValueKey('stage1_spark_clarify_card')),
+            find.byKey(const ValueKey('stage1_idea_angles_card')),
+            findsOneWidget,
+          );
+          expect(angleCalls, equals(1));
+
+          await tester.enterText(
+            find.byKey(const ValueKey('stage1_angle_steer_input')),
+            'Emphasize overhead crane swing momentum',
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('stage1_angle_steer_btn')),
+          );
+          expect(angleCalls, equals(2));
+          expect(find.text('Round 2'), findsOneWidget);
+          expect(
+            find.text('Emphasize overhead crane swing momentum'),
             findsOneWidget,
           );
 
-          await tester.tap(find.byKey(const ValueKey('clarify_view_tps')));
-          await tester.pumpAndSettle();
-          await tester.tap(find.byKey(const ValueKey('clarify_archetype_movement')));
-          await tester.pumpAndSettle();
-          await tester.tap(find.byKey(const ValueKey('clarify_hook_course')));
-          await tester.pumpAndSettle();
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('stage1_angle_card_arcade')),
+          );
           await tester.tap(find.byKey(const ValueKey('stage1_mode_cpp_hybrid')));
           await tester.pumpAndSettle();
 
-          await tester.tap(
-            find.byKey(const ValueKey('stage1_clarify_confirm_btn')),
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('stage1_lock_angle_draft_btn')),
           );
-          await tester.pumpAndSettle();
 
           expect(wb.conceptDraft?.gameTitle, equals('SKYHOOK COURIER'));
           expect(

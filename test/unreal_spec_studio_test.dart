@@ -1108,16 +1108,31 @@ void main() {
         );
         expect(UnrealSparkPresets.matchSparkPrompt('shellbreaker'), isNotNull);
 
-        // 3. Vague spark heuristic
+        // 3. SparkAngleAgent offline fallback, steering/reroll, and leakage sanitization
+        final offAngles = await SparkAngleAgent.proposeAngles(
+          rawSpark: 'horror fishing',
+          apiKey: '',
+        );
+        expect(offAngles.usedOfflineFallback, isTrue);
+        expect(offAngles.deck, isNotNull);
+        expect(offAngles.deck!.angles, hasLength(3));
+        expect(offAngles.deck!.round, equals(1));
+
+        final steeredOff = await SparkAngleAgent.proposeAngles(
+          rawSpark: 'horror fishing',
+          apiKey: '',
+          steerNote: 'Swap boat for oil rig',
+          reroll: true,
+          previousDeck: offAngles.deck,
+        );
+        expect(steeredOff.deck!.round, equals(2));
         expect(
-          SparkClarificationDraft.isSparkVague('cozy farming roguelike'),
-          isTrue,
+          steeredOff.deck!.steerHistory,
+          equals(<String>['Swap boat for oil rig']),
         );
         expect(
-          SparkClarificationDraft.isSparkVague(
-            '3D stylized torch survival skirmisher with axe cleave',
-          ),
-          isFalse,
+          steeredOff.deck!.buildSelectedHandoffPrompt(),
+          contains('Swap boat for oil rig'),
         );
 
         // 4 & 5. Real AI failure surfacing on draftSpecWithStatus & applyCoDesignEditWithStatus
@@ -1126,6 +1141,42 @@ void main() {
         GeminiAgentClient.testMockResponder = (_, __) async => null;
         GeminiAgentClient.lastErrorStatus = 'HTTP 503: Service Unavailable';
         try {
+          final leakyRes = await SparkAngleAgent.proposeAngles(
+            rawSpark: 'top-down brawler',
+            apiKey: 'test-key-1234',
+          );
+          expect(leakyRes.deck, isNull);
+          expect(leakyRes.errorMessage, isNotEmpty);
+
+          GeminiAgentClient.testMockResponder = (_, __) async => {
+                'angles': [
+                  {
+                    'id': 'arcade',
+                    'styleTag': 'ARCADE',
+                    'title': 'godot.gd Rush',
+                    'pitch': 'CharacterBody3D dashes 12 m across res://arena.tscn',
+                    'cameraHint': 'Isometric',
+                    'viewChoiceId': 'isometric',
+                    'sliceHint': '1 Room',
+                  },
+                ],
+              };
+          final sanitizedAngles = await SparkAngleAgent.proposeAngles(
+            rawSpark: 'top-down brawler',
+            apiKey: 'test-key-1234',
+          );
+          expect(sanitizedAngles.deck, isNotNull);
+          expect(sanitizedAngles.deck!.angles, hasLength(3));
+          expect(
+            UnrealSpecGuard.containsEngineLeakage(
+              sanitizedAngles.deck!.angles.first.pitch,
+            ),
+            isFalse,
+          );
+          expect(sanitizedAngles.deck!.angles.first.pitch, contains('1200 cm'));
+
+          GeminiAgentClient.testMockResponder = (_, __) async => null;
+          GeminiAgentClient.lastErrorStatus = 'HTTP 503: Service Unavailable';
           final draftErr = await ProjectConceptAgent.draftSpecWithStatus(
             sparkPrompt: 'Top-down melee beetle brawler with dash',
             apiKey: 'test-key-1234',
@@ -1310,23 +1361,43 @@ void main() {
           equals(UnrealArchitectureMode.cppHybrid),
         );
 
-        // 2. Vague spark shows 3-fork clarification card -> Confirm drafts spec + Scope preview
+        // 2. Idea Workbench explores 3 angles -> select -> steer -> reroll -> Draft Selected Angle
+        expect(
+          find.byKey(const ValueKey('stage1_blueprint_empty_outline')),
+          findsNothing,
+        );
         await tester.enterText(
           find.byKey(const ValueKey('spark_prompt_input')),
           'cozy farming roguelike',
         );
         await tester.pump();
-        await tester.tap(find.byKey(const ValueKey('draft_spark_btn')));
+        await tester.tap(find.byKey(const ValueKey('explore_angles_btn')));
         await tester.pumpAndSettle();
 
         expect(
-          find.byKey(const ValueKey('stage1_spark_clarify_card')),
+          find.byKey(const ValueKey('stage1_idea_angles_card')),
           findsOneWidget,
         );
-        await tester.tap(find.byKey(const ValueKey('clarify_archetype_puzzle')));
+        await tester.tap(find.byKey(const ValueKey('stage1_angle_card_tactical')));
         await tester.pumpAndSettle();
+        expect(wb.pendingAngleDeck?.selectedAngleId, equals('tactical'));
+
+        await tester.enterText(
+          find.byKey(const ValueKey('stage1_angle_steer_input')),
+          'Add co-op lantern bearer',
+        );
+        await tester.tap(find.byKey(const ValueKey('stage1_angle_steer_btn')));
+        await tester.pumpAndSettle();
+        expect(wb.pendingAngleDeck?.round, equals(2));
+        expect(find.text('Round 2'), findsOneWidget);
+        expect(find.text('Add co-op lantern bearer'), findsOneWidget);
+
+        await tester.tap(find.byKey(const ValueKey('stage1_angle_reroll_btn')));
+        await tester.pumpAndSettle();
+        expect(wb.pendingAngleDeck?.round, equals(3));
+
         await tester.tap(
-          find.byKey(const ValueKey('stage1_clarify_confirm_btn')),
+          find.byKey(const ValueKey('stage1_lock_angle_draft_btn')),
         );
         await tester.pumpAndSettle();
 
