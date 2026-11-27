@@ -141,7 +141,7 @@ class _PlainPlanReleasePageState extends State<PlainPlanReleasePage> {
                         ),
                       ),
                       child: Text(
-                        'Note: $openCount/${relRollup.total} slices in ${wb.activeReleaseVersionTag} are still open — untouched slices lock as read-only baseline in ${draft.targetVersion}.',
+                        'Note: $openCount/${relRollup.total} features in ${wb.activeReleaseVersionTag} are still open — untouched features lock as read-only baseline in ${draft.targetVersion}.',
                         style: TextStyle(fontSize: 12, color: textSecondary),
                       ),
                     );
@@ -297,7 +297,7 @@ class _PlainPlanReleasePageState extends State<PlainPlanReleasePage> {
                 const SizedBox(height: 22),
 
                 PlainSectionHeader(
-                  title: 'Baseline Epics (+DELTA Upgrades & +NEW Slices)',
+                  title: 'Baseline Epics (+DELTA Upgrades & +NEW Features)',
                   isDark: isDark,
                 ),
                 const SizedBox(height: 6),
@@ -445,7 +445,7 @@ class _PlainPlanReleasePageState extends State<PlainPlanReleasePage> {
                           ),
                           subtitle: Text(
                             cand.features.isNotEmpty
-                                ? '${cand.goal} · ${cand.features.length} Feature ${cand.features.length == 1 ? 'slice' : 'slices'}'
+                                ? '${cand.goal} · ${cand.features.length} ${cand.features.length == 1 ? 'Feature' : 'Features'}'
                                 : cand.goal,
                             style: TextStyle(fontSize: 12, color: textMuted),
                           ),
@@ -460,7 +460,7 @@ class _PlainPlanReleasePageState extends State<PlainPlanReleasePage> {
                     Expanded(
                       child: !wb.hasSelectedProgressiveChanges
                           ? Text(
-                              'Select at least 1 +DELTA upgrade, +NEW slice, or Epic.',
+                              'Select at least 1 +DELTA upgrade, +NEW feature, or Epic.',
                               style: TextStyle(fontSize: 12, color: textMuted),
                             )
                           : const SizedBox.shrink(),

@@ -575,8 +575,8 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         ? customGoal
         : 'Progressive release $nextVer ($presetLabel)';
     final doneWhenGate = activeSliceCount > 0
-        ? 'Pass all $activeSliceCount $nextVer ${activeSliceCount == 1 ? 'slice' : 'slices'} in PIE -> ${sampleGateText ?? 'Every delta and new slice behaves cleanly'}'
-        : 'Pass all $nextVer slices in PIE -> Every delta and new slice behaves cleanly';
+        ? 'Pass all $activeSliceCount $nextVer ${activeSliceCount == 1 ? 'feature' : 'features'} in PIE -> ${sampleGateText ?? 'Every upgrade and new feature behaves cleanly'}'
+        : 'Pass all $nextVer features in PIE -> Every upgrade and new feature behaves cleanly';
 
     final newRelDoc = TierDocument(
       id: relId,

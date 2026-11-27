@@ -150,7 +150,7 @@ class UnrealContextBuilder {
     b.writeln();
     b.writeln('Shared State & Interrupt Rules:');
     if (epic.stateFlow.isEmpty && epic.interruptRules.isEmpty) {
-      b.writeln('- Event-driven domain with decoupled Feature slices');
+      b.writeln('- Event-driven domain with decoupled Features');
     } else {
       if (epic.stateFlow.isNotEmpty) {
         final states = [
@@ -376,13 +376,13 @@ class UnrealContextBuilder {
     if (isFirstSliceOwnerScaffold) {
       b.writeln();
       b.writeln(
-        'First-Slice Owner Rule: If the shared Epic owner assets above do not exist yet, create them now so subsequent Features reuse the same assets.',
+        'First-Feature Owner Rule: If the shared Epic owner assets above do not exist yet, create them now so subsequent Features reuse the same assets.',
       );
     }
 
     if (visibleSiblings.isNotEmpty) {
       b.writeln();
-      b.writeln('## Sibling Feature Slices in ${cleanEpic.code}');
+      b.writeln('## Sibling Features in ${cleanEpic.code}');
       for (final sib in visibleSiblings) {
         final isActive = (cleanFeat.id.isNotEmpty && sib.id == cleanFeat.id) ||
             (cleanFeat.id.isEmpty && sib.code == cleanFeat.code);
@@ -400,7 +400,7 @@ class UnrealContextBuilder {
     b.writeln('---');
     b.writeln();
     b.writeln(
-      '## 2. Active Target Slice · ${cleanFeat.code} · ${cleanFeat.title} ($ver · ${cleanFeat.sliceTime})',
+      '## 2. Active Target Feature · ${cleanFeat.code} · ${cleanFeat.title} ($ver · ${cleanFeat.sliceTime})',
     );
 
     if (isUpgradeDelta) {
@@ -484,7 +484,7 @@ class UnrealContextBuilder {
       b.writeln();
       b.writeln('### CoPilot Execution Instruction');
       b.writeln(
-        'Apply targeted edits only to resolve every [FIX] above while keeping all already-passing Feature behavior and [PASSED — DO NOT REGRESS] slices intact. Run PIE and confirm the §05 checks.',
+        'Apply targeted edits only to resolve every [FIX] above while keeping all already-passing Feature behavior and [PASSED — DO NOT REGRESS] features intact. Run PIE and confirm the §05 checks.',
       );
     } else if (isLockedBaseline) {
       b.writeln();
@@ -496,7 +496,7 @@ class UnrealContextBuilder {
       b.writeln();
       b.writeln('### CoPilot Execution Instruction');
       b.writeln(
-        'Apply ONLY the $ver Upgrade Delta above to ${cleanFeat.code} inside ${cleanEpic.code} (${mode.fullLabel}) without regressing its locked baseline behavior or [PASSED — DO NOT REGRESS] sibling slices, then check every §05 PIE Playtest Gate item. Create any missing shared Epic ownership assets if absent; otherwise extend the existing assets.',
+        'Apply ONLY the $ver Upgrade Delta above to ${cleanFeat.code} inside ${cleanEpic.code} (${mode.fullLabel}) without regressing its locked baseline behavior or [PASSED — DO NOT REGRESS] sibling features, then check every §05 PIE Playtest Gate item. Create any missing shared Epic ownership assets if absent; otherwise extend the existing assets.',
       );
     } else {
       b.writeln();
@@ -574,9 +574,9 @@ class UnrealContextBuilder {
     }
 
     b.writeln();
-    b.writeln('## §02 Feature Slices Owned by ${cleanEpic.code} ($ver)');
+    b.writeln('## §02 Features Owned by ${cleanEpic.code} ($ver)');
     if (visibleFeatures.isEmpty) {
-      b.writeln('- No Feature slices queued in $ver');
+      b.writeln('- No Features queued in $ver');
     } else {
       for (final feat in visibleFeatures) {
         final effChecks = feat.effectiveChecksForRelease(ver);

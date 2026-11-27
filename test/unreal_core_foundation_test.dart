@@ -459,7 +459,7 @@ void main() {
           contains('[UE5_COPILOT TASK=BUILD TARGET=F01'),
         );
         expect(buildF01Prompt, contains('/Game/Blueprints/BP_CrabPlayer'));
-        expect(buildF01Prompt, contains('@FIRST_SLICE:'));
+        expect(buildF01Prompt, contains('@FIRST_FEATURE:'));
         expect(buildF01Prompt, contains('TARGET=[F01]'));
         expect(buildF01Prompt, contains('DO_NOT_BUILD=[F02]'));
         expect(buildF01Prompt, contains('IA_Move'));
@@ -708,7 +708,7 @@ void main() {
           goal: 'Ricochet cleanly along angled walls.',
         );
         expect(added, isNotNull);
-        expect(added!.tuning.first.key, equals('SliceMagnitude'));
+        expect(added!.tuning.first.key, equals('ActionDistance'));
         expect(added.tuning.first.value, equals('250'));
         expect(added.tuning.first.unit, equals('cm'));
         expect(added.controls.first.action, equals('IA_PrimaryAction'));
@@ -2015,7 +2015,7 @@ void main() {
         final f01 = epic.features.firstWhere((f) => f.code == 'F01');
 
         final buildF01Prompt = wb.activeFeatureBuildPrompt(epic, f01);
-        expect(buildF01Prompt, contains('@FIRST_SLICE:'));
+        expect(buildF01Prompt, contains('@FIRST_FEATURE:'));
 
         for (final chk in f01.checks) {
           wb.toggleFeatureCheck(epic.id, f01.id, chk.id, true);
@@ -2030,7 +2030,7 @@ void main() {
         final buildF02Readable =
             wb.activeFeatureReadablePrompt(updatedEpic, updatedF02);
 
-        expect(buildF02Compact, isNot(contains('@FIRST_SLICE:')));
+        expect(buildF02Compact, isNot(contains('@FIRST_FEATURE:')));
         expect(
           buildF02Compact,
           contains('create missing @OWNERS if absent, else extend existing'),

@@ -7,7 +7,7 @@ class LayersTextStyleGuide {
   /// Shared compact style rules injected into Gemini system/user prompts by `GeminiAgentClient`.
   static const String compactStyleRules = '''
 LAYERS CANONICAL UNREAL ENGINE 5 SPEC STYLE RULES:
-1. 4-TIER UNREAL ENGINE 5 ARCHITECTURE (`Project -> Release -> Epic -> Feature`, ZERO Tasks/Steps): Never emit implementation step checklists or non-Unreal engine terms. Epics own large domain architecture (shared `/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, or `Source/*.h`/`*.cpp` assets, state & interrupt rules, domain cuts); Features own sittable 30-90 min playable slices (Enhanced Input `IA_*` bindings, Exposed BP / `UPROPERTY(EditAnywhere)` tuning, viewport/UMG/Niagara/audio cues, PIE Playtest Gate).
+1. 4-TIER UNREAL ENGINE 5 ARCHITECTURE (`Project -> Release -> Epic -> Feature`, ZERO Tasks/Steps): Never emit implementation step checklists or non-Unreal engine terms. Epics own large domain architecture (shared `/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, or `Source/*.h`/`*.cpp` assets, state & interrupt rules, domain cuts); Features own focused 30-90 min playable mechanics (Enhanced Input `IA_*` bindings, Exposed BP / `UPROPERTY(EditAnywhere)` tuning, viewport/UMG/Niagara/audio cues, PIE Playtest Gate).
 2. BLUF FORMAT: "[2-4 Word Payoff] — [Scope]" for Project Vision / Pitch and Epic summaries.
 3. CAUSAL PIE PLAYTEST GATES (<= 14 words): "[Player Action] -> [Observable PIE Viewport Result]" for checks & Done When gates.
 4. CHANGELOG DELTAS (+Delta, 5-10 words): Progressive release upgrades describe "+mechanic delta" atop locked v0.1 baselines inside permanent Epics without duplicating cards.
@@ -20,7 +20,7 @@ LAYERS CANONICAL UNREAL ENGINE 5 SPEC STYLE RULES:
       '2-5 word plain Unreal Engine 5 domain title covering multiple child Features (e.g. "Player Movement & Camera", "Claw Combat & Hitstop"). Never use corporate buzzwords or implementation steps.';
 
   static const String featureTitleSchemaDesc =
-      '2-5 word plain playable Feature slice title (30-90 min scope, e.g. "Armored Claw Dash", "8-Way Walk & Iso Camera").';
+      '2-5 word plain playable Feature title (30-90 min scope, e.g. "Armored Claw Dash", "8-Way Walk & Iso Camera").';
 
   static const String sceneOwnershipSchemaDesc =
       'Concrete Unreal Engine 5 `/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, or `Source/*.h`/`*.cpp` asset owned by this Epic domain (`path` + concise `role`).';

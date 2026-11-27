@@ -1053,7 +1053,7 @@ void main() {
             findsOneWidget,
           );
           expect(
-            find.text('✓ v0.1 Complete (7/7 Slices Passed)'),
+            find.text('✓ v0.1 Complete (7/7 Features Passed)'),
             findsOneWidget,
           );
 

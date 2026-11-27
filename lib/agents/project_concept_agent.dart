@@ -160,7 +160,7 @@ CODE POLICY: ${effectiveMode.codePolicyContract}$archetypeHint
 CRITICAL CONSTRAINTS:
 - Match the true genre of the spark cleanly: for non-combat ideas (puzzle, racing, cozy, builder, stealth), design native Unreal maps (`/Game/Maps/Lvl_RoomProto.umap`, `/Game/Maps/Lvl_TrackProto.umap`, `/Game/Maps/Lvl_CourseProto.umap`) and domain inputs/verbs instead of forcing enemy combat or arena brawlers.
 - Produce `2–4` Large-Domain `v0.1` Prototype Epics in `initialEpics` derived directly from §01 `coreLoop` beats and §02 Camera/Scale/Enhanced Input contracts.
-- Each Epic owns shared `sceneOwnership` (`/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, or `Source/*.cpp` files), `inScope`, `doneWhen`, `states`, `interrupts`, `outOfScope`, AND `2–3` sittable 30-90 min `v0.1` Feature slices inside `features` (`F01`, `F02`, ... sequentially across all Epics with zero duplicate `F01` resets and zero `Task`/`Step` micro-lists).
+- Each Epic owns shared `sceneOwnership` (`/Game/Maps/Lvl_*.umap`, `/Game/Blueprints/BP_*`, `/Game/UI/WBP_*`, or `Source/*.cpp` files), `inScope`, `doneWhen`, `states`, `interrupts`, `outOfScope`, AND `2–3` focused 30-90 min `v0.1` Features inside `features` (`F01`, `F02`, ... sequentially across all Epics with zero duplicate `F01` resets and zero `Task`/`Step` micro-lists).
 - Keep controls, Exposed BP / `UPROPERTY(EditAnywhere)` tuning parameters, cues, and PIE Playtest Gate checks inside child `features` (never duplicate them on the parent Epic).
 - Populate `coreLoopBeat` on every Epic naming which §01 Core Loop beat(s) it proves, and defer waves, menus, save slots, and meta progression to `v0.2+`.
 - Use $tuningStyleGuide everywhere in §02 and in every Feature tuning parameter with `PascalCase` keys and `IA_*` Enhanced Input action names.
@@ -651,7 +651,7 @@ RULES:
 - Call `patch_unreal_root_spec` with ONLY the fields you need to change plus `coDesignNote` and `changedSections`.
 - Omit unchanged scalar/list fields and untouched Epics so untouched sections remain identical.
 - If changing `architectureMode` (`blueprint` / `cppHybrid`) or Camera framing, update `architectureMode`, `cameraChoiceId`, `cameraContract`, `characterScale`, and any affected Epics in `epicUpdates`.
-- Keep all `§05` Epics strictly at `2–4` `v0.1` Epics with sequential `F01..FM` Feature slices and Unreal units (`cm`/`cm/s`).
+- Keep all `§05` Epics strictly at `2–4` `v0.1` Epics with sequential `F01..FM` Features and Unreal units (`cm`/`cm/s`).
 
 CURRENT COMPACT SPEC JSON:
 $compactJson
@@ -923,9 +923,9 @@ USER CO-DESIGN INSTRUCTION:
         )
       else
         const QuickRefineSuggestion(
-          label: 'Tighten slices (30-45m)',
+          label: 'Tighten features (30-45m)',
           instruction:
-              'Keep each §05 Feature slice focused at 30-45 min with sharp causal Playtest checks.',
+              'Keep each §05 Feature focused at 30-45 min with sharp causal Playtest checks.',
         ),
       if (spec.feelChoiceId == 'snappy')
         const QuickRefineSuggestion(
@@ -947,7 +947,7 @@ USER CO-DESIGN INSTRUCTION:
         const QuickRefineSuggestion(
           label: 'Add parry / counter',
           instruction:
-              'Add a crisp risk/reward parry window Feature slice inside the combat Epic.',
+              'Add a crisp risk/reward parry window Feature inside the combat Epic.',
         )
       else
         const QuickRefineSuggestion(

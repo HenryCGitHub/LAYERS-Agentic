@@ -170,7 +170,7 @@ class WorkbenchOutlinerRail extends StatelessWidget {
                   child: Row(
                     children: [
                       Text(
-                        '+ Add slice',
+                        '+ Add feature',
                         style: GoogleFonts.inter(
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
@@ -565,7 +565,7 @@ class WorkbenchCompactSwitcherBar extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
                 child: Text(
-                  '+ Add slice',
+                  '+ Add feature',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,

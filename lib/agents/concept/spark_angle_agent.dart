@@ -175,7 +175,7 @@ class SparkAngleDeck {
         cleanSteers.isEmpty ? '' : ' | Steers: ${cleanSteers.join('; ')}';
     return '$rawSpark — ${chosen.title} (${chosen.styleTag}): ${chosen.pitch} '
         '| Camera: ${chosen.cameraHint} (${chosen.viewChoiceId}) '
-        '| Target v0.1 Slice: ${chosen.sliceHint} '
+        '| Target v0.1 Scope: ${chosen.sliceHint} '
         '| Mode: ${architectureMode.pillLabel}$steerSuffix';
   }
 }
@@ -332,7 +332,7 @@ RAW SPARK: "$effectiveSpark"$steerDirective$rerollDirective$prevSummary
 CONSTRAINTS:
 - Call `$proposeAnglesToolName` with exactly 3 genuinely different playable directions.
 - Each pitch follows BLUF syntax: `[2-4 Word Fantasy] — [Concrete Playable Loop]` in plain everyday game-dev words.
-- Keep scope strictly `v0.1` playable slice sized (1 room/course/shift, 2–3 core verbs).
+- Keep scope strictly `v0.1` prototype sized (1 room/course/shift, 2–3 core verbs).
 - Stay 100% Unreal Engine 5 compatible; never emit `§01–§05` sections, non-Unreal engine terms, or filler buzzwords.
 ''';
 

@@ -58,7 +58,7 @@ enum TierType {
         TierType.epic =>
           'Epic: Large game domain owning shared levels, Blueprints/C++, and state rules',
         TierType.feature =>
-          'Feature: Sittable 30-90 min playable slice with tuning and Playtest Gate',
+          'Feature: Playable 30-90 min mechanic with controls, tuning, and Playtest Gate',
       };
 
   Color colorFor(bool isDark) => switch (this) {

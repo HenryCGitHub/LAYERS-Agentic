@@ -299,8 +299,10 @@ void main() {
             findsOneWidget,
           );
           expect(find.text('Idea'), findsNothing);
+          expect(find.text('+ Add feature'), findsOneWidget);
+          expect(find.text('+ Add slice'), findsNothing);
 
-          // + Add slice in outline footer creates a slice and auto-focuses feature_title_input.
+          // + Add feature in outline footer creates a feature and auto-focuses feature_title_input.
           final countBefore = wb.activeReleaseEpics.first.features.length;
           await tester.tap(
             find.byKey(const ValueKey('outline_add_slice_btn')),
@@ -545,7 +547,7 @@ void main() {
           await tester.tap(find.byKey(ValueKey('outliner_release_$v02Id')));
           await tester.pumpAndSettle();
           expect(find.text('+DELTA UPGRADES'), findsOneWidget);
-          expect(find.text('+NEW v0.2 SLICES'), findsOneWidget);
+          expect(find.text('+NEW v0.2 FEATURES'), findsOneWidget);
           expect(find.text('LOCKED BASELINE'), findsOneWidget);
         });
       },
@@ -876,8 +878,8 @@ void main() {
             find.byKey(const ValueKey('plan_release_incomplete_prev_notice')),
             findsOneWidget,
           );
-          expect(find.textContaining('1 Feature slice'), findsWidgets);
-          expect(find.textContaining('1 Feature slices'), findsNothing);
+          expect(find.textContaining('1 Feature'), findsWidgets);
+          expect(find.textContaining('1 Features'), findsNothing);
 
           final e04Tile = find.byKey(const ValueKey('copilot_new_sb_e04'));
           final e05Tile = find.byKey(const ValueKey('copilot_new_sb_e05'));

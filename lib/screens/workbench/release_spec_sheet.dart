@@ -411,7 +411,7 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
                           const SizedBox(height: 12),
                         ],
                         if (newSliceRows.isNotEmpty) ...[
-                          _buildSubgroupLabel('+NEW $relVer SLICES', cyan),
+                          _buildSubgroupLabel('+NEW $relVer FEATURES', cyan),
                           for (final row in newSliceRows)
                             _buildFlatSliceRow(
                               wb: wb,
@@ -514,7 +514,7 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
             errorText: wb.stage2RefineError,
             quickPrompts: const <String>[
               'Tighten Done When into observable PIE checks',
-              'Trim scope to fastest playable vertical slice',
+              'Trim scope to fastest playable prototype',
               'Focus Goal on core combat loop feel',
             ],
             externalController: _refineCtrl,

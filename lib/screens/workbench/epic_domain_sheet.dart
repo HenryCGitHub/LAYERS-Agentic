@@ -626,10 +626,10 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
         EpicSectionCard(
           isDark: isDark,
           code: '§05',
-          title: 'Child Slices (${visibleFeatures.length})',
+          title: 'Features (${visibleFeatures.length})',
           trailing: PlainTextLink(
             key: const ValueKey('show_add_feature_btn'),
-            label: _showAddFeature ? 'Cancel' : '+ Add slice',
+            label: _showAddFeature ? 'Cancel' : '+ Add feature',
             isDark: isDark,
             fontSize: 11.5,
             color: _showAddFeature ? muted : focal,
@@ -659,7 +659,7 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                         style: TextStyle(fontSize: 13.5, color: primary),
                         decoration: InputDecoration(
                           isDense: true,
-                          hintText: 'Slice title (e.g. Shield Bash Knockback)',
+                          hintText: 'Feature title (e.g. Shield Bash Knockback)',
                           hintStyle: TextStyle(fontSize: 12.5, color: muted),
                           border: UnderlineInputBorder(
                             borderSide: BorderSide(color: border),
@@ -700,7 +700,7 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                           const SizedBox(width: 12),
                           PlainPrimaryButton(
                             key: const ValueKey('submit_add_feature_btn'),
-                            label: 'Create Feature Slice',
+                            label: 'Create Feature',
                             isDark: isDark,
                             onPressed: () {
                               final title =

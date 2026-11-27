@@ -127,7 +127,7 @@ class ReleasePlannerAgent {
   static Map<String, dynamic> get _progressiveReleaseSchema => <String, dynamic>{
         'name': 'propose_progressive_unreal_release',
         'description':
-            'Propose next Unreal Engine 5 release presets, baseline [UPGRADE] deltas, [NEW] Feature slices inside existing Epics, and candidate [NEW] domain Epics.',
+            'Propose next Unreal Engine 5 release presets, baseline [UPGRADE] deltas, [NEW] Features inside existing Epics, and candidate [NEW] domain Epics.',
         'parameters': <String, dynamic>{
           'type': 'OBJECT',
           'required': ['presets', 'upgrades', 'newFeatures', 'newEpics'],
@@ -188,7 +188,7 @@ class ReleasePlannerAgent {
             'newFeatures': {
               'type': 'ARRAY',
               'description':
-                  'Additive [+NEW] 30-90 min Feature slices placed inside existing permanent Epics by lineageKey.',
+                  'Additive [+NEW] 30-90 min Features placed inside existing permanent Epics by lineageKey.',
               'items': {
                 'type': 'OBJECT',
                 'required': ['lineageKey', 'features'],
@@ -204,7 +204,7 @@ class ReleasePlannerAgent {
             'newEpics': {
               'type': 'ARRAY',
               'description':
-                  'Candidate NEW 4-tier Unreal Engine 5 Domain Epics (architecture + child playable Feature slices) for this release.',
+                  'Candidate NEW 4-tier Unreal Engine 5 Domain Epics (architecture + child playable Features) for this release.',
               'items': {
                 'type': 'OBJECT',
                 'required': [
@@ -366,7 +366,7 @@ ${jsonEncode(existingSummary)}
 Generate:
 1. 2 distinct Release Direction Presets (`presets`) matching IDs of upgrades/newEpics.
 2. Small additive `[UPGRADE]` delta options for relevant baseline Epics/Features (`lineageKey` + optional `targetFeatureCode`).
-3. Additive `[+NEW]` 30-90 min Feature slices in `newFeatures` attached inside existing permanent Epics (`lineageKey`) whenever a mechanic extends an existing domain.
+3. Additive `[+NEW]` 30-90 min Features in `newFeatures` attached inside existing permanent Epics (`lineageKey`) whenever a mechanic extends an existing domain.
 4. 0-2 candidate `[NEW]` large-domain Unreal Engine 5 Epics with codes `${EpicSpec.formatCode(currentEpics.length + 1)}` onward (with `sceneOwnership` and child `features`) using `cm` / `cm/s` units, Enhanced Input `IA_*` actions, and $tuningStyleLabel.
 CRITICAL RULES:
 - Every `[UPGRADE]` delta, `[+NEW]` Feature, and `[NEW]` Epic MUST obey §02 Camera/Scale/Enhanced Input contracts, reinforce §01 Core Loop & §03 Trade-Offs, and NEVER introduce systems banned in §04 Hard Scope Cuts unless explicitly requested in User Direction Request.

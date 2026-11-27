@@ -387,7 +387,7 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                   minLines: 1,
                   allowEmpty: true,
                   readOnly: isLockedBaseline,
-                  hintText: 'Define 1 plain-English sentence for this slice...',
+                  hintText: 'Define 1 plain-English sentence for this feature...',
                   style: TextStyle(fontSize: 14, color: primary, height: 1.45),
                   onCommit: (val) =>
                       wb.updateFeatureScope(epic.id, feat.id, goal: val),

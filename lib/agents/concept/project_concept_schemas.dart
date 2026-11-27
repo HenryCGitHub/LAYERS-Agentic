@@ -151,7 +151,7 @@ Map<String, dynamic> get featureJsonSchema => <String, dynamic>{
       'properties': <String, dynamic>{
         'code': {
           'type': 'STRING',
-          'description': 'Sequential Feature slice code F01, F02, F03...',
+          'description': 'Sequential Feature code F01, F02, F03...',
         },
         'title': {
           'type': 'STRING',
@@ -159,12 +159,12 @@ Map<String, dynamic> get featureJsonSchema => <String, dynamic>{
         },
         'sliceTime': {
           'type': 'STRING',
-          'description': 'Playable build slice target such as "45 min" or "60 min".',
+          'description': 'Target build time such as "45 min" or "60 min".',
         },
         'goal': {
           'type': 'STRING',
           'description':
-              '1 plain sentence stating what this playable slice builds in PIE.',
+              '1 plain sentence stating what this Feature builds in PIE.',
         },
         'inScope': {
           'type': 'ARRAY',
@@ -311,7 +311,7 @@ Map<String, dynamic> get epicJsonSchema => <String, dynamic>{
         'features': {
           'type': 'ARRAY',
           'description':
-              '2-3 sittable 30-90 min playable v0.1 Feature slices inside this domain Epic (zero Tasks, zero Steps). Include Enhanced Input controls, Exposed BP / UPROPERTY tuning in cm & cm/s, cues, and PIE Playtest Gate checks here only.',
+              '2-3 focused 30-90 min playable v0.1 Features inside this domain Epic (zero Tasks, zero Steps). Include Enhanced Input controls, Exposed BP / UPROPERTY tuning in cm & cm/s, cues, and PIE Playtest Gate checks here only.',
           'items': featureJsonSchema,
         },
       },

@@ -645,8 +645,8 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
     if (targetEpicId == null) return null;
     final created = addFeatureSlice(
       targetEpicId,
-      title: 'New Playable Slice',
-      goal: 'Build and test this playable slice cleanly in UE5 PIE.',
+      title: 'New Feature',
+      goal: 'Build and test this feature cleanly in UE5 PIE.',
       selectCreated: true,
     );
     if (created == null) return null;

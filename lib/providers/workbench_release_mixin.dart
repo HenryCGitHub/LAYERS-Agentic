@@ -467,7 +467,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       ],
       tuning: [
         EpicTuningParam(
-          key: 'SliceMagnitude',
+          key: 'ActionDistance',
           value: '250',
           unit: 'cm',
         ),

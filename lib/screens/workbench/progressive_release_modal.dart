@@ -97,7 +97,7 @@ class _ProgressiveReleaseCopilotDialogState
                   const CircularProgressIndicator(),
                   const SizedBox(height: 14),
                   Text(
-                    'Drafting $targetVer upgrade options & Feature slices…',
+                    'Drafting $targetVer upgrade options & Features…',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 12.5, color: textSecondary),
                   ),
@@ -470,7 +470,7 @@ class _ProgressiveReleaseCopilotDialogState
                                   ),
                                   subtitle: Text(
                                     cand.features.isNotEmpty
-                                        ? '${cand.goal} · ${cand.features.length} Feature slices'
+                                        ? '${cand.goal} · ${cand.features.length} ${cand.features.length == 1 ? 'Feature' : 'Features'}'
                                         : cand.goal,
                                     style: TextStyle(
                                       fontSize: 12,
@@ -497,7 +497,7 @@ class _ProgressiveReleaseCopilotDialogState
                       Expanded(
                         child: !workbench.hasSelectedProgressiveChanges
                             ? Text(
-                                'Select at least 1 upgrade, Feature slice, or Epic',
+                                'Select at least 1 upgrade, Feature, or Epic',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: textMuted,

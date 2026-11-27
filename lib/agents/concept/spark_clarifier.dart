@@ -286,7 +286,7 @@ class Stage1ScopeSummary {
       if (epics.length > 4)
         '${epics.length} Epics in v0.1 (keep 2-4 Epics for focused playtesting)',
       if (featCount > 8)
-        '$featCount Features in v0.1 (trim to <= 8 slices to ship faster)',
+        '$featCount Features in v0.1 (trim to <= 8 features to ship faster)',
       if (testScene == null)
         'Missing a /Game/Maps/Lvl_*.umap playtest map in E01 Scene Ownership',
       if (anyMissingCheck) 'One or more Features lack a PIE Playtest Gate check',

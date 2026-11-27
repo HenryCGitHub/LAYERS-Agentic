@@ -368,7 +368,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           isDark: isDark,
                           readOnly: isLockedBaseline,
                           autoFocusAndSelect: autoFocusFeature,
-                          hintText: 'Feature slice title...',
+                          hintText: 'Feature title...',
                           style: AppTheme.displayFont(
                             fontSize: 26,
                             fontWeight: FontWeight.w700,
@@ -384,8 +384,8 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                     const SizedBox(height: 6),
                     Text(
                       feature == null
-                          ? 'EPIC DOMAIN · ${rollup.passed}/${rollup.total} SLICES PASSED'
-                          : 'SLICE ${feature.code} · ${feature.sliceTime} · ${wb.unrealArchitectureMode.shortLabel}',
+                          ? 'EPIC · ${rollup.passed}/${rollup.total} FEATURES PASSED'
+                          : 'FEATURE ${feature.code} · ${feature.sliceTime} · ${wb.unrealArchitectureMode.shortLabel}',
                       style: GoogleFonts.jetBrainsMono(
                         fontSize: 11,
                         color: muted,
@@ -563,7 +563,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                '✓ $relVer Complete (${releaseRollup.passed}/${releaseRollup.total} Slices Passed)',
+                                '✓ $relVer Complete (${releaseRollup.passed}/${releaseRollup.total} Features Passed)',
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w600,

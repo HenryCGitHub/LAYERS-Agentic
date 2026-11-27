@@ -151,7 +151,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           FloatingAiRefineDock(
             isDark: isDark,
             targetBadge: 'AI · Brief',
-            hintText: 'Refine pitch, UE5 setup, pillars, cuts, or v0.1 slices...',
+            hintText: 'Refine pitch, UE5 setup, pillars, cuts, or v0.1 features...',
             isBusy: wb.isAgentBusy,
             canUndo: wb.canUndoStage1,
             alwaysShowUndo: true,

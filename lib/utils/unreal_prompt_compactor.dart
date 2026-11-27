@@ -186,7 +186,7 @@ class UnrealPromptCompactor {
     b.writeln('@OWNERS: ${_ownersLine(cleanEpic, mode)}');
     if (isFirstSliceOwnerScaffold) {
       b.writeln(
-        '@FIRST_SLICE: Create missing @OWNERS now so sibling slices reuse them.',
+        '@FIRST_FEATURE: Create missing @OWNERS now so sibling features reuse them.',
       );
     }
 
@@ -226,7 +226,7 @@ class UnrealPromptCompactor {
     }
 
     b.writeln(
-      '@SLICE ${cleanFeat.code}(${cleanFeat.sliceTime}): ${compactProse(cleanFeat.goal)}',
+      '@FEATURE ${cleanFeat.code}(${cleanFeat.sliceTime}): ${compactProse(cleanFeat.goal)}',
     );
     if (cleanFeat.inScope.isNotEmpty) {
       final scopeItems = [
@@ -373,13 +373,13 @@ class UnrealPromptCompactor {
     }
 
     if (visibleFeatures.isEmpty) {
-      b.writeln('@SLICES: None queued in $ver');
+      b.writeln('@FEATURES: None queued in $ver');
     } else {
       final slices = [
         for (final feat in visibleFeatures)
           '${feat.code} ${feat.title} [${_statusTag(feat, ver)}]',
       ];
-      b.writeln('@SLICES: ${slices.join(' | ')}');
+      b.writeln('@FEATURES: ${slices.join(' | ')}');
     }
     return b.toString().trimRight();
   }

@@ -809,7 +809,7 @@ void main() {
         );
         expect(added3d, isNotNull);
         expect(added3d!.code, equals('F07'));
-        expect(added3d.tuning.first.key, equals('SliceMagnitude'));
+        expect(added3d.tuning.first.key, equals('ActionDistance'));
         expect(added3d.tuning.first.unit, equals('cm'));
         expect(wb.selectedFeatureId, equals(added3d.id));
         expect(wb.epicFeatureRollup(wb.activeReleaseEpics[0]).total, equals(3));

@@ -143,7 +143,7 @@ class Stage2RefineAgent {
       <String, dynamic>{
         'name': 'patch_unreal_feature_spec',
         'description':
-            'Patch only the requested sections of an Unreal Engine 5 Stage 2 Feature Slice Sheet (§01 Scope, §02 Enhanced Input, §03 Tuning Vars in cm/cm/s, §04 Cues, §05 PIE Checks). Omit untouched fields.',
+            'Patch only the requested sections of an Unreal Engine 5 Stage 2 Feature Spec (§01 Scope, §02 Enhanced Input, §03 Tuning Vars in cm/cm/s, §04 Cues, §05 PIE Checks). Omit untouched fields.',
         'parameters': <String, dynamic>{
           'type': 'OBJECT',
           'required': ['summary', 'changedSections'],
@@ -254,7 +254,7 @@ RULES:
 - Call `patch_unreal_epic_spec` with ONLY the modified fields plus `summary` and `changedSections`.
 - Keep all asset ownership strictly Unreal Engine 5 (`/Game/...`, `Source/...`, `BP_*`, `WBP_*`, `IA_*`, `IMC_*`).
 - Stay 100% native Unreal Engine 5 using `cm` and `cm/s` units only.
-- Child Feature slices belong in Features, not inside the Epic sheet.
+- Child Features belong in Features, not inside the Epic sheet.
 
 CURRENT EPIC JSON:
 ${jsonEncode(compactEpic)}
@@ -333,13 +333,13 @@ USER REFINE INSTRUCTION:
     };
 
     final deltaRule = isDeltaTarget
-        ? '\n- Because this slice is a $relVer delta upgrade, place new or updated playtest gate checks in `releaseDeltaChecks` and leave `${feature.introducedIn}` baseline `checks` unchanged.'
+        ? '\n- Because this feature is a $relVer delta upgrade, place new or updated playtest gate checks in `releaseDeltaChecks` and leave `${feature.introducedIn}` baseline `checks` unchanged.'
         : '';
 
     final prompt = '''
 ${LayersTextStyleGuide.compactStyleRules}
 
-Patch only the requested sections (§01-§05) of this Unreal Engine 5 Feature Slice Sheet.
+Patch only the requested sections (§01-§05) of this Unreal Engine 5 Feature Spec.
 PROJECT: ${rootSpec?.normalizedTitle ?? 'UE5 PROJECT'} (${mode.architectureContract})
 PARENT EPIC: ${epic.code} · ${epic.title} (${epic.goal})
 RULES:

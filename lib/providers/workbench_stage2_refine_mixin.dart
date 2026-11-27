@@ -192,14 +192,14 @@ extension WorkbenchStage2RefineMixin on WorkbenchProvider {
     final targetFeat = beforeEpic.features[featIdx];
     if (!_canEditFeature(targetFeat, releaseVersion: relVer)) {
       _stage2RefineError =
-          '${targetFeat.code} is a locked ${targetFeat.introducedIn} baseline in $relVer. Open in ${targetFeat.introducedIn} or target a delta slice.';
+          '${targetFeat.code} is a locked ${targetFeat.introducedIn} baseline in $relVer. Open in ${targetFeat.introducedIn} or target a delta feature.';
       notifyListeners();
       return null;
     }
 
     _isRefiningStage2 = true;
     _stage2RefineError = null;
-    _agentProgressStep = 'Hydrogen refining ${targetFeat.code} slice...';
+    _agentProgressStep = 'Hydrogen refining ${targetFeat.code}...';
     notifyListeners();
 
     try {
@@ -243,7 +243,7 @@ extension WorkbenchStage2RefineMixin on WorkbenchProvider {
       final freshFeat = latestEpic.features[freshFeatIdx];
       if (!_canEditFeature(freshFeat, releaseVersion: latestRelVer)) {
         _stage2RefineError =
-            '${freshFeat.code} is a locked ${freshFeat.introducedIn} baseline in $latestRelVer. Open in ${freshFeat.introducedIn} or target a delta slice.';
+            '${freshFeat.code} is a locked ${freshFeat.introducedIn} baseline in $latestRelVer. Open in ${freshFeat.introducedIn} or target a delta feature.';
         return null;
       }
 
