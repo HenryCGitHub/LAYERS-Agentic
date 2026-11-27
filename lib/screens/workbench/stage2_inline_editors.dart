@@ -102,15 +102,16 @@ class _InlineScopeEditorBoxState extends State<InlineScopeEditorBox> {
   Widget build(BuildContext context) {
     final primary = AppTheme.textPrimaryFor(widget.isDark);
     final muted = AppTheme.textMutedFor(widget.isDark);
-    final cyan = AppTheme.accentCyanFor(widget.isDark);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
       decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(widget.isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: cyan.withValues(alpha: 0.5)),
+        color: Colors.transparent,
+        border: Border(
+          left: BorderSide(color: AppTheme.focalAccentFor(widget.isDark), width: 2),
+          bottom: BorderSide(color: AppTheme.borderFor(widget.isDark), width: 1),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -249,15 +250,16 @@ class _InlineControlEditorBoxState extends State<InlineControlEditorBox> {
   Widget build(BuildContext context) {
     final primary = AppTheme.textPrimaryFor(widget.isDark);
     final muted = AppTheme.textMutedFor(widget.isDark);
-    final cyan = AppTheme.accentCyanFor(widget.isDark);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
       decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(widget.isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: cyan.withValues(alpha: 0.5)),
+        color: Colors.transparent,
+        border: Border(
+          left: BorderSide(color: AppTheme.focalAccentFor(widget.isDark), width: 2),
+          bottom: BorderSide(color: AppTheme.borderFor(widget.isDark), width: 1),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -269,7 +271,10 @@ class _InlineControlEditorBoxState extends State<InlineControlEditorBox> {
                 child: TextField(
                   key: widget.actionInputKey,
                   controller: _actionCtrl,
-                  style: GoogleFonts.jetBrainsMono(fontSize: 12.5, color: cyan),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12.5,
+                    color: AppTheme.focalAccentFor(widget.isDark),
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Action (IA_*)',
                     hintText: 'IA_ClawDash',
@@ -377,15 +382,16 @@ class _InlineTuningAddBoxState extends State<InlineTuningAddBox> {
   Widget build(BuildContext context) {
     final primary = AppTheme.textPrimaryFor(widget.isDark);
     final muted = AppTheme.textMutedFor(widget.isDark);
-    final cyan = AppTheme.accentCyanFor(widget.isDark);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
       decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(widget.isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: cyan.withValues(alpha: 0.5)),
+        color: Colors.transparent,
+        border: Border(
+          left: BorderSide(color: AppTheme.focalAccentFor(widget.isDark), width: 2),
+          bottom: BorderSide(color: AppTheme.borderFor(widget.isDark), width: 1),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -412,7 +418,10 @@ class _InlineTuningAddBoxState extends State<InlineTuningAddBox> {
                 child: TextField(
                   key: widget.valueInputKey,
                   controller: _valCtrl,
-                  style: GoogleFonts.jetBrainsMono(fontSize: 12.5, color: cyan),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 12.5,
+                    color: AppTheme.focalAccentFor(widget.isDark),
+                  ),
                   decoration: InputDecoration(
                     labelText: 'Value',
                     hintText: '500',
@@ -512,15 +521,16 @@ class _InlineSingleLineAdderBoxState extends State<InlineSingleLineAdderBox> {
   Widget build(BuildContext context) {
     final primary = AppTheme.textPrimaryFor(widget.isDark);
     final muted = AppTheme.textMutedFor(widget.isDark);
-    final cyan = AppTheme.accentCyanFor(widget.isDark);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
       decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(widget.isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: cyan.withValues(alpha: 0.45)),
+        color: Colors.transparent,
+        border: Border(
+          left: BorderSide(color: AppTheme.focalAccentFor(widget.isDark), width: 2),
+          bottom: BorderSide(color: AppTheme.borderFor(widget.isDark), width: 1),
+        ),
       ),
       child: Row(
         children: [

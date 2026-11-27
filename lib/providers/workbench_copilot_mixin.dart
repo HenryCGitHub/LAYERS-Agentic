@@ -258,4 +258,54 @@ extension WorkbenchCopilotMixin on WorkbenchProvider {
     _gddSyncStatus = LocalGddSyncStatus.linked;
     notifyListeners();
   }
+
+  /// Compiles a human-readable Markdown preview of the active or named Release Spec
+  /// locally in memory (0 AI tokens spent).
+  String buildReleaseSpecMarkdown([String? releaseId]) {
+    final targetId = releaseId ?? _activeReleaseId;
+    final relDoc = targetId != null ? documents[targetId] : activeRelease;
+    final projTitle = _conceptDraft?.normalizedTitle ??
+        activeProject?.title ??
+        'LAYERS PROJECT';
+    if (relDoc == null) {
+      return '# $projTitle — No Release Active';
+    }
+    final ver = releaseVersionTagFor(relDoc);
+    final goal = (relDoc.sections['goal'] ?? '').trim();
+    final doneWhen = (relDoc.sections['doneWhen'] ?? '').trim();
+    final epics = epicsForRelease(relDoc.id);
+    final b = StringBuffer()
+      ..writeln('# $projTitle — ${releaseDisplayName(relDoc)}')
+      ..writeln(
+        'Architecture: ${unrealArchitectureMode.architectureContract}',
+      )
+      ..writeln();
+    if (goal.isNotEmpty) {
+      b
+        ..writeln('## Goal')
+        ..writeln(goal)
+        ..writeln();
+    }
+    if (doneWhen.isNotEmpty) {
+      b
+        ..writeln('## Done When (PIE Gate)')
+        ..writeln(doneWhen)
+        ..writeln();
+    }
+    b.writeln('## In Scope ($ver)');
+    for (final ep in epics) {
+      final vis = visibleFeaturesForEpic(ep, releaseVersion: ver);
+      b
+        ..writeln('### ${ep.code} · ${ep.title}')
+        ..writeln(ep.goal);
+      for (final f in vis) {
+        final passed = f.isPassedForRelease(ver);
+        final fixTag =
+            f.openFixesCount > 0 ? ' [${f.openFixesCount} FIX]' : '';
+        b.writeln('- [${passed ? 'x' : ' '}] ${f.code} · ${f.title}$fixTag');
+      }
+      b.writeln();
+    }
+    return b.toString().trimRight();
+  }
 }

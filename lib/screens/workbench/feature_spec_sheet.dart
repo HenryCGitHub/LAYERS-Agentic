@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../models/epic_spec.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
+import 'plain_doc_widgets.dart';
 import 'stage2_inline_editors.dart';
 import 'workbench_shared_widgets.dart';
 
+/// Flat plain-document Feature Slice Spec Sheet rendered in strict PIE-first
+/// order: (1) Conditional Open Fixes, (2) Playtest (PIE) + Broken in PIE?,
+/// (3) Goal / Scope, (4) Controls, (5) Semantic Table Tuning, (6) Cues.
 class FeatureSpecSheet extends StatefulWidget {
   final WorkbenchProvider workbench;
   final EpicSpec epic;
@@ -32,6 +37,7 @@ class FeatureSpecSheet extends StatefulWidget {
 
 class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
   final TextEditingController _fixInputController = TextEditingController();
+
   bool _editingScope = false;
   bool _showControlForm = false;
   int? _editingControlIndex;
@@ -50,10 +56,6 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
       _addingTuning = false;
       _addingCue = false;
       _addingCheck = false;
-    } else if (_editingControlIndex != null &&
-        _editingControlIndex! >= widget.feature.controls.length) {
-      _showControlForm = false;
-      _editingControlIndex = null;
     }
   }
 
@@ -65,103 +67,286 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final primary = AppTheme.textPrimaryFor(widget.isDark);
-    final secondary = AppTheme.textSecondaryFor(widget.isDark);
-    final muted = AppTheme.textMutedFor(widget.isDark);
-    final border = AppTheme.borderFor(widget.isDark);
-    final cyan = AppTheme.accentCyanFor(widget.isDark);
-    final green = AppTheme.accentGreenFor(widget.isDark);
-    final red = AppTheme.accentRedFor(widget.isDark);
-    final amber = AppTheme.accentAmberFor(widget.isDark);
-    return _buildSheetContent(
-      context,
-      widget.workbench,
-      widget.epic,
-      widget.feature,
-      widget.isLockedBaseline,
-      widget.isDark,
-      primary,
-      secondary,
-      muted,
-      border,
-      cyan,
-      green,
-      red,
-      amber,
-    );
-  }
-
-  Widget _buildSheetContent(
-    BuildContext context,
-    WorkbenchProvider wb,
-    EpicSpec epic,
-    FeatureSpec feat,
-    bool isLockedBaseline,
-    bool isDark,
-    Color primary,
-    Color secondary,
-    Color muted,
-    Color border,
-    Color cyan,
-    Color green,
-    Color red,
-    Color amber,
-  ) {
+    final wb = widget.workbench;
+    final epic = widget.epic;
+    final feat = widget.feature;
+    final isLockedBaseline = widget.isLockedBaseline;
+    final isDark = widget.isDark;
     final target = wb.unrealArchitectureMode;
     final relVer = wb.activeReleaseVersionTag;
-    final effChecks = feat.effectiveChecksForRelease(relVer);
-    final checkedCount = effChecks.where((c) => c.passed).length;
+    final effectiveChecks = feat.effectiveChecksForRelease(relVer);
+    final openFixes = feat.openFixes;
+
+    final border = AppTheme.borderFor(isDark);
+    final primary = AppTheme.textPrimaryFor(isDark);
+    final secondary = AppTheme.textSecondaryFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
+    final green = AppTheme.accentGreenFor(isDark);
+    final red = AppTheme.accentRedFor(isDark);
+    final amber = AppTheme.accentAmberFor(isDark);
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // §01 Feature Scope
+        // 1. Conditional Fixes (completely hidden when openFixes is empty)
+        if (openFixes.isNotEmpty)
+          EpicSectionCard(
+            isDark: isDark,
+            code: 'FIX',
+            title: 'Fixes (${openFixes.length})',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (int i = 0; i < openFixes.length; i++)
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: border, width: 1),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '[FIX]',
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: red,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            openFixes[i].text,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              color: primary,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                        if (!isLockedBaseline) ...[
+                          const SizedBox(width: 8),
+                          PlainTextLink(
+                            key: ValueKey('resolve_fix_${openFixes[i].id}'),
+                            label: 'Resolve',
+                            isDark: isDark,
+                            color: green,
+                            onTap: () => wb.resolveFeatureFix(
+                              epic.id,
+                              feat.id,
+                              openFixes[i].id,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          InkWell(
+                            onTap: () => wb.deleteFeatureFix(
+                              epic.id,
+                              feat.id,
+                              openFixes[i].id,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              child: Text(
+                                '×',
+                                style: TextStyle(fontSize: 15, color: muted),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+
+        // 2. Playtest (PIE) + Broken in PIE?
+        EpicSectionCard(
+          isDark: isDark,
+          code: 'PIE',
+          title:
+              'Playtest (${feat.passedChecksCountForRelease(relVer)}/${effectiveChecks.length})',
+          trailing: isLockedBaseline
+              ? null
+              : PlainTextLink(
+                  key: const ValueKey('feature_add_check_btn'),
+                  label: _addingCheck ? 'Cancel' : '+ Add check',
+                  isDark: isDark,
+                  fontSize: 11.5,
+                  color: _addingCheck ? muted : focal,
+                  onTap: () => setState(() => _addingCheck = !_addingCheck),
+                ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (_addingCheck && !isLockedBaseline)
+                InlineSingleLineAdderBox(
+                  isDark: isDark,
+                  labelText: 'Playtest Check',
+                  hintText:
+                      'e.g. Tap dash -> breaks crab shell within 0.25s',
+                  submitLabel: 'Add Check',
+                  inputKey: const ValueKey('feature_check_input'),
+                  saveBtnKey: const ValueKey('feature_check_save_btn'),
+                  onSubmit: (text) {
+                    wb.addFeatureCheck(epic.id, feat.id, text);
+                    setState(() => _addingCheck = false);
+                  },
+                  onCancel: () => setState(() => _addingCheck = false),
+                ),
+              for (int i = 0; i < effectiveChecks.length; i++) ...[
+                () {
+                  final chk = effectiveChecks[i];
+                  final isBaseCheckInDeltaFeature =
+                      relVer != 'v0.1' &&
+                      feat.releaseDeltaChecks.isNotEmpty &&
+                      feat.checks.any(
+                        (b) => identical(b, chk) || b.id == chk.id,
+                      );
+                  final canDeleteCheck =
+                      !isLockedBaseline && !isBaseCheckInDeltaFeature;
+
+                  return PlainHoverRemoveRow(
+                    isDark: isDark,
+                    showBottomBorder: i < effectiveChecks.length - 1,
+                    removeKey: canDeleteCheck
+                        ? ValueKey('feature_check_delete_${chk.id}')
+                        : null,
+                    removeTooltip: 'Remove check',
+                    onRemove: canDeleteCheck
+                        ? () => wb.removeFeatureCheck(epic.id, feat.id, chk.id)
+                        : null,
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: CheckboxListTile(
+                        key: ValueKey('feature_check_${chk.id}'),
+                        value: chk.passed,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        onChanged: isLockedBaseline
+                            ? null
+                            : (val) => wb.toggleFeatureCheck(
+                                  epic.id,
+                                  feat.id,
+                                  chk.id,
+                                  val,
+                                ),
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(
+                          chk.text,
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            color: chk.passed ? green : primary,
+                            decoration: chk.passed
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }(),
+              ],
+              if (widget.passGateHint != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  key: const ValueKey('pass_gate_hint'),
+                  widget.passGateHint!,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w500,
+                    color: amber,
+                  ),
+                ),
+              ],
+              if (!isLockedBaseline) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        key: const ValueKey('flag_fix_input'),
+                        controller: _fixInputController,
+                        style: TextStyle(fontSize: 13, color: primary),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          hintText:
+                              'Broken in PIE? Log an issue to generate a focused [FIX]...',
+                          hintStyle: TextStyle(fontSize: 12.5, color: muted),
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                          ),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(color: border),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: red),
+                          ),
+                        ),
+                        onSubmitted: (_) =>
+                            _submitFlagFix(wb, epic.id, feat.id),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    PlainPrimaryButton(
+                      key: const ValueKey('flag_fix_btn'),
+                      label: 'Flag [FIX]',
+                      outlined: true,
+                      isDark: isDark,
+                      foregroundColor: red,
+                      onPressed: () => _submitFlagFix(wb, epic.id, feat.id),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+
+        // 3. Goal / Scope
         EpicSectionCard(
           isDark: isDark,
           code: '§01',
-          title: 'Feature Scope',
-          trailing: Wrap(
-            spacing: 10,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
+          title: 'Goal & Scope',
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              if (!isLockedBaseline)
-                TextButton.icon(
+              if (!isLockedBaseline) ...[
+                PlainTextLink(
                   key: const ValueKey('feature_edit_scope_btn'),
-                  onPressed: () =>
-                      setState(() => _editingScope = !_editingScope),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  ),
-                  icon: Icon(
-                    _editingScope ? Icons.close : Icons.edit_outlined,
-                    size: 13,
-                  ),
-                  label: Text(
-                    _editingScope ? 'Cancel' : 'Edit Scope',
-                    style: const TextStyle(fontSize: 11.5),
-                  ),
+                  label: _editingScope ? 'Cancel' : 'Edit Scope',
+                  isDark: isDark,
+                  fontSize: 11.5,
+                  color: _editingScope ? muted : focal,
+                  onTap: () => setState(() => _editingScope = !_editingScope),
                 ),
-              InkWell(
+                const SizedBox(width: 12),
+              ],
+              PlainTextLink(
                 key: const ValueKey('feature_parent_epic_link'),
-                onTap: () => wb.selectEpic(epic.id),
-                child: Text(
-                  'Owning Epic: ${epic.code} · ${epic.title}',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    color: cyan,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
+                label: '← ${epic.code}',
+                isDark: isDark,
+                mono: true,
+                fontSize: 11.5,
+                color: secondary,
+                onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  wb.selectEpic(epic.id);
+                },
               ),
             ],
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_editingScope && !isLockedBaseline)
+              if (_editingScope && !isLockedBaseline) ...[
                 InlineScopeEditorBox(
                   isDark: isDark,
                   initialGoal: feat.goal,
@@ -170,17 +355,16 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                   initialDelta: feat.releaseDelta,
                   showDeltaField: relVer != 'v0.1',
                   goalInputKey: const ValueKey('feature_scope_goal_input'),
-                  inScopeInputKey:
-                      const ValueKey('feature_scope_in_scope_input'),
+                  inScopeInputKey: const ValueKey('feature_scope_in_scope_input'),
                   doneWhenInputKey:
                       const ValueKey('feature_scope_done_when_input'),
                   deltaInputKey: const ValueKey('feature_scope_delta_input'),
                   saveBtnKey: const ValueKey('feature_scope_save_btn'),
                   onSave: ({
-                    required goal,
-                    required inScope,
-                    required doneWhen,
-                    required delta,
+                    required String goal,
+                    required List<String> inScope,
+                    required List<String> doneWhen,
+                    required String delta,
                   }) {
                     wb.updateFeatureScope(
                       epic.id,
@@ -194,119 +378,91 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                   },
                   onCancel: () => setState(() => _editingScope = false),
                 ),
-              if (relVer != 'v0.1' && feat.releaseDelta.trim().isNotEmpty) ...[
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(color: amber.withValues(alpha: 0.45)),
-                  ),
-                  child: Text(
-                    '$relVer Upgrade Delta: ${feat.releaseDelta}',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: primary,
+              ] else ...[
+                PlainEditableLineField(
+                  fieldKey: ValueKey('feature_goal_inline_${feat.id}'),
+                  value: feat.goal,
+                  isDark: isDark,
+                  multiLine: true,
+                  minLines: 1,
+                  allowEmpty: true,
+                  readOnly: isLockedBaseline,
+                  hintText: 'Define 1 plain-English sentence for this slice...',
+                  style: TextStyle(fontSize: 14, color: primary, height: 1.45),
+                  onCommit: (val) =>
+                      wb.updateFeatureScope(epic.id, feat.id, goal: val),
+                ),
+                if (feat.releaseDelta.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    '+DELTA ($relVer): ${feat.releaseDelta}',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      color: amber,
                     ),
                   ),
-                ),
-              ],
-              Text(
-                'Goal: ${feat.goal}',
-                style: TextStyle(fontSize: 14, color: primary, height: 1.45),
-              ),
-              if (feat.inScope.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'In Scope',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: muted,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                for (final s in feat.inScope)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      '• $s',
-                      style: TextStyle(fontSize: 13, color: secondary),
+                ],
+                if (feat.inScope.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  for (final s in feat.inScope)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '— $s',
+                        style: TextStyle(fontSize: 13.5, color: secondary),
+                      ),
                     ),
-                  ),
-              ],
-              if (feat.doneWhen.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'Done When',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: muted,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                for (final d in feat.doneWhen)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      '• $d',
-                      style: TextStyle(fontSize: 13, color: secondary),
+                ],
+                if (feat.doneWhen.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  for (final d in feat.doneWhen)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        'Done: $d',
+                        style: TextStyle(fontSize: 13, color: secondary),
+                      ),
                     ),
-                  ),
+                ],
               ],
             ],
           ),
         ),
-        const SizedBox(height: 14),
 
-        // §02 Input Actions (Enhanced Input)
+        // 4. Controls
         EpicSectionCard(
           isDark: isDark,
           code: '§02',
-          title: 'Input Actions (${target.inputContractLabel})',
-          trailing: !isLockedBaseline
-              ? TextButton.icon(
+          title: 'Controls',
+          trailing: isLockedBaseline
+              ? null
+              : PlainTextLink(
                   key: const ValueKey('feature_add_control_btn'),
-                  onPressed: () => setState(() {
-                    _editingControlIndex = null;
-                    _showControlForm = !_showControlForm;
-                  }),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  ),
-                  icon: Icon(
-                    _showControlForm ? Icons.close : Icons.add,
-                    size: 13.5,
-                  ),
-                  label: Text(
-                    _showControlForm ? 'Close' : '+ Add Input',
-                    style: const TextStyle(fontSize: 11.5),
-                  ),
-                )
-              : null,
+                  label: _showControlForm ? 'Cancel' : '+ Add input',
+                  isDark: isDark,
+                  fontSize: 11.5,
+                  color: _showControlForm ? muted : focal,
+                  onTap: () {
+                    setState(() {
+                      _showControlForm = !_showControlForm;
+                      _editingControlIndex = null;
+                    });
+                  },
+                ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_showControlForm && !isLockedBaseline)
                 InlineControlEditorBox(
                   key: ValueKey('ctrl_editor_${_editingControlIndex ?? 'new'}'),
                   isDark: isDark,
-                  initialAction: _editingControlIndex != null &&
-                          _editingControlIndex! < feat.controls.length
+                  initialAction: _editingControlIndex != null
                       ? feat.controls[_editingControlIndex!].action
                       : '',
-                  initialTrigger: _editingControlIndex != null &&
-                          _editingControlIndex! < feat.controls.length
+                  initialTrigger: _editingControlIndex != null
                       ? feat.controls[_editingControlIndex!].trigger
                       : 'Pressed',
-                  initialRule: _editingControlIndex != null &&
-                          _editingControlIndex! < feat.controls.length
+                  initialRule: _editingControlIndex != null
                       ? feat.controls[_editingControlIndex!].rule
                       : '',
                   actionInputKey:
@@ -329,167 +485,126 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                       _editingControlIndex = null;
                     });
                   },
-                  onCancel: () => setState(() {
-                    _showControlForm = false;
-                    _editingControlIndex = null;
-                  }),
+                  onCancel: () {
+                    setState(() {
+                      _showControlForm = false;
+                      _editingControlIndex = null;
+                    });
+                  },
                 ),
               if (feat.controls.isEmpty)
                 Text(
-                  'Event/system-driven slice — uses parent Epic Enhanced Input triggers.',
+                  'No Enhanced Input bindings added yet.',
                   style: TextStyle(fontSize: 12.5, color: muted),
                 )
               else
-                Table(
-                  columnWidths: <int, TableColumnWidth>{
-                    0: const FlexColumnWidth(1.5),
-                    1: const FlexColumnWidth(1.1),
-                    2: const FlexColumnWidth(2.6),
-                    if (!isLockedBaseline) 3: const FixedColumnWidth(62),
-                  },
-                  border: TableBorder(
-                    horizontalInside: BorderSide(color: border),
-                  ),
-                  children: [
-                    for (int i = 0; i < feat.controls.length; i++)
-                      TableRow(
+                for (int i = 0; i < feat.controls.length; i++)
+                  PlainHoverRemoveRow(
+                    isDark: isDark,
+                    showBottomBorder: i < feat.controls.length - 1,
+                    removeKey: !isLockedBaseline
+                        ? ValueKey('feature_control_delete_$i')
+                        : null,
+                    removeTooltip: 'Delete input',
+                    onRemove: isLockedBaseline
+                        ? null
+                        : () {
+                            if (_editingControlIndex == i) {
+                              setState(() {
+                                _showControlForm = false;
+                                _editingControlIndex = null;
+                              });
+                            } else if (_editingControlIndex != null &&
+                                _editingControlIndex! > i) {
+                              setState(() {
+                                _editingControlIndex =
+                                    _editingControlIndex! - 1;
+                              });
+                            }
+                            wb.removeFeatureControl(epic.id, feat.id, i);
+                          },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 8,
-                              horizontal: 4,
-                            ),
-                            child: Text(
-                              feat.controls[i].action,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: cyan,
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 8,
-                              horizontal: 4,
-                            ),
-                            child: Text(
-                              feat.controls[i].trigger,
-                              style: GoogleFonts.jetBrainsMono(
-                                fontSize: 11.5,
-                                color: muted,
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              vertical: 8,
-                              horizontal: 4,
-                            ),
-                            child: Text(
-                              feat.controls[i].rule,
-                              style: TextStyle(fontSize: 13, color: primary),
-                            ),
-                          ),
-                          if (!isLockedBaseline)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 4),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                              Wrap(
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                spacing: 6,
                                 children: [
-                                  InkWell(
-                                    key: ValueKey('feature_control_edit_$i'),
-                                    onTap: () => setState(() {
-                                      _editingControlIndex = i;
-                                      _showControlForm = true;
-                                    }),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(4),
-                                      child: Icon(
-                                        Icons.edit_outlined,
-                                        size: 14,
-                                        color: muted,
-                                      ),
+                                  Text(
+                                    feat.controls[i].action,
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 12.5,
+                                      fontWeight: FontWeight.w600,
+                                      color: primary,
                                     ),
                                   ),
-                                  InkWell(
-                                    key: ValueKey('feature_control_delete_$i'),
-                                    onTap: () {
-                                      if (_editingControlIndex == i) {
-                                        setState(() {
-                                          _showControlForm = false;
-                                          _editingControlIndex = null;
-                                        });
-                                      } else if (_editingControlIndex != null &&
-                                          _editingControlIndex! > i) {
-                                        setState(() {
-                                          _editingControlIndex =
-                                              _editingControlIndex! - 1;
-                                        });
-                                      }
-                                      wb.removeFeatureControl(
-                                        epic.id,
-                                        feat.id,
-                                        i,
-                                      );
-                                    },
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(4),
-                                      child: Icon(
-                                        Icons.close_rounded,
-                                        size: 14,
-                                        color: red,
-                                      ),
+                                  Text(
+                                    '· ${feat.controls[i].trigger}',
+                                    style: GoogleFonts.jetBrainsMono(
+                                      fontSize: 12,
+                                      color: muted,
                                     ),
                                   ),
                                 ],
                               ),
+                                if (feat.controls[i].rule.trim().isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    feat.controls[i].rule,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: secondary,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                          if (!isLockedBaseline)
+                            PlainTextLink(
+                              key: ValueKey('feature_control_edit_$i'),
+                              label: 'Edit',
+                              isDark: isDark,
+                              fontSize: 11.5,
+                              color: muted,
+                              onTap: () {
+                                setState(() {
+                                  _editingControlIndex = i;
+                                  _showControlForm = true;
+                                });
+                              },
                             ),
                         ],
                       ),
-                  ],
-                ),
+                    ),
+                  ),
             ],
           ),
         ),
-        const SizedBox(height: 14),
 
-        // §03 Exposed Tuning
+        // 5. Semantic Tuning Table
         EpicSectionCard(
           isDark: isDark,
           code: '§03',
-          title: 'Exposed Tuning (${target.tuningColumnLabel})',
-          trailing: Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                isLockedBaseline
-                    ? 'Locked baseline'
-                    : 'Included in CoPilot Feature Prompt',
-                style: GoogleFonts.jetBrainsMono(fontSize: 10.5, color: muted),
-              ),
-              if (!isLockedBaseline)
-                TextButton.icon(
+          title: 'Tuning · ${target.tuningColumnLabel}',
+          trailing: isLockedBaseline
+              ? null
+              : PlainTextLink(
                   key: const ValueKey('feature_add_tuning_btn'),
-                  onPressed: () =>
-                      setState(() => _addingTuning = !_addingTuning),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  ),
-                  icon: Icon(_addingTuning ? Icons.close : Icons.add, size: 13.5),
-                  label: Text(
-                    _addingTuning ? 'Close' : '+ Add Variable',
-                    style: const TextStyle(fontSize: 11.5),
-                  ),
+                  label: _addingTuning ? 'Cancel' : '+ Add var',
+                  isDark: isDark,
+                  fontSize: 11.5,
+                  color: _addingTuning ? muted : focal,
+                  onTap: () => setState(() => _addingTuning = !_addingTuning),
                 ),
-            ],
-          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_addingTuning && !isLockedBaseline)
                 InlineTuningAddBox(
@@ -498,11 +613,11 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                   valueInputKey: const ValueKey('feature_tuning_value_input'),
                   unitInputKey: const ValueKey('feature_tuning_unit_input'),
                   saveBtnKey: const ValueKey('feature_tuning_save_btn'),
-                  onAdd: (key, value, unit) {
+                  onAdd: (keyName, value, unit) {
                     wb.addFeatureTuningParam(
                       epic.id,
                       feat.id,
-                      key: key,
+                      key: keyName,
                       value: value,
                       unit: unit,
                     );
@@ -512,74 +627,133 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                 ),
               if (feat.tuning.isEmpty)
                 Text(
-                  'No exposed tuning variables on this slice.',
+                  'No exposed tuning parameters yet.',
                   style: TextStyle(fontSize: 12.5, color: muted),
                 )
               else
-                Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
+                Table(
+                  defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+                  columnWidths: <int, TableColumnWidth>{
+                    0: const FlexColumnWidth(2.4),
+                    1: const FlexColumnWidth(1.4),
+                    2: const FlexColumnWidth(0.9),
+                    if (!isLockedBaseline) 3: const FixedColumnWidth(28),
+                  },
+                  border: TableBorder(
+                    horizontalInside: BorderSide(color: border, width: 1),
+                    bottom: BorderSide(color: border, width: 1),
+                  ),
                   children: [
+                    TableRow(
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(color: border, width: 1),
+                        ),
+                      ),
+                      children: [
+                        _tuningHeaderCell('KEY', muted),
+                        _tuningHeaderCell('VALUE', muted),
+                        _tuningHeaderCell('UNIT', muted),
+                        if (!isLockedBaseline) const SizedBox(height: 22),
+                      ],
+                    ),
                     for (int i = 0; i < feat.tuning.length; i++)
-                      LiveTuningChip(
-                        key: ValueKey(
-                          'tuning_chip_${wb.activeReleaseId}_${feat.id}_${feat.tuning[i].key}_$i',
-                        ),
-                        inputKey: ValueKey('tuning_input_${feat.id}_$i'),
-                        param: feat.tuning[i],
-                        isDark: isDark,
-                        readOnly: isLockedBaseline,
-                        deleteKey: ValueKey('tuning_delete_${feat.id}_$i'),
-                        onDelete: isLockedBaseline
-                            ? null
-                            : () => wb.removeFeatureTuningParam(
-                                  epic.id,
-                                  feat.id,
-                                  i,
-                                ),
-                        onChanged: (val) => wb.updateFeatureTuningParam(
-                          epic.id,
-                          feat.id,
-                          i,
-                          val,
-                        ),
+                      TableRow(
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6,
+                              horizontal: 2,
+                            ),
+                            child: Text(
+                              feat.tuning[i].key,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w500,
+                                color: primary,
+                              ),
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 2,
+                              horizontal: 4,
+                            ),
+                            child: PlainEditableLineField(
+                              fieldKey: ValueKey('tuning_input_${feat.id}_$i'),
+                              value: feat.tuning[i].value,
+                              isDark: isDark,
+                              readOnly: isLockedBaseline,
+                              allowEmpty: true,
+                              trimOnCommit: false,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: focal,
+                              ),
+                              onChanged: (val) => wb.updateFeatureTuningParam(
+                                epic.id,
+                                feat.id,
+                                i,
+                                val,
+                              ),
+                              onCommit: (_) {},
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: 6,
+                              horizontal: 4,
+                            ),
+                            child: Text(
+                              feat.tuning[i].unit,
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 12,
+                                color: muted,
+                              ),
+                            ),
+                          ),
+                          if (!isLockedBaseline)
+                            _TuningDeleteCell(
+                              deleteKey: ValueKey('tuning_delete_${feat.id}_$i'),
+                              isDark: isDark,
+                              onDelete: () => wb.removeFeatureTuningParam(
+                                epic.id,
+                                feat.id,
+                                i,
+                              ),
+                            ),
+                        ],
                       ),
                   ],
                 ),
             ],
           ),
         ),
-        const SizedBox(height: 14),
 
-        // §04 Viewport, UI & Audio Cues
+        // 6. Cues
         EpicSectionCard(
           isDark: isDark,
           code: '§04',
-          title: 'Viewport, UI & Audio Cues',
-          trailing: !isLockedBaseline
-              ? TextButton.icon(
+          title: 'Cues (VFX, SFX & HUD)',
+          trailing: isLockedBaseline
+              ? null
+              : PlainTextLink(
                   key: const ValueKey('feature_add_cue_btn'),
-                  onPressed: () => setState(() => _addingCue = !_addingCue),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  ),
-                  icon: Icon(_addingCue ? Icons.close : Icons.add, size: 13.5),
-                  label: Text(
-                    _addingCue ? 'Close' : '+ Add Cue',
-                    style: const TextStyle(fontSize: 11.5),
-                  ),
-                )
-              : null,
+                  label: _addingCue ? 'Cancel' : '+ Add cue',
+                  isDark: isDark,
+                  fontSize: 11.5,
+                  color: _addingCue ? muted : focal,
+                  onTap: () => setState(() => _addingCue = !_addingCue),
+                ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_addingCue && !isLockedBaseline)
                 InlineSingleLineAdderBox(
                   isDark: isDark,
-                  labelText: 'Viewport, UI, or Audio Cue',
-                  hintText: 'e.g. Orange thruster sparks + impact thud SFX',
+                  labelText: 'Cue (VFX, SFX, HUD, or Camera Shake)',
+                  hintText: 'e.g. Shell crack spark + camera punch on dash hit',
                   submitLabel: 'Add Cue',
                   inputKey: const ValueKey('feature_cue_input'),
                   saveBtnKey: const ValueKey('feature_cue_save_btn'),
@@ -591,285 +765,49 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                 ),
               if (feat.cues.isEmpty)
                 Text(
-                  'Minimal greybox feedback visual + confirmation sound.',
+                  'No viewport or audio cues specified yet.',
                   style: TextStyle(fontSize: 12.5, color: muted),
                 )
               else
                 for (int i = 0; i < feat.cues.length; i++)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 5),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '• ${feat.cues[i]}',
-                            style: TextStyle(fontSize: 13, color: primary),
-                          ),
-                        ),
-                        if (!isLockedBaseline)
-                          InkWell(
-                            key: ValueKey('feature_cue_delete_$i'),
-                            onTap: () => wb.removeFeatureCue(
-                              epic.id,
-                              feat.id,
-                              i,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: Icon(
-                                Icons.close_rounded,
-                                size: 14,
-                                color: muted,
-                              ),
-                            ),
-                          ),
-                      ],
+                  PlainHoverRemoveRow(
+                    isDark: isDark,
+                    showBottomBorder: i < feat.cues.length - 1,
+                    removeKey: !isLockedBaseline
+                        ? ValueKey('feature_cue_delete_$i')
+                        : null,
+                    removeTooltip: 'Remove cue',
+                    onRemove: isLockedBaseline
+                        ? null
+                        : () => wb.removeFeatureCue(epic.id, feat.id, i),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        '— ${feat.cues[i]}',
+                        style: TextStyle(fontSize: 13.5, color: secondary),
+                      ),
                     ),
                   ),
             ],
           ),
         ),
-        const SizedBox(height: 14),
-
-        // §05 Playtest Gate & [FIX] Notes
-        EpicSectionCard(
-          isDark: isDark,
-          code: '§05',
-          title: 'Playtest Gate & [FIX] Notes',
-          trailing: Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                '$checkedCount/${effChecks.length} Checked · ${feat.openFixesCount} Open [FIX]',
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11,
-                  color: effChecks.isNotEmpty && checkedCount == effChecks.length
-                      ? green
-                      : muted,
-                ),
-              ),
-              if (!isLockedBaseline)
-                TextButton.icon(
-                  key: const ValueKey('feature_add_check_btn'),
-                  onPressed: () => setState(() => _addingCheck = !_addingCheck),
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  ),
-                  icon: Icon(
-                    _addingCheck ? Icons.close : Icons.add,
-                    size: 13.5,
-                  ),
-                  label: Text(
-                    _addingCheck ? 'Close' : '+ Add Check',
-                    style: const TextStyle(fontSize: 11.5),
-                  ),
-                ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (_addingCheck && !isLockedBaseline)
-                InlineSingleLineAdderBox(
-                  isDark: isDark,
-                  labelText: 'PIE Playtest Gate (Action -> Result)',
-                  hintText: 'e.g. Press IA_Dash -> Mech dashes 450 cm forward',
-                  submitLabel: 'Add Check',
-                  inputKey: const ValueKey('feature_check_input'),
-                  saveBtnKey: const ValueKey('feature_check_save_btn'),
-                  onSubmit: (text) {
-                    wb.addFeatureCheck(epic.id, feat.id, text);
-                    setState(() => _addingCheck = false);
-                  },
-                  onCancel: () => setState(() => _addingCheck = false),
-                ),
-              for (final chk in effChecks)
-                Row(
-                  children: [
-                    Expanded(
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: CheckboxListTile(
-                          key: ValueKey('feature_check_${chk.id}'),
-                          dense: true,
-                          contentPadding: EdgeInsets.zero,
-                          value: chk.passed,
-                          onChanged: isLockedBaseline
-                              ? null
-                              : (val) => wb.toggleFeatureCheck(
-                                    epic.id,
-                                    feat.id,
-                                    chk.id,
-                                    val,
-                                  ),
-                          title: Text(
-                            chk.text,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: chk.passed ? green : primary,
-                              decoration:
-                                  chk.passed ? TextDecoration.lineThrough : null,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (!isLockedBaseline &&
-                        !(relVer.trim() != feat.introducedIn.trim() &&
-                            feat.releaseDelta.trim().isNotEmpty &&
-                            feat.checks.any(
-                              (b) => identical(b, chk) || b.id == chk.id,
-                            )))
-                      IconButton(
-                        key: ValueKey('feature_check_delete_${chk.id}'),
-                        icon: Icon(Icons.close_rounded, size: 15, color: muted),
-                        tooltip: 'Remove check',
-                        onPressed: () => wb.removeFeatureCheck(
-                          epic.id,
-                          feat.id,
-                          chk.id,
-                        ),
-                      ),
-                  ],
-                ),
-
-              if (widget.passGateHint != null) ...[
-                const SizedBox(height: 6),
-                Text(
-                  widget.passGateHint!,
-                  key: const ValueKey('pass_gate_hint'),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: amber,
-                  ),
-                ),
-              ],
-
-              if (!isLockedBaseline) ...[
-                const SizedBox(height: 14),
-                Text(
-                  'Flag Playtest Revision ([FIX]) — switches Feature Build Prompt to Focused [FIX] Pass:',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: secondary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minWidth: 160,
-                        maxWidth: 520,
-                      ),
-                      child: TextField(
-                        key: const ValueKey('flag_fix_input'),
-                        controller: _fixInputController,
-                        style: TextStyle(fontSize: 13, color: primary),
-                        decoration: InputDecoration(
-                          hintText:
-                              'e.g. Dash stops early against north barrier wall...',
-                          hintStyle: TextStyle(fontSize: 12.5, color: muted),
-                          isDense: true,
-                        ),
-                        onSubmitted: (_) =>
-                            _submitFlagFix(wb, epic.id, feat.id),
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      key: const ValueKey('flag_fix_btn'),
-                      onPressed: () => _submitFlagFix(wb, epic.id, feat.id),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: red,
-                        side: BorderSide(color: red.withValues(alpha: 0.45)),
-                      ),
-                      icon: const Icon(Icons.flag_outlined, size: 15),
-                      label: const Text('Flag [FIX]'),
-                    ),
-                  ],
-                ),
-              ],
-
-              if (feat.fixes.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                for (final fx in feat.fixes)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 6),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: fx.resolved
-                          ? green.withValues(alpha: 0.08)
-                          : red.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                      border: Border.all(
-                        color: fx.resolved
-                            ? green.withValues(alpha: 0.3)
-                            : red.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Text(
-                          fx.resolved ? '[FIXED]' : '[FIX]',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: fx.resolved ? green : red,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            fx.text,
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: primary,
-                              decoration:
-                                  fx.resolved ? TextDecoration.lineThrough : null,
-                            ),
-                          ),
-                        ),
-                        if (!fx.resolved && !isLockedBaseline)
-                          TextButton(
-                            key: ValueKey('resolve_fix_${fx.id}'),
-                            onPressed: () => wb.resolveFeatureFix(
-                              epic.id,
-                              feat.id,
-                              fx.id,
-                            ),
-                            child: Text(
-                              'Resolve ✓',
-                              style: TextStyle(color: green, fontSize: 12),
-                            ),
-                          ),
-                        if (!isLockedBaseline)
-                          IconButton(
-                            icon: Icon(Icons.close, size: 15, color: muted),
-                            onPressed: () =>
-                                wb.deleteFeatureFix(epic.id, feat.id, fx.id),
-                            tooltip: 'Remove note',
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 36),
+        const SizedBox(height: 24),
       ],
+    );
+  }
+
+  Widget _tuningHeaderCell(String label, Color muted) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, left: 2, right: 4),
+      child: Text(
+        label,
+        style: GoogleFonts.jetBrainsMono(
+          fontSize: 10.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.8,
+          color: muted,
+        ),
+      ),
     );
   }
 
@@ -882,5 +820,61 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
     if (text.isEmpty) return;
     _fixInputController.clear();
     wb.flagFeatureFix(epicId, featureId, text);
+  }
+}
+
+class _TuningDeleteCell extends StatefulWidget {
+  final Key deleteKey;
+  final bool isDark;
+  final VoidCallback onDelete;
+
+  const _TuningDeleteCell({
+    required this.deleteKey,
+    required this.isDark,
+    required this.onDelete,
+  });
+
+  @override
+  State<_TuningDeleteCell> createState() => _TuningDeleteCellState();
+}
+
+class _TuningDeleteCellState extends State<_TuningDeleteCell> {
+  bool _hovered = false;
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _focused;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: Focus(
+        onFocusChange: (f) => setState(() => _focused = f),
+        child: Tooltip(
+          message: 'Remove variable',
+          child: InkWell(
+            key: widget.deleteKey,
+            onTap: widget.onDelete,
+            child: Opacity(
+              opacity: active ? 1.0 : 0.35,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                child: Text(
+                  '×',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.0,
+                    color: active
+                        ? AppTheme.accentRedFor(widget.isDark)
+                        : AppTheme.textMutedFor(widget.isDark),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

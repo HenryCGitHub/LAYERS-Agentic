@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../models/epic_spec.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
+import 'plain_doc_widgets.dart';
 import 'stage2_inline_editors.dart';
 import 'workbench_shared_widgets.dart';
 
+/// Flat plain-document Epic Domain Sheet (`700px` single-column, 1px dividers,
+/// zero card chrome or pill clutter).
 class EpicDomainSheet extends StatefulWidget {
   final WorkbenchProvider workbench;
   final EpicSpec epic;
@@ -25,156 +29,96 @@ class EpicDomainSheet extends StatefulWidget {
 }
 
 class _EpicDomainSheetState extends State<EpicDomainSheet> {
+  bool _editingScope = false;
+  bool _showOwnerForm = false;
+  int? _editingOwnerIndex;
+  final TextEditingController _ownerPathController = TextEditingController();
+  final TextEditingController _ownerRoleController = TextEditingController();
+  bool _editingStateRules = false;
+  final TextEditingController _statesController = TextEditingController();
+  final TextEditingController _interruptsController = TextEditingController();
+  bool _addingCut = false;
+  bool _showAddFeature = false;
   final TextEditingController _newFeatureTitleController =
       TextEditingController();
   final TextEditingController _newFeatureGoalController =
       TextEditingController();
-  final TextEditingController _ownerPathController = TextEditingController();
-  final TextEditingController _ownerRoleController = TextEditingController();
-  final TextEditingController _statesController = TextEditingController();
-  final TextEditingController _interruptsController = TextEditingController();
-
-  bool _editingScope = false;
-  bool _addingCut = false;
-  bool _showAddFeatureForm = false;
-  bool _showOwnerForm = false;
-  int? _editingOwnerIndex;
-  bool _editingStateRules = false;
 
   @override
   void didUpdateWidget(covariant EpicDomainSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectionKey != widget.selectionKey) {
       _editingScope = false;
-      _addingCut = false;
-      _showAddFeatureForm = false;
       _showOwnerForm = false;
       _editingOwnerIndex = null;
-      _editingStateRules = false;
-      _newFeatureTitleController.clear();
-      _newFeatureGoalController.clear();
       _ownerPathController.clear();
       _ownerRoleController.clear();
-      _statesController.clear();
-      _interruptsController.clear();
-      return;
-    }
-    if (_editingStateRules) {
-      final oldStates = oldWidget.epic.stateFlow.join(' -> ');
-      final nextStates = widget.epic.stateFlow.join(' -> ');
-      if (oldStates != nextStates && _statesController.text != nextStates) {
+      _editingStateRules = false;
+      _addingCut = false;
+      _showAddFeature = false;
+      _newFeatureTitleController.clear();
+      _newFeatureGoalController.clear();
+    } else if (_editingStateRules) {
+      final oldStates = oldWidget.epic.states.join(' -> ');
+      final nextStates = widget.epic.states.join(' -> ');
+      final oldRules = oldWidget.epic.interrupts.join('\n');
+      final nextRules = widget.epic.interrupts.join('\n');
+      if (oldStates != nextStates) {
         _statesController.text = nextStates;
       }
-      final oldRules = oldWidget.epic.interruptRules.join('\n');
-      final nextRules = widget.epic.interruptRules.join('\n');
-      if (oldRules != nextRules && _interruptsController.text != nextRules) {
+      if (oldRules != nextRules) {
         _interruptsController.text = nextRules;
-      }
-    }
-    if (_showOwnerForm && _editingOwnerIndex != null) {
-      final idx = _editingOwnerIndex!;
-      if (idx >= widget.epic.sceneOwnership.length) {
-        _showOwnerForm = false;
-        _editingOwnerIndex = null;
-        _ownerPathController.clear();
-        _ownerRoleController.clear();
-      } else if (idx < oldWidget.epic.sceneOwnership.length) {
-        final oldOwner = oldWidget.epic.sceneOwnership[idx];
-        final nextOwner = widget.epic.sceneOwnership[idx];
-        if (oldOwner.path != nextOwner.path &&
-            _ownerPathController.text != nextOwner.path) {
-          _ownerPathController.text = nextOwner.path;
-        }
-        if (oldOwner.role != nextOwner.role &&
-            _ownerRoleController.text != nextOwner.role) {
-          _ownerRoleController.text = nextOwner.role;
-        }
       }
     }
   }
 
   @override
   void dispose() {
-    _newFeatureTitleController.dispose();
-    _newFeatureGoalController.dispose();
     _ownerPathController.dispose();
     _ownerRoleController.dispose();
     _statesController.dispose();
     _interruptsController.dispose();
+    _newFeatureTitleController.dispose();
+    _newFeatureGoalController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final primary = AppTheme.textPrimaryFor(widget.isDark);
-    final secondary = AppTheme.textSecondaryFor(widget.isDark);
-    final muted = AppTheme.textMutedFor(widget.isDark);
-    final border = AppTheme.borderFor(widget.isDark);
-    final cyan = AppTheme.accentCyanFor(widget.isDark);
-    final green = AppTheme.accentGreenFor(widget.isDark);
-    final red = AppTheme.accentRedFor(widget.isDark);
-    return _buildSheetContent(
-      context,
-      widget.workbench,
-      widget.epic,
-      widget.isDark,
-      primary,
-      secondary,
-      muted,
-      border,
-      cyan,
-      green,
-      red,
-    );
-  }
-
-  Widget _buildSheetContent(
-    BuildContext context,
-    WorkbenchProvider wb,
-    EpicSpec epic,
-    bool isDark,
-    Color primary,
-    Color secondary,
-    Color muted,
-    Color border,
-    Color cyan,
-    Color green,
-    Color red,
-  ) {
+    final wb = widget.workbench;
+    final epic = widget.epic;
+    final isDark = widget.isDark;
+    final border = AppTheme.borderFor(isDark);
+    final primary = AppTheme.textPrimaryFor(isDark);
+    final secondary = AppTheme.textSecondaryFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
+    final states = epic.states;
+    final rules = epic.interrupts;
+    final ownershipList = epic.sceneOwnership;
     final relVer = wb.activeReleaseVersionTag;
     final visibleFeatures = wb.visibleFeaturesForEpic(epic);
-    final ownershipList = epic.sceneOwnership;
-    final states = epic.stateFlow;
-    final rules = epic.interruptRules;
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // §01 Domain Scope (Zero Feature Duplication)
+        // §01 Domain Scope
         EpicSectionCard(
           isDark: isDark,
           code: '§01',
-          title: 'Domain Scope (Zero Feature Duplication)',
-          trailing: TextButton.icon(
+          title: 'Domain Scope',
+          trailing: PlainTextLink(
             key: const ValueKey('epic_edit_scope_btn'),
-            onPressed: () => setState(() => _editingScope = !_editingScope),
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            ),
-            icon: Icon(
-              _editingScope ? Icons.close : Icons.edit_outlined,
-              size: 13,
-            ),
-            label: Text(
-              _editingScope ? 'Cancel' : 'Edit Scope',
-              style: const TextStyle(fontSize: 11.5),
-            ),
+            label: _editingScope ? 'Cancel' : 'Edit Scope',
+            isDark: isDark,
+            fontSize: 11.5,
+            color: _editingScope ? muted : focal,
+            onTap: () => setState(() => _editingScope = !_editingScope),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_editingScope)
+              if (_editingScope) ...[
                 InlineScopeEditorBox(
                   isDark: isDark,
                   initialGoal: epic.goal,
@@ -182,14 +126,13 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                   initialDoneWhen: epic.doneWhen,
                   goalInputKey: const ValueKey('epic_scope_goal_input'),
                   inScopeInputKey: const ValueKey('epic_scope_in_scope_input'),
-                  doneWhenInputKey:
-                      const ValueKey('epic_scope_done_when_input'),
+                  doneWhenInputKey: const ValueKey('epic_scope_done_when_input'),
                   saveBtnKey: const ValueKey('epic_scope_save_btn'),
                   onSave: ({
-                    required goal,
-                    required inScope,
-                    required doneWhen,
-                    required delta,
+                    required String goal,
+                    required List<String> inScope,
+                    required List<String> doneWhen,
+                    required String delta,
                   }) {
                     wb.updateEpicScope(
                       epic.id,
@@ -201,94 +144,83 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                   },
                   onCancel: () => setState(() => _editingScope = false),
                 ),
-              Text(
-                'Goal: ${epic.goal}',
-                style: TextStyle(fontSize: 14, color: primary, height: 1.45),
-              ),
-              if (epic.inScope.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'In Scope',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: muted,
-                  ),
+              ] else ...[
+                PlainEditableLineField(
+                  fieldKey: ValueKey('epic_goal_inline_${epic.id}'),
+                  value: epic.goal,
+                  isDark: isDark,
+                  multiLine: true,
+                  minLines: 1,
+                  allowEmpty: true,
+                  hintText: 'Define one plain-English sentence for this domain...',
+                  style: TextStyle(fontSize: 14, color: primary, height: 1.45),
+                  onCommit: (val) => wb.updateEpicScope(epic.id, goal: val),
                 ),
-                const SizedBox(height: 4),
-                for (final item in epic.inScope)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      '• $item',
-                      style: TextStyle(fontSize: 13, color: secondary),
+                if (epic.inScope.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    'IN SCOPE',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: muted,
                     ),
                   ),
-              ],
-              if (epic.doneWhen.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  'Done When',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: muted,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                for (final item in epic.doneWhen)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 3),
-                    child: Text(
-                      '• $item',
-                      style: TextStyle(fontSize: 13, color: secondary),
-                    ),
-                  ),
-              ],
-              if (epic.upgradeDeltas.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: cyan.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(color: cyan.withValues(alpha: 0.35)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '${epic.releaseVersion} UPGRADE DELTAS',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: cyan,
+                  const SizedBox(height: 4),
+                  for (final item in epic.inScope)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '— $item',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: secondary,
+                          height: 1.4,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      for (final d in epic.upgradeDeltas)
-                        Text(
-                          '• $d',
-                          style: TextStyle(fontSize: 12.5, color: primary),
-                        ),
-                    ],
+                    ),
+                ],
+                if (epic.doneWhen.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'DONE WHEN',
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: muted,
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 4),
+                  for (final cond in epic.doneWhen)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '— $cond',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: secondary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                ],
               ],
             ],
           ),
         ),
-        const SizedBox(height: 14),
 
-        // §02 Shared Blueprint, Level & Class Ownership
+        // §02 @OWNERS
         EpicSectionCard(
           isDark: isDark,
           code: '§02',
-          title: 'Shared Blueprint, Level & Class Ownership',
-          trailing: OutlinedButton.icon(
+          title: '@OWNERS · Blueprint, Level & Class Ownership',
+          trailing: PlainTextLink(
             key: const ValueKey('epic_add_owner_btn'),
-            onPressed: () {
+            label: _showOwnerForm ? 'Cancel' : '+ Add owner',
+            isDark: isDark,
+            fontSize: 11.5,
+            color: _showOwnerForm ? muted : focal,
+            onTap: () {
               setState(() {
                 _showOwnerForm = !_showOwnerForm;
                 _editingOwnerIndex = null;
@@ -296,15 +228,6 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                 _ownerRoleController.clear();
               });
             },
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 30),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            ),
-            icon: Icon(_showOwnerForm ? Icons.close : Icons.add, size: 14),
-            label: Text(
-              _showOwnerForm ? 'Close' : '+ Add Owner',
-              style: const TextStyle(fontSize: 11.5),
-            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -312,11 +235,12 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
               if (_showOwnerForm)
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
                   decoration: BoxDecoration(
-                    color: AppTheme.bgSurfaceFor(isDark),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(color: cyan.withValues(alpha: 0.5)),
+                    border: Border(
+                      left: BorderSide(color: focal, width: 2),
+                      bottom: BorderSide(color: border, width: 1),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -329,11 +253,16 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                           color: primary,
                         ),
                         decoration: InputDecoration(
-                          labelText: 'UE5 Asset / Class Path',
-                          hintText:
-                              'e.g. /Game/Player/BP_PlayerCharacter.uasset or Source/.../Player.cpp',
-                          hintStyle: TextStyle(fontSize: 12, color: muted),
                           isDense: true,
+                          hintText:
+                              'Asset or class path (e.g. /Game/Characters/BP_Player.uasset)',
+                          hintStyle: TextStyle(fontSize: 12, color: muted),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(color: border),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: focal),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -342,19 +271,27 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                         controller: _ownerRoleController,
                         style: TextStyle(fontSize: 13, color: primary),
                         decoration: InputDecoration(
-                          labelText: 'Domain Role (optional)',
-                          hintText: 'e.g. Shared locomotion & dash owner',
-                          hintStyle: TextStyle(fontSize: 12, color: muted),
                           isDense: true,
+                          hintText:
+                              'Responsibility (e.g. Owns character locomotion & Enhanced Input)',
+                          hintStyle: TextStyle(fontSize: 12, color: muted),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(color: border),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: focal),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 8,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          TextButton(
-                            onPressed: () {
+                          PlainTextLink(
+                            label: 'Cancel',
+                            isDark: isDark,
+                            color: muted,
+                            onTap: () {
                               setState(() {
                                 _showOwnerForm = false;
                                 _editingOwnerIndex = null;
@@ -362,10 +299,14 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                                 _ownerRoleController.clear();
                               });
                             },
-                            child: const Text('Cancel'),
                           ),
-                          ElevatedButton(
+                          const SizedBox(width: 12),
+                          PlainPrimaryButton(
                             key: const ValueKey('epic_owner_save_btn'),
+                            label: _editingOwnerIndex != null
+                                ? 'Update Owner'
+                                : 'Add Owner',
+                            isDark: isDark,
                             onPressed: () {
                               final path = _ownerPathController.text.trim();
                               if (path.isEmpty) return;
@@ -382,12 +323,6 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                                 _ownerRoleController.clear();
                               });
                             },
-                            child: Text(
-                              _editingOwnerIndex != null
-                                  ? 'Update Owner'
-                                  : 'Add Owner',
-                              style: const TextStyle(fontSize: 12),
-                            ),
                           ),
                         ],
                       ),
@@ -396,85 +331,76 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                 ),
               if (ownershipList.isNotEmpty)
                 for (int i = 0; i < ownershipList.length; i++)
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: AppTheme.bgSurfaceFor(isDark),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                      border: Border.all(color: border),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                ownershipList[i].path,
-                                style: GoogleFonts.jetBrainsMono(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: cyan,
-                                ),
-                              ),
-                              if (ownershipList[i].role.isNotEmpty) ...[
-                                const SizedBox(height: 3),
+                  PlainHoverRemoveRow(
+                    isDark: isDark,
+                    showBottomBorder: i < ownershipList.length - 1,
+                    removeKey: ValueKey('epic_owner_delete_$i'),
+                    removeTooltip: 'Remove owner',
+                    onRemove: () {
+                      if (_editingOwnerIndex == i) {
+                        setState(() {
+                          _showOwnerForm = false;
+                          _editingOwnerIndex = null;
+                          _ownerPathController.clear();
+                          _ownerRoleController.clear();
+                        });
+                      } else if (_editingOwnerIndex != null &&
+                          _editingOwnerIndex! > i) {
+                        setState(() {
+                          _editingOwnerIndex = _editingOwnerIndex! - 1;
+                        });
+                      }
+                      wb.removeEpicOwnership(epic.id, i);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  ownershipList[i].role,
-                                  style: TextStyle(
+                                  ownershipList[i].path,
+                                  style: GoogleFonts.jetBrainsMono(
                                     fontSize: 12.5,
-                                    color: secondary,
+                                    fontWeight: FontWeight.w600,
+                                    color: primary,
                                   ),
                                 ),
+                                if (ownershipList[i].role.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    ownershipList[i].role,
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: secondary,
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
-                        ),
-                        IconButton(
-                          key: ValueKey('epic_owner_edit_$i'),
-                          tooltip: 'Edit owner',
-                          constraints: const BoxConstraints(),
-                          padding: const EdgeInsets.all(4),
-                          icon: Icon(
-                            Icons.edit_outlined,
-                            size: 15,
+                          PlainTextLink(
+                            key: ValueKey('epic_owner_edit_$i'),
+                            label: 'Edit',
+                            isDark: isDark,
+                            fontSize: 11.5,
                             color: muted,
+                            onTap: () {
+                              setState(() {
+                                _editingOwnerIndex = i;
+                                _showOwnerForm = true;
+                                _ownerPathController.text =
+                                    ownershipList[i].path;
+                                _ownerRoleController.text =
+                                    ownershipList[i].role;
+                              });
+                            },
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _editingOwnerIndex = i;
-                              _showOwnerForm = true;
-                              _ownerPathController.text = ownershipList[i].path;
-                              _ownerRoleController.text = ownershipList[i].role;
-                            });
-                          },
-                        ),
-                        IconButton(
-                          key: ValueKey('epic_owner_delete_$i'),
-                          tooltip: 'Remove owner',
-                          constraints: const BoxConstraints(),
-                          padding: const EdgeInsets.all(4),
-                          icon: Icon(Icons.close, size: 15, color: muted),
-                          onPressed: () {
-                            if (_editingOwnerIndex == i) {
-                              setState(() {
-                                _showOwnerForm = false;
-                                _editingOwnerIndex = null;
-                                _ownerPathController.clear();
-                                _ownerRoleController.clear();
-                              });
-                            } else if (_editingOwnerIndex != null &&
-                                _editingOwnerIndex! > i) {
-                              setState(() {
-                                _editingOwnerIndex = _editingOwnerIndex! - 1;
-                              });
-                            }
-                            wb.removeEpicOwnership(epic.id, i);
-                          },
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   )
               else if (epic.links.isNotEmpty)
@@ -482,7 +408,7 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: 4),
                     child: Text(
-                      '• $l',
+                      '— $l',
                       style: TextStyle(fontSize: 13, color: secondary),
                     ),
                   )
@@ -494,16 +420,19 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
             ],
           ),
         ),
-        const SizedBox(height: 14),
 
         // §03 Shared State & Interrupt Rules
         EpicSectionCard(
           isDark: isDark,
           code: '§03',
-          title: 'Shared State & Interrupt Rules',
-          trailing: OutlinedButton.icon(
+          title: 'State & Interrupt Rules',
+          trailing: PlainTextLink(
             key: const ValueKey('epic_edit_states_btn'),
-            onPressed: () {
+            label: _editingStateRules ? 'Cancel' : 'Edit Rules',
+            isDark: isDark,
+            fontSize: 11.5,
+            color: _editingStateRules ? muted : focal,
+            onTap: () {
               setState(() {
                 _editingStateRules = !_editingStateRules;
                 if (_editingStateRules) {
@@ -512,30 +441,18 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                 }
               });
             },
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 30),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            ),
-            icon: Icon(
-              _editingStateRules ? Icons.close : Icons.edit_outlined,
-              size: 14,
-            ),
-            label: Text(
-              _editingStateRules ? 'Close' : 'Edit Rules',
-              style: const TextStyle(fontSize: 11.5),
-            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_editingStateRules)
                 Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
                   decoration: BoxDecoration(
-                    color: AppTheme.bgSurfaceFor(isDark),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(color: cyan.withValues(alpha: 0.5)),
+                    border: Border(
+                      left: BorderSide(color: focal, width: 2),
+                      bottom: BorderSide(color: border, width: 1),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -548,135 +465,129 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                           color: primary,
                         ),
                         decoration: InputDecoration(
-                          labelText: 'State Flow (separate with -> or →)',
-                          hintText: 'e.g. Idle -> Move -> Dash -> Recovery',
-                          hintStyle: TextStyle(fontSize: 12, color: muted),
                           isDense: true,
+                          hintText:
+                              'State flow (e.g. Idle -> Moving -> Dashing -> Recovery)',
+                          hintStyle: TextStyle(fontSize: 12, color: muted),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(color: border),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: focal),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         key: const ValueKey('epic_interrupts_input'),
                         controller: _interruptsController,
-                        maxLines: 3,
-                        style: TextStyle(fontSize: 12.5, color: primary),
+                        minLines: 2,
+                        maxLines: 5,
+                        style: TextStyle(fontSize: 13, color: primary),
                         decoration: InputDecoration(
-                          labelText: 'Interrupt Rules (1 per line)',
-                          hintText:
-                              'e.g. Dash cancels Move\nHitstun cancels Dash',
-                          hintStyle: TextStyle(fontSize: 12, color: muted),
                           isDense: true,
+                          hintText: 'Interrupt rules (one rule per line)',
+                          hintStyle: TextStyle(fontSize: 12, color: muted),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(color: border),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: focal),
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),
-                      Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 8,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          TextButton(
-                            onPressed: () =>
+                          PlainTextLink(
+                            label: 'Cancel',
+                            isDark: isDark,
+                            color: muted,
+                            onTap: () =>
                                 setState(() => _editingStateRules = false),
-                            child: const Text('Cancel'),
                           ),
-                          ElevatedButton(
+                          const SizedBox(width: 12),
+                          PlainPrimaryButton(
                             key: const ValueKey('epic_states_save_btn'),
+                            label: 'Save Rules',
+                            isDark: isDark,
                             onPressed: () {
+                              final parsedStates = _statesController.text
+                                  .split(RegExp(r'->|\n|,'))
+                                  .map((s) => s.trim())
+                                  .where((s) => s.isNotEmpty)
+                                  .toList();
+                              final parsedRules = _interruptsController.text
+                                  .split('\n')
+                                  .map((s) => s.trim())
+                                  .where((s) => s.isNotEmpty)
+                                  .toList();
                               wb.updateEpicStateRules(
                                 epic.id,
-                                stateFlow: _statesController.text.split(
-                                  RegExp(r'\s*(?:->|→)\s*'),
-                                ),
-                                interruptRules: _interruptsController.text
-                                    .split('\n'),
+                                stateFlow: parsedStates,
+                                interruptRules: parsedRules,
                               );
                               setState(() => _editingStateRules = false);
                             },
-                            child: const Text(
-                              'Save State Rules',
-                              style: TextStyle(fontSize: 12),
-                            ),
                           ),
                         ],
                       ),
                     ],
                   ),
-                ),
-              if (states.isNotEmpty) ...[
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    for (int i = 0; i < states.length; i++) ...[
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.bgSurfaceFor(isDark),
-                          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                          border: Border.all(color: border),
-                        ),
-                        child: Text(
-                          states[i],
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 12,
-                            color: primary,
-                          ),
-                        ),
-                      ),
-                      if (i < states.length - 1)
-                        Text('→', style: TextStyle(color: muted, fontSize: 12)),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 10),
-              ],
-              for (final rule in rules)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    '• $rule',
-                    style: TextStyle(fontSize: 13, color: secondary),
+                )
+              else ...[
+                if (states.isNotEmpty) ...[
+                  Text(
+                    states.join(' -> '),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12.5,
+                      color: primary,
+                      height: 1.45,
+                    ),
                   ),
-                ),
-              if (states.isEmpty && rules.isEmpty)
-                Text(
-                  'Linear slice execution; no cross-slice interrupt locks.',
-                  style: TextStyle(fontSize: 12.5, color: muted),
-                ),
+                  if (rules.isNotEmpty) const SizedBox(height: 8),
+                ],
+                if (rules.isNotEmpty)
+                  for (final r in rules)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '— $r',
+                        style: TextStyle(fontSize: 13.5, color: secondary),
+                      ),
+                    )
+                else if (states.isEmpty)
+                  Text(
+                    'No shared state machine or interrupt rules specified yet.',
+                    style: TextStyle(fontSize: 12.5, color: muted),
+                  ),
+              ],
             ],
           ),
         ),
-        const SizedBox(height: 14),
 
-        // §04 Domain Out-of-Scope Cuts
+        // §04 Out of Scope
         EpicSectionCard(
           isDark: isDark,
           code: '§04',
-          title: 'Domain Out-of-Scope Cuts',
-          trailing: TextButton.icon(
+          title: 'Out of Scope',
+          trailing: PlainTextLink(
             key: const ValueKey('epic_add_cut_btn'),
-            onPressed: () => setState(() => _addingCut = !_addingCut),
-            style: TextButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            ),
-            icon: Icon(_addingCut ? Icons.close : Icons.add, size: 13.5),
-            label: Text(
-              _addingCut ? 'Close' : '+ Add Cut',
-              style: const TextStyle(fontSize: 11.5),
-            ),
+            label: _addingCut ? 'Cancel' : '+ Add cut',
+            isDark: isDark,
+            fontSize: 11.5,
+            color: _addingCut ? muted : focal,
+            onTap: () => setState(() => _addingCut = !_addingCut),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (_addingCut)
                 InlineSingleLineAdderBox(
                   isDark: isDark,
-                  labelText: 'Domain Scope Cut (e.g. No multiplayer lobbies)',
-                  hintText: 'No procedural dungeon generation',
+                  labelText: 'Domain Out-of-Scope Cut',
+                  hintText: 'e.g. No multiplayer lag compensation',
                   submitLabel: 'Add Cut',
                   inputKey: const ValueKey('epic_cut_input'),
                   saveBtnKey: const ValueKey('epic_cut_save_btn'),
@@ -688,86 +599,55 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                 ),
               if (epic.outOfScope.isEmpty)
                 Text(
-                  'Scoped cleanly to child Features below.',
+                  'No domain out-of-scope cuts specified.',
                   style: TextStyle(fontSize: 12.5, color: muted),
                 )
               else
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    for (int i = 0; i < epic.outOfScope.length; i++)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 9,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: red.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-                          border: Border.all(color: red.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                epic.outOfScope[i],
-                                style: TextStyle(fontSize: 12, color: primary),
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            InkWell(
-                              key: ValueKey('epic_cut_delete_$i'),
-                              onTap: () =>
-                                  wb.removeEpicOutOfScopeCut(epic.id, i),
-                              child: Icon(
-                                Icons.close_rounded,
-                                size: 13,
-                                color: red,
-                              ),
-                            ),
-                          ],
-                        ),
+                for (int i = 0; i < epic.outOfScope.length; i++)
+                  PlainHoverRemoveRow(
+                    isDark: isDark,
+                    showBottomBorder: i < epic.outOfScope.length - 1,
+                    removeKey: ValueKey('epic_cut_delete_$i'),
+                    removeTooltip: 'Remove cut',
+                    onRemove: () => wb.removeEpicOutOfScopeCut(epic.id, i),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        epic.outOfScope[i],
+                        style: TextStyle(fontSize: 13.5, color: secondary),
                       ),
-                  ],
-                ),
+                    ),
+                  ),
             ],
           ),
         ),
-        const SizedBox(height: 14),
 
-        // §05 Child Features + Add Feature Slice
+        // §05 Child Slices
         EpicSectionCard(
           isDark: isDark,
           code: '§05',
-          title: 'Child Features in ${epic.code} ($relVer)',
-          trailing: OutlinedButton.icon(
+          title: 'Child Slices (${visibleFeatures.length})',
+          trailing: PlainTextLink(
             key: const ValueKey('show_add_feature_btn'),
-            onPressed: () =>
-                setState(() => _showAddFeatureForm = !_showAddFeatureForm),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(0, 30),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            ),
-            icon: Icon(_showAddFeatureForm ? Icons.close : Icons.add, size: 14),
-            label: Text(
-              _showAddFeatureForm ? 'Close' : '+ Add Feature Slice',
-              style: const TextStyle(fontSize: 11.5),
-            ),
+            label: _showAddFeature ? 'Cancel' : '+ Add slice',
+            isDark: isDark,
+            fontSize: 11.5,
+            color: _showAddFeature ? muted : focal,
+            onTap: () => setState(() => _showAddFeature = !_showAddFeature),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (_showAddFeatureForm) ...[
+              if (_showAddFeature)
                 Container(
                   key: const ValueKey('add_feature_form'),
-                  margin: const EdgeInsets.only(bottom: 14),
-                  padding: const EdgeInsets.all(14),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 10),
                   decoration: BoxDecoration(
-                    color: AppTheme.bgSurfaceFor(isDark),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(color: cyan.withValues(alpha: 0.5)),
+                    border: Border(
+                      left: BorderSide(color: focal, width: 2),
+                      bottom: BorderSide(color: border, width: 1),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -775,86 +655,86 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                       TextField(
                         key: const ValueKey('new_feature_title_input'),
                         controller: _newFeatureTitleController,
-                        style: TextStyle(fontSize: 13, color: primary),
+                        autofocus: true,
+                        style: TextStyle(fontSize: 13.5, color: primary),
                         decoration: InputDecoration(
-                          labelText: 'Feature Title (2–5 plain words)',
-                          hintText: 'e.g. Wall Bounce Dash',
-                          hintStyle: TextStyle(fontSize: 12, color: muted),
                           isDense: true,
+                          hintText: 'Slice title (e.g. Shield Bash Knockback)',
+                          hintStyle: TextStyle(fontSize: 12.5, color: muted),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(color: border),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: focal),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       TextField(
                         key: const ValueKey('new_feature_goal_input'),
                         controller: _newFeatureGoalController,
-                        style: TextStyle(fontSize: 13, color: primary),
+                        style: TextStyle(fontSize: 13, color: secondary),
                         decoration: InputDecoration(
-                          labelText: 'Slice Goal (1 plain-English sentence)',
-                          hintText:
-                              'e.g. Ricochet cleanly off angled stone arena walls.',
-                          hintStyle: TextStyle(fontSize: 12, color: muted),
                           isDense: true,
+                          hintText: 'Playable outcome in 1 plain sentence',
+                          hintStyle: TextStyle(fontSize: 12, color: muted),
+                          border: UnderlineInputBorder(
+                            borderSide: BorderSide(color: border),
+                          ),
+                          focusedBorder: UnderlineInputBorder(
+                            borderSide: BorderSide(color: focal),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        alignment: WrapAlignment.end,
-                        spacing: 8,
-                        runSpacing: 6,
+                      const SizedBox(height: 10),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          TextButton(
-                            onPressed: () {
-                              _newFeatureTitleController.clear();
-                              _newFeatureGoalController.clear();
-                              setState(() => _showAddFeatureForm = false);
-                            },
-                            child: const Text('Cancel'),
+                          PlainTextLink(
+                            label: 'Cancel',
+                            isDark: isDark,
+                            color: muted,
+                            onTap: () =>
+                                setState(() => _showAddFeature = false),
                           ),
-                          ElevatedButton(
+                          const SizedBox(width: 12),
+                          PlainPrimaryButton(
                             key: const ValueKey('submit_add_feature_btn'),
+                            label: 'Create Feature Slice',
+                            isDark: isDark,
                             onPressed: () {
                               final title =
                                   _newFeatureTitleController.text.trim();
-                              final goal =
-                                  _newFeatureGoalController.text.trim();
-                              if (title.isEmpty || goal.isEmpty) return;
+                              if (title.isEmpty) return;
                               wb.addFeatureSlice(
                                 epic.id,
                                 title: title,
-                                goal: goal,
+                                goal: _newFeatureGoalController.text.trim(),
                               );
                               _newFeatureTitleController.clear();
                               _newFeatureGoalController.clear();
-                              setState(() => _showAddFeatureForm = false);
+                              setState(() => _showAddFeature = false);
                             },
-                            child: const Text(
-                              'Create Feature Slice →',
-                              style: TextStyle(fontSize: 12),
-                            ),
                           ),
                         ],
                       ),
                     ],
                   ),
                 ),
-              ],
-              if (visibleFeatures.isEmpty)
-                Text(
-                  'No child Features queued in $relVer. Use + Add Feature Slice above.',
-                  style: TextStyle(fontSize: 12.5, color: muted),
-                )
-              else
-                for (final feat in visibleFeatures)
-                  EpicChildFeatureCard(
-                    feat: feat,
-                    relVer: relVer,
-                    isDark: isDark,
-                    onTap: () => wb.selectFeature(epic.id, feat.id),
-                  ),
+              for (final feat in visibleFeatures)
+                EpicChildFeatureCard(
+                  feat: feat,
+                  relVer: relVer,
+                  isDark: isDark,
+                  onTap: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    wb.selectFeature(epic.id, feat.id);
+                  },
+                ),
             ],
           ),
         ),
-        const SizedBox(height: 36),
+        const SizedBox(height: 24),
       ],
     );
   }

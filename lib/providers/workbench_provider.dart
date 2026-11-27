@@ -46,6 +46,15 @@ enum WorkbenchStage {
   releaseWorkbench,
 }
 
+enum WorkbenchDocPage {
+  newGameIdea,
+  projectBrief,
+  releaseSpec,
+  planNextRelease,
+  epicDomain,
+  featureSlice,
+}
+
 class WorkbenchProvider extends ChangeNotifier {
   static const String ownerAdminEmail = 'henryyoungchoi@gmail.com';
 
@@ -229,6 +238,58 @@ class WorkbenchProvider extends ChangeNotifier {
 
   String? _selectedFeatureId;
   String? get selectedFeatureId => _selectedFeatureId;
+
+  bool _showingReleaseSpec = false;
+  bool _showingPlanNextRelease = false;
+  String? _previousProjectIdBeforeNewGame;
+  String? _autoFocusFeatureId;
+
+  bool get isInspectingReleaseSpec =>
+      !_showingPlanNextRelease &&
+      _showingReleaseSpec &&
+      activeRelease != null &&
+      _currentStage == WorkbenchStage.releaseWorkbench;
+  bool get isPlanningNextRelease => _showingPlanNextRelease;
+  bool get canCancelNewGame =>
+      _previousProjectIdBeforeNewGame != null &&
+      _previousProjectIdBeforeNewGame != _activeProjectId &&
+      documents.containsKey(_previousProjectIdBeforeNewGame);
+  String? get previousProjectTitleBeforeNewGame => canCancelNewGame
+      ? documents[_previousProjectIdBeforeNewGame!]?.title
+      : null;
+
+  String? consumeAutoFocusFeatureId() {
+    final id = _autoFocusFeatureId;
+    _autoFocusFeatureId = null;
+    return id;
+  }
+
+  WorkbenchDocPage get activeDocPage {
+    final draft = _conceptDraft;
+    if (draft == null || !draft.hasSpec) {
+      return WorkbenchDocPage.newGameIdea;
+    }
+    if (_showingPlanNextRelease) {
+      return WorkbenchDocPage.planNextRelease;
+    }
+    if (_currentStage == WorkbenchStage.projectPitch) {
+      return WorkbenchDocPage.projectBrief;
+    }
+    if (activeRelease != null &&
+        (_showingReleaseSpec || activeReleaseEpicDocs.isEmpty)) {
+      return WorkbenchDocPage.releaseSpec;
+    }
+    if (selectedFeatureSpec != null) {
+      return WorkbenchDocPage.featureSlice;
+    }
+    if (selectedEpicSpec != null) {
+      return WorkbenchDocPage.epicDomain;
+    }
+    if (activeRelease != null) {
+      return WorkbenchDocPage.releaseSpec;
+    }
+    return WorkbenchDocPage.projectBrief;
+  }
 
   final Set<String> _expandedEpicIds = <String>{};
   Set<String> get expandedEpicIds => Set.unmodifiable(_expandedEpicIds);
@@ -833,14 +894,18 @@ class WorkbenchProvider extends ChangeNotifier {
   }
 
   void setStage(WorkbenchStage stage) {
+    _showingPlanNextRelease = false;
     if (stage == WorkbenchStage.releaseWorkbench &&
         activeReleaseEpicDocs.isEmpty) {
+      _showingReleaseSpec = false;
       _currentStage = WorkbenchStage.projectPitch;
       notifyListeners();
       return;
     }
     _currentStage = stage;
-    if (stage == WorkbenchStage.releaseWorkbench && _selectedEpicId == null) {
+    if (stage == WorkbenchStage.projectPitch) {
+      _showingReleaseSpec = false;
+    } else if (_selectedEpicId == null) {
       final docs = activeReleaseEpicDocs;
       if (docs.isNotEmpty) {
         _selectedEpicId = docs.first.id;
@@ -854,13 +919,15 @@ class WorkbenchProvider extends ChangeNotifier {
 }
 
 class _Stage2UndoEntry {
-  final String epicDocId;
+  final String? epicDocId;
+  final String? releaseDocId;
   final String? featureId;
   final String snapshotJson;
   final String summary;
 
   const _Stage2UndoEntry({
-    required this.epicDocId,
+    this.epicDocId,
+    this.releaseDocId,
     required this.featureId,
     required this.snapshotJson,
     required this.summary,

@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
 
-/// Shared slim 1-line floating AI Refine dock (`✨ AI · [Target]`) with
-/// expandable quick-prompt chips and inline Undo / Error status.
+/// Shared slim 1-line flat AI Refine bar with expandable prompt links and
+/// inline Undo / Error status.
 class FloatingAiRefineDock extends StatefulWidget {
   final bool isDark;
   final String targetBadge;
@@ -107,28 +107,29 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
   Widget build(BuildContext context) {
     final isDark = widget.isDark;
     final border = AppTheme.borderFor(isDark);
-    final panelBg = AppTheme.bgPanelFor(isDark);
-    final surfaceBg = AppTheme.bgSurfaceRaisedFor(isDark);
+    final baseBg = AppTheme.bgBaseFor(isDark);
     final primary = AppTheme.textPrimaryFor(isDark);
     final secondary = AppTheme.textSecondaryFor(isDark);
     final muted = AppTheme.textMutedFor(isDark);
-    final cyan = AppTheme.accentCyanFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
+    final focalFg = AppTheme.focalAccentFgFor(isDark);
     final green = AppTheme.accentGreenFor(isDark);
     final red = AppTheme.accentRedFor(isDark);
 
     final showChips =
         widget.quickPrompts.isNotEmpty && (_showIdeas || _focusNode.hasFocus);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-      decoration: BoxDecoration(
-        color: panelBg,
-        border: Border(top: BorderSide(color: border)),
-      ),
+    return Material(
+      color: baseBg,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(24, 8, 24, 10),
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: border, width: 1)),
+        ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 840),
+          constraints: const BoxConstraints(maxWidth: 700),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -140,20 +141,11 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
                 ),
               ] else if (widget.errorText != null &&
                   widget.errorText!.trim().isNotEmpty) ...[
-                Container(
-                  margin: const EdgeInsets.only(bottom: 6),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: red.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(color: red.withValues(alpha: 0.4)),
-                  ),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
-                      Icon(Icons.error_outline, size: 14, color: red),
+                      Icon(Icons.error_outline, size: 13, color: red),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
@@ -164,7 +156,7 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
                       if (widget.onDismissError != null)
                         InkWell(
                           onTap: widget.onDismissError,
-                          child: Icon(Icons.close, size: 14, color: red),
+                          child: Icon(Icons.close, size: 13, color: red),
                         ),
                     ],
                   ),
@@ -188,21 +180,14 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
               if (showChips) ...[
                 Padding(
                   key: widget.ideasStripKey,
-                  padding: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.only(bottom: 6),
                   child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+                    spacing: 12,
+                    runSpacing: 4,
                     children: [
                       for (final tip in widget.quickPrompts)
-                        ActionChip(
-                          label: Text(
-                            tip,
-                            style: TextStyle(fontSize: 11.5, color: secondary),
-                          ),
-                          backgroundColor: surfaceBg,
-                          side: BorderSide(color: border),
-                          visualDensity: VisualDensity.compact,
-                          onPressed: widget.isBusy
+                        InkWell(
+                          onTap: widget.isBusy
                               ? null
                               : () {
                                   _ctrl.text = tip;
@@ -211,62 +196,64 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
                                   );
                                   _focusNode.requestFocus();
                                 },
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Text(
+                              tip,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: secondary,
+                              ),
+                            ),
+                          ),
                         ),
                     ],
                   ),
                 ),
               ],
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(vertical: 2),
                 decoration: BoxDecoration(
-                  color: surfaceBg,
-                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                  border: Border.all(color: border),
+                  border: Border(
+                    bottom: BorderSide(
+                      color: _focusNode.hasFocus ? focal : border,
+                      width: 1,
+                    ),
+                  ),
                 ),
                 child: LayoutBuilder(
                   builder: (context, dockConstraints) {
                     final compact = dockConstraints.maxWidth < 500;
+                    final fullBadge = widget.targetBadge.startsWith('✨')
+                        ? widget.targetBadge
+                        : '✨ ${widget.targetBadge}';
                     return Row(
                       children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: cyan.withValues(alpha: 0.12),
-                            borderRadius:
-                                BorderRadius.circular(AppTheme.radiusXs),
-                            border: Border.all(
-                              color: cyan.withValues(alpha: 0.35),
-                            ),
-                          ),
-                          child: Text(
-                            compact ? '✨' : '✨ ${widget.targetBadge}',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: cyan,
-                            ),
+                        Text(
+                          compact ? '✨' : fullBadge,
+                          style: GoogleFonts.jetBrainsMono(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: muted,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: TextField(
                             key: widget.inputKey,
                             controller: _ctrl,
                             focusNode: _focusNode,
                             enabled: !widget.isBusy,
-                            style: TextStyle(fontSize: 12.5, color: primary),
+                            style: TextStyle(fontSize: 13, color: primary),
                             decoration: InputDecoration(
                               hintText: widget.hintText,
-                              hintStyle: TextStyle(fontSize: 12, color: muted),
+                              hintStyle: TextStyle(fontSize: 12.5, color: muted),
                               border: InputBorder.none,
                               enabledBorder: InputBorder.none,
                               focusedBorder: InputBorder.none,
                               isDense: true,
                               contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 4,
+                                horizontal: 2,
                                 vertical: 6,
                               ),
                             ),
@@ -281,65 +268,84 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
                                 setState(() => _showIdeas = !_showIdeas),
                             style: TextButton.styleFrom(
                               visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.symmetric(
-                                horizontal: compact ? 5 : 8,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
                                 vertical: 4,
                               ),
-                              minimumSize: const Size(0, 28),
+                              minimumSize: const Size(0, 26),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
                             child: Text(
                               _showIdeas ? 'Hide' : 'Ideas',
                               style: TextStyle(
                                 fontSize: 11.5,
-                                color: _showIdeas ? cyan : muted,
+                                color: _showIdeas ? primary : muted,
                               ),
                             ),
                           ),
                         ],
                         if ((widget.canUndo || widget.alwaysShowUndo) &&
                             widget.onUndo != null) ...[
-                          const SizedBox(width: 4),
-                          OutlinedButton.icon(
+                          const SizedBox(width: 2),
+                          TextButton(
                             key: widget.undoBtnKey,
                             onPressed: (widget.isBusy || !widget.canUndo)
                                 ? null
                                 : widget.onUndo,
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 30),
-                              padding: EdgeInsets.symmetric(
-                                horizontal: compact ? 6 : 8,
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
                                 vertical: 4,
                               ),
+                              minimumSize: const Size(0, 26),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              foregroundColor: secondary,
+                              disabledForegroundColor:
+                                  muted.withValues(alpha: 0.45),
                             ),
-                            icon: const Icon(Icons.undo_rounded, size: 13.5),
-                            label: Text(
-                              compact ? '' : 'Undo',
-                              style: const TextStyle(fontSize: 11.5),
+                            child: const Text(
+                              'Undo',
+                              style: TextStyle(fontSize: 11.5),
                             ),
                           ),
                         ],
                         const SizedBox(width: 6),
-                        ElevatedButton(
+                        TextButton(
                           key: widget.applyBtnKey,
                           onPressed: widget.isBusy ? null : _submit,
-                          style: ElevatedButton.styleFrom(
-                            minimumSize: const Size(0, 30),
+                          style: TextButton.styleFrom(
+                            backgroundColor: focal,
+                            foregroundColor: focalFg,
+                            disabledBackgroundColor:
+                                AppTheme.bgSurfaceActiveFor(isDark),
+                            disabledForegroundColor: muted,
+                            elevation: 0,
+                            minimumSize: const Size(0, 28),
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
+                              horizontal: 11,
                               vertical: 4,
+                            ),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
                           child: widget.isBusy
-                              ? const SizedBox(
-                                  width: 13,
-                                  height: 13,
+                              ? SizedBox(
+                                  width: 12,
+                                  height: 12,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
+                                    color: focalFg,
                                   ),
                                 )
                               : const Text(
-                                  'Apply',
-                                  style: TextStyle(fontSize: 12),
+                                  'Run',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                         ),
                       ],
@@ -351,6 +357,7 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
           ),
         ),
       ),
+    ),
     );
   }
 }

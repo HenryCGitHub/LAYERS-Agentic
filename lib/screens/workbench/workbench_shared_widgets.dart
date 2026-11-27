@@ -406,62 +406,44 @@ class EpicSectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceRaisedFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppTheme.borderFor(isDark)),
-      ),
+    final border = AppTheme.borderFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Builder(
-            builder: (context) {
-              final titleStyle = AppTheme.displayFont(
-                fontSize: 15.5,
-                fontWeight: FontWeight.w700,
-                color: AppTheme.textPrimaryFor(isDark),
-              );
-              final codeWidget = Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Text(
+          Container(
+            padding: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: border, width: 1)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
                   code,
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.accentCyanFor(isDark),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: muted,
                   ),
                 ),
-              );
-              return Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  codeWidget,
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: trailing == null
-                        ? Text(title, style: titleStyle)
-                        : LayoutBuilder(
-                            builder: (context, rightConstraints) => SizedBox(
-                              width: rightConstraints.maxWidth,
-                              child: Wrap(
-                                alignment: WrapAlignment.spaceBetween,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                spacing: 12,
-                                runSpacing: 6,
-                                children: [
-                                  Text(title, style: titleStyle),
-                                  trailing!,
-                                ],
-                              ),
-                            ),
-                          ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title.toUpperCase(),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.9,
+                      color: muted,
+                    ),
                   ),
-                ],
-              );
-            },
+                ),
+                if (trailing != null) trailing!,
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           child,
@@ -616,7 +598,6 @@ class EpicChildFeatureCard extends StatelessWidget {
     final secondary = AppTheme.textSecondaryFor(isDark);
     final muted = AppTheme.textMutedFor(isDark);
     final border = AppTheme.borderFor(isDark);
-    final cyan = AppTheme.accentCyanFor(isDark);
     final green = AppTheme.accentGreenFor(isDark);
     final red = AppTheme.accentRedFor(isDark);
 
@@ -624,65 +605,67 @@ class EpicChildFeatureCard extends StatelessWidget {
     final passedCount = effChecks.where((c) => c.passed).length;
     final passedFeature = feat.isPassedForRelease(relVer);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        key: ValueKey('epic_feature_card_${feat.id}'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.bgSurfaceFor(isDark),
-            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            border: Border.all(
-              color: passedFeature ? green.withValues(alpha: 0.4) : border,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 8,
-                runSpacing: 4,
-                children: [
-                  Text(
-                    '${feat.code} · ${feat.sliceTime}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w700,
-                      color: cyan,
-                    ),
+    return InkWell(
+      key: ValueKey('epic_feature_card_${feat.id}'),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: border, width: 1)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  passedFeature ? '✓' : (feat.openFixesCount > 0 ? '●' : '○'),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: feat.openFixesCount > 0
+                        ? red
+                        : (passedFeature ? green : muted),
                   ),
-                  Text(
-                    '$passedCount/${effChecks.length} checks${feat.openFixesCount > 0 ? ' · ${feat.openFixesCount} [FIX]' : ''}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: feat.openFixesCount > 0
-                          ? red
-                          : (passedFeature ? green : muted),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                feat.title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: primary,
                 ),
+                const SizedBox(width: 8),
+                Text(
+                  '${feat.code} · ${feat.sliceTime}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: muted,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  '$passedCount/${effChecks.length} checks${feat.openFixesCount > 0 ? ' · ${feat.openFixesCount} [FIX]' : ''}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: feat.openFixesCount > 0
+                        ? red
+                        : (passedFeature ? green : muted),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              feat.title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: primary,
               ),
-              const SizedBox(height: 3),
+            ),
+            if (feat.goal.trim().isNotEmpty) ...[
+              const SizedBox(height: 2),
               Text(
                 feat.goal,
                 style: TextStyle(fontSize: 12.5, color: secondary),
               ),
             ],
-          ),
+          ],
         ),
       ),
     );

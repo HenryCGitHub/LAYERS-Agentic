@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../agents/project_concept_agent.dart';
+
 import '../models/agent_blueprints.dart';
 import '../providers/workbench_provider.dart';
 import '../theme/app_theme.dart';
@@ -8,19 +8,20 @@ import 'stage1/stage1_idea_angles_card.dart';
 import 'stage1/stage1_shared_widgets.dart';
 import 'stage1/stage1_spec_document.dart';
 import 'workbench/floating_ai_refine_dock.dart';
+import 'workbench/plain_doc_widgets.dart';
 
-
-/// Stage 1: `1. Project Spec` (`PROJECT_SPEC.md` -> `ROOT_UNREAL_CONTEXT`).
-/// Single-space canvas with Idea Intake + vague-spark forks, scoped patch Refine + Undo,
-/// changed-section badges, `§05` Scope & First Playtest preview, and lean direct inline edits.
+/// Flat 700px single-column Stage 1 screen: handles both New Game Idea spark /
+/// 3-Angles intake and the Project Brief spec document.
 class ProjectPitchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
   final VoidCallback? onOpenAiSettings;
+  final bool embeddedInShell;
 
   const ProjectPitchScreen({
     super.key,
     required this.workbench,
     this.onOpenAiSettings,
+    this.embeddedInShell = false,
   });
 
   @override
@@ -29,504 +30,457 @@ class ProjectPitchScreen extends StatefulWidget {
 
 class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
   final TextEditingController _sparkController = TextEditingController();
-  final TextEditingController _coDesignController = TextEditingController();
   final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _refineController = TextEditingController();
 
   bool _editingTitle = false;
+  String? _lastSyncedTitle;
   String? _lastActiveProjectId;
 
-
-  void _resetInlineEditFlags() {
-    _editingTitle = false;
-  }
-
-  void _clearInlineControllers({bool includeSpark = false}) {
-    _titleController.clear();
-    _coDesignController.clear();
-    if (includeSpark) {
-      _sparkController.clear();
-    }
+  @override
+  void initState() {
+    super.initState();
+    _lastActiveProjectId = widget.workbench.activeProjectId;
   }
 
   @override
   void dispose() {
     _sparkController.dispose();
-    _coDesignController.dispose();
     _titleController.dispose();
+    _refineController.dispose();
     super.dispose();
+  }
+
+  void _resetInlineEditFlags() {
+    _editingTitle = false;
+  }
+
+  void _clearInlineControllers() {
+    _titleController.clear();
+    _lastSyncedTitle = null;
+    _refineController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
     final wb = widget.workbench;
     final draft = wb.conceptDraft;
-    final hasSpec = draft != null && draft.hasSpec;
     if (_lastActiveProjectId != wb.activeProjectId ||
-        (!hasSpec && _editingTitle)) {
-      final projectChanged = _lastActiveProjectId != null &&
-          _lastActiveProjectId != wb.activeProjectId;
+        (draft == null && _editingTitle)) {
       _lastActiveProjectId = wb.activeProjectId;
       _resetInlineEditFlags();
-      _clearInlineControllers(
-        includeSpark: projectChanged &&
-            !hasSpec &&
-            (draft == null || draft.sparkPrompt.isEmpty),
-      );
+      _clearInlineControllers();
     }
+    if (draft != null && _editingTitle && _lastSyncedTitle != draft.gameTitle) {
+      _titleController.text = draft.gameTitle;
+      _lastSyncedTitle = draft.gameTitle;
+    }
+
     final isDark = wb.isDark;
+    final bgBase = AppTheme.bgBaseFor(isDark);
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
     final border = AppTheme.borderFor(isDark);
-    final cyan = AppTheme.accentCyanFor(isDark);
-    final green = AppTheme.accentGreenFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
 
-    return Container(
-      color: AppTheme.bgBaseFor(isDark),
+    if (draft == null || !draft.hasSpec) {
+      return Material(
+        color: bgBase,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(28, 28, 28, 48),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 700),
+              child: _buildNewGameIntakeView(
+                wb: wb,
+                isDark: isDark,
+                textPrimary: textPrimary,
+                textSecondary: textSecondary,
+                textMuted: textMuted,
+                border: border,
+                focal: focal,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Material(
+      color: bgBase,
       child: Column(
         children: [
-          if (hasSpec)
-            _buildTopEditorialBar(
-              wb: wb,
-              spec: draft,
-              isDark: isDark,
-              textPrimary: textPrimary,
-              textSecondary: textSecondary,
-              border: border,
-              green: green,
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(28, 16, 28, 14),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: border, width: 1)),
             ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 700),
+                child: _buildBriefHeader(
+                  wb: wb,
+                  spec: draft,
+                  isDark: isDark,
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
+                  textMuted: textMuted,
+                  border: border,
+                  focal: focal,
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              padding: const EdgeInsets.fromLTRB(28, 22, 28, 40),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 840),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!hasSpec)
-                        _buildIdeaIntakeHeaderCard(
-                          context: context,
-                          wb: wb,
-                          isDark: isDark,
-                          textPrimary: textPrimary,
-                          textSecondary: textSecondary,
-                          textMuted: textMuted,
-                          cyan: cyan,
-                        )
-                      else ...[
-                        _buildSparkContextCaption(
-                          spec: draft,
-                          isDark: isDark,
-                          textMuted: textMuted,
-                          border: border,
-                        ),
-                        const SizedBox(height: 16),
-                        Stage1SpecDocument(
-                          workbench: wb,
-                          spec: draft,
-                          activeProjectId: wb.activeProjectId,
-                        ),
-                      ],
-                    ],
+                  constraints: const BoxConstraints(maxWidth: 700),
+                  child: Stage1SpecDocument(
+                    workbench: wb,
+                    spec: draft,
+                    activeProjectId: wb.activeProjectId,
                   ),
                 ),
               ),
             ),
           ),
-          if (hasSpec)
-            FloatingAiRefineDock(
-              isDark: isDark,
-              targetBadge: 'AI · Spec',
-              hintText:
-                  'Refine spec: "Switch to third-person", "Make movement heavier", or "Add parry shield"...',
-              isBusy: wb.isAgentBusy,
-              canUndo: wb.canUndoStage1,
-              alwaysShowUndo: true,
-              externalController: _coDesignController,
-              summaryText: draft.lastCoDesignNote.isEmpty
-                  ? null
-                  : 'Updated: ${draft.lastCoDesignNote}',
-              errorText: wb.stage1InlineError,
-              customErrorBanner: wb.stage1InlineError == null
-                  ? null
-                  : _buildStage1InlineErrorBanner(
-                      wb: wb,
-                      isDark: isDark,
-                      textPrimary: textPrimary,
-                      retryKey: const ValueKey('stage1_refine_retry_btn'),
-                      onRetry: () => _submitCoDesign(wb),
-                    ),
-              quickPrompts: [
-                for (final chip in ProjectConceptAgent.suggestQuickRefines(draft))
-                  chip.instruction,
-              ],
-              inputKey: const ValueKey('stage1_codesign_input'),
-              applyBtnKey: const ValueKey('stage1_codesign_apply_btn'),
-              undoBtnKey: const ValueKey('stage1_undo_btn'),
-              ideasBtnKey: const ValueKey('stage1_ai_ideas_btn'),
-              ideasStripKey: const ValueKey('stage1_ai_ideas_strip'),
-              onApply: (_) => _submitCoDesign(wb),
-              onUndo: () {
-                setState(_resetInlineEditFlags);
-                _clearInlineControllers();
-                wb.undoStage1Edit();
-              },
-              onDismissError: wb.dismissStage1InlineError,
-            ),
+          FloatingAiRefineDock(
+            isDark: isDark,
+            targetBadge: 'AI · Brief',
+            hintText: 'Refine pitch, UE5 setup, pillars, cuts, or v0.1 slices...',
+            isBusy: wb.isAgentBusy,
+            canUndo: wb.canUndoStage1,
+            alwaysShowUndo: true,
+            summaryText: draft.lastCoDesignNote,
+            errorText: wb.stage1InlineError,
+            customErrorBanner: wb.stage1InlineError == null
+                ? null
+                : _buildStage1InlineErrorBanner(
+                    wb: wb,
+                    isDark: isDark,
+                    textPrimary: textPrimary,
+                    retryKey: const ValueKey('stage1_refine_retry_btn'),
+                    onRetry: () => _submitRefine(wb),
+                  ),
+            quickPrompts: const <String>[
+              'Tighten v0.1 scope to 2 core Epics',
+              'Add hitstop and camera shake feel trade-off',
+              'Exclude multiplayer and save system from v0.1',
+            ],
+            externalController: _refineController,
+            inputKey: const ValueKey('stage1_codesign_input'),
+            applyBtnKey: const ValueKey('stage1_codesign_apply_btn'),
+            undoBtnKey: const ValueKey('stage1_undo_btn'),
+            ideasBtnKey: const ValueKey('stage1_ai_ideas_btn'),
+            ideasStripKey: const ValueKey('stage1_ai_ideas_strip'),
+            onApply: (instruction) async {
+              FocusManager.instance.primaryFocus?.unfocus();
+              final res = await wb.applyStage1CoDesignInstruction(instruction);
+              if (res != null && mounted) {
+                _refineController.clear();
+              }
+            },
+            onUndo: wb.undoStage1Edit,
+            onDismissError: wb.dismissStage1InlineError,
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildTopEditorialBar({
+  Widget _buildBriefHeader({
     required WorkbenchProvider wb,
     required ProjectConceptBlueprint spec,
     required bool isDark,
     required Color textPrimary,
     required Color textSecondary,
+    required Color textMuted,
     required Color border,
-    required Color green,
+    required Color focal,
   }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.bgPanelFor(isDark),
-        border: Border(bottom: BorderSide(color: border)),
-      ),
-      child: SizedBox(
-        width: double.infinity,
-        child: Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 12,
-          runSpacing: 8,
+    final launched = wb.projectReleases.isNotEmpty;
+    final launchLabel = launched
+        ? 'Sync Spec & Return to ${wb.activeReleaseVersionTag} →'
+        : 'Approve & Launch v0.1 →';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
           children: [
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 8,
-              runSpacing: 6,
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgSurfaceFor(isDark),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-                    border: Border.all(color: border),
-                  ),
-                  child: Text(
-                    'PROJECT_SPEC.md',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: textSecondary,
-                    ),
-                  ),
-                ),
-                if (_editingTitle)
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      SizedBox(
-                        width: 240,
-                        child: TextField(
-                          key: const ValueKey('stage1_title_input'),
-                          controller: _titleController,
-                          style: AppTheme.displayFont(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: textPrimary,
-                          ),
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 6,
-                            ),
-                          ),
-                          onSubmitted: (val) {
-                            wb.updateRootSpecSections(gameTitle: val);
-                            setState(() => _editingTitle = false);
-                          },
-                        ),
-                      ),
-                      IconButton(
-                        key: const ValueKey('stage1_title_save_btn'),
-                        tooltip: 'Save title',
-                        visualDensity: VisualDensity.compact,
-                        icon: Icon(Icons.check_rounded, size: 17, color: green),
-                        onPressed: () {
-                          wb.updateRootSpecSections(
-                            gameTitle: _titleController.text,
-                          );
-                          setState(() => _editingTitle = false);
-                        },
-                      ),
-                      IconButton(
-                        key: const ValueKey('stage1_title_cancel_btn'),
-                        tooltip: 'Cancel title edit',
-                        visualDensity: VisualDensity.compact,
-                        icon: const Icon(Icons.close_rounded, size: 16),
-                        onPressed: () => setState(() => _editingTitle = false),
-                      ),
-                    ],
-                  )
-                else
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          spec.normalizedTitle,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTheme.displayFont(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: textPrimary,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        key: const ValueKey('stage1_edit_title_btn'),
-                        tooltip: 'Rename project',
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.only(left: 4),
-                        constraints: const BoxConstraints(
-                          minWidth: 26,
-                          minHeight: 26,
-                        ),
-                        icon: Icon(
-                          Icons.edit_outlined,
-                          size: 14,
-                          color: textSecondary,
-                        ),
-                        onPressed: wb.isAgentBusy
-                            ? null
-                            : () {
-                                _titleController.text = spec.normalizedTitle;
-                                setState(() => _editingTitle = true);
-                              },
-                      ),
-                    ],
-                  ),
-                TextButton.icon(
-                  key: const ValueKey('reset_spark_btn'),
-                  onPressed: wb.isAgentBusy
-                      ? null
-                      : () {
-                          _sparkController.clear();
-                          _coDesignController.clear();
-                          setState(_resetInlineEditFlags);
-                          wb.resetStage1ToNewIdea();
-                        },
-                  icon: const Icon(Icons.add_rounded, size: 15),
-                  label: const Text('New Idea', style: TextStyle(fontSize: 12)),
-                ),
-              ],
+            Text(
+              'PROJECT BRIEF · ${spec.architectureMode.shortLabel.toUpperCase()}',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.9,
+                color: textMuted,
+              ),
             ),
-            Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 10,
-              runSpacing: 6,
-              children: [
-                UnrealArchitectureToggle(
-                  mode: wb.unrealArchitectureMode,
-                  isDark: isDark,
-                  onChanged: wb.isAgentBusy ? null : wb.setArchitectureMode,
-                ),
-                ElevatedButton.icon(
-                  key: const ValueKey('approve_launch_workbench_btn'),
-                  onPressed: wb.isAgentBusy
-                      ? null
-                      : () {
-                          wb.approveRootSpecAndLaunchWorkbench();
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: green,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
+            const Spacer(),
+            if (!_editingTitle)
+              PlainTextLink(
+                key: const ValueKey('stage1_edit_title_btn'),
+                label: 'Rename',
+                isDark: isDark,
+                fontSize: 11.5,
+                color: textMuted,
+                onTap: wb.isAgentBusy
+                    ? null
+                    : () {
+                        _titleController.text = spec.gameTitle;
+                        _lastSyncedTitle = spec.gameTitle;
+                        setState(() => _editingTitle = true);
+                      },
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_editingTitle) ...[
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  key: const ValueKey('stage1_title_input'),
+                  controller: _titleController,
+                  autofocus: true,
+                  style: AppTheme.displayFont(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w700,
+                    color: textPrimary,
+                  ),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    border: UnderlineInputBorder(
+                      borderSide: BorderSide(color: border),
+                    ),
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: focal),
                     ),
                   ),
-                  icon: const Icon(Icons.check_circle_outline, size: 16),
-                  label: Text(
-                    () {
-                      if (wb.projectReleases.isNotEmpty) {
-                        return 'Sync Spec & Return to ${wb.activeReleaseVersionTag} →';
-                      }
-                      final sliceCount = spec.initialEpics.fold<int>(
-                        0,
-                        (sum, e) => sum + e.featuresForRelease('v0.1').length,
-                      );
-                      return 'Approve & Launch v0.1 (${spec.initialEpics.length} Epics · $sliceCount Features) →';
-                    }(),
-                  ),
+                  onSubmitted: (val) {
+                    wb.updateRootSpecSections(gameTitle: val);
+                    setState(() => _editingTitle = false);
+                  },
                 ),
-              ],
+              ),
+              const SizedBox(width: 8),
+              PlainPrimaryButton(
+                key: const ValueKey('stage1_title_save_btn'),
+                label: 'Save',
+                isDark: isDark,
+                onPressed: () {
+                  wb.updateRootSpecSections(gameTitle: _titleController.text);
+                  setState(() => _editingTitle = false);
+                },
+              ),
+              const SizedBox(width: 6),
+              PlainTextLink(
+                key: const ValueKey('stage1_title_cancel_btn'),
+                label: 'Cancel',
+                isDark: isDark,
+                color: textMuted,
+                onTap: () => setState(() => _editingTitle = false),
+              ),
+            ],
+          ),
+        ] else ...[
+          PlainEditableLineField(
+            fieldKey: const ValueKey('stage1_title_inline_field'),
+            value: spec.normalizedTitle,
+            isDark: isDark,
+            style: AppTheme.displayFont(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: textPrimary,
+            ),
+            onCommit: (val) => wb.updateRootSpecSections(gameTitle: val),
+          ),
+        ],
+        const SizedBox(height: 14),
+        Wrap(
+          spacing: 16,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            PlainPrimaryButton(
+              key: const ValueKey('approve_launch_workbench_btn'),
+              label: launchLabel,
+              isDark: isDark,
+              onPressed: wb.isAgentBusy
+                  ? null
+                  : () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      wb.approveRootSpecAndLaunchWorkbench(
+                        openReleaseSpec: wb.projectReleases.isEmpty,
+                      );
+                    },
+            ),
+            UnrealArchitectureToggle(
+              mode: wb.unrealArchitectureMode,
+              isDark: isDark,
+              onChanged: wb.isAgentBusy ? null : wb.setArchitectureMode,
+            ),
+            PlainTextLink(
+              key: const ValueKey('reset_spark_btn'),
+              label: 'New Idea',
+              isDark: isDark,
+              color: textMuted,
+              onTap: wb.isAgentBusy
+                  ? null
+                  : () {
+                      setState(_resetInlineEditFlags);
+                      _clearInlineControllers();
+                      wb.resetStage1ToNewIdea();
+                    },
             ),
           ],
         ),
-      ),
+        if (spec.sparkPrompt.trim().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Spark: "${spec.sparkPrompt.trim()}"',
+            style: TextStyle(fontSize: 12, color: textMuted),
+          ),
+        ],
+      ],
     );
   }
 
-  Widget _buildIdeaIntakeHeaderCard({
-    required BuildContext context,
+  Widget _buildNewGameIntakeView({
     required WorkbenchProvider wb,
     required bool isDark,
     required Color textPrimary,
     required Color textSecondary,
     required Color textMuted,
-    required Color cyan,
+    required Color border,
+    required Color focal,
   }) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-          decoration: BoxDecoration(
-            color: cyan.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(AppTheme.radiusPill),
-            border: Border.all(color: cyan.withValues(alpha: 0.35)),
+        if (wb.canCancelNewGame) ...[
+          Row(
+            children: [
+              PlainTextLink(
+                key: const ValueKey('new_game_cancel_btn'),
+                label:
+                    '← Back to ${wb.previousProjectTitleBeforeNewGame ?? "Project"}',
+                isDark: isDark,
+                color: textSecondary,
+                onTap: wb.isAgentBusy
+                    ? null
+                    : () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        wb.cancelNewGame();
+                      },
+              ),
+            ],
           ),
-          child: Text(
-            'STAGE 1 · IDEA WORKBENCH',
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: cyan,
-            ),
+          const SizedBox(height: 18),
+        ],
+        Text(
+          'NEW GAME · IDEA SPARK',
+          style: GoogleFonts.jetBrainsMono(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.9,
+            color: textMuted,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 6),
         Text(
-          'Shape your game idea.',
+          'What are you building in UE5?',
           style: AppTheme.displayFont(
-            fontSize: 30,
+            fontSize: 28,
             fontWeight: FontWeight.w700,
             color: textPrimary,
-            height: 1.15,
           ),
         ),
         const SizedBox(height: 8),
         Text(
-          'Drop 2–5 rough words to explore 3 playable angles with Hydrogen, or skip straight to drafting your UE5 spec.',
-          style: TextStyle(
-            fontSize: 14,
-            color: textSecondary,
-            height: 1.5,
-          ),
+          'Describe the player verb, camera, and prototype goal. Pick an angle or generate the v0.1 Project Brief directly.',
+          style: TextStyle(fontSize: 13.5, height: 1.45, color: textSecondary),
         ),
-        const SizedBox(height: 18),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppTheme.bgSurfaceRaisedFor(isDark),
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            border: Border.all(color: AppTheme.borderBrightFor(isDark)),
+        const SizedBox(height: 22),
+        TextField(
+          key: const ValueKey('spark_prompt_input'),
+          controller: _sparkController,
+          maxLines: 3,
+          minLines: 2,
+          enabled: !wb.isAgentBusy,
+          style: TextStyle(fontSize: 15, height: 1.45, color: textPrimary),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText:
+                'e.g., Third-person mech claw dash arena where breaking crab armor drops shield plates...',
+            hintStyle: TextStyle(fontSize: 14, color: textMuted),
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            border: UnderlineInputBorder(
+              borderSide: BorderSide(color: border),
+            ),
+            enabledBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: border),
+            ),
+            focusedBorder: UnderlineInputBorder(
+              borderSide: BorderSide(color: focal, width: 1.5),
+            ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextField(
-                key: const ValueKey('spark_prompt_input'),
-                controller: _sparkController,
-                minLines: 2,
-                maxLines: 4,
-                style: TextStyle(fontSize: 15, color: textPrimary),
-                decoration: InputDecoration(
-                  hintText:
-                      'e.g. horror fishing, cozy goblin bakery, mech courier...',
-                  hintStyle: TextStyle(color: textMuted, fontSize: 14),
-                  border: InputBorder.none,
-                  enabledBorder: InputBorder.none,
-                  focusedBorder: InputBorder.none,
-                  filled: false,
-                  contentPadding: EdgeInsets.zero,
-                ),
-                onChanged: wb.previewArchitectureModeFromSparkText,
-                onSubmitted: (val) async {
-                  if (!wb.isAgentBusy && val.trim().isNotEmpty) {
-                    await wb.exploreSparkAngles(val);
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                alignment: WrapAlignment.spaceBetween,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  UnrealArchitectureToggle(
-                    mode: wb.unrealArchitectureMode,
-                    isDark: isDark,
-                    onChanged: wb.isAgentBusy ? null : wb.setArchitectureMode,
-                  ),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      OutlinedButton(
-                        key: const ValueKey('draft_spark_btn'),
-                        onPressed: wb.isAgentBusy
-                            ? null
-                            : () async {
-                                final text = _sparkController.text.trim();
-                                if (text.isEmpty) {
-                                  AppToast.show(
-                                    context,
-                                    'Enter a short game idea first.',
-                                    isDark: isDark,
-                                    accentColor: AppTheme.accentRedFor(isDark),
-                                  );
-                                  return;
-                                }
-                                await wb.draftSpecDirectlyFromSpark(text);
-                              },
-                        child: const Text('Skip → Draft Spec'),
-                      ),
-                      ElevatedButton.icon(
-                        key: const ValueKey('explore_angles_btn'),
-                        onPressed: wb.isAgentBusy
-                            ? null
-                            : () async {
-                                final text = _sparkController.text.trim();
-                                if (text.isEmpty) {
-                                  AppToast.show(
-                                    context,
-                                    'Enter a short game idea to explore 3 angles.',
-                                    isDark: isDark,
-                                    accentColor: AppTheme.accentRedFor(isDark),
-                                  );
-                                  return;
-                                }
-                                await wb.exploreSparkAngles(text);
-                              },
-                        icon: wb.isAgentBusy
-                            ? const SizedBox(
-                                width: 14,
-                                height: 14,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.auto_awesome, size: 15),
-                        label: Text(
-                          wb.isAgentBusy
-                              ? (wb.agentProgressStep ?? 'Thinking...')
-                              : (wb.pendingAngleDeck != null
-                                  ? 'Re-Explore'
-                                  : 'Explore Angles'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
+          onChanged: wb.previewArchitectureModeFromSparkText,
+          onSubmitted: (val) async {
+            if (!wb.isAgentBusy && val.trim().isNotEmpty) {
+              await wb.exploreSparkAngles(val);
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 14,
+          runSpacing: 10,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            PlainPrimaryButton(
+              key: const ValueKey('explore_angles_btn'),
+              label: wb.isAgentBusy
+                  ? (wb.agentProgressStep ?? 'Thinking...')
+                  : (wb.pendingAngleDeck != null
+                        ? 'Re-Explore Angles'
+                        : 'Explore 3 Angles'),
+              isDark: isDark,
+              onPressed: wb.isAgentBusy
+                  ? null
+                  : () async {
+                      final text = _sparkController.text.trim();
+                      if (text.isEmpty) return;
+                      await wb.exploreSparkAngles(text);
+                    },
+            ),
+            PlainPrimaryButton(
+              key: const ValueKey('draft_spark_btn'),
+              label: 'Create Spec',
+              outlined: true,
+              isDark: isDark,
+              onPressed: wb.isAgentBusy
+                  ? null
+                  : () async {
+                      final text = _sparkController.text.trim();
+                      if (text.isEmpty) return;
+                      await wb.draftSpecDirectlyFromSpark(text);
+                    },
+            ),
+            UnrealArchitectureToggle(
+              mode: wb.unrealArchitectureMode,
+              isDark: isDark,
+              onChanged: wb.isAgentBusy ? null : wb.setArchitectureMode,
+            ),
+          ],
         ),
         if (wb.stage1InlineError != null) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           _buildStage1InlineErrorBanner(
             wb: wb,
             isDark: isDark,
@@ -535,34 +489,35 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             onRetry: () => wb.retryLastStage1Intake(_sparkController.text),
           ),
         ],
-        if (wb.pendingAngleDeck != null) ...[
-          const SizedBox(height: 12),
+        if (wb.pendingAngleDeck != null)
           Stage1IdeaAnglesCard(
             workbench: wb,
             deck: wb.pendingAngleDeck!,
             activeProjectId: wb.activeProjectId,
             isDark: isDark,
           ),
-        ],
+        const SizedBox(height: 22),
+        Divider(height: 1, thickness: 1, color: border),
         const SizedBox(height: 12),
         Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          spacing: 14,
+          runSpacing: 6,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
-              'Starter Packs:',
-              style: TextStyle(fontSize: 12, color: textMuted),
+              'Starter Examples:',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                color: textMuted,
+              ),
             ),
             for (final preset in UnrealSparkPresets.entries)
-              ActionChip(
+              PlainTextLink(
                 key: ValueKey('preset_${preset.id}'),
-                avatar: Icon(Icons.bolt_rounded, size: 14, color: cyan),
-                label: Text(
-                  preset.label,
-                  style: TextStyle(fontSize: 12, color: textPrimary),
-                ),
-                onPressed: wb.isAgentBusy
+                label: preset.label,
+                isDark: isDark,
+                color: focal,
+                onTap: wb.isAgentBusy
                     ? null
                     : () {
                         setState(_resetInlineEditFlags);
@@ -586,95 +541,44 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
     final red = AppTheme.accentRedFor(isDark);
     return Container(
       key: const ValueKey('stage1_inline_error_banner'),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       decoration: BoxDecoration(
-        color: red.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: red.withValues(alpha: 0.45)),
+        border: Border(bottom: BorderSide(color: red.withValues(alpha: 0.5))),
       ),
       child: Row(
         children: [
-          Icon(Icons.error_outline_rounded, size: 16, color: red),
+          Icon(Icons.error_outline_rounded, size: 15, color: red),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               wb.stage1InlineError ?? 'Request failed.',
-              style: TextStyle(fontSize: 12.5, color: textPrimary),
+              style: TextStyle(fontSize: 12.5, color: red),
             ),
           ),
           const SizedBox(width: 8),
-          TextButton(
+          PlainTextLink(
             key: retryKey,
-            onPressed: wb.isAgentBusy ? null : onRetry,
-            child: const Text('Retry'),
+            label: 'Retry',
+            isDark: isDark,
+            color: textPrimary,
+            onTap: wb.isAgentBusy ? null : onRetry,
           ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-            icon: const Icon(Icons.close_rounded, size: 15),
-            onPressed: wb.dismissStage1InlineError,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSparkContextCaption({
-    required ProjectConceptBlueprint spec,
-    required bool isDark,
-    required Color textMuted,
-    required Color border,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.bgPanelFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        children: [
-          if (spec.sparkPrompt.trim().isNotEmpty) ...[
-            Expanded(
-              flex: 2,
-              child: Text(
-                'Spark: "${spec.sparkPrompt.trim()}"',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: textMuted),
-              ),
-            ),
-            const SizedBox(width: 12),
-          ],
-          Expanded(
-            flex: 3,
-            child: Tooltip(
-              message: spec.architectureMode.architectureContract,
-              child: Text(
-                spec.architectureMode.architectureContract,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.right,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11,
-                  color: textMuted,
-                ),
-              ),
-            ),
+          const SizedBox(width: 6),
+          InkWell(
+            onTap: wb.dismissStage1InlineError,
+            child: Icon(Icons.close_rounded, size: 14, color: red),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _submitCoDesign(WorkbenchProvider wb) async {
-    final text = _coDesignController.text.trim();
+  Future<void> _submitRefine(WorkbenchProvider wb) async {
+    final text = _refineController.text.trim();
     if (text.isEmpty || wb.isAgentBusy) return;
     final res = await wb.applyStage1CoDesignInstruction(text);
-    if (!mounted) return;
-    if (res != null) {
-      _coDesignController.clear();
+    if (res != null && mounted) {
+      _refineController.clear();
     }
   }
 }

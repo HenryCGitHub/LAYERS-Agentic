@@ -343,10 +343,12 @@ void main() {
             ),
             isTrue,
           );
+          await tester.tap(find.byKey(const ValueKey('header_settings_menu_btn')));
+          await tester.pumpAndSettle();
           expect(
             find.descendant(
               of: find.byKey(const ValueKey('active_model_indicator_pill')),
-              matching: find.text('⚡ Hydrogen'),
+              matching: find.textContaining('⚡ Hydrogen'),
             ),
             findsOneWidget,
           );
@@ -357,6 +359,8 @@ void main() {
             ),
             findsOneWidget,
           );
+          await tester.tapAt(const Offset(20, 200));
+          await tester.pumpAndSettle();
 
           // 3) Camera Decision Fork + Core Feel + Trade-Offs error guard & save
           await _tapVisible(
@@ -454,18 +458,23 @@ void main() {
           expect(wb.conceptDraft!.pitch, isNot(contains('wall-runs')));
 
           // 5) Link Local GDD + Inspect C++ & BP Hybrid Source/ markdown + Multi-project & JSON round-trip
-          await _tapVisible(
-            tester,
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          await tester.tap(
             find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
           );
+          await tester.pumpAndSettle();
           expect(wb.isLocalGddLinked, isTrue);
           final gddFilename = wb.linkedGddFileName!;
-          expect(find.text('● Live · $gddFilename'), findsOneWidget);
+          expect(find.text('GDD ▾'), findsOneWidget);
 
-          await _tapVisible(
-            tester,
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          expect(find.text('File: $gddFilename'), findsOneWidget);
+          await tester.tap(
             find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
           );
+          await tester.pumpAndSettle();
           expect(
             find.byKey(const ValueKey('gdd_inspector_dialog')),
             findsOneWidget,
@@ -491,19 +500,20 @@ void main() {
             find.byKey(const ValueKey('project_switcher_dropdown_btn')),
           );
           await tester.pumpAndSettle();
-          await tester.tap(find.text('+ New Project'));
+          await tester.tap(find.text('+ New Game'));
           await tester.pumpAndSettle();
 
           final blankProjId = wb.activeProjectId!;
           expect(blankProjId, isNot(equals(skyhookProjId)));
           expect(wb.isLocalGddLinked, isFalse);
-          expect(
-            find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
-            findsNothing,
-          );
+          expect(find.text('GDD ▾'), findsOneWidget);
           await tester.tap(find.byKey(const ValueKey('preset_railjack')));
           await tester.pumpAndSettle();
-          expect(find.text('Link Local GDD'), findsOneWidget);
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          expect(find.text('Link Local GDD…'), findsOneWidget);
+          await tester.tapAt(const Offset(20, 500));
+          await tester.pumpAndSettle();
 
           await tester.tap(
             find.byKey(const ValueKey('project_switcher_dropdown_btn')),
@@ -512,7 +522,12 @@ void main() {
           await tester.tap(find.text('SKYHOOK COURIER').first);
           await tester.pumpAndSettle();
           expect(wb.activeProjectId, equals(skyhookProjId));
-          expect(find.text('● Live · $gddFilename'), findsOneWidget);
+          expect(wb.isLocalGddLinked, isTrue);
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          expect(find.text('File: $gddFilename'), findsOneWidget);
+          await tester.tapAt(const Offset(20, 500));
+          await tester.pumpAndSettle();
 
           // Remove blank Proj 2 via switcher delete confirmation dialog
           await tester.tap(
@@ -597,15 +612,24 @@ void main() {
           }
           expect(wb.savedProjects, hasLength(1));
           expect(wb.activeProjectId, equals(skyhookProjId));
-          expect(find.text('● Live · $gddFilename'), findsOneWidget);
+          expect(wb.isLocalGddLinked, isTrue);
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          expect(find.text('File: $gddFilename'), findsOneWidget);
+          await tester.tapAt(const Offset(20, 500));
+          await tester.pumpAndSettle();
 
-          // 6) Launch Stage 2 (v0.1 C++ & BP Hybrid): check Source/ owners, UPROPERTY(EditAnywhere), AI error -> retry -> Undo, Preview DSL
+          // 6) Launch Stage 2 (v0.1 C++ & BP Hybrid): Release Spec -> Feature -> check Source/ owners, UPROPERTY(EditAnywhere), AI error -> retry -> Undo, Preview DSL
           await tester.tap(
             find.byKey(const ValueKey('approve_launch_workbench_btn')),
           );
           await tester.pumpAndSettle();
-          expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
           expect(wb.activeReleaseVersionTag, equals('v0.1'));
+          await tester.tap(
+            find.byKey(const ValueKey('release_primary_action_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
 
           expect(
             wb.selectedEpicSpec!.sceneOwnership.any(
@@ -628,7 +652,7 @@ void main() {
           await tester.tap(find.byKey(const ValueKey('outliner_feature_sk_f02')));
           await tester.pumpAndSettle();
           expect(
-            find.text('Exposed Tuning (UPROPERTY(EditAnywhere) Var)'),
+            find.textContaining('UPROPERTY(EDITANYWHERE) VAR'),
             findsOneWidget,
           );
           expect(find.byType(Slider), findsNothing);
@@ -718,8 +742,10 @@ void main() {
             tester,
             find.byKey(const ValueKey('copilot_new_feat_sk_f06_thermal')),
           );
-          await tester.tap(find.byKey(const ValueKey('copilot_commit_btn')));
-          await tester.pumpAndSettle();
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('copilot_commit_btn')),
+          );
           expect(wb.activeReleaseVersionTag, equals('v0.2'));
           final v02ReleaseId = wb.activeReleaseId!;
 
@@ -739,8 +765,10 @@ void main() {
             tester,
             find.byKey(const ValueKey('copilot_new_feat_sk_f07_slipstream')),
           );
-          await tester.tap(find.byKey(const ValueKey('copilot_commit_btn')));
-          await tester.pumpAndSettle();
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('copilot_commit_btn')),
+          );
           expect(wb.activeReleaseVersionTag, equals('v0.3'));
           final v03ReleaseId = wb.activeReleaseId!;
 
@@ -766,8 +794,10 @@ void main() {
             findsOneWidget,
           );
           expect(find.text('Open in v0.1 →'), findsOneWidget);
-          await tester.tap(find.byKey(const ValueKey('open_in_baseline_btn')));
-          await tester.pumpAndSettle();
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('open_in_baseline_btn')),
+          );
           expect(wb.activeReleaseVersionTag, equals('v0.1'));
 
           await tester.tap(find.byKey(ValueKey('outliner_release_$v03ReleaseId')));
@@ -792,8 +822,10 @@ void main() {
             findsOneWidget,
           );
           expect(find.text('Open in v0.2 →'), findsOneWidget);
-          await tester.tap(find.byKey(const ValueKey('open_in_baseline_btn')));
-          await tester.pumpAndSettle();
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('open_in_baseline_btn')),
+          );
           expect(wb.activeReleaseId, equals(v02ReleaseId));
           expect(wb.activeReleaseVersionTag, equals('v0.2'));
 
@@ -801,13 +833,17 @@ void main() {
           await tester.pumpAndSettle();
           expect(wb.activeReleaseVersionTag, equals('v0.3'));
 
-          // Switch to Light theme on v0.3 at 1920x1080 -> zero overflows
-          await tester.tap(find.byTooltip('Toggle Theme'));
+          // Switch to Light theme on v0.3 at 1920x1080 via Settings ▾ -> zero overflows
+          await tester.tap(find.byKey(const ValueKey('header_settings_menu_btn')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('settings_theme_toggle_btn')));
+          await tester.pumpAndSettle();
+          await tester.tapAt(const Offset(20, 200));
           await tester.pumpAndSettle();
           expect(wb.isDark, isFalse);
 
           // Stage 1 return -> confirm Sync Spec & Return to v0.3 -> edit pitch -> click CTA -> return to v0.3
-          await tester.tap(find.byKey(const ValueKey('nav_stage_1_btn')));
+          await tester.tap(find.byKey(const ValueKey('outliner_project_brief')));
           await tester.pumpAndSettle();
           expect(find.byType(ProjectPitchScreen), findsOneWidget);
           expect(
@@ -862,6 +898,13 @@ Future<void> _passAllFeaturesInRelease(
   String releaseVer,
 ) async {
   while (!wb.isActiveReleaseComplete) {
+    if (wb.isInspectingReleaseSpec) {
+      await _tapVisible(
+        tester,
+        find.byKey(const ValueKey('release_primary_action_btn')),
+      );
+      continue;
+    }
     final feat = wb.selectedFeatureSpec;
     if (feat == null || feat.isPassedForRelease(releaseVer)) {
       final jumped = wb.selectNextOpenFeature();

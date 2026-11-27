@@ -4,8 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'providers/workbench_provider.dart';
+import 'screens/plain_document_shell.dart';
 import 'screens/project_pitch_screen.dart';
-import 'screens/release_workbench_screen.dart';
 import 'screens/shell/studio_top_bar.dart';
 import 'screens/shell/team_invites_dialog.dart';
 import 'theme/app_theme.dart';
@@ -166,10 +166,9 @@ class WorkbenchShell extends StatelessWidget {
   }
 
   Widget _buildActiveStageBody() {
-    if (workbench.currentStage == WorkbenchStage.releaseWorkbench &&
-        workbench.activeReleaseEpicDocs.isNotEmpty) {
-      return ReleaseWorkbenchScreen(workbench: workbench);
+    if (workbench.activeDocPage == WorkbenchDocPage.newGameIdea) {
+      return ProjectPitchScreen(workbench: workbench);
     }
-    return ProjectPitchScreen(workbench: workbench);
+    return PlainDocumentShell(workbench: workbench);
   }
 }

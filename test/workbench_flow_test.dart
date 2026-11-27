@@ -12,6 +12,8 @@ import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/models/tier_document.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
+import 'package:layers_agentic/screens/workbench/plain_doc_widgets.dart';
+import 'package:layers_agentic/screens/workbench/plain_plan_release_page.dart';
 import 'package:layers_agentic/services/firestore_vault_service.dart';
 import 'package:layers_agentic/services/local_vault_service.dart';
 import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
@@ -154,6 +156,11 @@ void main() {
           await tester.pumpWidget(LayersAgenticApp(provider: provider));
           await tester.pumpAndSettle();
 
+          await tester.tap(
+            find.byKey(const ValueKey('header_settings_menu_btn')),
+          );
+          await tester.pumpAndSettle();
+
           final pillFinder = find.byKey(
             const ValueKey('active_model_indicator_pill'),
           );
@@ -210,6 +217,11 @@ void main() {
         expect(wb.tokenUsageCompactLabel, contains('\$9.00'));
 
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
+        await tester.pumpAndSettle();
+
+        await tester.tap(
+          find.byKey(const ValueKey('header_settings_menu_btn')),
+        );
         await tester.pumpAndSettle();
 
         expect(
@@ -609,6 +621,11 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        await tester.tap(
+          find.byKey(const ValueKey('header_settings_menu_btn')),
+        );
+        await tester.pumpAndSettle();
+
         expect(find.byKey(const ValueKey('team_invites_btn')), findsOneWidget);
         await tester.tap(find.byKey(const ValueKey('team_invites_btn')));
         await tester.pumpAndSettle();
@@ -935,7 +952,11 @@ void main() {
           find.byKey(const ValueKey('approve_launch_workbench_btn')),
         );
         await tester.pumpAndSettle();
-        expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
+        expect(wb.isInspectingReleaseSpec, isTrue);
+        expect(
+          find.byKey(const ValueKey('release_primary_action_btn')),
+          findsOneWidget,
+        );
 
         final e01 = wb.activeReleaseEpics.first;
         expect(
@@ -959,6 +980,10 @@ void main() {
           findsOneWidget,
         );
 
+        await tester.tap(find.byKey(const ValueKey('outliner_feature_sb_f01')));
+        await tester.pumpAndSettle();
+        expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
+
         // Clickable Breadcrumbs present in Stage 2
         expect(find.byKey(const ValueKey('crumb_project')), findsOneWidget);
         expect(find.byKey(const ValueKey('crumb_release')), findsOneWidget);
@@ -970,18 +995,18 @@ void main() {
         await tester.pumpAndSettle();
         expect(wb.isInspectingEpicDomain, isTrue);
         expect(
-          find.textContaining('Shared Blueprint, Level & Class Ownership'),
+          find.textContaining('BLUEPRINT, LEVEL & CLASS OWNERSHIP'),
           findsOneWidget,
         );
         expect(
-          find.textContaining('Shared State & Interrupt Rules'),
+          find.textContaining('STATE & INTERRUPT RULES'),
           findsOneWidget,
         );
         expect(
-          find.textContaining('Domain Out-of-Scope'),
+          find.textContaining('OUT OF SCOPE'),
           findsOneWidget,
         );
-        expect(find.textContaining('Exposed Tuning'), findsNothing);
+        expect(find.textContaining('TUNING'), findsNothing);
         expect(
           find.byKey(const ValueKey('epic_feature_card_sb_f02')),
           findsOneWidget,
@@ -1026,7 +1051,8 @@ void main() {
           wb.activeCoPilotPrompt(),
           contains('float DashDistance = 680 cm'),
         );
-        expect(find.text('Included in CoPilot Feature Prompt'), findsOneWidget);
+        expect(find.byType(Table), findsOneWidget);
+        expect(find.text('DashDistance'), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_tab_raw')), findsNothing);
         expect(find.byKey(const ValueKey('copy_copilot_prompt_btn')), findsOneWidget);
         expect(find.byKey(const ValueKey('ai_build_prompt_text')), findsNothing);
@@ -1035,16 +1061,22 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const ValueKey('flag_fix_input')),
         );
+        await tester.pumpAndSettle();
         await tester.enterText(
           find.byKey(const ValueKey('flag_fix_input')),
           'Dash hitbox edge clip',
         );
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('flag_fix_btn')),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('flag_fix_btn')));
         await tester.pumpAndSettle();
 
         await tester.ensureVisible(
           find.byKey(const ValueKey('pass_feature_btn')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('pass_feature_btn')));
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('pass_gate_hint')), findsOneWidget);
@@ -1052,12 +1084,14 @@ void main() {
 
         final fxId = wb.selectedFeatureSpec!.fixes.first.id;
         await tester.ensureVisible(find.byKey(ValueKey('resolve_fix_$fxId')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(ValueKey('resolve_fix_$fxId')));
         await tester.pumpAndSettle();
 
         await tester.ensureVisible(
           find.byKey(const ValueKey('feature_check_sb_f02_c1')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(
           find.byKey(const ValueKey('feature_check_sb_f02_c1')),
         );
@@ -1066,6 +1100,7 @@ void main() {
         await tester.ensureVisible(
           find.byKey(const ValueKey('pass_feature_btn')),
         );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('pass_feature_btn')));
         await tester.pumpAndSettle();
         expect(wb.selectedFeatureSpec?.code, equals('F07'));
@@ -1099,7 +1134,9 @@ void main() {
           find.byKey(const ValueKey('copilot_new_feat_sb_f07_chain')),
           findsOneWidget,
         );
-        await tester.tap(find.byKey(const ValueKey('copilot_commit_btn')));
+        final commitBtn = find.byKey(const ValueKey('copilot_commit_btn'));
+        await tester.ensureVisible(commitBtn);
+        await tester.tap(commitBtn);
         await tester.pumpAndSettle();
 
         expect(wb.activeReleaseVersionTag, equals('v0.2'));
@@ -1302,7 +1339,7 @@ void main() {
         // Global Export menu keeps Spec + Backup and excludes Godot plugin & local-AI prompt items
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
         await tester.pumpAndSettle();
-        await tester.tap(find.byKey(const ValueKey('global_export_spec_btn')));
+        await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('export_active_prompt_item')),
@@ -1313,10 +1350,10 @@ void main() {
           findsNothing,
         );
         expect(find.text('Connect Godot 4 Editor Plugin'), findsNothing);
-        expect(find.text('Export CoPilot GDD (.md)'), findsOneWidget);
-        expect(find.text('Copy Full Project Spec (.md)'), findsOneWidget);
-        expect(find.text('Export Project Vault (.layers.json)'), findsOneWidget);
-        expect(find.text('Import Project Backup (.layers.json)'), findsOneWidget);
+        expect(find.text('Copy CoPilot GDD (MD)'), findsOneWidget);
+        expect(find.text('Copy Full Spec (MD)'), findsOneWidget);
+        expect(find.text('Export Project (.layers.json)'), findsOneWidget);
+        expect(find.text('Import Project (.json)…'), findsOneWidget);
         expect(tester.takeException(), isNull);
 
         // Preset (emberkeep) exports Unreal cm/s with zero px/s or m/s leakage
@@ -1664,17 +1701,17 @@ void main() {
             findsNothing,
           );
 
-          // 3) Stage 1 ChoiceChips & Epic reorder/remove buttons disable while isAgentBusy
+          // 3) Stage 1 camera/feel options & Epic reorder/remove buttons disable while isAgentBusy
           wb.setAgentBusyForTest(true);
           await tester.pump();
-          final camChip = tester.widget<ChoiceChip>(
+          final camOpt = tester.widget<InkWell>(
             find.byKey(
               ValueKey(
                 'camera_opt_${wb.conceptDraft!.effectiveCameraDecisionOptions.first.id}',
               ),
             ),
           );
-          final feelChip = tester.widget<ChoiceChip>(
+          final feelOpt = tester.widget<InkWell>(
             find.byKey(
               ValueKey(
                 'feel_opt_${ProjectConceptBlueprint.coreFeelOptions.first.id}',
@@ -1687,8 +1724,8 @@ void main() {
           final removeBtn = tester.widget<IconButton>(
             find.byKey(const ValueKey('stage1_epic_remove_0')),
           );
-          expect(camChip.onSelected, isNull);
-          expect(feelChip.onSelected, isNull);
+          expect(camOpt.onTap, isNull);
+          expect(feelOpt.onTap, isNull);
           expect(downBtn.onPressed, isNull);
           expect(removeBtn.onPressed, isNull);
           wb.setAgentBusyForTest(false);
@@ -1731,7 +1768,11 @@ void main() {
           );
 
           // 5) Cloud Sync dialog updates live via ListenableBuilder and disposes cleanly
-          await tester.tap(find.byKey(const ValueKey('cloud_sync_auth_btn')));
+          await tester.tap(
+          find.byKey(const ValueKey('header_settings_menu_btn')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('cloud_sync_auth_btn')));
           await tester.pumpAndSettle();
           expect(find.textContaining('SAVED PROJECTS IN VAULT'), findsOneWidget);
 
@@ -1895,7 +1936,7 @@ void main() {
         // 4) Unchecking all upgrades, new Features & new Epics blocks empty clone releases
         while (true) {
           final tileFinder = find.descendant(
-            of: find.byType(Dialog),
+            of: find.byType(PlainPlanReleasePage),
             matching: find.byType(CheckboxListTile),
           );
           final tiles = tester.widgetList<CheckboxListTile>(tileFinder).toList();
@@ -1908,15 +1949,18 @@ void main() {
         }
 
         expect(wb.hasSelectedProgressiveChanges, isFalse);
-        final commitBtn = tester.widget<ElevatedButton>(
+        final commitBtn = tester.widget<PlainPrimaryButton>(
           find.byKey(const ValueKey('copilot_commit_btn')),
         );
         expect(commitBtn.onPressed, isNull);
         expect(wb.commitProgressiveReleaseDraft(), isNull);
         expect(wb.projectReleases.length, equals(1));
 
-        // 5) Dismissing via barrier cleans up _progressiveDraft & disposes controller safely
-        await tester.tapAt(const Offset(8, 8));
+        // 5) Dismissing via Cancel cleans up _progressiveDraft & disposes controller safely
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('plan_release_cancel_btn')),
+        );
+        await tester.tap(find.byKey(const ValueKey('plan_release_cancel_btn')));
         await tester.pumpAndSettle();
         expect(wb.progressiveDraft, isNull);
         expect(wb.isDraftingProgressive, isFalse);
@@ -2033,6 +2077,10 @@ void main() {
 
         // Cloud Vault project delete requires confirmation dialog
         final pid = wb.activeProjectId!;
+        await tester.tap(
+          find.byKey(const ValueKey('header_settings_menu_btn')),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('cloud_sync_auth_btn')));
         await tester.pumpAndSettle();
 

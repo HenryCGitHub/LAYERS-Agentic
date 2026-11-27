@@ -46,7 +46,19 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     }
   }
 
+  void openInPagePlanNextRelease({String directionPrompt = ''}) {
+    _showingPlanNextRelease = true;
+    notifyListeners();
+    unawaited(openProgressiveReleaseCopilot(directionPrompt: directionPrompt));
+  }
+
+  void closeInPagePlanNextRelease() {
+    _showingPlanNextRelease = false;
+    closeProgressiveReleaseCopilot();
+  }
+
   void closeProgressiveReleaseCopilot() {
+    _showingPlanNextRelease = false;
     _resetProgressiveDraftState();
     notifyListeners();
   }
@@ -99,6 +111,9 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       orElse: () => draft.presets.first,
     );
     draft.activePresetId = preset.id;
+    draft.customGoal = preset.description.trim().isNotEmpty
+        ? preset.description.trim()
+        : 'Progressive release ${draft.targetVersion} (${preset.label})';
 
     final upIdsLower = preset.upgradeIds.map((id) => id.trim().toLowerCase()).toSet();
     final newIdsLower = preset.newEpicIds.map((id) => id.trim().toLowerCase()).toSet();
@@ -142,6 +157,12 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
           );
     }
     notifyListeners();
+  }
+
+  void updateProgressiveCustomGoal(String goal) {
+    final draft = _progressiveDraft;
+    if (draft == null) return;
+    draft.customGoal = goal.trim();
   }
 
   void toggleProgressiveUpgrade(String lineageKey, String upgradeId) {
@@ -518,6 +539,17 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
             .label
         : 'Update';
 
+    final fromInPage = _showingPlanNextRelease;
+    final doneWhenText = (draft.activePresetId != null && draft.presets.isNotEmpty)
+        ? draft.presets
+            .firstWhere(
+              (p) => p.id == draft.activePresetId,
+              orElse: () => draft.presets.first,
+            )
+            .description
+        : '';
+
+    final customGoal = draft.customGoal.trim();
     final newRelDoc = TierDocument(
       id: relId,
       title: '$nextVer · $presetLabel',
@@ -527,7 +559,10 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       estimatedDuration: '${nextEpicDocIds.length} Epics',
       sections: <String, String>{
         'release_version': nextVer,
-        'goal': 'Progressive release $nextVer ($presetLabel)',
+        'goal': customGoal.isNotEmpty
+            ? customGoal
+            : 'Progressive release $nextVer ($presetLabel)',
+        if (doneWhenText.trim().isNotEmpty) 'doneWhen': doneWhenText.trim(),
       },
     );
     documents[relId] = newRelDoc;
@@ -542,6 +577,8 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
     }
     _selectedFeatureId = firstFocusFeatureId ??
         _defaultFeatureIdForEpicDoc(_selectedEpicId, releaseVersion: nextVer);
+    _showingPlanNextRelease = false;
+    _showingReleaseSpec = fromInPage;
     _resetProgressiveDraftState();
     _currentStage = WorkbenchStage.releaseWorkbench;
     _syncActiveProjectMetadata();

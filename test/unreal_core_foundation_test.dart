@@ -578,9 +578,17 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(
+          find.byKey(const ValueKey('header_gdd_menu_btn')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+        await tester.pumpAndSettle();
+        expect(
           find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
           findsOneWidget,
         );
+        await tester.tapAt(const Offset(20, 200));
+        await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('copy_copilot_prompt_btn')),
           findsOneWidget,
@@ -1805,7 +1813,10 @@ void main() {
           find.byKey(const ValueKey('copy_epic_brief_btn')),
           findsNothing,
         );
-        expect(find.textContaining('Auto-included in'), findsOneWidget);
+        expect(
+          find.byKey(const ValueKey('epic_inspect_first_feature_btn')),
+          findsOneWidget,
+        );
         expect(
           find.byKey(const ValueKey('epic_more_menu_btn')),
           findsOneWidget,
@@ -1880,6 +1891,7 @@ void main() {
 
         final saveOwnerBtn = find.byKey(const ValueKey('epic_owner_save_btn'));
         await tester.ensureVisible(saveOwnerBtn);
+        await tester.pumpAndSettle();
         await tester.tap(saveOwnerBtn);
         await tester.pumpAndSettle();
 
@@ -1902,12 +1914,14 @@ void main() {
         final lastIdx = afterAdd.sceneOwnership.length - 1;
         final editOwnerBtn = find.byKey(ValueKey('epic_owner_edit_$lastIdx'));
         await tester.ensureVisible(editOwnerBtn);
+        await tester.pumpAndSettle();
         await tester.tap(editOwnerBtn);
         await tester.pumpAndSettle();
 
         await tester.ensureVisible(roleInput);
         await tester.enterText(roleInput, 'Dash charge component');
         await tester.ensureVisible(saveOwnerBtn);
+        await tester.pumpAndSettle();
         await tester.tap(saveOwnerBtn);
         await tester.pumpAndSettle();
 
@@ -1920,6 +1934,7 @@ void main() {
           ValueKey('epic_owner_delete_$lastIdx'),
         );
         await tester.ensureVisible(deleteOwnerBtn);
+        await tester.pumpAndSettle();
         await tester.tap(deleteOwnerBtn);
         await tester.pumpAndSettle();
 
@@ -2478,33 +2493,27 @@ void main() {
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
         await tester.pumpAndSettle();
 
-        // Top Bar stage pills & Link Local GDD
+        // Flat 40px Header (zero 1. Plan / 2. Build pills) & GDD menu Local GDD Link
+        expect(find.byKey(const ValueKey('nav_stage_1_btn')), findsNothing);
+        expect(find.byKey(const ValueKey('nav_stage_2_btn')), findsNothing);
+        expect(find.text('LAYERS'), findsOneWidget);
+        expect(find.byKey(const ValueKey('plan_next_release_btn')), findsOneWidget);
         expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('nav_stage_1_btn')),
-            matching: find.text('1. Plan'),
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.descendant(
-            of: find.byKey(const ValueKey('nav_stage_2_btn')),
-            matching: find.text('2. Build'),
-          ),
+          find.byKey(const ValueKey('outliner_project_brief')),
           findsOneWidget,
         );
 
+        await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+        await tester.pumpAndSettle();
         final linkBtn = find.byKey(const ValueKey('top_bar_link_local_gdd_btn'));
         expect(linkBtn, findsOneWidget);
         await tester.tap(linkBtn);
         await tester.pumpAndSettle();
         expect(wb.isLocalGddLinked, isTrue);
-        expect(
-          find.descendant(of: linkBtn, matching: find.textContaining('Live')),
-          findsOneWidget,
-        );
 
-        // Open GDD Inspector modal via Top Bar ⚡ GDD button
+        // Open GDD Inspector modal via GDD menu
+        await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+        await tester.pumpAndSettle();
         await tester.tap(find.byKey(const ValueKey('top_bar_copilot_gdd_btn')));
         await tester.pumpAndSettle();
         expect(

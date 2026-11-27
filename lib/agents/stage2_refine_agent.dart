@@ -40,10 +40,48 @@ class Stage2FeatureRefineOutcome {
   });
 }
 
+/// Result returned from refining a Stage 2 Release Spec (`v0.1`, `v0.2+`).
+class Stage2ReleaseRefineOutcome {
+  final String? title;
+  final String? goal;
+  final String? doneWhen;
+  final String summary;
+  final String? errorMessage;
+  final bool usedFallback;
+
+  const Stage2ReleaseRefineOutcome({
+    this.title,
+    this.goal,
+    this.doneWhen,
+    this.summary = '',
+    this.errorMessage,
+    this.usedFallback = false,
+  });
+}
+
 /// Surgical Stage 2 Gemini 4 Hydrogen (`LOW` thinking) patch agent for individual
-/// Unreal Engine 5 Domain Epics (`§01-§04`) and Feature Slices (`§01-§05`).
+/// Unreal Engine 5 Domain Epics (`§01-§04`), Feature Slices (`§01-§05`), and Releases.
 class Stage2RefineAgent {
   const Stage2RefineAgent._();
+
+  static Map<String, dynamic> get patchReleaseSpecToolSchema => <String, dynamic>{
+        'name': 'patch_unreal_release_spec',
+        'description':
+            'Patch only the requested fields of an Unreal Engine 5 Release Spec (title, goal, doneWhen). Omit untouched fields.',
+        'parameters': <String, dynamic>{
+          'type': 'OBJECT',
+          'required': ['summary'],
+          'properties': <String, dynamic>{
+            'summary': {
+              'type': 'STRING',
+              'description': 'Short 6-12 word changelog of what changed.',
+            },
+            'title': {'type': 'STRING'},
+            'goal': {'type': 'STRING'},
+            'doneWhen': {'type': 'STRING'},
+          },
+        },
+      };
 
   static Map<String, dynamic> get patchEpicSpecToolSchema => <String, dynamic>{
         'name': 'patch_unreal_epic_spec',
@@ -649,6 +687,147 @@ USER REFINE INSTRUCTION:
       feature: clean,
       summary: 'Offline refine applied to ${clean.code}',
       changedSections: changed,
+      usedFallback: true,
+    );
+  }
+
+  /// Refines a Release Spec (`title`, `goal`, `doneWhen`) on `gemini-4-hydrogen` (`LOW` thinking),
+  /// falling back deterministically when offline / no API key is configured.
+  static Future<Stage2ReleaseRefineOutcome> refineReleaseSpec({
+    required ProjectConceptBlueprint? rootSpec,
+    required String versionTag,
+    required String currentTitle,
+    required String currentGoal,
+    required String currentDoneWhen,
+    required List<EpicSpec> epics,
+    required String instruction,
+    required String apiKey,
+    UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
+    String preferredModel = GeminiAgentClient.pinnedLiveFlashModel,
+    String thinkingLevel = GeminiAgentClient.defaultFastThinkingLevel,
+  }) async {
+    final trimmed = instruction.trim();
+    if (trimmed.isEmpty) {
+      return const Stage2ReleaseRefineOutcome();
+    }
+    if (!GeminiAgentClient.hasKey(apiKey)) {
+      return _applyDeterministicReleaseRefine(
+        versionTag: versionTag,
+        currentTitle: currentTitle,
+        currentGoal: currentGoal,
+        currentDoneWhen: currentDoneWhen,
+        instruction: trimmed,
+        mode: mode,
+      );
+    }
+
+    final compactRelease = <String, dynamic>{
+      'version': versionTag,
+      'title': currentTitle,
+      'goal': currentGoal,
+      'doneWhen': currentDoneWhen,
+      'epics': [
+        for (final ep in epics)
+          '${ep.code} ${ep.title}: ${[for (final f in ep.features) '${f.code} ${f.title}'].join(', ')}',
+      ],
+    };
+
+    final prompt = '''
+${LayersTextStyleGuide.compactStyleRules}
+
+Patch only the requested fields of this Unreal Engine 5 Release Spec ($versionTag).
+PROJECT: ${rootSpec?.normalizedTitle ?? 'UE5 PROJECT'} (${mode.architectureContract})
+RULES:
+- Call `patch_unreal_release_spec` with ONLY modified fields (`title`, `goal`, `doneWhen`) plus `summary`.
+- Keep `goal` a single plain sentence and `doneWhen` a concrete PIE playtest gate.
+- Stay 100% native Unreal Engine 5 using `cm` and `cm/s` units only.
+
+CURRENT RELEASE JSON:
+${jsonEncode(compactRelease)}
+
+USER REFINE INSTRUCTION:
+"$trimmed"
+''';
+
+    final res = await GeminiAgentClient.generateJson(
+      prompt: prompt,
+      apiKey: apiKey,
+      preferredModel: preferredModel,
+      thinkingLevel: thinkingLevel,
+      functionDeclarations: [patchReleaseSpecToolSchema],
+    );
+
+    if (res == null) {
+      return Stage2ReleaseRefineOutcome(
+        errorMessage: GeminiAgentClient.lastErrorStatus ??
+            'Cloud Gemini could not refine $versionTag. Retry when ready.',
+      );
+    }
+    final rawTitle = _nonEmptyString(res['title']);
+    final rawGoal = _nonEmptyString(res['goal']);
+    final rawDone = _nonEmptyString(res['doneWhen']);
+    final summary = _nonEmptyString(res['summary']) ??
+        'Updated $versionTag release spec';
+    return Stage2ReleaseRefineOutcome(
+      title: rawTitle != null
+          ? UnrealSpecGuard.sanitizeLine(rawTitle, mode: mode)
+          : null,
+      goal: rawGoal != null
+          ? UnrealSpecGuard.sanitizeLine(rawGoal, mode: mode)
+          : null,
+      doneWhen: rawDone != null
+          ? UnrealSpecGuard.sanitizeLine(rawDone, mode: mode)
+          : null,
+      summary: UnrealSpecGuard.sanitizeLine(summary, mode: mode),
+    );
+  }
+
+  static Stage2ReleaseRefineOutcome _applyDeterministicReleaseRefine({
+    required String versionTag,
+    required String currentTitle,
+    required String currentGoal,
+    required String currentDoneWhen,
+    required String instruction,
+    required UnrealArchitectureMode mode,
+  }) {
+    final lower = instruction.toLowerCase();
+    final cleanInst = UnrealSpecGuard.sanitizeLine(instruction, mode: mode);
+    if (lower.contains('rename') || lower.contains('title')) {
+      final cleaned = cleanInst
+          .replaceFirst(
+            RegExp(r'^(?:rename|set\s+title(?:\s+to)?)\s*', caseSensitive: false),
+            '',
+          )
+          .trim();
+      final nextTitle = cleaned.isEmpty
+          ? currentTitle
+          : (cleaned.toLowerCase().startsWith(versionTag.toLowerCase())
+              ? cleaned
+              : '$versionTag · $cleaned');
+      return Stage2ReleaseRefineOutcome(
+        title: nextTitle,
+        summary: 'Updated $versionTag title',
+        usedFallback: true,
+      );
+    }
+    if (lower.contains('gate') ||
+        lower.contains('pie') ||
+        lower.contains('done') ||
+        lower.contains('->') ||
+        RegExp(r'\b\d+\s*s\b', caseSensitive: false).hasMatch(cleanInst)) {
+      final base = currentDoneWhen.trim().replaceFirst(RegExp(r'\.$'), '');
+      final nextDone = base.isEmpty ? cleanInst : '$base — $cleanInst.';
+      return Stage2ReleaseRefineOutcome(
+        doneWhen: UnrealSpecGuard.sanitizeLine(nextDone, mode: mode),
+        summary: 'Updated $versionTag PIE gate',
+        usedFallback: true,
+      );
+    }
+    final baseGoal = currentGoal.trim().replaceFirst(RegExp(r'\.$'), '');
+    final nextGoal = baseGoal.isEmpty ? cleanInst : '$baseGoal ($cleanInst).';
+    return Stage2ReleaseRefineOutcome(
+      goal: UnrealSpecGuard.sanitizeLine(nextGoal, mode: mode),
+      summary: 'Updated $versionTag goal',
       usedFallback: true,
     );
   }

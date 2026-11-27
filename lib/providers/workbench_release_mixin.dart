@@ -94,6 +94,11 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void selectActiveRelease(String releaseId) {
     final rel = documents[releaseId];
     if (rel == null || rel.tier != TierType.release) return;
+    _showingPlanNextRelease = false;
+    if (_currentStage == WorkbenchStage.projectPitch) {
+      _currentStage = WorkbenchStage.releaseWorkbench;
+      _showingReleaseSpec = true;
+    }
     final prevEpic = selectedEpicSpec;
     final prevFeat = selectedFeatureSpec;
     final wasDomainSheet = selectedEpicDoc != null && _selectedFeatureId == null;
@@ -182,6 +187,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void selectEpic(String epicId, {bool openDomainSheet = true}) {
     final doc = documents[epicId];
     if (doc == null || doc.tier != TierType.epic) return;
+    _showingPlanNextRelease = false;
+    _showingReleaseSpec = false;
+    _currentStage = WorkbenchStage.releaseWorkbench;
     if (doc.parentId != null && doc.parentId != _activeReleaseId) {
       _activeReleaseId = doc.parentId;
     }
@@ -198,6 +206,9 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void selectFeature(String epicId, String featureId) {
     final doc = documents[epicId];
     if (doc == null || doc.tier != TierType.epic) return;
+    _showingPlanNextRelease = false;
+    _showingReleaseSpec = false;
+    _currentStage = WorkbenchStage.releaseWorkbench;
     if (doc.parentId != null && doc.parentId != _activeReleaseId) {
       _activeReleaseId = doc.parentId;
     }

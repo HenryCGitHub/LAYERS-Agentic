@@ -280,7 +280,7 @@ void main() {
             equals(UnrealArchitectureMode.cppHybrid),
           );
           expect(
-            find.text('Unreal Engine 5 Scale & Architecture (C++ & BP Hybrid)'),
+            find.text('UE5 SETUP (C++ & BP HYBRID)'),
             findsOneWidget,
           );
 
@@ -370,9 +370,9 @@ void main() {
             tester,
             find.byKey(const ValueKey('stage1_pillars_save_btn')),
           );
-          expect(find.text('Commit Every Dash'), findsOneWidget);
+          expect(find.text('— Commit Every Dash'), findsOneWidget);
           expect(
-            find.text('Snappy arcade turn  OVER  heavy inertia'),
+            find.text('Snappy arcade turn OVER heavy inertia'),
             findsOneWidget,
           );
 
@@ -455,20 +455,29 @@ void main() {
 
           // 4) Link Local GDD -> initial disk write -> Inspect GDD -> permissionNeeded recovery -> Unlink -> re-link
           await tester.tap(
+            find.byKey(const ValueKey('header_gdd_menu_btn')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
             find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
           );
           await tester.pumpAndSettle();
           expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
-          expect(
-            find.text('● Live · shellbreaker_arena_copilot_gdd.md'),
-            findsOneWidget,
-          );
+          expect(find.text('GDD ▾'), findsOneWidget);
           expect(fakeGddBackend.writtenContents, hasLength(1));
           expect(
             fakeGddBackend.writtenContents.first,
             contains('# PROJECT GDD · SHELLBREAKER ARENA'),
           );
 
+          await tester.tap(
+            find.byKey(const ValueKey('header_gdd_menu_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.text('File: shellbreaker_arena_copilot_gdd.md'),
+            findsOneWidget,
+          );
           await tester.tap(
             find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
           );
@@ -491,9 +500,14 @@ void main() {
           expect(await wb.syncLinkedGddNow(force: true), isFalse);
           await tester.pumpAndSettle();
           expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.permissionNeeded));
-          expect(find.text('Grant GDD Write'), findsOneWidget);
+          expect(find.text('Grant GDD ▾'), findsOneWidget);
 
           fakeGddBackend.denyPermission = false;
+          await tester.tap(
+            find.byKey(const ValueKey('header_gdd_menu_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.text('Grant GDD Write Permission'), findsOneWidget);
           await tester.tap(
             find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
           );
@@ -504,6 +518,10 @@ void main() {
           // permissionNeeded inside GDD Inspector + Unlink Local File -> close -> re-link cleanly
           fakeGddBackend.denyPermission = true;
           expect(await wb.syncLinkedGddNow(force: true), isFalse);
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('header_gdd_menu_btn')),
+          );
           await tester.pumpAndSettle();
           await tester.tap(
             find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
@@ -530,19 +548,23 @@ void main() {
 
           fakeGddBackend.denyPermission = false;
           await tester.tap(
+            find.byKey(const ValueKey('header_gdd_menu_btn')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
             find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
           );
           await tester.pumpAndSettle();
           expect(wb.isLocalGddLinked, isTrue);
           expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
 
-          // 5) Approve & Launch v0.1 -> Stage 2 -> Outliner & Breadcrumbs -> E01 Domain Sheet CRUD + Architecture Brief -> Start/Continue CTA
+          // 5) Approve & Launch v0.1 -> Release Spec -> Outliner & Breadcrumbs -> E01 Domain Sheet CRUD + Architecture Brief -> Start/Continue CTA
           final writesBeforeLaunch = fakeGddBackend.writtenContents.length;
           await tester.tap(
             find.byKey(const ValueKey('approve_launch_workbench_btn')),
           );
           await tester.pumpAndSettle();
-          expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
+          expect(wb.isInspectingReleaseSpec, isTrue);
           expect(wb.activeReleaseVersionTag, equals('v0.1'));
           // Launching v0.1 from identical Stage 1 initialEpics skips redundant GDD write (delta-only sync)
           expect(
@@ -652,8 +674,11 @@ void main() {
             tester,
             find.byKey(const ValueKey('epic_states_save_btn')),
           );
-          expect(find.text('DashWindup'), findsOneWidget);
-          expect(find.text('• Hitstun cancels DashWindup'), findsOneWidget);
+          expect(
+            find.text('Idle -> Move -> DashWindup -> DashActive -> DashRecover'),
+            findsOneWidget,
+          );
+          expect(find.text('— Hitstun cancels DashWindup'), findsOneWidget);
 
           // E01 §04 Cut add / delete
           await _tapVisible(
@@ -716,7 +741,10 @@ void main() {
             find.byKey(const ValueKey('preview_epic_brief_btn')),
           );
           await tester.pumpAndSettle();
-          expect(find.textContaining('Epic Architecture Brief'), findsOneWidget);
+          expect(
+            find.textContaining('E01 · Architecture Brief'),
+            findsOneWidget,
+          );
           expect(find.textContaining('@OWNERS:'), findsOneWidget);
           await tester.tap(
             find.byKey(const ValueKey('close_copilot_preview_btn')),
@@ -817,7 +845,7 @@ void main() {
             tester,
             find.byKey(const ValueKey('feature_tuning_save_btn')),
           );
-          expect(find.text('DashBufferWindow:'), findsOneWidget);
+          expect(find.text('DashBufferWindow'), findsOneWidget);
 
           final f02Id = wb.selectedFeatureSpec!.id;
           final addedTuneIdx = wb.selectedFeatureSpec!.tuning.length - 1;
@@ -838,7 +866,7 @@ void main() {
             tester,
             find.byKey(ValueKey('tuning_delete_${f02Id}_$addedTuneIdx')),
           );
-          expect(find.text('DashBufferWindow:'), findsNothing);
+          expect(find.text('DashBufferWindow'), findsNothing);
 
           // §04 Cues add / delete
           await _tapVisible(
@@ -854,7 +882,7 @@ void main() {
             find.byKey(const ValueKey('feature_cue_save_btn')),
           );
           expect(
-            find.text('• Blue ring decal pulses under landing point'),
+            find.text('— Blue ring decal pulses under landing point'),
             findsOneWidget,
           );
           final addedCueIdx = wb.selectedFeatureSpec!.cues.length - 1;
@@ -863,7 +891,7 @@ void main() {
             find.byKey(ValueKey('feature_cue_delete_$addedCueIdx')),
           );
           expect(
-            find.text('• Blue ring decal pulses under landing point'),
+            find.text('— Blue ring decal pulses under landing point'),
             findsNothing,
           );
 
@@ -931,10 +959,10 @@ void main() {
           );
 
           // 7) CoPilot Preview modal (Compact DSL -> Readable View -> close) + Flag [FIX] -> Resolve [FIX]
-          await tester.tap(
+          await _tapVisible(
+            tester,
             find.byKey(const ValueKey('preview_copilot_prompt_btn')),
           );
-          await tester.pumpAndSettle();
           expect(
             find.textContaining('@OWNERS:'),
             findsOneWidget,
@@ -1060,8 +1088,10 @@ void main() {
           if (!tester.widget<CheckboxListTile>(newFeatCheckbox).value!) {
             await _tapVisible(tester, newFeatCheckbox);
           }
-          await tester.tap(find.byKey(const ValueKey('copilot_commit_btn')));
-          await tester.pumpAndSettle();
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('copilot_commit_btn')),
+          );
 
           expect(wb.activeReleaseVersionTag, equals('v0.2'));
           final v02ReleaseId = wb.activeReleaseId!;
@@ -1108,7 +1138,7 @@ void main() {
             find.byKey(const ValueKey('outliner_feature_sb_f02')),
           );
           await tester.pumpAndSettle();
-          expect(find.text('[v0.2 +DELTA]'), findsOneWidget);
+          expect(find.textContaining('+DELTA (v0.2):'), findsOneWidget);
           expect(find.text('⚡ Copy CoPilot Delta Prompt'), findsOneWidget);
           expect(find.byKey(const ValueKey('pass_feature_btn')), findsOneWidget);
 
@@ -1161,27 +1191,26 @@ void main() {
             await tester.pumpWidget(LayersAgenticApp(provider: wb));
             await tester.pumpAndSettle();
 
-            // Toggle to Light theme via real UI button (scrolling top bar horizontally if Ahem font pushes it past width)
-            final themeToggle = find.byTooltip('Toggle Theme');
-            expect(themeToggle, findsOneWidget);
-            await tester.ensureVisible(themeToggle);
+            // Toggle to Light theme via Settings ▾ menu
+            await tester.tap(
+              find.byKey(const ValueKey('header_settings_menu_btn')),
+            );
             await tester.pumpAndSettle();
-            expect(themeToggle.hitTestable(), findsOneWidget);
+            final themeToggle = find.byKey(
+              const ValueKey('settings_theme_toggle_btn'),
+            );
+            expect(themeToggle, findsOneWidget);
             await tester.tap(themeToggle);
+            await tester.pumpAndSettle();
+            await tester.tapAt(const Offset(20, 200));
             await tester.pumpAndSettle();
             expect(wb.isDark, isFalse);
 
-            // Stage 1 (1. Plan) checks: zero overflow + primary controls mounted & hittable
+            // Stage 1 (Project Brief) checks: zero overflow + primary controls mounted & hittable
             expect(find.byType(ProjectPitchScreen), findsOneWidget);
-            await _expectTopBarControlsMountAndTapVisible(tester, <Finder>[
-              find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
-              find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
-              find.byKey(const ValueKey('global_export_spec_btn')),
-              find.byKey(const ValueKey('active_model_indicator_pill')),
-              find.byKey(const ValueKey('token_usage_tracker_pill')),
-              find.byTooltip('Toggle Theme'),
-            ]);
             _expectMountedAndHittable(<Finder>[
+              find.byKey(const ValueKey('header_gdd_menu_btn')),
+              find.byKey(const ValueKey('header_settings_menu_btn')),
               find.byKey(const ValueKey('stage1_mode_blueprint')),
               find.byKey(const ValueKey('stage1_mode_cpp_hybrid')),
               find.byKey(const ValueKey('approve_launch_workbench_btn')),
@@ -1189,35 +1218,28 @@ void main() {
               find.byKey(const ValueKey('stage1_codesign_apply_btn')),
             ]);
 
-            // Approve & Launch into Stage 2 (2. Build) via real CTA
+            // Approve & Launch into Release Spec -> Continue into F01..F0N
             await tester.tap(
               find.byKey(const ValueKey('approve_launch_workbench_btn')),
+            );
+            await tester.pumpAndSettle();
+            expect(wb.isInspectingReleaseSpec, isTrue);
+            await tester.tap(
+              find.byKey(const ValueKey('release_primary_action_btn')),
             );
             await tester.pumpAndSettle();
             expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
 
             final e01 = wb.activeReleaseEpics.first;
             final f02 = e01.features.firstWhere((f) => f.code == 'F02');
-
-            // Check Stage 2 top bar (horizontally scrollable bar) + outliner + Feature Spec Sheet + Stage 2 dock
-            await _expectTopBarControlsMountAndTapVisible(tester, <Finder>[
-              find.byKey(const ValueKey('nav_stage_1_btn')),
-              find.byKey(const ValueKey('nav_stage_2_btn')),
-              find.byKey(const ValueKey('global_bar_release_selector_btn')),
-              find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
-              find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
-              find.byTooltip('Toggle Theme'),
-            ]);
-            // Scroll top bar back to left so 1. Plan & 2. Build remain at front
-            await tester.ensureVisible(
-              find.byKey(const ValueKey('nav_stage_1_btn')),
-            );
+            wb.selectFeature(e01.id, f02.id);
             await tester.pumpAndSettle();
 
             _expectMountedAndHittable(<Finder>[
-              find.byKey(const ValueKey('nav_stage_1_btn')),
-              find.byKey(const ValueKey('nav_stage_2_btn')),
+              find.byKey(const ValueKey('outliner_project_brief')),
               find.byKey(const ValueKey('plan_next_release_btn')),
+              find.byKey(const ValueKey('header_gdd_menu_btn')),
+              find.byKey(const ValueKey('header_settings_menu_btn')),
               find.byKey(ValueKey('outliner_epic_${e01.id}')),
               find.byKey(ValueKey('outliner_feature_${f02.id}')),
               find.byKey(const ValueKey('copy_copilot_prompt_btn')),
@@ -1237,17 +1259,16 @@ void main() {
               find.byKey(const ValueKey('stage2_ai_refine_input')),
             ]);
 
-            // Stage 1 <-> Stage 2 switch via top bar navigation buttons
-            await tester.tap(find.byKey(const ValueKey('nav_stage_1_btn')));
+            // Project Brief <-> Release Spec <-> Feature switch via left outliner & breadcrumbs
+            await tester.tap(find.byKey(const ValueKey('outliner_project_brief')));
             await tester.pumpAndSettle();
             expect(find.byType(ProjectPitchScreen), findsOneWidget);
             _expectMountedAndHittable(<Finder>[
-              find.byKey(const ValueKey('nav_stage_1_btn')),
-              find.byKey(const ValueKey('nav_stage_2_btn')),
+              find.byKey(const ValueKey('outliner_project_brief')),
               find.byKey(const ValueKey('approve_launch_workbench_btn')),
             ]);
 
-            await tester.tap(find.byKey(const ValueKey('nav_stage_2_btn')));
+            await tester.tap(find.byKey(const ValueKey('approve_launch_workbench_btn')));
             await tester.pumpAndSettle();
             expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
           });
@@ -1264,22 +1285,6 @@ void _expectMountedAndHittable(List<Finder> finders) {
       finder.hitTestable(),
       findsOneWidget,
       reason: 'Expected control $finder to be hittable within viewport',
-    );
-  }
-}
-
-Future<void> _expectTopBarControlsMountAndTapVisible(
-  WidgetTester tester,
-  List<Finder> finders,
-) async {
-  for (final finder in finders) {
-    expect(finder, findsOneWidget);
-    await tester.ensureVisible(finder);
-    await tester.pumpAndSettle();
-    expect(
-      finder.hitTestable(),
-      findsOneWidget,
-      reason: 'Expected top bar control $finder to be hittable after horizontal scroll',
     );
   }
 }

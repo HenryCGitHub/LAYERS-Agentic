@@ -1045,15 +1045,14 @@ void main() {
 
           expect(find.text('§05'), findsOneWidget);
           expect(
-            find.text('Seeded Epics & Initial v0.1 Feature Slices'),
+            find.text('INITIAL V0.1 SCOPE'),
             findsOneWidget,
           );
           expect(
             find.byKey(const ValueKey('stage1_scope_preview_card')),
             findsOneWidget,
           );
-          expect(find.text('#1 Build First'), findsOneWidget);
-          expect(find.text('Lean v0.1'), findsOneWidget);
+          expect(find.textContaining('Lean v0.1'), findsOneWidget);
           expect(find.text('${f01.code} · ${f01.title}'), findsOneWidget);
           expect(find.text('${f02.code} · ${f02.title}'), findsOneWidget);
 
@@ -1107,10 +1106,10 @@ void main() {
                   .featuresForRelease('v0.1')
                   .length ==
               1) {
-            final remainingBtn = tester.widget<IconButton>(
+            final remainingBtn = tester.widget<InkWell>(
               find.byKey(ValueKey('stage1_feat_remove_${f01.id}')),
             );
-            expect(remainingBtn.onPressed, isNull);
+            expect(remainingBtn.onTap, isNull);
           }
 
           // Reorder Epic 0 down swaps first two Epics while renumbering codes
@@ -1184,7 +1183,7 @@ void main() {
               );
               await tester.pumpAndSettle();
 
-              expect(find.text('Scope Check'), findsOneWidget);
+              expect(find.textContaining('Scope Check'), findsOneWidget);
               expect(
                 find.byKey(const ValueKey('stage1_trim_lean_btn')),
                 findsOneWidget,
@@ -2619,45 +2618,30 @@ void main() {
               );
               await tester.pumpAndSettle();
 
-              if (tc.expectSignIn) {
-                expect(find.text('Sign in'), findsOneWidget);
-              } else {
-                expect(find.text('Sign in'), findsNothing);
-              }
-
-              if (tc.expectInspectFull) {
-                expect(find.text('⚡ Inspect GDD'), findsOneWidget);
-              } else {
-                expect(find.text('⚡ GDD'), findsOneWidget);
-              }
-
-              if (tc.size.width < 1280) {
-                expect(
-                  find.text('● Live · shellbreaker_very_l…'),
-                  findsOneWidget,
-                );
-              } else {
-                expect(
-                  find.text('● Live · shellbreaker_very_long_copilot_gdd.md'),
-                  findsOneWidget,
-                );
-              }
-
-              final inviteFinder = find.byKey(const ValueKey('team_invites_btn'));
-              final themeFinder = find.byIcon(
-                isDark
-                    ? Icons.light_mode_outlined
-                    : Icons.dark_mode_outlined,
+              expect(
+                find.byKey(const ValueKey('header_gdd_menu_btn')),
+                findsOneWidget,
               );
-              expect(inviteFinder, findsOneWidget);
-              expect(themeFinder, findsOneWidget);
-
+              final settingsBtn = find.byKey(
+                const ValueKey('header_settings_menu_btn'),
+              );
+              expect(settingsBtn, findsOneWidget);
               if (isDark) {
-                rightEdges.add(tester.getRect(themeFinder).right);
+                rightEdges.add(tester.getRect(settingsBtn).right);
               }
 
-              // Theme toggle remains reachable and toggles theme without overflow
-              await tester.ensureVisible(themeFinder);
+              // Open Settings menu and toggle Theme cleanly without overflow
+              await tester.tap(settingsBtn);
+              await tester.pumpAndSettle();
+              expect(find.byKey(const ValueKey('team_invites_btn')), findsOneWidget);
+              expect(
+                find.byKey(const ValueKey('cloud_sync_auth_btn')),
+                findsOneWidget,
+              );
+              final themeFinder = find.byKey(
+                const ValueKey('settings_theme_toggle_btn'),
+              );
+              expect(themeFinder, findsOneWidget);
               await tester.tap(themeFinder);
               await tester.pumpAndSettle();
               expect(wb.isDark, equals(!isDark));

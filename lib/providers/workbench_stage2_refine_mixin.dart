@@ -31,6 +31,26 @@ extension WorkbenchStage2RefineMixin on WorkbenchProvider {
     }
   }
 
+  void _pushStage2ReleaseUndoSnapshot({
+    required TierDocument releaseDoc,
+    required String summary,
+  }) {
+    _syncStage2UndoProjectScope();
+    _stage2UndoProjectId = _activeProjectId;
+    _stage2UndoReleaseId = _activeReleaseId;
+    _stage2UndoStack.add(
+      _Stage2UndoEntry(
+        releaseDocId: releaseDoc.id,
+        featureId: null,
+        snapshotJson: jsonEncode(releaseDoc.toJson()),
+        summary: summary,
+      ),
+    );
+    if (_stage2UndoStack.length > 15) {
+      _stage2UndoStack.removeAt(0);
+    }
+  }
+
   static bool _ownersDiffer(
     List<EpicSceneOwnership> a,
     List<EpicSceneOwnership> b,
@@ -265,13 +285,108 @@ extension WorkbenchStage2RefineMixin on WorkbenchProvider {
     }
   }
 
+  /// Refines the active Release Spec (`title`, `goal`, `doneWhen`) via `Stage2RefineAgent` with Undo.
+  Future<bool> applyStage2ReleaseRefine(
+    String releaseId,
+    String instruction,
+  ) async {
+    final clean = instruction.trim();
+    final rel = documents[releaseId];
+    if (clean.isEmpty || rel == null || rel.tier != TierType.release) {
+      return false;
+    }
+
+    final startProjectId = _activeProjectId;
+    final ver = releaseVersionTagFor(rel);
+    _isRefiningStage2 = true;
+    _stage2RefineError = null;
+    _agentProgressStep = 'Hydrogen refining $ver release...';
+    notifyListeners();
+
+    try {
+      final outcome = await Stage2RefineAgent.refineReleaseSpec(
+        rootSpec: _conceptDraft,
+        versionTag: ver,
+        currentTitle: rel.title,
+        currentGoal: rel.sections['goal'] ?? '',
+        currentDoneWhen: rel.sections['doneWhen'] ?? '',
+        epics: epicsForRelease(rel.id),
+        instruction: clean,
+        apiKey: _apiKey,
+        mode: unrealArchitectureMode,
+        preferredModel: _conversationModel,
+        thinkingLevel: GeminiAgentClient.defaultFastThinkingLevel,
+      );
+      if (_isDisposed ||
+          _activeProjectId != startProjectId ||
+          !documents.containsKey(releaseId)) {
+        return false;
+      }
+      if (outcome.errorMessage != null) {
+        _stage2RefineError = outcome.errorMessage;
+        return false;
+      }
+      final latestRel = documents[releaseId]!;
+      _pushStage2ReleaseUndoSnapshot(
+        releaseDoc: latestRel,
+        summary: outcome.summary,
+      );
+      if (outcome.title != null && outcome.title!.isNotEmpty) {
+        latestRel.title = outcome.title!;
+      }
+      if (outcome.goal != null && outcome.goal!.isNotEmpty) {
+        latestRel.sections['goal'] = outcome.goal!;
+      }
+      if (outcome.doneWhen != null && outcome.doneWhen!.isNotEmpty) {
+        latestRel.sections['doneWhen'] = outcome.doneWhen!;
+        if (ver == 'v0.1' && _conceptDraft != null) {
+          _conceptDraft!.releaseDoneWhen = outcome.doneWhen!;
+          _ensureActiveProjectDocument(_conceptDraft!);
+        }
+      }
+      _lastStage2RefineSummary = outcome.summary;
+      _persistDocument(latestRel);
+      return true;
+    } catch (e) {
+      if (!_isDisposed && _activeProjectId == startProjectId) {
+        _stage2RefineError = 'Release refine error: $e';
+      }
+      return false;
+    } finally {
+      _isRefiningStage2 = false;
+      _agentProgressStep = null;
+      notifyListeners();
+    }
+  }
+
   /// Reverts the most recent Stage 2 AI or inline refine snapshot in the active release.
   bool undoStage2Edit() {
     _syncStage2UndoProjectScope();
     if (_stage2UndoStack.isEmpty) return false;
     final entry = _stage2UndoStack.removeLast();
-    final doc = documents[entry.epicDocId];
-    if (doc == null) {
+
+    if (entry.releaseDocId != null) {
+      final restoredRel = TierDocument.fromJson(
+        jsonDecode(entry.snapshotJson) as Map<String, dynamic>,
+      );
+      documents[restoredRel.id] = restoredRel;
+      if (releaseVersionTagFor(restoredRel) == 'v0.1' &&
+          _conceptDraft != null) {
+        _conceptDraft!.releaseDoneWhen =
+            restoredRel.sections['doneWhen'] ?? _conceptDraft!.releaseDoneWhen;
+        _ensureActiveProjectDocument(_conceptDraft!);
+      }
+      _lastStage2RefineSummary = 'Reverted: ${entry.summary}';
+      _stage2RefineError = null;
+      _lastStage2ChangedSections = const <String>{};
+      _persistDocument(restoredRel);
+      notifyListeners();
+      return true;
+    }
+
+    final epicDocId = entry.epicDocId;
+    final doc = epicDocId != null ? documents[epicDocId] : null;
+    if (epicDocId == null || doc == null) {
       notifyListeners();
       return false;
     }
@@ -280,8 +395,8 @@ extension WorkbenchStage2RefineMixin on WorkbenchProvider {
       jsonDecode(entry.snapshotJson) as Map<String, dynamic>,
     );
     final restoredDoc = restoredEpic.applyToDocument(doc);
-    documents[entry.epicDocId] = restoredDoc;
-    if (_selectedEpicId == entry.epicDocId &&
+    documents[epicDocId] = restoredDoc;
+    if (_selectedEpicId == epicDocId &&
         _selectedFeatureId != null &&
         !restoredEpic.features.any((f) => f.id == _selectedFeatureId)) {
       _selectedFeatureId = null;

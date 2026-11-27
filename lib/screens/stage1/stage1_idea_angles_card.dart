@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../models/agent_blueprints.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
+import '../workbench/plain_doc_widgets.dart';
 
-/// In-place Stage 1 Idea Workbench card showing 3 AI-proposed playable angles
-/// with 1-line steer, reroll, and one-click lock into Argon `PROJECT_SPEC.md` drafting.
+/// Flat 3-angle exploration block rendered on the New Game view with 1px rules
+/// and a 2px left active bar (zero cards or pill badges).
 class Stage1IdeaAnglesCard extends StatefulWidget {
   final WorkbenchProvider workbench;
   final SparkAngleDeck deck;
@@ -25,34 +27,37 @@ class Stage1IdeaAnglesCard extends StatefulWidget {
 }
 
 class _Stage1IdeaAnglesCardState extends State<Stage1IdeaAnglesCard> {
-  final TextEditingController _steerController = TextEditingController();
+  final TextEditingController _steerCtrl = TextEditingController();
+  String? _lastProjId;
+
+  @override
+  void initState() {
+    super.initState();
+    _lastProjId = widget.activeProjectId;
+  }
 
   @override
   void didUpdateWidget(covariant Stage1IdeaAnglesCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.activeProjectId != widget.activeProjectId ||
-        oldWidget.deck.rawSpark != widget.deck.rawSpark) {
-      _steerController.clear();
+    if (_lastProjId != widget.activeProjectId) {
+      _lastProjId = widget.activeProjectId;
+      _steerCtrl.clear();
     }
   }
 
   @override
   void dispose() {
-    _steerController.dispose();
+    _steerCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submitSteer() async {
-    final text = _steerController.text.trim();
-    if (text.isEmpty || widget.workbench.isAgentBusy) return;
-    final res = await widget.workbench.exploreSparkAngles(
-      widget.deck.rawSpark,
-      steerNote: text,
-    );
-    if (!mounted) return;
-    if (res != null) {
-      _steerController.clear();
-    }
+    final wb = widget.workbench;
+    final text = _steerCtrl.text.trim();
+    if (text.isEmpty || wb.isAgentBusy) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    await wb.exploreSparkAngles(widget.deck.rawSpark, steerNote: text);
+    if (mounted) _steerCtrl.clear();
   }
 
   @override
@@ -64,108 +69,82 @@ class _Stage1IdeaAnglesCardState extends State<Stage1IdeaAnglesCard> {
     final textSecondary = AppTheme.textSecondaryFor(isDark);
     final textMuted = AppTheme.textMutedFor(isDark);
     final border = AppTheme.borderFor(isDark);
-    final cyan = AppTheme.accentCyanFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
     final green = AppTheme.accentGreenFor(isDark);
     final selectedAngle = deck.selectedAngle;
 
-    return Container(
+    return Padding(
       key: const ValueKey('stage1_idea_angles_card'),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.bgPanelFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: cyan.withValues(alpha: 0.45)),
-      ),
+      padding: const EdgeInsets.only(top: 22),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                decoration: BoxDecoration(
-                  color: cyan.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-                  border: Border.all(color: cyan.withValues(alpha: 0.35)),
-                ),
-                child: Text(
-                  '⚡ Hydrogen · 3 Angles',
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: cyan,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Pick a Direction for "${deck.rawSpark}"',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: textPrimary,
-                  ),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgSurfaceFor(isDark),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-                  border: Border.all(color: border),
-                ),
-                child: Text(
+          PlainSectionHeader(
+            title: 'Pick an Angle',
+            isDark: isDark,
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
                   'Round ${deck.round}',
                   style: GoogleFonts.jetBrainsMono(
-                    fontSize: 10.5,
+                    fontSize: 11,
                     color: textMuted,
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              IconButton(
-                tooltip: 'Close 3-Angles Picker',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-                icon: Icon(Icons.close_rounded, size: 15, color: textMuted),
-                onPressed: wb.isAgentBusy ? null : wb.dismissSparkAngles,
-              ),
-            ],
+                Text(
+                  ' · ${deck.architectureMode.shortLabel}',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    color: textMuted,
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Pick the 1-sentence direction that feels closest, steer/reroll in place if needed, then draft your UE5 spec.',
-            style: TextStyle(fontSize: 12, color: textSecondary),
-          ),
-          const SizedBox(height: 12),
+          if (deck.steerHistory.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                for (final s in deck.steerHistory)
+                  Text(
+                    s,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 11.5,
+                      color: focal,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+          const SizedBox(height: 8),
           LayoutBuilder(
-            builder: (context, constraints) {
-              if (constraints.maxWidth >= 680) {
+            builder: (context, angleConstraints) {
+              final threeCol =
+                  angleConstraints.maxWidth >= 560 && deck.angles.length == 3;
+              if (threeCol) {
                 return IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      for (int i = 0; i < deck.angles.length; i++) ...[
-                        if (i > 0) const SizedBox(width: 10),
+                      for (int i = 0; i < deck.angles.length; i++)
                         Expanded(
-                          child: _buildAngleOptionCard(
+                          child: _buildAngleColumnCell(
                             wb: wb,
                             angle: deck.angles[i],
                             selected: deck.angles[i].id == selectedAngle.id,
+                            showRightDivider: i < deck.angles.length - 1,
                             isDark: isDark,
                             textPrimary: textPrimary,
                             textSecondary: textSecondary,
                             textMuted: textMuted,
                             border: border,
-                            cyan: cyan,
+                            focal: focal,
                             green: green,
                           ),
                         ),
-                      ],
                     ],
                   ),
                 );
@@ -173,9 +152,8 @@ class _Stage1IdeaAnglesCardState extends State<Stage1IdeaAnglesCard> {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  for (int i = 0; i < deck.angles.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 10),
-                    _buildAngleOptionCard(
+                  for (int i = 0; i < deck.angles.length; i++)
+                    _buildAngleRow(
                       wb: wb,
                       angle: deck.angles[i],
                       selected: deck.angles[i].id == selectedAngle.id,
@@ -184,174 +162,201 @@ class _Stage1IdeaAnglesCardState extends State<Stage1IdeaAnglesCard> {
                       textSecondary: textSecondary,
                       textMuted: textMuted,
                       border: border,
-                      cyan: cyan,
+                      focal: focal,
                       green: green,
                     ),
-                  ],
                 ],
               );
             },
           ),
-          if (deck.steerHistory.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                Text(
-                  'Steers:',
-                  style: TextStyle(fontSize: 11.5, color: textMuted),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 520;
+              final field = TextField(
+                key: const ValueKey('stage1_angle_steer_input'),
+                controller: _steerCtrl,
+                enabled: !wb.isAgentBusy,
+                style: TextStyle(fontSize: 13, color: textPrimary),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'Steer angles (e.g., slower stamina combat, top-down)...',
+                  hintStyle: TextStyle(fontSize: 12.5, color: textMuted),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 2,
+                    vertical: 8,
+                  ),
+                  border: UnderlineInputBorder(
+                    borderSide: BorderSide(color: border),
+                  ),
+                  focusedBorder: UnderlineInputBorder(
+                    borderSide: BorderSide(color: focal),
+                  ),
                 ),
-                for (final steer in deck.steerHistory)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppTheme.bgSurfaceFor(isDark),
-                      borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-                      border: Border.all(color: border),
-                    ),
-                    child: Text(
-                      steer,
-                      style: TextStyle(fontSize: 11.5, color: textSecondary),
-                    ),
+                onSubmitted: (_) => _submitSteer(),
+              );
+              final btns = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  PlainPrimaryButton(
+                    key: const ValueKey('stage1_angle_steer_btn'),
+                    label: 'Steer',
+                    outlined: true,
+                    isDark: isDark,
+                    onPressed: wb.isAgentBusy ? null : _submitSteer,
                   ),
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.bgSurfaceFor(isDark),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-              border: Border.all(color: border),
-            ),
-            child: LayoutBuilder(
-              builder: (context, steerConstraints) {
-                final narrowSteer = steerConstraints.maxWidth < 520;
-                final steerField = TextField(
-                  key: const ValueKey('stage1_angle_steer_input'),
-                  controller: _steerController,
-                  enabled: !wb.isAgentBusy,
-                  style: TextStyle(fontSize: 12.5, color: textPrimary),
-                  decoration: InputDecoration(
-                    hintText:
-                        'Steer angles: "Make #1 co-op", "Swap boat for oil rig", "Tighter 1-room slice"...',
-                    hintStyle: TextStyle(fontSize: 12, color: textMuted),
-                    border: InputBorder.none,
-                    enabledBorder: InputBorder.none,
-                    focusedBorder: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 4,
-                      vertical: 6,
-                    ),
+                  const SizedBox(width: 8),
+                  PlainPrimaryButton(
+                    key: const ValueKey('stage1_angle_reroll_btn'),
+                    label: '↻ Reroll',
+                    outlined: true,
+                    isDark: isDark,
+                    onPressed: wb.isAgentBusy
+                        ? null
+                        : () => wb.exploreSparkAngles(
+                              deck.rawSpark,
+                              reroll: true,
+                            ),
                   ),
-                  onSubmitted: (_) => _submitSteer(),
-                );
-                final steerBtns = Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
+                ],
+              );
+
+              if (narrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    OutlinedButton(
-                      key: const ValueKey('stage1_angle_steer_btn'),
-                      onPressed: wb.isAgentBusy ? null : _submitSteer,
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 30),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                      ),
-                      child: const Text('Steer', style: TextStyle(fontSize: 12)),
-                    ),
-                    OutlinedButton(
-                      key: const ValueKey('stage1_angle_reroll_btn'),
-                      onPressed: wb.isAgentBusy
-                          ? null
-                          : () => wb.exploreSparkAngles(
-                                deck.rawSpark,
-                                reroll: true,
-                              ),
-                      style: OutlinedButton.styleFrom(
-                        minimumSize: const Size(0, 30),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                      ),
-                      child: const Text(
-                        '↻ Reroll',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ),
+                    field,
+                    const SizedBox(height: 8),
+                    Align(alignment: Alignment.centerRight, child: btns),
                   ],
                 );
-                if (narrowSteer) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      steerField,
-                      const SizedBox(height: 6),
-                      Align(alignment: Alignment.centerRight, child: steerBtns),
-                    ],
-                  );
-                }
-                return Row(
-                  children: [
-                    Text(
-                      '✨ Steer',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: cyan,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(child: steerField),
-                    const SizedBox(width: 8),
-                    steerBtns,
-                  ],
-                );
-              },
-            ),
+              }
+              return Row(
+                children: [
+                  Expanded(child: field),
+                  const SizedBox(width: 10),
+                  btns,
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 12),
-          Divider(height: 1, color: border),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: Wrap(
-              alignment: WrapAlignment.spaceBetween,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: 10,
-              runSpacing: 8,
-              children: [
-                Text(
-                  'Selected: ${selectedAngle.title} (${selectedAngle.cameraHint}) · ${deck.architectureMode.pillLabel}',
-                  style: TextStyle(fontSize: 12, color: textSecondary),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Selected: ${selectedAngle.title} · ${selectedAngle.cameraHint}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: textSecondary),
                 ),
-                ElevatedButton.icon(
-                  key: const ValueKey('stage1_lock_angle_draft_btn'),
-                  onPressed: wb.isAgentBusy
-                      ? null
-                      : () => wb.draftSpecFromSelectedAngle(),
-                  icon: const Icon(Icons.auto_awesome, size: 15),
-                  label: const Text('Draft Selected Angle →'),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              PlainPrimaryButton(
+                key: const ValueKey('stage1_lock_angle_draft_btn'),
+                label: 'Draft Selected Angle →',
+                isDark: isDark,
+                onPressed: wb.isAgentBusy
+                    ? null
+                    : () => wb.draftSpecFromSelectedAngle(),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildAngleOptionCard({
+  Widget _buildAngleColumnCell({
+    required WorkbenchProvider wb,
+    required SparkAngleOption angle,
+    required bool selected,
+    required bool showRightDivider,
+    required bool isDark,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color textMuted,
+    required Color border,
+    required Color focal,
+    required Color green,
+  }) {
+    return InkWell(
+      key: ValueKey('stage1_angle_card_${angle.id}'),
+      onTap: wb.isAgentBusy ? null : () => wb.selectSparkAngle(angle.id),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppTheme.bgSurfaceActiveFor(isDark)
+              : Colors.transparent,
+          border: Border(
+            top: BorderSide(
+              color: selected ? focal : border,
+              width: selected ? 2 : 1,
+            ),
+            right: showRightDivider
+                ? BorderSide(color: border, width: 1)
+                : BorderSide.none,
+            bottom: BorderSide(color: border, width: 1),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    angle.styleTag.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? focal : textMuted,
+                    ),
+                  ),
+                ),
+                Text(
+                  selected ? '✓' : 'Select',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? green : textMuted,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 5),
+            Text(
+              angle.title,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: textPrimary,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              angle.pitch,
+              style: TextStyle(fontSize: 12, height: 1.4, color: textSecondary),
+            ),
+            const Spacer(),
+            const SizedBox(height: 6),
+            Text(
+              '${angle.cameraHint} · ${angle.sliceHint}',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 10.5,
+                color: textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAngleRow({
     required WorkbenchProvider wb,
     required SparkAngleOption angle,
     required bool selected,
@@ -360,100 +365,73 @@ class _Stage1IdeaAnglesCardState extends State<Stage1IdeaAnglesCard> {
     required Color textSecondary,
     required Color textMuted,
     required Color border,
-    required Color cyan,
+    required Color focal,
     required Color green,
   }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        key: ValueKey('stage1_angle_card_${angle.id}'),
-        onTap: wb.isAgentBusy ? null : () => wb.selectSparkAngle(angle.id),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: selected
-                ? cyan.withValues(alpha: 0.11)
-                : AppTheme.bgSurfaceFor(isDark),
-            borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-            border: Border.all(
-              color: selected ? cyan : border,
-              width: selected ? 1.5 : 1.0,
+    return InkWell(
+      key: ValueKey('stage1_angle_card_${angle.id}'),
+      onTap: wb.isAgentBusy ? null : () => wb.selectSparkAngle(angle.id),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppTheme.bgSurfaceActiveFor(isDark)
+              : Colors.transparent,
+          border: Border(
+            left: BorderSide(
+              color: selected ? focal : Colors.transparent,
+              width: 2,
             ),
+            bottom: BorderSide(color: border, width: 1),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          angle.styleTag,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: cyan,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        selected ? '✓ Selected' : 'Select',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight:
-                              selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected ? green : textMuted,
-                        ),
-                      ),
-                    ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Text(
+                  angle.styleTag.toUpperCase(),
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? focal : textMuted,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    angle.title,
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w700,
-                      color: textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    angle.pitch,
-                    style: TextStyle(
-                      fontSize: 12,
-                      height: 1.45,
-                      color: textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Divider(height: 1, color: border),
-                    const SizedBox(height: 7),
-                    Text(
-                      '${angle.cameraHint} · ${angle.sliceHint}',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 10.5,
-                        color: textMuted,
-                      ),
-                    ),
-                  ],
                 ),
+                const Spacer(),
+                Text(
+                  selected ? '✓ Selected' : 'Select',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                    color: selected ? green : textMuted,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              angle.title,
+              style: TextStyle(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w700,
+                color: textPrimary,
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              angle.pitch,
+              style: TextStyle(fontSize: 13, height: 1.45, color: textSecondary),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '${angle.cameraHint} · ${angle.sliceHint}',
+              style: GoogleFonts.jetBrainsMono(
+                fontSize: 11,
+                color: textMuted,
+              ),
+            ),
+          ],
         ),
       ),
     );

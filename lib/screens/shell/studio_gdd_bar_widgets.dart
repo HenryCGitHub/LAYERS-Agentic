@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+
+export 'studio_header_menus.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';

@@ -730,9 +730,12 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
 
   /// Approves `PROJECT_SPEC.md` and materializes or non-destructively reconciles `v0.1 · Prototype` Epics,
   /// transitioning straight to Stage 2 (`2. Release Workbench`).
-  String? approveRootSpecAndLaunchWorkbench() {
+  String? approveRootSpecAndLaunchWorkbench({bool openReleaseSpec = false}) {
     var draft = _conceptDraft;
     if (draft == null) return null;
+    _previousProjectIdBeforeNewGame = null;
+    _showingPlanNextRelease = false;
+    _showingReleaseSpec = openReleaseSpec;
     draft = UnrealSpecGuard.sanitizeConceptBlueprint(
       raw: draft,
       modeOverride: draft.architectureMode,

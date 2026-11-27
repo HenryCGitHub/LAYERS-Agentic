@@ -259,6 +259,10 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('approve_launch_workbench_btn')));
         await tester.pumpAndSettle();
 
+        expect(wb.isInspectingReleaseSpec, isTrue);
+        await tester.tap(find.byKey(const ValueKey('release_primary_action_btn')));
+        await tester.pumpAndSettle();
+
         expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
         expect(find.byKey(const ValueKey('stage2_tab_raw')), findsNothing);
         expect(find.byKey(const ValueKey('copy_copilot_prompt_btn')), findsOneWidget);
@@ -2401,27 +2405,29 @@ void main() {
         );
         expect(find.textContaining('SHELLBREAKER'), findsWidgets);
 
-        // Approve & Launch into Stage 2 Release Workbench (Feature Spec Sheet)
+        // Approve & Launch into Release Spec, then open Feature Spec Sheet
         await tester.tap(
           find.byKey(const ValueKey('approve_launch_workbench_btn')),
         );
         await tester.pumpAndSettle();
-        expect(find.text('Feature Scope'), findsOneWidget);
-        expect(find.text('Playtest Gate & [FIX] Notes'), findsOneWidget);
+        expect(find.byKey(const ValueKey('release_primary_action_btn')), findsOneWidget);
+        await tester.tap(
+          find.byKey(const ValueKey('release_primary_action_btn')),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('GOAL & SCOPE'), findsOneWidget);
+        expect(find.textContaining('PLAYTEST ('), findsOneWidget);
 
         // Select parent Epic Domain & exercise inline add-slice toggle
         wb.selectEpic(wb.activeReleaseEpics.first.id);
         await tester.pumpAndSettle();
-        expect(
-          find.text('Domain Scope (Zero Feature Duplication)'),
-          findsOneWidget,
-        );
-        final addSliceBtn = find.text('+ Add Feature Slice');
+        expect(find.text('DOMAIN SCOPE'), findsOneWidget);
+        final addSliceBtn = find.byKey(const ValueKey('show_add_feature_btn'));
         expect(addSliceBtn, findsOneWidget);
         await tester.ensureVisible(addSliceBtn);
         await tester.tap(addSliceBtn);
         await tester.pumpAndSettle();
-        expect(find.text('Close'), findsOneWidget);
+        expect(find.byKey(const ValueKey('add_feature_form')), findsOneWidget);
 
         await tester.pumpWidget(const SizedBox.shrink());
         wb.dispose();

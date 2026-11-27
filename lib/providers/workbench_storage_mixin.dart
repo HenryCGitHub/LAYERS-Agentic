@@ -165,6 +165,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
   /// Switches the active project and restores its Stage 1/2/3 blueprints and selection.
   void switchProject(String projectId) {
     if (!documents.containsKey(projectId)) return;
+    _previousProjectIdBeforeNewGame = null;
     _restoreProjectState(projectId);
     _persistSettings();
     notifyListeners();
@@ -172,11 +173,17 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
 
   /// Starts a brand-new Project at Stage 1 (`1. Project Spec`) while keeping existing projects in the vault.
   void createNewProject() {
+    _previousProjectIdBeforeNewGame =
+        (_activeProjectId != null && documents.containsKey(_activeProjectId))
+            ? _activeProjectId
+            : null;
     _activeProjectId = 'proj_${DateTime.now().millisecondsSinceEpoch}';
     _unpersistedNewProjectId = _activeProjectId;
     _activeReleaseId = null;
     _selectedEpicId = null;
     _selectedFeatureId = null;
+    _showingReleaseSpec = false;
+    _showingPlanNextRelease = false;
     _expandedEpicIds.clear();
     _userPinnedMode = false;
     _conceptDraft = null;
@@ -188,6 +195,17 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     _currentStage = WorkbenchStage.projectPitch;
     unawaited(_restoreLocalGddLinkForActiveProject());
     notifyListeners();
+  }
+
+  /// Cancels an empty `+ New Game` flow and restores the prior project cleanly.
+  bool cancelNewGame() {
+    final prevId = _previousProjectIdBeforeNewGame;
+    _previousProjectIdBeforeNewGame = null;
+    if (prevId == null || !documents.containsKey(prevId)) return false;
+    _restoreProjectState(prevId);
+    _persistSettings();
+    notifyListeners();
+    return true;
   }
 
   /// Renames a saved project in the vault (updating both its TierDocument title and Concept Blueprint).
@@ -437,6 +455,8 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
       _selectedFeatureId = null;
     }
 
+    _showingPlanNextRelease = false;
+    _showingReleaseSpec = proj.sections['showing_release_spec'] == 'true';
     final savedStage = proj.sections['current_stage'];
     if ((savedStage == WorkbenchStage.releaseWorkbench.name ||
             savedStage == 'releasePlanGate') &&
@@ -509,6 +529,7 @@ extension WorkbenchStorageMixin on WorkbenchProvider {
     final proj = activeProject;
     if (proj == null) return;
     proj.sections['current_stage'] = _currentStage.name;
+    proj.sections['showing_release_spec'] = _showingReleaseSpec.toString();
     if (_activeReleaseId != null) {
       proj.sections['active_release_id'] = _activeReleaseId!;
     }

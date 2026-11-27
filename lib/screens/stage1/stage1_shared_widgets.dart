@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../models/epic_spec.dart';
+
+import '../../models/unreal_architecture_mode.dart';
 import '../../theme/app_theme.dart';
 
+/// Flat segmented text link toggle for Blueprint-First vs C++ & BP Hybrid.
 class UnrealArchitectureToggle extends StatelessWidget {
   final UnrealArchitectureMode mode;
   final bool isDark;
@@ -17,34 +19,37 @@ class UnrealArchitectureToggle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cyan = AppTheme.accentCyanFor(isDark);
     final border = AppTheme.borderFor(isDark);
-    final muted = AppTheme.textMutedFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final isBp = mode == UnrealArchitectureMode.blueprint;
 
-    Widget buildOption({
+    Widget buildTab({
       required Key key,
-      required UnrealArchitectureMode target,
+      required String label,
+      required bool active,
+      required UnrealArchitectureMode value,
     }) {
-      final selected = mode == target;
       return InkWell(
         key: key,
-        onTap: onChanged == null ? null : () => onChanged!(target),
-        borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+        onTap: onChanged == null ? null : () => onChanged!(value),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: selected ? cyan.withValues(alpha: 0.16) : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-            border: selected
-                ? Border.all(color: cyan.withValues(alpha: 0.45))
-                : null,
+            border: Border(
+              bottom: BorderSide(
+                color: active ? focal : Colors.transparent,
+                width: 2,
+              ),
+            ),
           ),
           child: Text(
-            target.pillLabel,
-            style: GoogleFonts.jetBrainsMono(
-              fontSize: 11,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? cyan : muted,
+            label,
+            style: GoogleFonts.inter(
+              fontSize: 12,
+              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              color: active ? textPrimary : textMuted,
             ),
           ),
         ),
@@ -53,23 +58,24 @@ class UnrealArchitectureToggle extends StatelessWidget {
 
     return Container(
       key: const ValueKey('stage1_architecture_toggle'),
-      padding: const EdgeInsets.all(2),
       decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-        border: Border.all(color: border),
+        border: Border(bottom: BorderSide(color: border, width: 1)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          buildOption(
+          buildTab(
             key: const ValueKey('stage1_mode_blueprint'),
-            target: UnrealArchitectureMode.blueprint,
+            label: 'Blueprint-First',
+            active: isBp,
+            value: UnrealArchitectureMode.blueprint,
           ),
-          const SizedBox(width: 2),
-          buildOption(
+          const SizedBox(width: 8),
+          buildTab(
             key: const ValueKey('stage1_mode_cpp_hybrid'),
-            target: UnrealArchitectureMode.cppHybrid,
+            label: 'C++ & BP Hybrid',
+            active: !isBp,
+            value: UnrealArchitectureMode.cppHybrid,
           ),
         ],
       ),
@@ -77,6 +83,7 @@ class UnrealArchitectureToggle extends StatelessWidget {
   }
 }
 
+/// Flat plain-document section separated only by a 1px bottom header rule.
 class Stage1SectionCard extends StatelessWidget {
   final bool isDark;
   final String code;
@@ -97,72 +104,70 @@ class Stage1SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cyan = AppTheme.accentCyanFor(isDark);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppTheme.bgSurfaceRaisedFor(isDark),
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(
-          color: isUpdated
-              ? cyan.withValues(alpha: 0.55)
-              : AppTheme.borderFor(isDark),
-        ),
-      ),
+    final border = AppTheme.borderFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 26),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(
-                code,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: cyan,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: AppTheme.displayFont(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.textPrimaryFor(isDark),
+          Container(
+            padding: const EdgeInsets.only(bottom: 8),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: border, width: 1)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  code.startsWith('§') ? code : '§$code',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: textMuted,
                   ),
                 ),
-              ),
-              if (trailing != null) ...[
                 const SizedBox(width: 8),
-                trailing!,
-              ],
-              if (isUpdated)
-                Container(
-                  key: ValueKey('stage1_updated_badge_$code'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: cyan.withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-                    border: Border.all(color: cyan.withValues(alpha: 0.45)),
-                  ),
+                Expanded(
                   child: Text(
-                    'Updated',
+                    title.toUpperCase(),
                     style: GoogleFonts.jetBrainsMono(
-                      fontSize: 10.5,
+                      fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: cyan,
+                      letterSpacing: 0.9,
+                      color: textMuted,
                     ),
                   ),
                 ),
-            ],
+                if (trailing != null) ...[
+                  trailing!,
+                  if (isUpdated) const SizedBox(width: 10),
+                ],
+                if (isUpdated)
+                  Text(
+                    'Updated',
+                    key: ValueKey(
+                      code.startsWith('§')
+                          ? 'stage1_updated_badge_$code'
+                          : 'stage1_updated_badge_§$code',
+                    ),
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w600,
+                      color: focal,
+                    ),
+                  ),
+              ],
+            ),
           ),
-          const SizedBox(height: 14),
-          child,
+          const SizedBox(height: 12),
+          DefaultTextStyle(
+            style: TextStyle(fontSize: 13.5, color: textPrimary, height: 1.45),
+            child: child,
+          ),
         ],
       ),
     );
@@ -191,7 +196,7 @@ class Stage1ContractRow extends StatelessWidget {
           ? null
           : BoxDecoration(
               border: Border(
-                bottom: BorderSide(color: AppTheme.borderFor(isDark)),
+                bottom: BorderSide(color: AppTheme.borderFor(isDark), width: 1),
               ),
             ),
       child: Row(
@@ -202,7 +207,7 @@ class Stage1ContractRow extends StatelessWidget {
             child: Text(
               label,
               style: GoogleFonts.jetBrainsMono(
-                fontSize: 12,
+                fontSize: 11.5,
                 color: AppTheme.textMutedFor(isDark),
               ),
             ),
@@ -211,7 +216,7 @@ class Stage1ContractRow extends StatelessWidget {
             child: Text(
               value,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: 13.5,
                 color: AppTheme.textPrimaryFor(isDark),
                 height: 1.4,
               ),

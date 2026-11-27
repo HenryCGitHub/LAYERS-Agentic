@@ -93,6 +93,7 @@ class ProgressiveReleaseDraft {
   Set<String> chosenNewFeatureIds;
   List<EpicSpec> candidateNewEpics;
   String? activePresetId;
+  String customGoal;
 
   ProgressiveReleaseDraft({
     required this.targetVersion,
@@ -102,7 +103,8 @@ class ProgressiveReleaseDraft {
     Set<String>? chosenNewFeatureIds,
     required this.candidateNewEpics,
     this.activePresetId,
-  })  : candidateNewFeaturesByLineageKey =
+    this.customGoal = '',
+  }) : candidateNewFeaturesByLineageKey =
             candidateNewFeaturesByLineageKey ?? <String, List<FeatureSpec>>{},
         chosenNewFeatureIds = chosenNewFeatureIds ??
             <String>{
@@ -138,6 +140,7 @@ class ProgressiveReleaseDraft {
         for (final ep in candidateNewEpics) ep.deepCopy(),
       ],
       activePresetId: activePresetId,
+      customGoal: customGoal,
     );
   }
 }

@@ -442,4 +442,214 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
       _syncEpicLifecycleFromFeatures(spec, relVer);
     });
   }
+
+  /// Navigates directly to the Stage 1 Project Brief document (`PROJECT_SPEC.md`).
+  void selectProjectBrief() {
+    _showingPlanNextRelease = false;
+    _showingReleaseSpec = false;
+    setStage(WorkbenchStage.projectPitch);
+  }
+
+  /// Navigates directly to the plain Release Spec page for [releaseId] (or active release).
+  void selectReleaseSpec([String? releaseId]) {
+    final targetId = releaseId ?? _activeReleaseId;
+    if (targetId != null &&
+        documents[targetId]?.tier == TierType.release &&
+        targetId != _activeReleaseId) {
+      _activeReleaseId = targetId;
+    }
+    if (activeRelease == null) return;
+    _showingPlanNextRelease = false;
+    _showingReleaseSpec = true;
+    _currentStage = WorkbenchStage.releaseWorkbench;
+    _syncActiveProjectMetadata();
+    _syncStage2UndoProjectScope();
+    notifyListeners();
+  }
+
+  /// Inline-edits Release Spec `title`, `goal`, or `doneWhen` with Undo history & local GDD sync.
+  void updateReleaseSpec(
+    String releaseId, {
+    String? title,
+    String? goal,
+    String? doneWhen,
+  }) {
+    final rel = documents[releaseId];
+    if (rel == null || rel.tier != TierType.release) return;
+    final mode = unrealArchitectureMode;
+    final ver = releaseVersionTagFor(rel);
+
+    final nextTitle = title != null && title.trim().isNotEmpty
+        ? UnrealSpecGuard.sanitizeLine(title, mode: mode)
+        : rel.title;
+    final nextGoal = goal != null
+        ? UnrealSpecGuard.sanitizeLine(goal, mode: mode)
+        : (rel.sections['goal'] ?? '');
+    final nextDone = doneWhen != null
+        ? UnrealSpecGuard.sanitizeLine(doneWhen, mode: mode)
+        : (rel.sections['doneWhen'] ?? '');
+
+    if (nextTitle == rel.title &&
+        nextGoal == (rel.sections['goal'] ?? '') &&
+        nextDone == (rel.sections['doneWhen'] ?? '')) {
+      return;
+    }
+
+    _pushStage2ReleaseUndoSnapshot(
+      releaseDoc: rel,
+      summary: 'Edited $ver release spec',
+    );
+    _lastStage2RefineSummary = 'Edited $ver release spec';
+
+    rel.title = nextTitle;
+    rel.sections['goal'] = nextGoal;
+    rel.sections['doneWhen'] = nextDone;
+    if (ver == 'v0.1' && _conceptDraft != null) {
+      _conceptDraft!.releaseDoneWhen = nextDone;
+      _ensureActiveProjectDocument(_conceptDraft!);
+    }
+    _persistDocument(rel);
+    notifyListeners();
+  }
+
+  /// Adds a new permanent Domain Epic (plus one starter Feature slice) to the active release.
+  EpicSpec? addEpicToActiveRelease({
+    required String title,
+    String? goal,
+  }) {
+    final rel = activeRelease;
+    final cleanTitle = UnrealSpecGuard.sanitizeLine(
+      title,
+      mode: unrealArchitectureMode,
+    );
+    if (rel == null || cleanTitle.isEmpty) return null;
+
+    final existingEpics = activeReleaseEpics;
+    int maxEpicNum = existingEpics.length;
+    final epCodeRx = RegExp(r'^E(\d+)$', caseSensitive: false);
+    for (final ep in existingEpics) {
+      final m = epCodeRx.firstMatch(ep.code.trim());
+      final parsed = m != null ? int.tryParse(m.group(1) ?? '') ?? 0 : 0;
+      if (parsed > maxEpicNum) maxEpicNum = parsed;
+    }
+    final nextEpCode = EpicSpec.formatCode(maxEpicNum + 1);
+
+    int maxFeatNum = 0;
+    final featCodeRx = RegExp(r'^F(\d+)$', caseSensitive: false);
+    for (final projRel in projectReleases) {
+      for (final epDoc in epicDocsForRelease(projRel.id)) {
+        for (final f in EpicSpec.fromDocument(epDoc).features) {
+          final m = featCodeRx.firstMatch(f.code.trim());
+          final parsed = m != null ? int.tryParse(m.group(1) ?? '') ?? 0 : 0;
+          if (parsed > maxFeatNum) maxFeatNum = parsed;
+        }
+      }
+    }
+    final nextFeatCode = FeatureSpec.formatCode(maxFeatNum + 1);
+    final relVer = releaseVersionTagFor(rel);
+    final mode = unrealArchitectureMode;
+    final cleanGoal = UnrealSpecGuard.sanitizeLine(
+      (goal != null && goal.trim().isNotEmpty)
+          ? goal
+          : 'Handle $cleanTitle actors and shared domain state in PIE.',
+      mode: mode,
+    );
+    final slug = cleanTitle
+        .replaceAll(RegExp(r'[^a-zA-Z0-9]+'), '')
+        .trim();
+    final bpOwner = '/Game/Blueprints/BP_${slug.isEmpty ? nextEpCode : slug}';
+    final epDocId = '${rel.id}_epic_${DateTime.now().microsecondsSinceEpoch}';
+    final featId = '${epDocId}_${nextFeatCode.toLowerCase()}';
+
+    final rawEpic = EpicSpec(
+      id: epDocId,
+      lineageKey: nextEpCode.toLowerCase(),
+      code: nextEpCode,
+      releaseVersion: relVer,
+      lifecycle: EpicLifecycle.active,
+      title: cleanTitle,
+      coreLoopBeat: cleanTitle,
+      goal: cleanGoal,
+      inScope: [cleanTitle],
+      doneWhen: ['$cleanTitle responds cleanly in PIE with zero errors'],
+      sceneOwnership: [
+        EpicSceneOwnership(path: bpOwner, role: '$cleanTitle domain owner'),
+      ],
+      stateFlow: ['Idle', 'Active', 'Reset'],
+      interruptRules: [
+        'Pressing IA_QuickReset restores $cleanTitle state cleanly.',
+      ],
+      outOfScope: ['No unrelated UI menus in $nextEpCode'],
+      features: [
+        FeatureSpec(
+          id: featId,
+          code: nextFeatCode,
+          title: '$cleanTitle Core',
+          introducedIn: relVer,
+          sliceTime: '45 min',
+          status: FeatureStatus.active,
+          goal: 'Implement $cleanTitle core loop cleanly in UE5 PIE.',
+          inScope: ['$cleanTitle core action'],
+          doneWhen: ['Trigger $cleanTitle -> Observable response runs in PIE'],
+          controls: [
+            EpicControlBinding(
+              action: 'IA_PrimaryAction',
+              trigger: 'Started (LMB / Space)',
+              rule: 'Triggers $cleanTitle cleanly',
+            ),
+          ],
+          tuning: [
+            EpicTuningParam(
+              key: 'PrimaryMagnitude',
+              value: '300',
+              unit: 'cm',
+            ),
+          ],
+          cues: ['Visual feedback pulse + crisp activation audio cue'],
+          checks: [
+            EpicPieCheck(
+              id: '${featId}_c1',
+              text: 'Trigger $cleanTitle in PIE -> Expected response appears clearly',
+            ),
+          ],
+        ),
+      ],
+    );
+    final cleanEpic = UnrealSpecGuard.sanitizeEpicSpec(rawEpic, mode: mode);
+    final epDoc = cleanEpic.toTierDocument(
+      docId: epDocId,
+      parentReleaseId: rel.id,
+    );
+    documents[epDocId] = epDoc;
+    rel.childrenIds = [...rel.childrenIds, epDocId];
+    rel.estimatedDuration = '${rel.childrenIds.length} Epics';
+    _persistDocument(epDoc);
+    _persistDocument(rel);
+    notifyListeners();
+    return cleanEpic;
+  }
+
+  /// Creates a quick slice directly from the left outline footer and marks it for title auto-focus.
+  FeatureSpec? quickAddSliceToActiveRelease({String? epicId}) {
+    final targetEpicId = epicId ??
+        _selectedEpicId ??
+        (activeReleaseEpicDocs.isNotEmpty
+            ? activeReleaseEpicDocs.first.id
+            : null);
+    if (targetEpicId == null) return null;
+    final created = addFeatureSlice(
+      targetEpicId,
+      title: 'New Playable Slice',
+      goal: 'Build and test this playable slice cleanly in UE5 PIE.',
+      selectCreated: true,
+    );
+    if (created == null) return null;
+    _showingReleaseSpec = false;
+    _showingPlanNextRelease = false;
+    _currentStage = WorkbenchStage.releaseWorkbench;
+    _autoFocusFeatureId = created.id;
+    _syncActiveProjectMetadata();
+    notifyListeners();
+    return created;
+  }
 }

@@ -49,9 +49,9 @@ Future<void> showGddInspectorDialog(
 
         return Dialog(
           key: const ValueKey('gdd_inspector_dialog'),
-          backgroundColor: AppTheme.bgSurfaceRaisedFor(isDark),
+          backgroundColor: AppTheme.bgPanelFor(isDark),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            borderRadius: BorderRadius.circular(2),
             side: BorderSide(color: border),
           ),
           child: ConstrainedBox(
@@ -103,9 +103,8 @@ Future<void> showGddInspectorDialog(
                           vertical: 5,
                         ),
                         decoration: BoxDecoration(
-                          color: AppTheme.bgSurfaceRecessedFor(isDark),
-                          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                          border: Border.all(color: border),
+                          color: Colors.transparent,
+                          border: Border(bottom: BorderSide(color: border)),
                         ),
                         child: Text(
                           'Paste size: ~$tokens tok',
@@ -169,8 +168,8 @@ Future<void> showGddInspectorDialog(
                       width: double.infinity,
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: AppTheme.bgSurfaceRecessedFor(isDark),
-                        borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+                        color: AppTheme.bgBaseFor(isDark),
+                        borderRadius: BorderRadius.circular(2),
                         border: Border.all(color: border),
                       ),
                       child: SingleChildScrollView(

@@ -1,15 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../models/epic_spec.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
-import 'progressive_release_modal.dart';
-import 'workbench_shared_widgets.dart';
 
+/// Flat 240px left document outline strictly reflecting the 4-tier hierarchy:
+/// Project Brief -> Active Release (`v0.X · Title · X/Y`) -> Epics -> Features.
 class WorkbenchOutlinerRail extends StatelessWidget {
   final WorkbenchProvider wb;
   final List<EpicSpec> epics;
-  final EpicSpec activeEpic;
+  final EpicSpec? activeEpic;
   final FeatureSpec? activeFeature;
 
   const WorkbenchOutlinerRail({
@@ -21,307 +22,331 @@ class WorkbenchOutlinerRail extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) =>
-      _buildRail(context, wb, epics, activeEpic, activeFeature);
-
-  Widget _buildRail(
-    BuildContext context,
-    WorkbenchProvider wb,
-    List<EpicSpec> epics,
-    EpicSpec activeEpic,
-    FeatureSpec? activeFeature,
-  ) {
+  Widget build(BuildContext context) {
     final isDark = wb.isDark;
+    final bgBase = AppTheme.bgBaseFor(isDark);
     final border = AppTheme.borderFor(isDark);
-    final panelBg = AppTheme.bgPanelFor(isDark);
-    final primary = AppTheme.textPrimaryFor(isDark);
-    final muted = AppTheme.textMutedFor(isDark);
-    final secondary = AppTheme.textSecondaryFor(isDark);
-    final cyan = AppTheme.accentCyanFor(isDark);
-    final green = AppTheme.accentGreenFor(isDark);
-    final red = AppTheme.accentRedFor(isDark);
-    final amber = AppTheme.accentAmberFor(isDark);
-
-    final relVer = wb.activeReleaseVersionTag;
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
+    final activePage = wb.activeDocPage;
     final releases = wb.projectReleases;
+    final relVer = wb.activeReleaseVersionTag;
     final releaseRollup = wb.activeReleaseFeatureRollup;
 
-    return Container(
-      width: 286,
-      decoration: BoxDecoration(
-        color: panelBg,
-        border: Border(right: BorderSide(color: border)),
-      ),
+    return Material(
+      color: bgBase,
+      child: Container(
+        width: 240,
+        decoration: BoxDecoration(
+          border: Border(right: BorderSide(color: border, width: 1)),
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Release Scope Header & Release Switcher Pills
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+          _OutlineRow(
+            key: const ValueKey('outliner_project_brief'),
+            active: activePage == WorkbenchDocPage.projectBrief,
+            isDark: isDark,
+            padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              wb.selectProjectBrief();
+            },
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'RELEASE SCOPE',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                          color: muted,
-                        ),
-                      ),
+                Expanded(
+                  child: Text(
+                    'Project Brief',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      fontWeight: activePage == WorkbenchDocPage.projectBrief
+                          ? FontWeight.w600
+                          : FontWeight.w500,
+                      color: activePage == WorkbenchDocPage.projectBrief
+                          ? textPrimary
+                          : textSecondary,
                     ),
-                    OutlinedButton.icon(
-                      key: const ValueKey('plan_next_release_btn'),
-                      onPressed: wb.isDraftingProgressive
-                          ? null
-                          : () => showProgressiveReleaseCopilotDialog(
-                                context,
-                                wb,
-                              ),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 5,
-                        ),
-                        minimumSize: const Size(0, 28),
-                        backgroundColor: wb.isActiveReleaseComplete
-                            ? green.withValues(alpha: 0.14)
-                            : AppTheme.bgSurfaceRaisedFor(isDark),
-                        foregroundColor:
-                            wb.isActiveReleaseComplete ? green : primary,
-                        side: BorderSide(
-                          color: wb.isActiveReleaseComplete ? green : border,
-                        ),
-                      ),
-                      icon: const Icon(Icons.auto_awesome, size: 12),
-                      label: const Text(
-                        '+ New Release',
-                        style: TextStyle(fontSize: 11),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                for (final rel in releases) ...[
-                  OutlinerReleasePill(
-                    key: ValueKey('outliner_release_${rel.id}'),
-                    label: wb.releaseDisplayName(rel),
-                    goal: (rel.sections['goal'] ?? '').trim(),
-                    isActive: rel.id == wb.activeReleaseId,
-                    isDark: isDark,
-                    onTap: () => wb.selectActiveRelease(rel.id),
                   ),
-                  const SizedBox(height: 5),
-                ],
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'EPICS & FEATURES',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w600,
-                          color: muted,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${releaseRollup.passed}/${releaseRollup.total} Passed',
-                      key: const ValueKey('outliner_release_summary'),
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: releaseRollup.total > 0 &&
-                                releaseRollup.passed == releaseRollup.total
-                            ? green
-                            : muted,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
           ),
-          Divider(height: 1, color: border),
-
-          // Expandable Epic -> Feature Outliner Tree
+          Divider(height: 1, thickness: 1, color: border),
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.all(10),
-              itemCount: epics.length,
-              itemBuilder: (ctx, i) {
-                final ep = epics[i];
-                final expanded = wb.isEpicExpanded(ep.id);
-                final isEpicDomainSelected =
-                    ep.id == activeEpic.id && activeFeature == null;
-                final rollup = wb.epicFeatureRollup(ep);
-                final visibleFeatures = wb.visibleFeaturesForEpic(ep);
-                final rollupComplete =
-                    rollup.total > 0 && rollup.passed == rollup.total;
-                final rollupColor = rollup.openFixes > 0
-                    ? red
-                    : rollupComplete
-                        ? green
-                        : muted;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.bgSurfaceFor(isDark),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSm),
-                    border: Border.all(
-                      color: isEpicDomainSelected
-                          ? cyan.withValues(alpha: 0.6)
-                          : border,
+            child: ListView(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              children: [
+                if (releases.isEmpty && wb.conceptDraft != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
+                    child: Text(
+                      'No release launched yet',
+                      style: TextStyle(fontSize: 12, color: textMuted),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Epic header row
-                      Container(
-                        decoration: BoxDecoration(
-                          color: isEpicDomainSelected
-                              ? cyan.withValues(alpha: 0.1)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.vertical(
-                            top: const Radius.circular(AppTheme.radiusSm),
-                            bottom: expanded
-                                ? Radius.zero
-                                : const Radius.circular(AppTheme.radiusSm),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            InkWell(
-                              key: ValueKey('outliner_epic_toggle_${ep.id}'),
-                              onTap: () => wb.toggleEpicExpanded(ep.id),
-                              borderRadius:
-                                  BorderRadius.circular(AppTheme.radiusXs),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 10,
-                                ),
-                                child: Icon(
-                                  expanded
-                                      ? Icons.keyboard_arrow_down_rounded
-                                      : Icons.keyboard_arrow_right_rounded,
-                                  size: 16,
-                                  color: muted,
-                                ),
+                for (final rel in releases) ...[
+                  () {
+                    final isCurrentRel = rel.id == wb.activeReleaseId;
+                    final isRelActive =
+                        isCurrentRel &&
+                        activePage == WorkbenchDocPage.releaseSpec;
+                    final ver = (rel.sections['release_version'] ?? '')
+                            .trim()
+                            .isNotEmpty
+                        ? rel.sections['release_version']!.trim()
+                        : rel.title;
+                    return _OutlineRow(
+                      key: ValueKey('outliner_release_${rel.id}'),
+                      active: isRelActive,
+                      isDark: isDark,
+                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                      onTap: () {
+                        FocusManager.instance.primaryFocus?.unfocus();
+                        wb.selectReleaseSpec(rel.id);
+                      },
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '$ver · ${rel.title}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 12.5,
+                                fontWeight: isCurrentRel
+                                    ? FontWeight.w600
+                                    : FontWeight.w500,
+                                color: isCurrentRel ? textPrimary : textMuted,
                               ),
                             ),
-                            Expanded(
-                              child: InkWell(
-                                key: ValueKey('outliner_epic_${ep.id}'),
-                                onTap: () => wb.selectEpic(ep.id),
-                                child: Padding(
-                                  padding: const EdgeInsets.fromLTRB(
-                                    0,
-                                    9,
-                                    10,
-                                    9,
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          '${ep.code} · ${ep.title}',
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            fontSize: 12.5,
-                                            fontWeight: isEpicDomainSelected
-                                                ? FontWeight.w700
-                                                : FontWeight.w600,
-                                            color: isEpicDomainSelected
-                                                ? cyan
-                                                : primary,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 6,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: rollupColor.withValues(
-                                            alpha: 0.12,
-                                          ),
-                                          borderRadius: BorderRadius.circular(
-                                            AppTheme.radiusXs,
-                                          ),
-                                          border: Border.all(color: border),
-                                        ),
-                                        child: Text(
-                                          '${rollup.passed}/${rollup.total}',
-                                          style: GoogleFonts.jetBrainsMono(
-                                            fontSize: 10.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: rollupColor,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                          ),
+                          if (isCurrentRel) ...[
+                            const SizedBox(width: 6),
+                            Text(
+                              '${releaseRollup.passed}/${releaseRollup.total}',
+                              key: const ValueKey('outliner_release_summary'),
+                              style: GoogleFonts.jetBrainsMono(
+                                fontSize: 10.5,
+                                color: releaseRollup.openFixes > 0
+                                    ? AppTheme.accentRedFor(isDark)
+                                    : (releaseRollup.total > 0 &&
+                                              releaseRollup.passed ==
+                                                  releaseRollup.total
+                                          ? AppTheme.accentGreenFor(isDark)
+                                          : textMuted),
                               ),
                             ),
                           ],
+                        ],
+                      ),
+                    );
+                  }(),
+                  if (rel.id == wb.activeReleaseId) ...[
+                    for (final ep in epics)
+                      _buildEpicTree(context, ep, relVer),
+                  ],
+                ],
+              ],
+            ),
+          ),
+          Container(
+            decoration: BoxDecoration(
+              border: Border(top: BorderSide(color: border, width: 1)),
+            ),
+            child: InkWell(
+              key: const ValueKey('outline_add_slice_btn'),
+              onTap: epics.isEmpty
+                  ? null
+                  : () {
+                      FocusManager.instance.primaryFocus?.unfocus();
+                      wb.quickAddSliceToActiveRelease();
+                    },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
+                child: Row(
+                  children: [
+                    Text(
+                      '+ Add slice',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: epics.isEmpty ? textMuted : focal,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    ),
+    );
+  }
+
+  Widget _buildEpicTree(
+    BuildContext context,
+    EpicSpec ep,
+    String relVer,
+  ) {
+    final isDark = wb.isDark;
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final visibleFeatures = wb.visibleFeaturesForEpic(ep);
+    final expanded = wb.isEpicExpanded(ep.id);
+    final rollup = wb.epicFeatureRollup(ep);
+    final isEpicActive =
+        activeEpic?.id == ep.id &&
+        wb.activeDocPage == WorkbenchDocPage.epicDomain;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _OutlineRow(
+          active: isEpicActive,
+          isDark: isDark,
+          padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            wb.selectEpic(ep.id);
+          },
+          child: Row(
+            children: [
+              InkWell(
+                key: ValueKey('outliner_epic_toggle_${ep.id}'),
+                onTap: () => wb.toggleEpicExpanded(ep.id),
+                borderRadius: BorderRadius.circular(2),
+                child: Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Icon(
+                    expanded
+                        ? Icons.keyboard_arrow_down_rounded
+                        : Icons.keyboard_arrow_right_rounded,
+                    size: 14,
+                    color: textMuted,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: InkWell(
+                  key: ValueKey('outliner_epic_${ep.id}'),
+                  onTap: () {
+                    FocusManager.instance.primaryFocus?.unfocus();
+                    wb.selectEpic(ep.id);
+                  },
+                  child: Row(
+                    children: [
+                      Text(
+                        ep.code,
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: isEpicActive ? textPrimary : textMuted,
                         ),
                       ),
-
-                      // Child Feature rows
-                      if (expanded && visibleFeatures.isNotEmpty) ...[
-                        Divider(height: 1, color: border),
-                        Container(
-                          padding: const EdgeInsets.fromLTRB(8, 6, 8, 6),
-                          decoration: BoxDecoration(
-                            color: AppTheme.bgInsetFor(isDark),
-                            borderRadius: const BorderRadius.vertical(
-                              bottom: Radius.circular(AppTheme.radiusSm),
-                            ),
-                          ),
-                          child: Column(
-                            children: [
-                              for (final feat in visibleFeatures)
-                                _buildOutlinerFeatureRow(
-                                  wb: wb,
-                                  epic: ep,
-                                  feat: feat,
-                                  relVer: relVer,
-                                  isSelected: activeFeature?.id == feat.id &&
-                                      ep.id == activeEpic.id,
-                                  isDark: isDark,
-                                  primary: primary,
-                                  secondary: secondary,
-                                  muted: muted,
-                                  border: border,
-                                  cyan: cyan,
-                                  green: green,
-                                  red: red,
-                                  amber: amber,
-                                ),
-                            ],
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          ep.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: isEpicActive
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                            color: isEpicActive ? textPrimary : textSecondary,
                           ),
                         ),
-                      ],
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${rollup.passed}/${rollup.total}',
+                        style: GoogleFonts.jetBrainsMono(
+                          fontSize: 10,
+                          color: rollup.openFixes > 0
+                              ? AppTheme.accentRedFor(isDark)
+                              : textMuted,
+                        ),
+                      ),
                     ],
                   ),
-                );
-              },
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (expanded)
+          for (final feat in visibleFeatures)
+            _buildFeatureRow(ep, feat, relVer),
+      ],
+    );
+  }
+
+  Widget _buildFeatureRow(
+    EpicSpec ep,
+    FeatureSpec feat,
+    String relVer,
+  ) {
+    final isDark = wb.isDark;
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final isFeatActive =
+        activeFeature?.id == feat.id &&
+        wb.activeDocPage == WorkbenchDocPage.featureSlice;
+    final glyph = _featureGlyph(feat, relVer, isDark);
+
+    return _OutlineRow(
+      key: ValueKey('outliner_feature_${feat.id}'),
+      active: isFeatActive,
+      isDark: isDark,
+      padding: const EdgeInsets.fromLTRB(28, 5, 12, 5),
+      onTap: () {
+        FocusManager.instance.primaryFocus?.unfocus();
+        wb.selectFeature(ep.id, feat.id);
+      },
+      child: Row(
+        children: [
+          Text(
+            glyph.symbol,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: glyph.color,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            feat.code,
+            style: GoogleFonts.jetBrainsMono(
+              fontSize: 10,
+              color: textMuted,
+            ),
+          ),
+          const SizedBox(width: 5),
+          Expanded(
+            child: Text(
+              feat.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                fontWeight: isFeatActive ? FontWeight.w600 : FontWeight.w400,
+                color: isFeatActive ? textPrimary : textSecondary,
+              ),
             ),
           ),
         ],
@@ -329,126 +354,72 @@ class WorkbenchOutlinerRail extends StatelessWidget {
     );
   }
 
-  Widget _buildOutlinerFeatureRow({
-    required WorkbenchProvider wb,
-    required EpicSpec epic,
-    required FeatureSpec feat,
-    required String relVer,
-    required bool isSelected,
-    required bool isDark,
-    required Color primary,
-    required Color secondary,
-    required Color muted,
-    required Color border,
-    required Color cyan,
-    required Color green,
-    required Color red,
-    required Color amber,
-  }) {
-    final badge = _featureOutlinerBadge(
-      feat: feat,
-      relVer: relVer,
-      cyan: cyan,
-      amber: amber,
-      green: green,
-      red: red,
-      muted: muted,
-    );
+  ({String symbol, Color color}) _featureGlyph(
+    FeatureSpec feat,
+    String relVer,
+    bool isDark,
+  ) {
+    if (feat.openFixesCount > 0) {
+      return (symbol: '●', color: AppTheme.accentRedFor(isDark));
+    }
+    if (feat.isPassedForRelease(relVer)) {
+      return (symbol: '✓', color: AppTheme.accentGreenFor(isDark));
+    }
+    if (relVer != 'v0.1' && feat.introducedIn.trim() == relVer) {
+      return (symbol: '+', color: AppTheme.accentCyanFor(isDark));
+    }
+    if (relVer != 'v0.1' && feat.releaseDelta.trim().isNotEmpty) {
+      return (symbol: 'Δ', color: AppTheme.accentAmberFor(isDark));
+    }
+    return (symbol: '○', color: AppTheme.textMutedFor(isDark));
+  }
+}
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+class _OutlineRow extends StatelessWidget {
+  final Widget child;
+  final bool active;
+  final bool isDark;
+  final VoidCallback onTap;
+  final EdgeInsetsGeometry padding;
+
+  const _OutlineRow({
+    super.key,
+    required this.child,
+    required this.active,
+    required this.isDark,
+    required this.onTap,
+    required this.padding,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final focal = AppTheme.focalAccentFor(isDark);
+    return Material(
+      color: active ? AppTheme.bgSurfaceActiveFor(isDark) : Colors.transparent,
       child: InkWell(
-        key: ValueKey('outliner_feature_${feat.id}'),
-        onTap: () => wb.selectFeature(epic.id, feat.id),
-        borderRadius: BorderRadius.circular(AppTheme.radiusXs),
+        onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
           decoration: BoxDecoration(
-            color: isSelected
-                ? AppTheme.bgSurfaceActiveFor(isDark)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-            border: Border.all(
-              color: isSelected
-                  ? cyan.withValues(alpha: 0.6)
-                  : Colors.transparent,
+            border: Border(
+              left: BorderSide(
+                color: active ? focal : Colors.transparent,
+                width: 2,
+              ),
             ),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${feat.code} · ${feat.title}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                    color: isSelected ? primary : secondary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                decoration: BoxDecoration(
-                  color: badge.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(AppTheme.radiusXs),
-                  border: Border.all(
-                    color: badge.color.withValues(alpha: 0.35),
-                  ),
-                ),
-                child: Text(
-                  badge.label,
-                  style: GoogleFonts.jetBrainsMono(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: badge.color,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          padding: padding,
+          child: child,
         ),
       ),
     );
   }
-
-  ({String label, Color color}) _featureOutlinerBadge({
-    required FeatureSpec feat,
-    required String relVer,
-    required Color cyan,
-    required Color amber,
-    required Color green,
-    required Color red,
-    required Color muted,
-  }) {
-    if (relVer != 'v0.1' && feat.introducedIn.trim() == relVer) {
-      return (label: '+$relVer NEW', color: cyan);
-    }
-    if (relVer != 'v0.1' && feat.releaseDelta.trim().isNotEmpty) {
-      return (label: '+DELTA', color: amber);
-    }
-    if (feat.isLockedBaselineInRelease(relVer)) {
-      return (label: '${feat.introducedIn} ✓', color: green);
-    }
-    if (feat.openFixesCount > 0) {
-      return (label: '${feat.openFixesCount} FIX', color: red);
-    }
-    if (feat.isPassed) {
-      return (label: 'Passed ✓', color: green);
-    }
-    if (feat.status == FeatureStatus.active) {
-      return (label: 'Active', color: cyan);
-    }
-    return (label: 'Queued', color: muted);
-  }
 }
 
+/// Compact 1-line document switcher bar rendered below 960px viewport width.
 class WorkbenchCompactSwitcherBar extends StatelessWidget {
   final WorkbenchProvider wb;
   final List<EpicSpec> epics;
-  final EpicSpec activeEpic;
+  final EpicSpec? activeEpic;
   final FeatureSpec? activeFeature;
 
   const WorkbenchCompactSwitcherBar({
@@ -459,100 +430,152 @@ class WorkbenchCompactSwitcherBar extends StatelessWidget {
     required this.activeFeature,
   });
 
-  @override
-  Widget build(BuildContext context) =>
-      _buildSwitcher(context, wb, epics, activeEpic, activeFeature);
+  String _currentSelectionValue() {
+    switch (wb.activeDocPage) {
+      case WorkbenchDocPage.newGameIdea:
+      case WorkbenchDocPage.projectBrief:
+        return 'brief';
+      case WorkbenchDocPage.releaseSpec:
+      case WorkbenchDocPage.planNextRelease:
+        if (wb.activeReleaseId != null) {
+          return 'rel:${wb.activeReleaseId}';
+        }
+        return 'brief';
+      case WorkbenchDocPage.epicDomain:
+        if (activeEpic != null) {
+          return 'epic:${activeEpic!.id}';
+        }
+        return 'brief';
+      case WorkbenchDocPage.featureSlice:
+        if (activeEpic != null && activeFeature != null) {
+          return 'feat:${activeEpic!.id}:${activeFeature!.id}';
+        }
+        if (activeEpic != null) {
+          return 'epic:${activeEpic!.id}';
+        }
+        return 'brief';
+    }
+  }
 
-  Widget _buildSwitcher(
-    BuildContext context,
-    WorkbenchProvider wb,
-    List<EpicSpec> epics,
-    EpicSpec activeEpic,
-    FeatureSpec? activeFeature,
-  ) {
+  @override
+  Widget build(BuildContext context) {
     final isDark = wb.isDark;
-    final items = <DropdownMenuItem<String>>[];
-    for (final ep in epics) {
-      items.add(
+    final border = AppTheme.borderFor(isDark);
+    final bgBase = AppTheme.bgBaseFor(isDark);
+    final textPrimary = AppTheme.textPrimaryFor(isDark);
+    final textMuted = AppTheme.textMutedFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
+
+    final items = <DropdownMenuItem<String>>[
+      DropdownMenuItem<String>(
+        value: 'brief',
+        child: Text(
+          'Project Brief',
+          style: TextStyle(fontSize: 12.5, color: textPrimary),
+        ),
+      ),
+      for (final rel in wb.projectReleases)
+        DropdownMenuItem<String>(
+          value: 'rel:${rel.id}',
+          child: Text(
+            '${(rel.sections['release_version'] ?? '').trim().isNotEmpty ? rel.sections['release_version']!.trim() : rel.title} · ${rel.title}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 12.5, color: textPrimary),
+          ),
+        ),
+      for (final ep in epics) ...[
         DropdownMenuItem<String>(
           value: 'epic:${ep.id}',
           child: Text(
-            '${ep.code} · ${ep.title} (Domain)',
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimaryFor(isDark),
-            ),
+            '  ${ep.code} ${ep.title}',
+            maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: textPrimary,
+            ),
           ),
         ),
-      );
-      for (final f in wb.visibleFeaturesForEpic(ep)) {
-        items.add(
+        for (final feat in wb.visibleFeaturesForEpic(ep))
           DropdownMenuItem<String>(
-            value: 'feat:${ep.id}::${f.id}',
+            value: 'feat:${ep.id}:${feat.id}',
             child: Text(
-              '  ↳ ${f.code} · ${f.title}',
-              style: TextStyle(
-                fontSize: 12,
-                color: AppTheme.textSecondaryFor(isDark),
-              ),
+              '    ${feat.code} ${feat.title}',
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: TextStyle(fontSize: 12, color: textPrimary),
             ),
           ),
-        );
-      }
-    }
+      ],
+    ];
 
-    final currentVal = activeFeature != null
-        ? 'feat:${activeEpic.id}::${activeFeature.id}'
-        : 'epic:${activeEpic.id}';
-    final safeValue = items.any((i) => i.value == currentVal)
-        ? currentVal
-        : (items.isNotEmpty ? items.first.value : null);
+    final currentVal = _currentSelectionValue();
+    final validValues = items.map((e) => e.value).toSet();
+    final safeVal = validValues.contains(currentVal) ? currentVal : 'brief';
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: AppTheme.bgPanelFor(isDark),
-        border: Border(bottom: BorderSide(color: AppTheme.borderFor(isDark))),
+        color: bgBase,
+        border: Border(bottom: BorderSide(color: border, width: 1)),
       ),
       child: Row(
         children: [
           Expanded(
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<String>(
-                isExpanded: true,
-                isDense: true,
-                value: safeValue,
-                dropdownColor: AppTheme.bgSurfaceRaisedFor(isDark),
-                items: items,
-                onChanged: (val) {
-                  if (val == null) return;
-                  if (val.startsWith('epic:')) {
-                    wb.selectEpic(val.substring('epic:'.length));
-                  } else if (val.startsWith('feat:')) {
-                    final parts = val.substring('feat:'.length).split('::');
-                    if (parts.length == 2) {
-                      wb.selectFeature(parts[0], parts[1]);
-                    }
+            child: DropdownButton<String>(
+              value: safeVal,
+              isExpanded: true,
+              isDense: true,
+              underline: const SizedBox.shrink(),
+              dropdownColor: AppTheme.bgSurfaceFor(isDark),
+              icon: Icon(
+                Icons.keyboard_arrow_down_rounded,
+                size: 16,
+                color: textMuted,
+              ),
+              items: items,
+              onChanged: (val) {
+                if (val == null) return;
+                FocusManager.instance.primaryFocus?.unfocus();
+                if (val == 'brief') {
+                  wb.selectProjectBrief();
+                } else if (val.startsWith('rel:')) {
+                  wb.selectReleaseSpec(val.substring(4));
+                } else if (val.startsWith('epic:')) {
+                  wb.selectEpic(val.substring(5));
+                } else if (val.startsWith('feat:')) {
+                  final parts = val.split(':');
+                  if (parts.length == 3) {
+                    wb.selectFeature(parts[1], parts[2]);
                   }
-                },
+                }
+              },
+            ),
+          ),
+          if (epics.isNotEmpty) ...[
+            const SizedBox(width: 10),
+            InkWell(
+              key: const ValueKey('outline_add_slice_btn'),
+              onTap: () {
+                FocusManager.instance.primaryFocus?.unfocus();
+                wb.quickAddSliceToActiveRelease();
+              },
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                child: Text(
+                  '+ Add slice',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: focal,
+                  ),
+                ),
               ),
             ),
-          ),
-          IconButton(
-            tooltip: wb.nextReleaseActionLabel,
-            visualDensity: VisualDensity.compact,
-            onPressed: wb.isDraftingProgressive
-                ? null
-                : () => showProgressiveReleaseCopilotDialog(context, wb),
-            icon: Icon(
-              Icons.auto_awesome,
-              size: 16,
-              color: AppTheme.accentCyanFor(isDark),
-            ),
-          ),
+          ],
         ],
       ),
     );

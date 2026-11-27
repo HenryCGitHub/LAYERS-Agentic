@@ -1,0 +1,994 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:layers_agentic/agents/gemini_agent_client.dart';
+import 'package:layers_agentic/main.dart';
+import 'package:layers_agentic/models/tier_document.dart';
+import 'package:layers_agentic/models/unreal_architecture_mode.dart';
+import 'package:layers_agentic/providers/workbench_provider.dart';
+import 'package:layers_agentic/screens/release_workbench_screen.dart';
+import 'package:layers_agentic/screens/shell/studio_top_bar.dart';
+import 'package:layers_agentic/screens/stage1/stage1_idea_angles_card.dart';
+import 'package:layers_agentic/screens/workbench/plain_plan_release_page.dart';
+import 'package:layers_agentic/screens/workbench/release_spec_sheet.dart';
+import 'package:layers_agentic/screens/workbench/workbench_outliner_rail.dart';
+import 'package:layers_agentic/services/local_vault_service.dart';
+import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
+
+void main() {
+  group('Flat 2-Pane Plain Document UI Widget Suite', () {
+    testWidgets(
+      '40px flat header shows Project switcher, release links, GDD ▾ & Settings ▾ toggles without legacy chrome',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(
+          vault: vault,
+          onGeminiCall: (_, body) {
+            return _mockGeminiFunctionResponse(
+              modelVersion: 'gemini-4-hydrogen',
+              inputTokens: 1200,
+              outputTokens: 300,
+              thinkingTokens: 80,
+              toolName: 'patch_unreal_release_spec',
+              args: <String, dynamic>{
+                'title': 'v0.1 · Arena Core Slice',
+                'summary': 'Tightened release title',
+              },
+            );
+          },
+        );
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..updateAiConfig(apiKey: 'AIzaPlainTestHeaderKey')
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // Strictly 40px flat top bar without stage pills or Idea tab.
+          final headerSize = tester.getSize(find.byType(StudioTopBar));
+          expect(headerSize.height, equals(40.0));
+          expect(find.text('LAYERS'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('project_switcher_dropdown_btn')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('header_release_$v01Id')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('plan_next_release_btn')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('header_gdd_menu_btn')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('header_settings_menu_btn')),
+            findsOneWidget,
+          );
+          expect(find.text('1. Plan'), findsNothing);
+          expect(find.text('2. Build'), findsNothing);
+          expect(find.text('Idea'), findsNothing);
+
+          // Trigger a token-tracked Gemini call so Usage Reset can be verified inside Settings ▾.
+          await wb.applyStage2ReleaseRefine(v01Id, 'Rename to Arena Core Slice');
+          await tester.pumpAndSettle();
+          expect(wb.totalInputTokens, greaterThan(0));
+
+          // Settings ▾ menu: Architecture mode, Theme toggle, Cloud Vault, AI Models & Usage Reset.
+          await tester.tap(
+            find.byKey(const ValueKey('header_settings_menu_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('settings_arch_blueprint')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('settings_arch_cpp_hybrid')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('cloud_sync_auth_btn')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('active_model_indicator_pill')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('token_usage_tracker_pill')),
+            findsOneWidget,
+          );
+
+          // Reset token usage (closeOnActivate: false).
+          await tester.tap(
+            find.byKey(const ValueKey('token_usage_tracker_pill')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.totalInputTokens, equals(0));
+          expect(wb.totalOutputTokens, equals(0));
+
+          // Toggle theme Dark -> Light -> Dark (closeOnActivate: false).
+          expect(wb.isDark, isTrue);
+          await tester.tap(
+            find.byKey(const ValueKey('settings_theme_toggle_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.isDark, isFalse);
+          await tester.tap(
+            find.byKey(const ValueKey('settings_theme_toggle_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.isDark, isTrue);
+
+          // Toggle Architecture mode to C++ & BP Hybrid (closes MenuAnchor on tap).
+          await tester.tap(
+            find.byKey(const ValueKey('settings_arch_cpp_hybrid')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            wb.unrealArchitectureMode,
+            equals(UnrealArchitectureMode.cppHybrid),
+          );
+
+          await tester.tap(
+            find.byKey(const ValueKey('header_settings_menu_btn')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('settings_arch_blueprint')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            wb.unrealArchitectureMode,
+            equals(UnrealArchitectureMode.blueprint),
+          );
+        });
+      },
+    );
+
+    testWidgets(
+      'GDD ▾ reflects unlinked, synced, permissionNeeded & error states with Inspect GDD and Unlink',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        final gddBackend = _PlainLocalGddBackend();
+        _installPlainTestHooks(vault: vault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..setLocalGddBackendForTest(gddBackend)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          wb.approveRootSpecAndLaunchWorkbench();
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // 1) Unlinked
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.unlinked));
+          expect(find.text('GDD ▾'), findsOneWidget);
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          expect(find.text('Link Local GDD…'), findsOneWidget);
+
+          // 2) Link -> synced
+          await tester.tap(
+            find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
+          expect(find.text('GDD ▾'), findsOneWidget);
+
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          expect(
+            find.text('File: shellbreaker_copilot_gdd.md'),
+            findsOneWidget,
+          );
+          expect(find.text('Sync Linked GDD Now'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('gdd_menu_unlink_btn')),
+            findsOneWidget,
+          );
+
+          // Open GDD Inspector modal
+          await tester.tap(
+            find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('gdd_inspector_dialog')),
+            findsOneWidget,
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('close_gdd_inspector_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          // 3) permissionNeeded -> amber Grant GDD ▾ -> Grant GDD Write Permission recovers
+          gddBackend.denyPermission = true;
+          expect(await wb.syncLinkedGddNow(force: true), isFalse);
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.permissionNeeded));
+          expect(find.text('Grant GDD ▾'), findsOneWidget);
+
+          gddBackend.denyPermission = false;
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          expect(find.text('Grant GDD Write Permission'), findsOneWidget);
+          await tester.tap(
+            find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
+          expect(gddBackend.lastRequestPermissionFlag, isTrue);
+
+          // 4) error -> red GDD Error ▾ -> Retry recovers -> Unlink
+          gddBackend.errorMessage = 'Simulated disk write failure';
+          expect(await wb.syncLinkedGddNow(force: true), isFalse);
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.error));
+          expect(find.text('GDD Error ▾'), findsOneWidget);
+
+          gddBackend.errorMessage = null;
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          expect(find.text('Simulated disk write failure'), findsOneWidget);
+          expect(find.text('Retry Local GDD Sync'), findsOneWidget);
+          await tester.tap(
+            find.byKey(const ValueKey('top_bar_link_local_gdd_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.synced));
+
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const ValueKey('gdd_menu_unlink_btn')));
+          await tester.pumpAndSettle();
+          expect(wb.gddSyncStatus, equals(LocalGddSyncStatus.unlinked));
+        });
+      },
+    );
+
+    testWidgets(
+      '240px 4-tier left outline shows Project Brief -> Release -> Epics -> Features, + Add slice autofocuses title, and + New Game ← Back cancels cleanly',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(vault: vault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          final firstProjId = wb.activeProjectId!;
+          final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+          final e01 = wb.activeReleaseEpics.first;
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // Persistent 240px left outline with all 4 tiers & zero Idea tab.
+          expect(
+            tester.getSize(find.byType(WorkbenchOutlinerRail)).width,
+            equals(240.0),
+          );
+          expect(
+            find.byKey(const ValueKey('outliner_project_brief')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('outliner_release_$v01Id')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(ValueKey('outliner_epic_${e01.id}')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('outliner_feature_sb_f01')),
+            findsOneWidget,
+          );
+          expect(find.text('Idea'), findsNothing);
+
+          // + Add slice in outline footer creates a slice and auto-focuses feature_title_input.
+          final countBefore = wb.activeReleaseEpics.first.features.length;
+          await tester.tap(
+            find.byKey(const ValueKey('outline_add_slice_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
+          expect(
+            wb.activeReleaseEpics.first.features.length,
+            equals(countBefore + 1),
+          );
+          expect(
+            find.byKey(const ValueKey('feature_title_input')),
+            findsOneWidget,
+          );
+          final editableTitle = tester.widget<EditableText>(
+            find.descendant(
+              of: find.byKey(const ValueKey('feature_title_input')),
+              matching: find.byType(EditableText),
+            ),
+          );
+          expect(editableTitle.focusNode.hasFocus, isTrue);
+
+          // + New Game from switcher opens Idea/3-Angles with ← Back cancel returning to first project.
+          await tester.tap(
+            find.byKey(const ValueKey('project_switcher_dropdown_btn')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.text('+ New Game'));
+          await tester.pumpAndSettle();
+
+          expect(wb.activeProjectId, isNot(equals(firstProjId)));
+          expect(
+            find.byKey(const ValueKey('new_game_cancel_btn')),
+            findsOneWidget,
+          );
+          await wb.exploreSparkAngles('Co-op grapple dungeon crawler');
+          await tester.pumpAndSettle();
+          expect(find.byType(Stage1IdeaAnglesCard), findsOneWidget);
+
+          await tester.tap(find.byKey(const ValueKey('new_game_cancel_btn')));
+          await tester.pumpAndSettle();
+          expect(wb.activeProjectId, equals(firstProjId));
+          expect(find.byKey(const ValueKey('new_game_cancel_btn')), findsNothing);
+        });
+      },
+    );
+
+    testWidgets(
+      'Clickable Release Spec (TierType.release) inline edits, + Add epic, AI Refine/Undo, Preview Spec & in-page + New Release v0.2 planning',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(
+          vault: vault,
+          onGeminiCall: (_, body) {
+            final promptStr = jsonEncode(body);
+            if (promptStr.contains('patch_unreal_release_spec')) {
+              return _mockGeminiFunctionResponse(
+                modelVersion: 'gemini-4-hydrogen',
+                inputTokens: 900,
+                outputTokens: 250,
+                thinkingTokens: 60,
+                toolName: 'patch_unreal_release_spec',
+                args: <String, dynamic>{
+                  'goal': 'Ship tight claw dash and 3-wave arena combat loop.',
+                  'summary': 'Focused v0.1 release goal on arena combat loop',
+                },
+              );
+            }
+            return http.Response('{"error": "fallback"}', 503);
+          },
+        );
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..updateAiConfig(apiKey: 'AIzaPlainTestHeaderKey')
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // Click v0.1 Release tier in left outline -> ReleaseSpecSheet.
+          await tester.tap(find.byKey(ValueKey('outliner_release_$v01Id')));
+          await tester.pumpAndSettle();
+          expect(wb.isInspectingReleaseSpec, isTrue);
+          expect(find.byType(ReleaseSpecSheet), findsOneWidget);
+
+          // Inline edit Title, Goal & Done When (commit on unfocus).
+          await _enterAndUnfocus(
+            tester,
+            find.byKey(const ValueKey('release_title_input')),
+            'v0.1 · Arena Combat Slice',
+          );
+          await _enterAndUnfocus(
+            tester,
+            find.byKey(const ValueKey('release_goal_input')),
+            'Playable crab claw dash vs armored arena waves.',
+          );
+          await _enterAndUnfocus(
+            tester,
+            find.byKey(const ValueKey('release_done_when_input')),
+            'Clear 3 waves in PIE -> Wave counter advances cleanly',
+          );
+          expect(wb.activeRelease!.title, equals('v0.1 · Arena Combat Slice'));
+          expect(
+            wb.activeRelease!.sections['goal'],
+            equals('Playable crab claw dash vs armored arena waves.'),
+          );
+          expect(
+            wb.activeRelease!.sections['doneWhen'],
+            equals('Clear 3 waves in PIE -> Wave counter advances cleanly'),
+          );
+
+          // Preview Spec modal open & close.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('release_preview_spec_btn')),
+          );
+          expect(
+            find.textContaining('Playable crab claw dash vs armored arena waves.'),
+            findsWidgets,
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('close_copilot_preview_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          // + Add epic inside v0.1 In Scope.
+          final epicCountBefore = wb.activeReleaseEpics.length;
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('release_add_epic_btn')),
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('release_new_epic_title_input')),
+            'Arena Hazards',
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('release_new_epic_goal_input')),
+            'Own floor spikes and thermal vents.',
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('release_new_epic_save_btn')),
+          );
+          expect(
+            wb.activeReleaseEpics.length,
+            equals(epicCountBefore + 1),
+          );
+          expect(
+            wb.activeReleaseEpics.last.title,
+            equals('Arena Hazards'),
+          );
+
+          // Bottom 1-line AI Refine + Undo on ReleaseSpecSheet.
+          await tester.enterText(
+            find.byKey(const ValueKey('stage2_ai_refine_input')),
+            'Focus Goal on core combat loop feel',
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('stage2_ai_refine_apply_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            wb.activeRelease!.sections['goal'],
+            equals('Ship tight claw dash and 3-wave arena combat loop.'),
+          );
+
+          await tester.tap(
+            find.byKey(const ValueKey('stage2_ai_refine_undo_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            wb.activeRelease!.sections['goal'],
+            equals('Playable crab claw dash vs armored arena waves.'),
+          );
+
+          // Pass all v0.1 slices via provider helper to reach + New Release state cleanly,
+          // then test in-page + New Release Planner (PlainPlanReleasePage, zero Dialog).
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('plan_next_release_btn')),
+          );
+          expect(find.byType(PlainPlanReleasePage), findsOneWidget);
+          expect(find.byType(Dialog), findsNothing);
+
+          await _enterAndUnfocus(
+            tester,
+            find.byKey(const ValueKey('plan_release_goal_input')),
+            'Add combo momentum and elite wave stagger.',
+          );
+          expect(
+            wb.progressiveDraft!.customGoal,
+            equals('Add combo momentum and elite wave stagger.'),
+          );
+
+          // Cancel via ← Cancel returns back to v0.1 ReleaseSpecSheet.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('plan_release_cancel_btn')),
+          );
+          expect(wb.progressiveDraft, isNull);
+          expect(find.byType(ReleaseSpecSheet), findsOneWidget);
+
+          // Re-open + New, select +DELTA & +NEW, commit v0.2.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('plan_next_release_btn')),
+          );
+          final upFinder = find.byWidgetPredicate(
+            (w) =>
+                w is CheckboxListTile &&
+                w.key is ValueKey<String> &&
+                (w.key as ValueKey<String>).value.startsWith('copilot_up_'),
+          );
+          expect(upFinder, findsWidgets);
+          if (!tester.widget<CheckboxListTile>(upFinder.first).value!) {
+            await _tapVisible(tester, upFinder.first);
+          }
+          final newFeatFinder = find.byWidgetPredicate(
+            (w) =>
+                w is CheckboxListTile &&
+                w.key is ValueKey<String> &&
+                (w.key as ValueKey<String>).value.startsWith(
+                  'copilot_new_feat_',
+                ),
+          );
+          expect(newFeatFinder, findsWidgets);
+          if (!tester.widget<CheckboxListTile>(newFeatFinder.first).value!) {
+            await _tapVisible(tester, newFeatFinder.first);
+          }
+
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('copilot_commit_btn')),
+          );
+          expect(wb.activeReleaseVersionTag, equals('v0.2'));
+
+          final v02Id = wb.activeReleaseId!;
+          await tester.tap(find.byKey(ValueKey('outliner_release_$v02Id')));
+          await tester.pumpAndSettle();
+          expect(find.text('+DELTA UPGRADES'), findsOneWidget);
+          expect(find.text('+NEW v0.2 SLICES'), findsOneWidget);
+          expect(find.text('LOCKED BASELINE'), findsOneWidget);
+        });
+      },
+    );
+
+    testWidgets(
+      'PIE-first Feature Page: silent 1-click Copy, conditional Fixes, Playtest checks, Controls & semantic Table Tuning',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(vault: vault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          wb.approveRootSpecAndLaunchWorkbench();
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // Navigate to F02 via outliner.
+          await tester.tap(
+            find.byKey(const ValueKey('outliner_feature_sb_f02')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
+
+          // 1) Silent 1-click Copy flashes Copied (~N tok) with ZERO SnackBar, then resets after 2s.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('copy_copilot_prompt_btn')),
+          );
+          expect(find.textContaining('Copied (~'), findsOneWidget);
+          expect(find.byType(SnackBar), findsNothing);
+          await tester.pump(const Duration(seconds: 3));
+          expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+
+          // Preview DSL toggle Compact DSL <-> Readable View -> close.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('preview_copilot_prompt_btn')),
+          );
+          await tester.tap(
+            find.byKey(const ValueKey('preview_mode_readable_btn')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('preview_mode_compact_btn')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('close_copilot_preview_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          // 2) Conditional Fixes hidden when 0 -> shown on Broken in PIE? -> hidden again on Resolve.
+          expect(find.textContaining('FIXES ('), findsNothing);
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('flag_fix_input')),
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('flag_fix_input')),
+            'Dash clips east arena step',
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('flag_fix_btn')),
+          );
+          expect(find.textContaining('FIXES (1)'), findsOneWidget);
+          expect(
+            find.text('🔧 Copy CoPilot [FIX] Prompt (1)'),
+            findsOneWidget,
+          );
+
+          final fxId = wb.selectedFeatureSpec!.fixes.first.id;
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('resolve_fix_$fxId')),
+          );
+          expect(find.textContaining('FIXES ('), findsNothing);
+          expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+
+          // 3) Playtest (PIE) toggle & + Add check.
+          final firstCheckId = wb.selectedFeatureSpec!.checks.first.id;
+          final wasPassed = wb.selectedFeatureSpec!.checks.first.passed;
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('feature_check_$firstCheckId')),
+          );
+          expect(
+            wb.selectedFeatureSpec!.checks.first.passed,
+            equals(!wasPassed),
+          );
+
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('feature_add_check_btn')),
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('feature_check_input')),
+            'Tap dash twice -> 1s cooldown blocks second dash',
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('feature_check_save_btn')),
+          );
+          expect(
+            wb.selectedFeatureSpec!.checks.last.text,
+            equals('Tap dash twice -> 1s cooldown blocks second dash'),
+          );
+
+          // 4) Inline Controls add + delete.
+          final ctrlCountBefore = wb.selectedFeatureSpec!.controls.length;
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('feature_add_control_btn')),
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('feature_control_action_input')),
+            'dash_cancel',
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('feature_control_trigger_input')),
+            'Started (RMB)',
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('feature_control_rule_input')),
+            'Stops active dash cleanly',
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('feature_control_save_btn')),
+          );
+          expect(
+            wb.selectedFeatureSpec!.controls.length,
+            equals(ctrlCountBefore + 1),
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('feature_control_delete_$ctrlCountBefore')),
+          );
+          expect(
+            wb.selectedFeatureSpec!.controls.length,
+            equals(ctrlCountBefore),
+          );
+
+          // 5) Semantic Table Tuning (zero Slider widgets) + Add var + inline edit + delete ×.
+          expect(find.byType(Table), findsOneWidget);
+          expect(find.byType(Slider), findsNothing);
+          final f02Id = wb.selectedFeatureSpec!.id;
+          final tuneCountBefore = wb.selectedFeatureSpec!.tuning.length;
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('feature_add_tuning_btn')),
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('feature_tuning_key_input')),
+            'ClawRecoveryTime',
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('feature_tuning_value_input')),
+            '0.25',
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('feature_tuning_unit_input')),
+            's',
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('feature_tuning_save_btn')),
+          );
+          expect(find.text('ClawRecoveryTime'), findsOneWidget);
+
+          await _enterAndUnfocus(
+            tester,
+            find.byKey(ValueKey('tuning_input_${f02Id}_0')),
+            '610',
+          );
+          expect(
+            wb.selectedFeatureSpec!.tuning.first.value,
+            equals('610'),
+          );
+
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('tuning_delete_${f02Id}_$tuneCountBefore')),
+          );
+          expect(find.text('ClawRecoveryTime'), findsNothing);
+        });
+      },
+    );
+
+    testWidgets(
+      'Zero layout overflows across Project Brief, Release Spec, Epic, Feature & Plan Release at 1280x800 and 640x800 (Dark & Light)',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(vault: vault);
+
+        const viewports = <Size>[Size(1280, 800), Size(640, 800)];
+        for (final isDark in const <bool>[true, false]) {
+          for (final size in viewports) {
+            await _runWithViewport(tester, size, () async {
+              final wb = WorkbenchProvider(enableAutoLoad: false)
+                ..loadPresetSpark('shellbreaker');
+              addTearDown(wb.dispose);
+              if (!isDark) wb.toggleTheme();
+              wb.approveRootSpecAndLaunchWorkbench();
+              wb.selectReleaseSpec();
+              final e01 = wb.activeReleaseEpics.first;
+              final f02 = e01.features.firstWhere((f) => f.code == 'F02');
+
+              await tester.pumpWidget(LayersAgenticApp(provider: wb));
+              await tester.pumpAndSettle();
+
+              // Release Spec
+              expect(find.byType(ReleaseSpecSheet), findsOneWidget);
+              if (size.width >= 960) {
+                expect(find.byType(WorkbenchOutlinerRail), findsOneWidget);
+                expect(
+                  find.byType(WorkbenchCompactSwitcherBar),
+                  findsNothing,
+                );
+              } else {
+                expect(find.byType(WorkbenchOutlinerRail), findsNothing);
+                expect(
+                  find.byType(WorkbenchCompactSwitcherBar),
+                  findsOneWidget,
+                );
+              }
+
+              // Project Brief
+              wb.selectProjectBrief();
+              await tester.pumpAndSettle();
+
+              // Epic Domain
+              wb.selectEpic(e01.id);
+              await tester.pumpAndSettle();
+
+              // Feature Slice
+              wb.selectFeature(e01.id, f02.id);
+              await tester.pumpAndSettle();
+
+              // Plan Next Release
+              wb.openInPagePlanNextRelease();
+              await tester.pumpAndSettle();
+              expect(find.byType(PlainPlanReleasePage), findsOneWidget);
+
+              expect(tester.takeException(), isNull);
+            });
+          }
+        }
+      },
+    );
+  });
+}
+
+Future<void> _enterAndUnfocus(
+  WidgetTester tester,
+  Finder fieldFinder,
+  String text,
+) async {
+  await tester.ensureVisible(fieldFinder);
+  await tester.pumpAndSettle();
+  await tester.enterText(fieldFinder, text);
+  await tester.pumpAndSettle();
+  FocusManager.instance.primaryFocus?.unfocus();
+  await tester.pumpAndSettle();
+}
+
+Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
+Future<void> _runWithViewport(
+  WidgetTester tester,
+  Size size,
+  Future<void> Function() body,
+) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  final prevOnError = FlutterError.onError;
+  final caughtErrors = <String>[];
+  FlutterError.onError = (details) {
+    caughtErrors.add(details.toString());
+  };
+  try {
+    await body();
+  } finally {
+    FlutterError.onError = prevOnError;
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  }
+  expect(caughtErrors, isEmpty, reason: caughtErrors.join('\n---\n'));
+}
+
+void _installPlainTestHooks({
+  required _PlainMemoryVaultBackend vault,
+  http.Response Function(Uri uri, Map<String, dynamic> body)? onGeminiCall,
+}) {
+  GeminiAgentClient.resetCapabilityCacheForTest();
+  GeminiAgentClient.resetUsage();
+  GeminiAgentClient.testMockResponder = null;
+  GeminiAgentClient.testBaseRetryDelay = Duration.zero;
+  LocalVaultService.testBackendOverride = vault;
+
+  if (onGeminiCall != null) {
+    GeminiAgentClient.testHttpPost = (uri, {headers, body}) async {
+      final decoded = (body is String && body.isNotEmpty)
+          ? jsonDecode(body) as Map<String, dynamic>
+          : const <String, dynamic>{};
+      return onGeminiCall(uri, decoded);
+    };
+  }
+
+  addTearDown(() {
+    GeminiAgentClient.testHttpPost = null;
+    GeminiAgentClient.testMockResponder = null;
+    GeminiAgentClient.testBaseRetryDelay = null;
+    GeminiAgentClient.resetCapabilityCacheForTest();
+    GeminiAgentClient.resetUsage();
+    LocalVaultService.testBackendOverride = null;
+  });
+}
+
+http.Response _mockGeminiFunctionResponse({
+  required String modelVersion,
+  required int inputTokens,
+  required int outputTokens,
+  required int thinkingTokens,
+  required String toolName,
+  required Map<String, dynamic> args,
+}) {
+  return http.Response.bytes(
+    utf8.encode(
+      jsonEncode(<String, dynamic>{
+        'modelVersion': modelVersion,
+        'usageMetadata': <String, dynamic>{
+          'promptTokenCount': inputTokens,
+          'candidatesTokenCount': outputTokens,
+          'thoughtsTokenCount': thinkingTokens,
+        },
+        'candidates': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'content': <String, dynamic>{
+              'parts': <Map<String, dynamic>>[
+                <String, dynamic>{
+                  'functionCall': <String, dynamic>{
+                    'name': toolName,
+                    'args': args,
+                  },
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ),
+    200,
+    headers: const <String, String>{'content-type': 'application/json; charset=utf-8'},
+  );
+}
+
+class _PlainMemoryVaultBackend implements VaultStorageBackend {
+  final Map<String, TierDocument> savedDocs = <String, TierDocument>{};
+
+  @override
+  Future<VaultLoadResult> loadVaultData() async =>
+      const VaultLoadResult(documents: <String, TierDocument>{});
+
+  @override
+  Future<void> saveSettings({
+    required String activeDocumentId,
+    String? apiKey,
+    String? modelName,
+    String? planningModel,
+    String? thinkingLevel,
+    String? themeMode,
+  }) async {}
+
+  @override
+  Future<void> saveDocument(TierDocument doc) async {
+    savedDocs[doc.id] = doc;
+  }
+
+  @override
+  Future<void> deleteDocument(String id) async {
+    savedDocs.remove(id);
+  }
+}
+
+class _PlainLocalGddBackend implements LocalGddFileBackend {
+  bool denyPermission = false;
+  String? errorMessage;
+  bool lastRequestPermissionFlag = false;
+  final Map<String, String> linkedHandles = <String, String>{};
+  final List<String> writtenContents = <String>[];
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<LocalGddLinkResult> pickAndWriteFile({
+    required String projectId,
+    required String suggestedFilename,
+    required String content,
+  }) async {
+    linkedHandles[projectId] = suggestedFilename;
+    writtenContents.add(content);
+    return LocalGddLinkResult(linked: true, filename: suggestedFilename);
+  }
+
+  @override
+  Future<String?> restoreLinkedFilename(String projectId) async =>
+      linkedHandles[projectId];
+
+  @override
+  Future<LocalGddWriteResult> writeLinkedFile({
+    required String projectId,
+    required String content,
+    bool requestPermissionIfNeeded = false,
+  }) async {
+    lastRequestPermissionFlag = requestPermissionIfNeeded;
+    if (!linkedHandles.containsKey(projectId)) {
+      return const LocalGddWriteResult(written: false);
+    }
+    if (denyPermission) {
+      return const LocalGddWriteResult(
+        written: false,
+        permissionDenied: true,
+      );
+    }
+    if (errorMessage != null) {
+      return LocalGddWriteResult(written: false, error: errorMessage);
+    }
+    writtenContents.add(content);
+    return const LocalGddWriteResult(written: true);
+  }
+
+  @override
+  Future<void> unlinkProject(String projectId) async {
+    linkedHandles.remove(projectId);
+  }
+}
