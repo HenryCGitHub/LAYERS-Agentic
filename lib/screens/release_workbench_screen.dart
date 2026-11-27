@@ -232,12 +232,17 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
         .trim();
 
     final copyIdleLabel = feature != null && feature.openFixesCount > 0
-        ? '🔧 Copy CoPilot [FIX] Prompt (${feature.openFixesCount})'
+        ? 'Copy CoPilot [FIX] Prompt (${feature.openFixesCount})'
         : (feature != null &&
                   relVer != 'v0.1' &&
                   feature.releaseDelta.trim().isNotEmpty
-              ? '⚡ Copy CoPilot Delta Prompt'
-              : '⚡ Copy CoPilot Prompt');
+              ? 'Copy CoPilot Delta Prompt'
+              : 'Copy CoPilot Prompt');
+    final copyIcon = _copiedTokens != null
+        ? Icons.check_rounded
+        : (feature != null && feature.openFixesCount > 0
+              ? Icons.build_outlined
+              : Icons.bolt_rounded);
     final copyLabel =
         _copiedTokens != null ? 'Copied (~$_copiedTokens tok)' : copyIdleLabel;
 
@@ -472,6 +477,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           PlainPrimaryButton(
                             key: const ValueKey('copy_copilot_prompt_btn'),
                             label: copyLabel,
+                            icon: copyIcon,
                             isDark: isDark,
                             fillColor: _copiedTokens != null ? green : focal,
                             onPressed: () {

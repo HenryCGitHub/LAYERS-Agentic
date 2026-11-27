@@ -597,7 +597,7 @@ void main() {
           find.byKey(const ValueKey('preview_copilot_prompt_btn')),
           findsOneWidget,
         );
-        expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+        expect(find.text('Copy CoPilot Prompt'), findsOneWidget);
 
         await tester.tap(
           find.byKey(const ValueKey('preview_copilot_prompt_btn')),
@@ -618,7 +618,7 @@ void main() {
 
         wb.flagFeatureFix(e01.id, f02.id, 'Dash clips corner ramp');
         await tester.pumpAndSettle();
-        expect(find.text('🔧 Copy CoPilot [FIX] Prompt (1)'), findsOneWidget);
+        expect(find.text('Copy CoPilot [FIX] Prompt (1)'), findsOneWidget);
         expect(
           wb.activeCoPilotPrompt(),
           contains('[UE5_COPILOT TASK=FIX TARGET=F02'),
@@ -1352,7 +1352,7 @@ void main() {
         await tester.pumpWidget(LayersAgenticApp(provider: wb));
         await tester.pumpAndSettle();
 
-        expect(find.text('⚡ Copy CoPilot Delta Prompt'), findsOneWidget);
+        expect(find.text('Copy CoPilot Delta Prompt'), findsOneWidget);
         final deltaPrompt = wb.activeFeatureBuildPrompt(
           wb.selectedEpicSpec!,
           wb.selectedFeatureSpec!,
@@ -1363,7 +1363,7 @@ void main() {
         wb.selectFeature(lockedEpic!.id, lockedFeat!.id);
         await tester.pumpAndSettle();
 
-        expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+        expect(find.text('Copy CoPilot Prompt'), findsOneWidget);
         final lockedPrompt = wb.activeFeatureBuildPrompt(
           wb.selectedEpicSpec!,
           wb.selectedFeatureSpec!,

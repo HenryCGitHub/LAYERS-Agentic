@@ -119,6 +119,35 @@ class _PlainPlanReleasePageState extends State<PlainPlanReleasePage> {
                 ),
                 PlainDocDivider(isDark: isDark, spacing: 18),
 
+                if (!wb.isActiveReleaseComplete &&
+                    wb.activeReleaseFeatureRollup.total > 0) ...[
+                  () {
+                    final relRollup = wb.activeReleaseFeatureRollup;
+                    final openCount =
+                        (relRollup.total - relRollup.passed).clamp(
+                          0,
+                          relRollup.total,
+                        );
+                    return Container(
+                      key: const ValueKey(
+                        'plan_release_incomplete_prev_notice',
+                      ),
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.fromLTRB(10, 6, 8, 6),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          left: BorderSide(color: amber, width: 2),
+                          bottom: BorderSide(color: border, width: 1),
+                        ),
+                      ),
+                      child: Text(
+                        'Note: $openCount/${relRollup.total} slices in ${wb.activeReleaseVersionTag} are still open — untouched slices lock as read-only baseline in ${draft.targetVersion}.',
+                        style: TextStyle(fontSize: 12, color: textSecondary),
+                      ),
+                    );
+                  }(),
+                ],
+
                 // Direction steer row
                 Row(
                   children: [
@@ -416,7 +445,7 @@ class _PlainPlanReleasePageState extends State<PlainPlanReleasePage> {
                           ),
                           subtitle: Text(
                             cand.features.isNotEmpty
-                                ? '${cand.goal} · ${cand.features.length} Feature slices'
+                                ? '${cand.goal} · ${cand.features.length} Feature ${cand.features.length == 1 ? 'slice' : 'slices'}'
                                 : cand.goal,
                             style: TextStyle(fontSize: 12, color: textMuted),
                           ),

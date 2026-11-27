@@ -453,12 +453,18 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
   /// Navigates directly to the plain Release Spec page for [releaseId] (or active release).
   void selectReleaseSpec([String? releaseId]) {
     final targetId = releaseId ?? _activeReleaseId;
-    if (targetId != null &&
+    final switchedRelease =
+        targetId != null &&
         documents[targetId]?.tier == TierType.release &&
-        targetId != _activeReleaseId) {
+        targetId != _activeReleaseId;
+    if (switchedRelease) {
       _activeReleaseId = targetId;
     }
     if (activeRelease == null) return;
+    if (!_showingReleaseSpec || switchedRelease) {
+      _lastStage2RefineSummary = null;
+      _stage2RefineError = null;
+    }
     _showingPlanNextRelease = false;
     _showingReleaseSpec = true;
     _currentStage = WorkbenchStage.releaseWorkbench;

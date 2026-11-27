@@ -312,18 +312,22 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         for (final bf in base.features) bf.id: bf,
       };
       for (final feat in nextEpic.features) {
+        final wasPassedInBase = feat.isPassedForRelease(baseRelVer);
         final seenCheckIds = <String>{};
         final foldedChecks = <EpicPieCheck>[];
         for (final c in feat.effectiveChecksForRelease(baseRelVer)) {
           if (seenCheckIds.add(c.id)) {
-            foldedChecks.add(c.copyWith(passed: true));
+            foldedChecks.add(
+              wasPassedInBase ? c.copyWith(passed: true) : c.copyWith(),
+            );
           }
         }
         feat.checks = foldedChecks;
         feat.releaseDeltaChecks = <EpicPieCheck>[];
         feat.releaseDelta = '';
         feat.fixes = <EpicPieFix>[];
-        feat.status = FeatureStatus.passed;
+        feat.status =
+            wasPassedInBase ? FeatureStatus.passed : FeatureStatus.active;
       }
 
       for (final upOpt in chosenUpgradeOpts) {
@@ -540,16 +544,40 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         : 'Update';
 
     final fromInPage = _showingPlanNextRelease;
-    final doneWhenText = (draft.activePresetId != null && draft.presets.isNotEmpty)
-        ? draft.presets
-            .firstWhere(
-              (p) => p.id == draft.activePresetId,
-              orElse: () => draft.presets.first,
-            )
-            .description
-        : '';
+    int activeSliceCount = 0;
+    String? sampleGateText;
+    for (final docId in nextEpicDocIds) {
+      final epDoc = documents[docId];
+      if (epDoc == null) continue;
+      final epSpec = EpicSpec.fromDocument(epDoc);
+      for (final f in epSpec.features) {
+        final isNextWork =
+            f.introducedIn.trim() == nextVer ||
+            f.releaseDelta.trim().isNotEmpty;
+        if (!isNextWork) continue;
+        activeSliceCount++;
+        if (sampleGateText == null) {
+          final eff = f.effectiveChecksForRelease(nextVer);
+          if (eff.isNotEmpty && eff.first.text.trim().isNotEmpty) {
+            sampleGateText = eff.first.text.trim();
+          } else if (f.doneWhen.isNotEmpty &&
+              f.doneWhen.first.trim().isNotEmpty) {
+            sampleGateText = f.doneWhen.first.trim();
+          } else if (f.title.trim().isNotEmpty) {
+            sampleGateText = '${f.code} ${f.title.trim()} passes in PIE';
+          }
+        }
+      }
+    }
 
     final customGoal = draft.customGoal.trim();
+    final goalText = customGoal.isNotEmpty
+        ? customGoal
+        : 'Progressive release $nextVer ($presetLabel)';
+    final doneWhenGate = activeSliceCount > 0
+        ? 'Pass all $activeSliceCount $nextVer ${activeSliceCount == 1 ? 'slice' : 'slices'} in PIE -> ${sampleGateText ?? 'Every delta and new slice behaves cleanly'}'
+        : 'Pass all $nextVer slices in PIE -> Every delta and new slice behaves cleanly';
+
     final newRelDoc = TierDocument(
       id: relId,
       title: '$nextVer · $presetLabel',
@@ -559,10 +587,8 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
       estimatedDuration: '${nextEpicDocIds.length} Epics',
       sections: <String, String>{
         'release_version': nextVer,
-        'goal': customGoal.isNotEmpty
-            ? customGoal
-            : 'Progressive release $nextVer ($presetLabel)',
-        if (doneWhenText.trim().isNotEmpty) 'doneWhen': doneWhenText.trim(),
+        'goal': goalText,
+        'doneWhen': doneWhenGate,
       },
     );
     documents[relId] = newRelDoc;

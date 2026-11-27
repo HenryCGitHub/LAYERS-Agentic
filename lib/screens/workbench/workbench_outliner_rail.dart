@@ -97,11 +97,6 @@ class WorkbenchOutlinerRail extends StatelessWidget {
                     final isRelActive =
                         isCurrentRel &&
                         activePage == WorkbenchDocPage.releaseSpec;
-                    final ver = (rel.sections['release_version'] ?? '')
-                            .trim()
-                            .isNotEmpty
-                        ? rel.sections['release_version']!.trim()
-                        : rel.title;
                     return _OutlineRow(
                       key: ValueKey('outliner_release_${rel.id}'),
                       active: isRelActive,
@@ -115,7 +110,7 @@ class WorkbenchOutlinerRail extends StatelessWidget {
                         children: [
                           Expanded(
                             child: Text(
-                              '$ver · ${rel.title}',
+                              wb.releaseDisplayName(rel),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.inter(
@@ -156,38 +151,37 @@ class WorkbenchOutlinerRail extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              border: Border(top: BorderSide(color: border, width: 1)),
-            ),
-            child: InkWell(
-              key: const ValueKey('outline_add_slice_btn'),
-              onTap: epics.isEmpty
-                  ? null
-                  : () {
-                      FocusManager.instance.primaryFocus?.unfocus();
-                      wb.quickAddSliceToActiveRelease();
-                    },
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 11,
-                ),
-                child: Row(
-                  children: [
-                    Text(
-                      '+ Add slice',
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: epics.isEmpty ? textMuted : focal,
+          if (epics.isNotEmpty)
+            Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: border, width: 1)),
+              ),
+              child: InkWell(
+                key: const ValueKey('outline_add_slice_btn'),
+                onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  wb.quickAddSliceToActiveRelease();
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 11,
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        '+ Add slice',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: focal,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     ),
@@ -362,6 +356,11 @@ class WorkbenchOutlinerRail extends StatelessWidget {
     if (feat.openFixesCount > 0) {
       return (symbol: '●', color: AppTheme.accentRedFor(isDark));
     }
+    if (feat.isLockedBaselineInRelease(relVer)) {
+      return feat.isPassed
+          ? (symbol: '✓', color: AppTheme.accentGreenFor(isDark))
+          : (symbol: '○', color: AppTheme.textMutedFor(isDark));
+    }
     if (feat.isPassedForRelease(relVer)) {
       return (symbol: '✓', color: AppTheme.accentGreenFor(isDark));
     }
@@ -478,7 +477,7 @@ class WorkbenchCompactSwitcherBar extends StatelessWidget {
         DropdownMenuItem<String>(
           value: 'rel:${rel.id}',
           child: Text(
-            '${(rel.sections['release_version'] ?? '').trim().isNotEmpty ? rel.sections['release_version']!.trim() : rel.title} · ${rel.title}',
+            wb.releaseDisplayName(rel),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 12.5, color: textPrimary),

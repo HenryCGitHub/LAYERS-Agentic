@@ -437,8 +437,9 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
                               epic: row.epic,
                               feat: row.feat,
                               relVer: relVer,
-                              subtitle:
-                                  'Shipped ${row.feat.introducedIn} · ${row.epic.code} ${row.epic.title}',
+                              subtitle: row.feat.isPassed
+                                  ? 'Shipped ${row.feat.introducedIn} · ${row.epic.code} ${row.epic.title}'
+                                  : 'Locked ${row.feat.introducedIn} baseline (open in ${row.feat.introducedIn}) · ${row.epic.code} ${row.epic.title}',
                               subtitleColor: textMuted,
                               mutedRow: true,
                               isDark: isDark,
@@ -685,9 +686,11 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
     required Color green,
     required Color red,
   }) {
+    final passedInView =
+        mutedRow ? feat.isPassed : feat.isPassedForRelease(relVer);
     final glyph = feat.openFixesCount > 0
         ? (symbol: '●', color: red)
-        : (feat.isPassedForRelease(relVer)
+        : (passedInView
               ? (symbol: '✓', color: green)
               : (symbol: '○', color: textMuted));
 

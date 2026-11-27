@@ -41,14 +41,17 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
               .where((p) => p.id == workbench.activeProjectId)
               .firstOrNull
         : null;
+    final isNewGame = workbench.activeDocPage == WorkbenchDocPage.newGameIdea;
     final String? projTitle = activeProj?.title.trim();
     final String? draftIdea = workbench.conceptDraft?.normalizedTitle.trim();
-    final String rawProjectName = (projTitle != null && projTitle.isNotEmpty)
-        ? projTitle
-        : ((draftIdea != null && draftIdea.isNotEmpty)
-              ? draftIdea
-              : 'New Game');
-    final releases = workbench.projectReleases;
+    final String rawProjectName = isNewGame
+        ? 'New Game'
+        : ((projTitle != null && projTitle.isNotEmpty)
+              ? projTitle
+              : ((draftIdea != null && draftIdea.isNotEmpty)
+                    ? draftIdea
+                    : 'New Game'));
+    final releases = isNewGame ? const [] : workbench.projectReleases;
 
     return Material(
       color: bgBase,

@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
+import 'package:layers_agentic/constants/tiers.dart';
 import 'package:layers_agentic/main.dart';
+import 'package:layers_agentic/models/epic_spec.dart';
 import 'package:layers_agentic/models/tier_document.dart';
-import 'package:layers_agentic/models/unreal_architecture_mode.dart';
 import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/screens/shell/studio_top_bar.dart';
@@ -573,14 +574,17 @@ void main() {
           expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
 
           // 1) Silent 1-click Copy flashes Copied (~N tok) with ZERO SnackBar, then resets after 2s.
+          expect(find.text('Copy CoPilot Prompt'), findsOneWidget);
+          expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
           await _tapVisible(
             tester,
             find.byKey(const ValueKey('copy_copilot_prompt_btn')),
           );
           expect(find.textContaining('Copied (~'), findsOneWidget);
+          expect(find.byIcon(Icons.check_rounded), findsOneWidget);
           expect(find.byType(SnackBar), findsNothing);
           await tester.pump(const Duration(seconds: 3));
-          expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+          expect(find.text('Copy CoPilot Prompt'), findsOneWidget);
 
           // Preview DSL toggle Compact DSL <-> Readable View -> close.
           await _tapVisible(
@@ -616,9 +620,10 @@ void main() {
           );
           expect(find.textContaining('FIXES (1)'), findsOneWidget);
           expect(
-            find.text('🔧 Copy CoPilot [FIX] Prompt (1)'),
+            find.text('Copy CoPilot [FIX] Prompt (1)'),
             findsOneWidget,
           );
+          expect(find.byIcon(Icons.build_outlined), findsOneWidget);
 
           final fxId = wb.selectedFeatureSpec!.fixes.first.id;
           await _tapVisible(
@@ -626,7 +631,7 @@ void main() {
             find.byKey(ValueKey('resolve_fix_$fxId')),
           );
           expect(find.textContaining('FIXES ('), findsNothing);
-          expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+          expect(find.text('Copy CoPilot Prompt'), findsOneWidget);
 
           // 3) Playtest (PIE) toggle & + Add check.
           final firstCheckId = wb.selectedFeatureSpec!.checks.first.id;
@@ -799,6 +804,196 @@ void main() {
         }
       },
     );
+
+    testWidgets(
+      'UX regression fixes: deduplicated release labels, hidden + Add slice before release, zero v0.1 delta leak, distinct v0.2 Done When, honest unfinished baseline status, E04+E05 commit & cleared navigation banner',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(vault: vault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // 1) Before any release is launched, + Add slice footer is hidden cleanly.
+          expect(
+            find.byKey(const ValueKey('outline_add_slice_btn')),
+            findsNothing,
+          );
+
+          // Launch v0.1 -> release label in outliner is deduplicated ("v0.1 · Prototype").
+          final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+          await tester.pumpAndSettle();
+          expect(find.text('v0.1 · Prototype'), findsOneWidget);
+          expect(find.textContaining('v0.1 · v0.1'), findsNothing);
+
+          // GDD Inspector close icon button carries an accessible tooltip.
+          await tester.tap(find.byKey(const ValueKey('header_gdd_menu_btn')));
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('top_bar_copilot_gdd_btn')),
+          );
+          await tester.pumpAndSettle();
+          final closeGddBtn = tester.widget<IconButton>(
+            find.byKey(const ValueKey('close_gdd_inspector_btn')),
+          );
+          expect(closeGddBtn.tooltip, equals('Close GDD Inspector'));
+          await tester.tap(
+            find.byKey(const ValueKey('close_gdd_inspector_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          // 2) Feature F02 on v0.1 never leaks seeded +DELTA (v0.1): ... text.
+          await tester.tap(
+            find.byKey(const ValueKey('outliner_feature_sb_f02')),
+          );
+          await tester.pumpAndSettle();
+          expect(find.textContaining('+DELTA (v0.1):'), findsNothing);
+
+          // 3) Quick-add slice sets Stage 2 summary banner; navigating to F01 clears it.
+          await tester.tap(
+            find.byKey(const ValueKey('outline_add_slice_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.lastStage2RefineSummary, isNotNull);
+
+          await tester.tap(
+            find.byKey(const ValueKey('outliner_feature_sb_f01')),
+          );
+          await tester.pumpAndSettle();
+          expect(wb.lastStage2RefineSummary, isNull);
+
+          // Leave some v0.1 slices unpassed (F03..F05) and open + New -> incomplete notice + E04+E05 commit.
+          await tester.tap(
+            find.byKey(const ValueKey('plan_next_release_btn')),
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('plan_release_incomplete_prev_notice')),
+            findsOneWidget,
+          );
+          expect(find.textContaining('1 Feature slice'), findsWidgets);
+          expect(find.textContaining('1 Feature slices'), findsNothing);
+
+          final e04Tile = find.byKey(const ValueKey('copilot_new_sb_e04'));
+          final e05Tile = find.byKey(const ValueKey('copilot_new_sb_e05'));
+          expect(e04Tile, findsOneWidget);
+          expect(e05Tile, findsOneWidget);
+          if (!tester.widget<CheckboxListTile>(e04Tile).value!) {
+            await _tapVisible(tester, e04Tile);
+          }
+          if (!tester.widget<CheckboxListTile>(e05Tile).value!) {
+            await _tapVisible(tester, e05Tile);
+          }
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('copilot_commit_btn')),
+          );
+
+          expect(wb.activeReleaseVersionTag, equals('v0.2'));
+          expect(wb.activeReleaseEpics.length, equals(5));
+          expect(find.textContaining('v0.2 · v0.2'), findsNothing);
+
+          // Distinct v0.2 GOAL vs DONE WHEN (PIE GATE).
+          final v02Goal = wb.activeRelease!.sections['goal'] ?? '';
+          final v02Done = wb.activeRelease!.sections['doneWhen'] ?? '';
+          expect(v02Goal, isNotEmpty);
+          expect(v02Done, isNotEmpty);
+          expect(v02Done, isNot(equals(v02Goal)));
+          expect(v02Done, contains('in PIE ->'));
+
+          // Unpassed locked baseline slices in v0.2 stay active and show open-in-v0.1 subtitle.
+          expect(
+            find.textContaining('Locked v0.1 baseline (open in v0.1)'),
+            findsWidgets,
+          );
+          final v02E02 = wb.activeReleaseEpics.firstWhere(
+            (e) => e.lineageKey.toLowerCase() == 'e02',
+          );
+          final lockedUnpassedF03 = v02E02.features.firstWhere(
+            (f) => f.code == 'F03',
+          );
+          expect(lockedUnpassedF03.status, equals(FeatureStatus.active));
+          expect(lockedUnpassedF03.isPassed, isFalse);
+
+          // Check v0.1 link still renders cleanly in outline with deduplicated label.
+          expect(
+            find.byKey(ValueKey('outliner_release_$v01Id')),
+            findsOneWidget,
+          );
+        });
+
+        // Also confirm compact jump bar at 640x800 uses deduplicated release labels.
+        await _runWithViewport(tester, const Size(640, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          wb.approveRootSpecAndLaunchWorkbench();
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+          expect(find.textContaining('v0.1 · v0.1'), findsNothing);
+        });
+      },
+    );
+
+    testWidgets(
+      'New Game & preset load detach cleanly from cached projects with existing releases',
+      (tester) async {
+        final seededVault = _PlainMemoryVaultBackend(
+          initialResult: VaultLoadResult(
+            activeDocumentId: 'proj_legacy',
+            documents: <String, TierDocument>{
+              'proj_legacy': TierDocument(
+                id: 'proj_legacy',
+                title: 'Chrono Commando',
+                tier: TierType.project,
+                childrenIds: const ['rel_legacy'],
+                sections: const <String, String>{},
+              ),
+              'rel_legacy': TierDocument(
+                id: 'rel_legacy',
+                title: 'v0.1 · Legacy Prototype',
+                tier: TierType.release,
+                parentId: 'proj_legacy',
+                childrenIds: const [],
+                sections: const <String, String>{'release_version': 'v0.1'},
+              ),
+            },
+          ),
+        );
+        _installPlainTestHooks(vault: seededVault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          addTearDown(wb.dispose);
+          await wb.initVault();
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // On New Game Intake, cached project's releases must NOT bleed into the header.
+          expect(wb.activeDocPage, equals(WorkbenchDocPage.newGameIdea));
+          expect(find.text('v0.1 · Legacy Prototype'), findsNothing);
+
+          // Loading Shellbreaker preset creates an isolated project with zero stale releases.
+          wb.loadPresetSpark('shellbreaker');
+          await tester.pumpAndSettle();
+          expect(wb.activeProjectId, isNot(equals('proj_legacy')));
+          expect(wb.projectReleases, isEmpty);
+          expect(find.text('v0.1 · Legacy Prototype'), findsNothing);
+          expect(find.text('No release launched yet'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('outline_add_slice_btn')),
+            findsNothing,
+          );
+        });
+      },
+    );
   });
 }
 
@@ -912,10 +1107,14 @@ http.Response _mockGeminiFunctionResponse({
 }
 
 class _PlainMemoryVaultBackend implements VaultStorageBackend {
+  final VaultLoadResult? initialResult;
   final Map<String, TierDocument> savedDocs = <String, TierDocument>{};
+
+  _PlainMemoryVaultBackend({this.initialResult});
 
   @override
   Future<VaultLoadResult> loadVaultData() async =>
+      initialResult ??
       const VaultLoadResult(documents: <String, TierDocument>{});
 
   @override

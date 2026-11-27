@@ -94,10 +94,15 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void selectActiveRelease(String releaseId) {
     final rel = documents[releaseId];
     if (rel == null || rel.tier != TierType.release) return;
+    final switchedRelease = rel.id != _activeReleaseId;
     _showingPlanNextRelease = false;
     if (_currentStage == WorkbenchStage.projectPitch) {
       _currentStage = WorkbenchStage.releaseWorkbench;
       _showingReleaseSpec = true;
+    }
+    if (switchedRelease) {
+      _lastStage2RefineSummary = null;
+      _stage2RefineError = null;
     }
     final prevEpic = selectedEpicSpec;
     final prevFeat = selectedFeatureSpec;
@@ -187,6 +192,15 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void selectEpic(String epicId, {bool openDomainSheet = true}) {
     final doc = documents[epicId];
     if (doc == null || doc.tier != TierType.epic) return;
+    final targetChanged =
+        _showingReleaseSpec ||
+        _showingPlanNextRelease ||
+        _selectedEpicId != epicId ||
+        (openDomainSheet && _selectedFeatureId != null);
+    if (targetChanged) {
+      _lastStage2RefineSummary = null;
+      _stage2RefineError = null;
+    }
     _showingPlanNextRelease = false;
     _showingReleaseSpec = false;
     _currentStage = WorkbenchStage.releaseWorkbench;
@@ -206,6 +220,8 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
   void selectFeature(String epicId, String featureId) {
     final doc = documents[epicId];
     if (doc == null || doc.tier != TierType.epic) return;
+    final prevEpicId = _selectedEpicId;
+    final wasOverlayOrSpec = _showingPlanNextRelease || _showingReleaseSpec;
     _showingPlanNextRelease = false;
     _showingReleaseSpec = false;
     _currentStage = WorkbenchStage.releaseWorkbench;
@@ -225,6 +241,14 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       }
     }
     match ??= _findFeatureByIdOrCode(spec, featureId);
+    final targetChanged =
+        wasOverlayOrSpec ||
+        prevEpicId != epicId ||
+        _selectedFeatureId != match?.id;
+    if (targetChanged) {
+      _lastStage2RefineSummary = null;
+      _stage2RefineError = null;
+    }
     _selectedFeatureId = match?.id;
     _syncActiveProjectMetadata();
     _syncStage2UndoProjectScope();

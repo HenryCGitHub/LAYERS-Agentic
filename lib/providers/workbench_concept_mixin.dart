@@ -121,7 +121,31 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     _persistSettings();
   }
 
+  void _detachFromExistingReleasesIfFreshStart() {
+    final existing = activeProject;
+    if (existing != null &&
+        projectReleases.isNotEmpty &&
+        (_conceptDraft == null || !_conceptDraft!.hasSpec)) {
+      final baseMs = DateTime.now().millisecondsSinceEpoch;
+      var candidate = 'proj_$baseMs';
+      var suffix = 1;
+      while (documents.containsKey(candidate)) {
+        candidate = 'proj_${baseMs}_$suffix';
+        suffix++;
+      }
+      _activeProjectId = candidate;
+      _unpersistedNewProjectId = candidate;
+      _activeReleaseId = null;
+      _selectedEpicId = null;
+      _selectedFeatureId = null;
+      _showingReleaseSpec = false;
+      _showingPlanNextRelease = false;
+      _expandedEpicIds.clear();
+    }
+  }
+
   void loadPresetSpark(String presetId) {
+    _detachFromExistingReleasesIfFreshStart();
     final preset = UnrealSparkPresets.byId(presetId);
     _userPinnedMode = false;
     _clearStage1TransientState();
@@ -283,6 +307,7 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   }) async {
     final cleanPrompt = sparkPrompt.trim();
     if (cleanPrompt.isEmpty) return null;
+    _detachFromExistingReleasesIfFreshStart();
 
     _isAgentBusy = true;
     _agentProgressStep = 'Drafting Unreal Engine 5 Root Spec (PROJECT_SPEC.md)...';

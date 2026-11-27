@@ -392,7 +392,7 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                   onCommit: (val) =>
                       wb.updateFeatureScope(epic.id, feat.id, goal: val),
                 ),
-                if (feat.releaseDelta.isNotEmpty) ...[
+                if (relVer != 'v0.1' && feat.releaseDelta.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
                     '+DELTA ($relVer): ${feat.releaseDelta}',

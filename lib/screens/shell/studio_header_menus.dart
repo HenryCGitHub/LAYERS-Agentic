@@ -277,9 +277,11 @@ class StudioGddMenuButton extends StatelessWidget {
       ],
       builder: (context, controller, child) {
         return Tooltip(
-          message: hasFile
-              ? 'Local GDD · $linkedFile'
-              : 'Local GDD Auto-Sync & Exports',
+          message: controller.isOpen
+              ? ''
+              : (hasFile
+                    ? 'Local GDD · $linkedFile'
+                    : 'Local GDD Auto-Sync & Exports'),
           child: InkWell(
             key: const ValueKey('header_gdd_menu_btn'),
             onTap: () =>
@@ -382,6 +384,8 @@ class StudioSettingsMenuButton extends StatelessWidget {
         const Divider(height: 8),
         Tooltip(
           message: 'Toggle Theme',
+          preferBelow: false,
+          waitDuration: const Duration(milliseconds: 600),
           child: MenuItemButton(
             key: const ValueKey('settings_theme_toggle_btn'),
             closeOnActivate: false,

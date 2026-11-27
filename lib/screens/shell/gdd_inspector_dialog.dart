@@ -86,6 +86,7 @@ Future<void> showGddInspectorDialog(
                       ),
                       IconButton(
                         key: const ValueKey('close_gdd_inspector_btn'),
+                        tooltip: 'Close GDD Inspector',
                         onPressed: () => Navigator.of(dialogCtx).pop(),
                         icon: Icon(Icons.close, color: muted),
                       ),

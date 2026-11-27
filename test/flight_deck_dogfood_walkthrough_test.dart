@@ -1012,7 +1012,7 @@ void main() {
             find.byKey(const ValueKey('flag_fix_btn')),
           );
           expect(
-            find.text('🔧 Copy CoPilot [FIX] Prompt (1)'),
+            find.text('Copy CoPilot [FIX] Prompt (1)'),
             findsOneWidget,
           );
 
@@ -1021,7 +1021,7 @@ void main() {
             tester,
             find.byKey(ValueKey('resolve_fix_$fxId')),
           );
-          expect(find.text('⚡ Copy CoPilot Prompt'), findsOneWidget);
+          expect(find.text('Copy CoPilot Prompt'), findsOneWidget);
 
           // 8) Pass every slice in v0.1 -> release_complete_banner -> + New Release -> v0.2 ([+DELTA] + [+NEW])
           // -> locked [v0.1] baseline banner + Open in v0.1 -> v0.2 delta protects baseline checks
@@ -1139,7 +1139,7 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(find.textContaining('+DELTA (v0.2):'), findsOneWidget);
-          expect(find.text('⚡ Copy CoPilot Delta Prompt'), findsOneWidget);
+          expect(find.text('Copy CoPilot Delta Prompt'), findsOneWidget);
           expect(find.byKey(const ValueKey('pass_feature_btn')), findsOneWidget);
 
           final deltaF02 = wb.selectedFeatureSpec!;
