@@ -575,13 +575,17 @@ void main() {
           final e01 = wb.activeReleaseEpics[0];
           final e02 = wb.activeReleaseEpics[1];
 
-          // Walk Outliner to E02 then back to E01 Domain Sheet
-          await tester.tap(find.byKey(ValueKey('outliner_epic_${e02.id}')));
+          // Open E02 Epic Overlay -> close -> open E01 Epic Overlay
+          await tester.tap(find.byKey(ValueKey('table_epic_open_${e02.id}')));
           await tester.pumpAndSettle();
           expect(wb.selectedEpicSpec?.code, equals('E02'));
           expect(wb.isInspectingEpicDomain, isTrue);
 
-          await tester.tap(find.byKey(ValueKey('outliner_epic_${e01.id}')));
+          await tester.tap(
+            find.byKey(const ValueKey('close_workbench_overlay_btn')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(ValueKey('table_epic_open_${e01.id}')));
           await tester.pumpAndSettle();
           expect(wb.selectedEpicSpec?.code, equals('E01'));
           expect(wb.isInspectingEpicDomain, isTrue);
@@ -775,7 +779,10 @@ void main() {
             find.byKey(const ValueKey('feature_scope_save_btn')),
           );
           expect(
-            find.textContaining('Launch a 560 cm forward dash'),
+            find.descendant(
+              of: find.byKey(const ValueKey('workbench_overlay_dialog')),
+              matching: find.textContaining('Launch a 560 cm forward dash'),
+            ),
             findsOneWidget,
           );
 
@@ -1098,13 +1105,13 @@ void main() {
 
           // Verify [+NEW] F08 lives inside permanent E01 without duplicating Epic cards
           expect(
-            find.byKey(const ValueKey('outliner_feature_sb_f08_chain')),
+            find.byKey(const ValueKey('table_feature_row_sb_f08_chain')),
             findsOneWidget,
           );
 
           // Untouched baseline F01 shows locked_baseline_banner & Open in v0.1 -> jumps cleanly
           await tester.tap(
-            find.byKey(const ValueKey('outliner_feature_sb_f01')),
+            find.byKey(const ValueKey('table_feature_row_sb_f01')),
           );
           await tester.pumpAndSettle();
           expect(
@@ -1127,15 +1134,15 @@ void main() {
             findsNothing,
           );
 
-          // Return to v0.2 and check unlocked [+DELTA] slice F02 protects v0.1 baseline checks
+          // Return to v0.2 via top header and inspect [+DELTA] F02
           await tester.tap(
-            find.byKey(ValueKey('outliner_release_$v02ReleaseId')),
+            find.byKey(ValueKey('header_release_$v02ReleaseId')),
           );
           await tester.pumpAndSettle();
           expect(wb.activeReleaseVersionTag, equals('v0.2'));
 
           await tester.tap(
-            find.byKey(const ValueKey('outliner_feature_sb_f02')),
+            find.byKey(const ValueKey('table_feature_row_sb_f02')),
           );
           await tester.pumpAndSettle();
           expect(find.textContaining('+DELTA (v0.2):'), findsOneWidget);
@@ -1236,12 +1243,13 @@ void main() {
             await tester.pumpAndSettle();
 
             _expectMountedAndHittable(<Finder>[
-              find.byKey(const ValueKey('outliner_project_brief')),
+              find.byKey(const ValueKey('header_project_brief_btn')),
               find.byKey(const ValueKey('plan_next_release_btn')),
               find.byKey(const ValueKey('header_gdd_menu_btn')),
               find.byKey(const ValueKey('header_settings_menu_btn')),
-              find.byKey(ValueKey('outliner_epic_${e01.id}')),
-              find.byKey(ValueKey('outliner_feature_${f02.id}')),
+              find.byKey(const ValueKey('overlay_prev_btn')),
+              find.byKey(const ValueKey('overlay_next_btn')),
+              find.byKey(const ValueKey('close_workbench_overlay_btn')),
               find.byKey(const ValueKey('copy_copilot_prompt_btn')),
               find.byKey(const ValueKey('preview_copilot_prompt_btn')),
               find.byKey(const ValueKey('pass_feature_btn')),
@@ -1259,16 +1267,25 @@ void main() {
               find.byKey(const ValueKey('stage2_ai_refine_input')),
             ]);
 
-            // Project Brief <-> Release Spec <-> Feature switch via left outliner & breadcrumbs
-            await tester.tap(find.byKey(const ValueKey('outliner_project_brief')));
+            // Project Brief <-> Monday Release Table <-> Feature Overlay via top header & table rows
+            await tester.tap(
+              find.byKey(const ValueKey('header_project_brief_btn')),
+            );
             await tester.pumpAndSettle();
             expect(find.byType(ProjectPitchScreen), findsOneWidget);
             _expectMountedAndHittable(<Finder>[
-              find.byKey(const ValueKey('outliner_project_brief')),
+              find.byKey(const ValueKey('header_project_brief_btn')),
               find.byKey(const ValueKey('approve_launch_workbench_btn')),
             ]);
 
-            await tester.tap(find.byKey(const ValueKey('approve_launch_workbench_btn')));
+            await tester.tap(
+              find.byKey(const ValueKey('approve_launch_workbench_btn')),
+            );
+            await tester.pumpAndSettle();
+            expect(wb.isInspectingReleaseSpec, isTrue);
+            await tester.tap(
+              find.byKey(ValueKey('table_feature_row_${f02.id}')),
+            );
             await tester.pumpAndSettle();
             expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
           });

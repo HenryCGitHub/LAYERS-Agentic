@@ -11,20 +11,21 @@ import 'workbench/epic_domain_sheet.dart';
 import 'workbench/feature_spec_sheet.dart';
 import 'workbench/floating_ai_refine_dock.dart';
 import 'workbench/plain_doc_widgets.dart';
-import 'workbench/workbench_outliner_rail.dart';
 import 'workbench/workbench_shared_widgets.dart';
 
-/// Stage 2 Epic Domain & Feature Slice plain-document workspace (`700px` single
-/// column). Mounts inside [PlainDocumentShell], or supplies its own outliner
-/// when pumped standalone in widget tests (`embeddedInShell: false`).
+/// Stage 2 Epic Domain & Feature Option A 2-column workspace (`1140px`).
+/// Mounts inside [PlainDocumentShell]'s wide centered overlay (`inOverlay: true`),
+/// or standalone in widget tests (`embeddedInShell: false`).
 class ReleaseWorkbenchScreen extends StatefulWidget {
   final WorkbenchProvider workbench;
   final bool embeddedInShell;
+  final bool inOverlay;
 
   const ReleaseWorkbenchScreen({
     super.key,
     required this.workbench,
     this.embeddedInShell = false,
+    this.inOverlay = false,
   });
 
   @override
@@ -149,44 +150,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
       selectionKey,
     );
 
-    if (widget.embeddedInShell) {
-      return Material(color: bgBase, child: workspace);
-    }
-
-    return Material(
-      color: bgBase,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isDesktopWide = constraints.maxWidth >= 960;
-          if (!isDesktopWide) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                WorkbenchCompactSwitcherBar(
-                  wb: wb,
-                  epics: epics,
-                  activeEpic: selectedEpic,
-                  activeFeature: selectedFeature,
-                ),
-                Expanded(child: workspace),
-              ],
-            );
-          }
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              WorkbenchOutlinerRail(
-                wb: wb,
-                epics: epics,
-                activeEpic: selectedEpic,
-                activeFeature: selectedFeature,
-              ),
-              Expanded(child: workspace),
-            ],
-          );
-        },
-      ),
-    );
+    return Material(color: bgBase, child: workspace);
   }
 
   Widget _buildCenteredDocumentWorkspace(
@@ -249,6 +213,133 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
     final autoFocusFeature =
         feature != null && _pendingAutoFocusFeatureId == feature.id;
 
+    ({String label, VoidCallback onTap})? overlayPrevTarget;
+    ({String label, VoidCallback onTap})? overlayNextTarget;
+    if (widget.inOverlay) {
+      if (feature != null) {
+        final orderedFeatures = <({String epicId, FeatureSpec feat})>[
+          for (final ep in epics)
+            for (final f in wb.visibleFeaturesForEpic(ep))
+              (epicId: ep.id, feat: f),
+        ];
+        final currentIdx = orderedFeatures.indexWhere(
+          (item) => item.feat.id == feature.id,
+        );
+        if (currentIdx > 0) {
+          final prev = orderedFeatures[currentIdx - 1];
+          overlayPrevTarget = (
+            label: prev.feat.code,
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              wb.selectFeature(prev.epicId, prev.feat.id);
+            },
+          );
+        }
+        if (currentIdx >= 0 && currentIdx < orderedFeatures.length - 1) {
+          final next = orderedFeatures[currentIdx + 1];
+          overlayNextTarget = (
+            label: next.feat.code,
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              wb.selectFeature(next.epicId, next.feat.id);
+            },
+          );
+        }
+      } else {
+        final epIdx = epics.indexWhere((ep) => ep.id == epic.id);
+        if (epIdx > 0) {
+          final prevEp = epics[epIdx - 1];
+          overlayPrevTarget = (
+            label: prevEp.code,
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              wb.selectEpic(prevEp.id);
+            },
+          );
+        }
+        if (epIdx >= 0 && epIdx < epics.length - 1) {
+          final nextEp = epics[epIdx + 1];
+          overlayNextTarget = (
+            label: nextEp.code,
+            onTap: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              wb.selectEpic(nextEp.id);
+            },
+          );
+        }
+      }
+    }
+
+    final breadcrumbsWrap = Wrap(
+      key: const ValueKey('stage2_breadcrumbs'),
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 6,
+      runSpacing: 4,
+      children: [
+        PlainTextLink(
+          key: const ValueKey('crumb_project'),
+          label: projTitle,
+          isDark: isDark,
+          mono: true,
+          fontSize: 11.5,
+          color: muted,
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            wb.selectProjectBrief();
+          },
+        ),
+        Text(
+          '/',
+          style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: muted),
+        ),
+        PlainTextLink(
+          key: const ValueKey('crumb_release'),
+          label: widget.inOverlay ? '$relVer Table' : relVer,
+          isDark: isDark,
+          mono: true,
+          fontSize: 11.5,
+          color: muted,
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            wb.selectReleaseSpec();
+          },
+        ),
+        Text(
+          '/',
+          style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: muted),
+        ),
+        PlainTextLink(
+          key: const ValueKey('crumb_epic'),
+          label: epic.code,
+          isDark: isDark,
+          mono: true,
+          fontSize: 11.5,
+          color: feature == null ? primary : muted,
+          fontWeight: feature == null ? FontWeight.w700 : FontWeight.w500,
+          onTap: () {
+            FocusManager.instance.primaryFocus?.unfocus();
+            wb.selectEpic(epic.id);
+          },
+        ),
+        if (feature != null) ...[
+          Text(
+            '/',
+            style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: muted),
+          ),
+          PlainTextLink(
+            key: const ValueKey('crumb_feature'),
+            label: feature.code,
+            isDark: isDark,
+            mono: true,
+            fontSize: 11.5,
+            color: primary,
+            fontWeight: FontWeight.w700,
+            onTap: () => wb.selectFeature(epic.id, feature.id),
+          ),
+        ],
+      ],
+    );
+
     return Column(
       children: [
         Container(
@@ -263,88 +354,54 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Breadcrumbs
-                    Wrap(
-                      key: const ValueKey('stage2_breadcrumbs'),
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: 6,
-                      runSpacing: 4,
+                  if (widget.inOverlay)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
+                        Expanded(child: breadcrumbsWrap),
+                        const SizedBox(width: 10),
                         PlainTextLink(
-                          key: const ValueKey('crumb_project'),
-                          label: projTitle,
+                          key: const ValueKey('overlay_prev_btn'),
+                          label: overlayPrevTarget != null
+                              ? '← ${overlayPrevTarget.label}'
+                              : '← Prev',
                           isDark: isDark,
                           mono: true,
                           fontSize: 11.5,
-                          color: muted,
-                          onTap: () {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            wb.selectProjectBrief();
-                          },
+                          color: secondary,
+                          onTap: overlayPrevTarget?.onTap,
                         ),
-                        Text(
-                          '/',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11.5,
-                            color: muted,
-                          ),
-                        ),
+                        const SizedBox(width: 10),
                         PlainTextLink(
-                          key: const ValueKey('crumb_release'),
-                          label: relVer,
+                          key: const ValueKey('overlay_next_btn'),
+                          label: overlayNextTarget != null
+                              ? '${overlayNextTarget.label} →'
+                              : 'Next →',
                           isDark: isDark,
                           mono: true,
                           fontSize: 11.5,
-                          color: muted,
+                          color: secondary,
+                          onTap: overlayNextTarget?.onTap,
+                        ),
+                        const SizedBox(width: 12),
+                        PlainTextLink(
+                          key: const ValueKey('close_workbench_overlay_btn'),
+                          label: '✕ Esc',
+                          isDark: isDark,
+                          mono: true,
+                          fontSize: 11.5,
+                          color: primary,
+                          fontWeight: FontWeight.w600,
                           onTap: () {
                             FocusManager.instance.primaryFocus?.unfocus();
                             wb.selectReleaseSpec();
                           },
                         ),
-                        Text(
-                          '/',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11.5,
-                            color: muted,
-                          ),
-                        ),
-                        PlainTextLink(
-                          key: const ValueKey('crumb_epic'),
-                          label: epic.code,
-                          isDark: isDark,
-                          mono: true,
-                          fontSize: 11.5,
-                          color: feature == null ? primary : muted,
-                          fontWeight: feature == null
-                              ? FontWeight.w700
-                              : FontWeight.w500,
-                          onTap: () {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            wb.selectEpic(epic.id);
-                          },
-                        ),
-                        if (feature != null) ...[
-                          Text(
-                            '/',
-                            style: GoogleFonts.jetBrainsMono(
-                              fontSize: 11.5,
-                              color: muted,
-                            ),
-                          ),
-                          PlainTextLink(
-                            key: const ValueKey('crumb_feature'),
-                            label: feature.code,
-                            isDark: isDark,
-                            mono: true,
-                            fontSize: 11.5,
-                            color: primary,
-                            fontWeight: FontWeight.w700,
-                            onTap: () => wb.selectFeature(epic.id, feature.id),
-                          ),
-                        ],
                       ],
-                    ),
-                    const SizedBox(height: 10),
+                    )
+                  else
+                    breadcrumbsWrap,
+                  const SizedBox(height: 10),
 
                     // Inline Title
                     if (feature == null)

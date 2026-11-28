@@ -328,7 +328,7 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
                   : () {
                       FocusManager.instance.primaryFocus?.unfocus();
                       wb.approveRootSpecAndLaunchWorkbench(
-                        openReleaseSpec: wb.projectReleases.isEmpty,
+                        openReleaseSpec: true,
                       );
                     },
             ),

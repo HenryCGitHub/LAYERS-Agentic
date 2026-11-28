@@ -6,10 +6,13 @@ import '../../models/tier_document.dart';
 import '../../providers/workbench_provider.dart';
 import '../../theme/app_theme.dart';
 import 'floating_ai_refine_dock.dart';
+import 'monday_release_table.dart';
 import 'plain_doc_widgets.dart';
 import 'workbench_shared_widgets.dart';
 
-/// Flat 700px single-column Release Spec view (`TierType.release`).
+/// Full-width Monday-style Release workspace (`TierType.release`) hosting the
+/// Release header, Goal / Done When strip, grouped Epic/Feature table, and
+/// pinned Stage 2 AI Refine dock.
 class ReleaseSpecSheet extends StatefulWidget {
   final WorkbenchProvider workbench;
 
@@ -131,8 +134,6 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
     final focal = AppTheme.focalAccentFor(isDark);
     final green = AppTheme.accentGreenFor(isDark);
     final red = AppTheme.accentRedFor(isDark);
-    final amber = AppTheme.accentAmberFor(isDark);
-    final cyan = AppTheme.accentCyanFor(isDark);
 
     final releaseGoal = (releaseDoc.sections['goal'] ?? '').trim();
     final releaseDoneWhen = (releaseDoc.sections['doneWhen'] ?? '').trim();
@@ -143,24 +144,10 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
         EpicSpec.fromDocument(epicDocs[i], indexHint: i),
     ];
 
-    final deltaRows = <({EpicSpec epic, FeatureSpec feat})>[];
-    final newSliceRows = <({EpicSpec epic, FeatureSpec feat})>[];
-    final baselineRows = <({EpicSpec epic, FeatureSpec feat})>[];
-
-    if (relVer != 'v0.1') {
-      for (final ep in epicsParsed) {
-        for (final feat in wb.visibleFeaturesForEpic(ep)) {
-          if (feat.releaseDelta.trim().isNotEmpty) {
-            deltaRows.add((epic: ep, feat: feat));
-          }
-          if (feat.introducedIn.trim() == relVer) {
-            newSliceRows.add((epic: ep, feat: feat));
-          } else if (feat.isLockedBaselineInRelease(relVer)) {
-            baselineRows.add((epic: ep, feat: feat));
-          }
-        }
-      }
-    }
+    final progressRatio = rollup.total == 0
+        ? 0.0
+        : (rollup.passed / rollup.total).clamp(0.0, 1.0);
+    final showBackgroundAiDock = wb.activeDocPage == WorkbenchDocPage.releaseSpec;
 
     return KeyedSubtree(
       key: ValueKey('release_sheet_${releaseDoc.id}'),
@@ -168,42 +155,71 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(24, 16, 24, 14),
+            padding: const EdgeInsets.fromLTRB(24, 14, 24, 12),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: border, width: 1)),
             ),
             child: Center(
               child: ConstrainedBox(
                 constraints: const BoxConstraints(
-                  maxWidth: kPlainDocWideMaxWidth,
+                  maxWidth: kPlainDocTableMaxWidth,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'RELEASE · $relVer · ${epicsParsed.length} ${epicsParsed.length == 1 ? 'EPIC' : 'EPICS'} · ${rollup.passed}/${rollup.total} PASSED',
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.9,
-                        color: textMuted,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'RELEASE · $relVer · ${epicsParsed.length} ${epicsParsed.length == 1 ? 'EPIC' : 'EPICS'} · ${rollup.passed}/${rollup.total} PASSED',
+                            key: const ValueKey('release_header_summary'),
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.9,
+                              color: rollup.openFixes > 0
+                                  ? red
+                                  : (rollup.total > 0 &&
+                                            rollup.passed == rollup.total
+                                        ? green
+                                        : textMuted),
+                            ),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 110,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(99),
+                            child: LinearProgressIndicator(
+                              value: progressRatio,
+                              minHeight: 5,
+                              backgroundColor: AppTheme.bgInsetFor(isDark),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                rollup.total > 0 &&
+                                        rollup.passed == rollup.total
+                                    ? green
+                                    : focal,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     PlainEditableLineField(
                       fieldKey: const ValueKey('release_title_input'),
                       value: releaseDoc.title,
                       isDark: isDark,
                       hintText: 'Release title...',
                       style: AppTheme.displayFont(
-                        fontSize: 26,
+                        fontSize: 24,
                         fontWeight: FontWeight.w700,
                         color: textPrimary,
                       ),
                       onCommit: (val) =>
                           wb.updateReleaseSpec(releaseDoc.id, title: val),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
                     Wrap(
                       spacing: 10,
                       runSpacing: 8,
@@ -232,6 +248,27 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
                             );
                           },
                         ),
+                        PlainTextLink(
+                          key: const ValueKey('release_add_epic_btn'),
+                          label: _addingEpic ? 'Cancel' : '+ Add epic',
+                          isDark: isDark,
+                          color: _addingEpic ? textMuted : focal,
+                          onTap: () =>
+                              setState(() => _addingEpic = !_addingEpic),
+                        ),
+                        if (epicsParsed.isNotEmpty)
+                          PlainTextLink(
+                            key: const ValueKey(
+                              'release_quick_add_feature_btn',
+                            ),
+                            label: '+ Add feature',
+                            isDark: isDark,
+                            color: focal,
+                            onTap: () {
+                              FocusManager.instance.primaryFocus?.unfocus();
+                              wb.quickAddSliceToActiveRelease();
+                            },
+                          ),
                       ],
                     ),
                   ],
@@ -241,87 +278,80 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(
-                    maxWidth: kPlainDocWideMaxWidth,
+                    maxWidth: kPlainDocTableMaxWidth,
                   ),
-                  child: PlainTwoColumnLayout(
-                    leftFlex: 5,
-                    rightFlex: 7,
-                    left: KeyedSubtree(
-                      key: const ValueKey('release_col_contract'),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          PlainColumnLabel(
-                            label: 'RELEASE CONTRACT',
-                            isDark: isDark,
-                          ),
-                          PlainSectionHeader(title: 'Goal', isDark: isDark),
-                      const SizedBox(height: 8),
-                      PlainEditableLineField(
-                        fieldKey: const ValueKey('release_goal_input'),
-                        value: releaseGoal,
-                        isDark: isDark,
-                        multiLine: true,
-                        minLines: 2,
-                        allowEmpty: true,
-                        hintText: 'One plain sentence for what this release ships...',
-                        onCommit: (val) =>
-                            wb.updateReleaseSpec(releaseDoc.id, goal: val),
-                      ),
-                      const SizedBox(height: 20),
-
-                      PlainSectionHeader(
-                        title: 'Done When (PIE Gate)',
-                        isDark: isDark,
-                      ),
-                      const SizedBox(height: 8),
-                      PlainEditableLineField(
-                        fieldKey: const ValueKey('release_done_when_input'),
-                        value: releaseDoneWhen,
-                        isDark: isDark,
-                        multiLine: true,
-                        minLines: 2,
-                        allowEmpty: true,
-                        hintText: '[Player Action] -> [Observable Viewport Result]',
-                          onCommit: (val) =>
-                              wb.updateReleaseSpec(releaseDoc.id, doneWhen: val),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      PlainTwoColumnLayout(
+                        layoutKey: const ValueKey(
+                          'release_contract_two_col_row',
                         ),
-                        const SizedBox(height: 12),
-                      ],
-                    ),
-                  ),
-                  right: KeyedSubtree(
-                    key: const ValueKey('release_col_shipping'),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        PlainColumnLabel(
-                          label: "WHAT'S SHIPPING",
-                          isDark: isDark,
+                        leftFlex: 6,
+                        rightFlex: 6,
+                        columnGap: 24,
+                        left: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            PlainSectionHeader(title: 'Goal', isDark: isDark),
+                            const SizedBox(height: 6),
+                            PlainEditableLineField(
+                              fieldKey: const ValueKey('release_goal_input'),
+                              value: releaseGoal,
+                              isDark: isDark,
+                              multiLine: true,
+                              minLines: 1,
+                              allowEmpty: true,
+                              hintText:
+                                  'One plain sentence for what this release ships...',
+                              onCommit: (val) =>
+                                  wb.updateReleaseSpec(releaseDoc.id, goal: val),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                         ),
-                        PlainSectionHeader(
-                        title: 'In Scope',
-                        isDark: isDark,
-                        trailing: PlainTextLink(
-                          key: const ValueKey('release_add_epic_btn'),
-                          label: _addingEpic ? 'Cancel' : '+ Add epic',
-                          isDark: isDark,
-                          color: _addingEpic ? textMuted : focal,
-                          onTap: () =>
-                              setState(() => _addingEpic = !_addingEpic),
+                        right: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            PlainSectionHeader(
+                              title: 'Done When (PIE Gate)',
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 6),
+                            PlainEditableLineField(
+                              fieldKey: const ValueKey(
+                                'release_done_when_input',
+                              ),
+                              value: releaseDoneWhen,
+                              isDark: isDark,
+                              multiLine: true,
+                              minLines: 1,
+                              allowEmpty: true,
+                              hintText:
+                                  '[Player Action] -> [Observable Viewport Result]',
+                              onCommit: (val) => wb.updateReleaseSpec(
+                                releaseDoc.id,
+                                doneWhen: val,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                          ],
                         ),
                       ),
                       if (_addingEpic) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          margin: const EdgeInsets.only(bottom: 16),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            border: Border(
-                              bottom: BorderSide(color: border, width: 1),
+                            color: AppTheme.bgPanelFor(isDark),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusMd,
                             ),
+                            border: Border.all(color: border, width: 1),
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -378,7 +408,16 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
                               ),
                               const SizedBox(height: 10),
                               Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
                                 children: [
+                                  PlainTextLink(
+                                    label: 'Cancel',
+                                    isDark: isDark,
+                                    color: textMuted,
+                                    onTap: () =>
+                                        setState(() => _addingEpic = false),
+                                  ),
+                                  const SizedBox(width: 12),
                                   PlainPrimaryButton(
                                     key: const ValueKey(
                                       'release_new_epic_save_btn',
@@ -386,7 +425,8 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
                                     label: 'Create Epic',
                                     isDark: isDark,
                                     onPressed: () {
-                                      final title = _newEpicTitleCtrl.text.trim();
+                                      final title =
+                                          _newEpicTitleCtrl.text.trim();
                                       if (title.isEmpty) return;
                                       wb.addEpicToActiveRelease(
                                         title: title,
@@ -405,385 +445,46 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
                           ),
                         ),
                       ],
-                      const SizedBox(height: 6),
-
-                      if (relVer == 'v0.1') ...[
-                        if (epicsParsed.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            child: Text(
-                              'No epics in this release yet.',
-                              style: TextStyle(fontSize: 13, color: textMuted),
-                            ),
-                          ),
-                        for (final ep in epicsParsed)
-                          _buildV01EpicScopeGroup(
-                            wb,
-                            ep,
-                            relVer,
-                            isDark,
-                            border,
-                            textPrimary,
-                            textSecondary,
-                            textMuted,
-                            green,
-                            red,
-                          ),
-                      ] else ...[
-                        if (deltaRows.isNotEmpty) ...[
-                          _buildSubgroupLabel('+DELTA UPGRADES', amber),
-                          for (final row in deltaRows)
-                            _buildFlatSliceRow(
-                              wb: wb,
-                              epic: row.epic,
-                              feat: row.feat,
-                              relVer: relVer,
-                              subtitle: '+DELTA: ${row.feat.releaseDelta}',
-                              subtitleColor: amber,
-                              isDark: isDark,
-                              border: border,
-                              textPrimary: textPrimary,
-                              textMuted: textMuted,
-                              green: green,
-                              red: red,
-                            ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (newSliceRows.isNotEmpty) ...[
-                          _buildSubgroupLabel('+NEW $relVer FEATURES', cyan),
-                          for (final row in newSliceRows)
-                            _buildFlatSliceRow(
-                              wb: wb,
-                              epic: row.epic,
-                              feat: row.feat,
-                              relVer: relVer,
-                              subtitle: row.feat.goal,
-                              subtitleColor: textSecondary,
-                              isDark: isDark,
-                              border: border,
-                              textPrimary: textPrimary,
-                              textMuted: textMuted,
-                              green: green,
-                              red: red,
-                            ),
-                          const SizedBox(height: 12),
-                        ],
-                        if (baselineRows.isNotEmpty) ...[
-                          _buildSubgroupLabel('LOCKED BASELINE', textMuted),
-                          for (final row in baselineRows)
-                            _buildFlatSliceRow(
-                              wb: wb,
-                              epic: row.epic,
-                              feat: row.feat,
-                              relVer: relVer,
-                              subtitle: row.feat.isPassed
-                                  ? 'Shipped ${row.feat.introducedIn} · ${row.epic.code} ${row.epic.title}'
-                                  : 'Locked ${row.feat.introducedIn} baseline (open in ${row.feat.introducedIn}) · ${row.epic.code} ${row.epic.title}',
-                              subtitleColor: textMuted,
-                              mutedRow: true,
-                              isDark: isDark,
-                              border: border,
-                              textPrimary: textPrimary,
-                              textMuted: textMuted,
-                              green: green,
-                              red: red,
-                            ),
-                        ],
-                        const SizedBox(height: 12),
-                        _buildSubgroupLabel('EPICS IN $relVer', textMuted),
-                        for (final ep in epicsParsed)
-                          InkWell(
-                            onTap: () {
-                              FocusManager.instance.primaryFocus?.unfocus();
-                              wb.selectEpic(ep.id);
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8),
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(color: border, width: 1),
-                                ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    ep.code,
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w600,
-                                      color: textMuted,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      ep.title,
-                                      style: TextStyle(
-                                        fontSize: 13.5,
-                                        fontWeight: FontWeight.w500,
-                                        color: textPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    '${wb.epicFeatureRollup(ep).passed}/${wb.epicFeatureRollup(ep).total}',
-                                    style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11.5,
-                                      color: textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                      ],
+                      const SizedBox(height: 4),
+                      MondayReleaseTable(
+                        workbench: wb,
+                        epics: epicsParsed,
+                        releaseVersion: relVer,
+                        isDark: isDark,
+                      ),
                     ],
                   ),
                 ),
               ),
             ),
           ),
-          ),
-          ),
-          FloatingAiRefineDock(
-            isDark: isDark,
-            targetBadge: 'AI · $relVer',
-            hintText: 'Refine $relVer Goal, Done When, or Epic scope...',
-            isBusy: wb.isRefiningStage2,
-            canUndo: wb.canUndoStage2Edit,
-            summaryText: wb.lastStage2RefineSummary,
-            errorText: wb.stage2RefineError,
-            quickPrompts: const <String>[
-              'Tighten Done When into observable PIE checks',
-              'Trim scope to fastest playable prototype',
-              'Focus Goal on core combat loop feel',
-            ],
-            externalController: _refineCtrl,
-            inputKey: const ValueKey('stage2_ai_refine_input'),
-            applyBtnKey: const ValueKey('stage2_ai_refine_apply_btn'),
-            undoBtnKey: const ValueKey('stage2_ai_refine_undo_btn'),
-            ideasBtnKey: const ValueKey('stage2_ai_ideas_btn'),
-            ideasStripKey: const ValueKey('stage2_ai_ideas_strip'),
-            onApply: (instruction) =>
-                wb.applyStage2ReleaseRefine(releaseDoc.id, instruction),
-            onUndo: wb.undoStage2Edit,
-            onDismissError: wb.dismissStage2RefineError,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSubgroupLabel(String label, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 10, bottom: 4),
-      child: Text(
-        label,
-        style: GoogleFonts.jetBrainsMono(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.8,
-          color: color,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildV01EpicScopeGroup(
-    WorkbenchProvider wb,
-    EpicSpec ep,
-    String relVer,
-    bool isDark,
-    Color border,
-    Color textPrimary,
-    Color textSecondary,
-    Color textMuted,
-    Color green,
-    Color red,
-  ) {
-    final visible = wb.visibleFeaturesForEpic(ep);
-    final epRollup = wb.epicFeatureRollup(ep);
-
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: border, width: 1)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          InkWell(
-            onTap: () {
-              FocusManager.instance.primaryFocus?.unfocus();
-              wb.selectEpic(ep.id);
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
-              child: Row(
-                children: [
-                  Text(
-                    ep.code,
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.w600,
-                      color: textMuted,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      ep.title,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: textPrimary,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    '${epRollup.passed}/${epRollup.total}',
-                    style: GoogleFonts.jetBrainsMono(
-                      fontSize: 11,
-                      color: epRollup.openFixes > 0
-                          ? red
-                          : (epRollup.total > 0 &&
-                                    epRollup.passed == epRollup.total
-                                ? green
-                                : textMuted),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (ep.goal.trim().isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(left: 34, bottom: 6),
-              child: Text(
-                ep.goal,
-                style: TextStyle(fontSize: 12.5, color: textSecondary),
-              ),
-            ),
-          for (final feat in visible)
-            InkWell(
-              onTap: () {
-                FocusManager.instance.primaryFocus?.unfocus();
-                wb.selectFeature(ep.id, feat.id);
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(34, 4, 4, 4),
-                child: Row(
-                  children: [
-                    Text(
-                      feat.openFixesCount > 0
-                          ? '●'
-                          : (feat.isPassedForRelease(relVer) ? '✓' : '○'),
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: feat.openFixesCount > 0
-                            ? red
-                            : (feat.isPassedForRelease(relVer)
-                                  ? green
-                                  : textMuted),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      feat.code,
-                      style: GoogleFonts.jetBrainsMono(
-                        fontSize: 11,
-                        color: textMuted,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        feat.title,
-                        style: TextStyle(fontSize: 13, color: textSecondary),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          if (showBackgroundAiDock)
+            FloatingAiRefineDock(
+              isDark: isDark,
+              maxWidth: kPlainDocTableMaxWidth,
+              targetBadge: 'AI · $relVer',
+              hintText: 'Refine $relVer Goal, Done When, or Epic scope...',
+              isBusy: wb.isRefiningStage2,
+              canUndo: wb.canUndoStage2Edit,
+              summaryText: wb.lastStage2RefineSummary,
+              errorText: wb.stage2RefineError,
+              quickPrompts: const <String>[
+                'Tighten Done When into observable PIE checks',
+                'Trim scope to fastest playable prototype',
+                'Focus Goal on core combat loop feel',
+              ],
+              externalController: _refineCtrl,
+              inputKey: const ValueKey('stage2_ai_refine_input'),
+              applyBtnKey: const ValueKey('stage2_ai_refine_apply_btn'),
+              undoBtnKey: const ValueKey('stage2_ai_refine_undo_btn'),
+              ideasBtnKey: const ValueKey('stage2_ai_ideas_btn'),
+              ideasStripKey: const ValueKey('stage2_ai_ideas_strip'),
+              onApply: (instruction) =>
+                  wb.applyStage2ReleaseRefine(releaseDoc.id, instruction),
+              onUndo: wb.undoStage2Edit,
+              onDismissError: wb.dismissStage2RefineError,
             ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildFlatSliceRow({
-    required WorkbenchProvider wb,
-    required EpicSpec epic,
-    required FeatureSpec feat,
-    required String relVer,
-    required String subtitle,
-    required Color subtitleColor,
-    bool mutedRow = false,
-    required bool isDark,
-    required Color border,
-    required Color textPrimary,
-    required Color textMuted,
-    required Color green,
-    required Color red,
-  }) {
-    final passedInView =
-        mutedRow ? feat.isPassed : feat.isPassedForRelease(relVer);
-    final glyph = feat.openFixesCount > 0
-        ? (symbol: '●', color: red)
-        : (passedInView
-              ? (symbol: '✓', color: green)
-              : (symbol: '○', color: textMuted));
-
-    return InkWell(
-      onTap: () {
-        FocusManager.instance.primaryFocus?.unfocus();
-        wb.selectFeature(epic.id, feat.id);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: border, width: 1)),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                glyph.symbol,
-                style: GoogleFonts.jetBrainsMono(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: glyph.color,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${feat.code} ${feat.title}',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w500,
-                      color: mutedRow ? textMuted : textPrimary,
-                    ),
-                  ),
-                  if (subtitle.trim().isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      subtitle,
-                      style: TextStyle(fontSize: 12, color: subtitleColor),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

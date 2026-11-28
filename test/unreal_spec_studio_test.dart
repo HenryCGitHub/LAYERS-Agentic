@@ -2440,7 +2440,7 @@ void main() {
           'lib/screens/shell/studio_export_actions.dart',
           'lib/screens/stage1/stage1_spec_document.dart',
           'lib/screens/stage1/stage1_shared_widgets.dart',
-          'lib/screens/workbench/workbench_outliner_rail.dart',
+          'lib/screens/workbench/monday_release_table.dart',
           'lib/screens/workbench/epic_domain_sheet.dart',
           'lib/screens/workbench/feature_spec_sheet.dart',
           'lib/screens/workbench/progressive_release_modal.dart',

@@ -572,6 +572,7 @@ class PlainBreadcrumbBar extends StatelessWidget {
 
 /// Shared max-width and responsive breakpoint for balanced 2-column specs.
 const double kPlainDocWideMaxWidth = 1140;
+const double kPlainDocTableMaxWidth = 1240;
 const double kPlainDocTwoColBreakpoint = 860;
 
 /// Subtle uppercase mono eyebrow naming a desktop column's role (`WHAT TO BUILD`,
@@ -614,6 +615,7 @@ class PlainTwoColumnLayout extends StatelessWidget {
   final double breakpoint;
   final double columnGap;
   final bool narrowRightFirst;
+  final Key? layoutKey;
 
   const PlainTwoColumnLayout({
     super.key,
@@ -624,6 +626,7 @@ class PlainTwoColumnLayout extends StatelessWidget {
     this.breakpoint = kPlainDocTwoColBreakpoint,
     this.columnGap = 28,
     this.narrowRightFirst = false,
+    this.layoutKey = const ValueKey('plain_two_col_row'),
   });
 
   @override
@@ -632,7 +635,7 @@ class PlainTwoColumnLayout extends StatelessWidget {
       builder: (context, constraints) {
         if (constraints.maxWidth >= breakpoint) {
           return Row(
-            key: const ValueKey('plain_two_col_row'),
+            key: layoutKey,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(flex: leftFlex, child: left),

@@ -648,8 +648,14 @@ void main() {
           );
           await tester.pumpAndSettle();
 
-          // Navigate to F02 (Skyhook Winch & Swing)
-          await tester.tap(find.byKey(const ValueKey('outliner_feature_sk_f02')));
+          // Close F01 overlay -> open F02 (Skyhook Winch & Swing) from Monday table
+          await tester.tap(
+            find.byKey(const ValueKey('close_workbench_overlay_btn')),
+          );
+          await tester.pumpAndSettle();
+          await tester.tap(
+            find.byKey(const ValueKey('table_feature_row_sk_f02')),
+          );
           await tester.pumpAndSettle();
           expect(
             find.textContaining('UPROPERTY(EDITANYWHERE) VAR'),
@@ -777,17 +783,17 @@ void main() {
             (e) => e.lineageKey.toLowerCase() == 'e01',
           );
           if (find
-              .byKey(const ValueKey('outliner_feature_sk_f01'))
+              .byKey(const ValueKey('table_feature_row_sk_f01'))
               .evaluate()
               .isEmpty) {
             await tester.tap(
-              find.byKey(ValueKey('outliner_epic_toggle_${e01InV03.id}')),
+              find.byKey(ValueKey('table_epic_toggle_${e01InV03.id}')),
             );
             await tester.pumpAndSettle();
           }
           await _tapVisible(
             tester,
-            find.byKey(const ValueKey('outliner_feature_sk_f01')),
+            find.byKey(const ValueKey('table_feature_row_sk_f01')),
           );
           expect(
             find.byKey(const ValueKey('locked_baseline_banner')),
@@ -800,22 +806,22 @@ void main() {
           );
           expect(wb.activeReleaseVersionTag, equals('v0.1'));
 
-          await tester.tap(find.byKey(ValueKey('outliner_release_$v03ReleaseId')));
+          await tester.tap(find.byKey(ValueKey('header_release_$v03ReleaseId')));
           await tester.pumpAndSettle();
           expect(wb.activeReleaseVersionTag, equals('v0.3'));
 
           if (find
-              .byKey(const ValueKey('outliner_feature_sk_f06_thermal'))
+              .byKey(const ValueKey('table_feature_row_sk_f06_thermal'))
               .evaluate()
               .isEmpty) {
             await tester.tap(
-              find.byKey(ValueKey('outliner_epic_toggle_${e01InV03.id}')),
+              find.byKey(ValueKey('table_epic_toggle_${e01InV03.id}')),
             );
             await tester.pumpAndSettle();
           }
           await _tapVisible(
             tester,
-            find.byKey(const ValueKey('outliner_feature_sk_f06_thermal')),
+            find.byKey(const ValueKey('table_feature_row_sk_f06_thermal')),
           );
           expect(
             find.byKey(const ValueKey('locked_baseline_banner')),
@@ -829,7 +835,7 @@ void main() {
           expect(wb.activeReleaseId, equals(v02ReleaseId));
           expect(wb.activeReleaseVersionTag, equals('v0.2'));
 
-          await tester.tap(find.byKey(ValueKey('outliner_release_$v03ReleaseId')));
+          await tester.tap(find.byKey(ValueKey('header_release_$v03ReleaseId')));
           await tester.pumpAndSettle();
           expect(wb.activeReleaseVersionTag, equals('v0.3'));
 
@@ -842,8 +848,10 @@ void main() {
           await tester.pumpAndSettle();
           expect(wb.isDark, isFalse);
 
-          // Stage 1 return -> confirm Sync Spec & Return to v0.3 -> edit pitch -> click CTA -> return to v0.3
-          await tester.tap(find.byKey(const ValueKey('outliner_project_brief')));
+          // Stage 1 return -> confirm Sync Spec & Return to v0.3 -> edit pitch -> click CTA -> return to v0.3 table
+          await tester.tap(
+            find.byKey(const ValueKey('header_project_brief_btn')),
+          );
           await tester.pumpAndSettle();
           expect(find.byType(ProjectPitchScreen), findsOneWidget);
           expect(
@@ -872,7 +880,7 @@ void main() {
           await tester.pump(const Duration(milliseconds: 600));
           await tester.pumpAndSettle();
 
-          expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
+          expect(wb.isInspectingReleaseSpec, isTrue);
           expect(wb.activeReleaseVersionTag, equals('v0.3'));
           expect(wb.conceptDraft?.pitch, equals(updatedPitch));
           expect(fakeGddBackend.writtenContents.last, contains(updatedPitch));

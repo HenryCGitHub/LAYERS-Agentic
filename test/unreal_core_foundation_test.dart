@@ -2499,7 +2499,7 @@ void main() {
         expect(find.text('LAYERS'), findsOneWidget);
         expect(find.byKey(const ValueKey('plan_next_release_btn')), findsOneWidget);
         expect(
-          find.byKey(const ValueKey('outliner_project_brief')),
+          find.byKey(const ValueKey('header_project_brief_btn')),
           findsOneWidget,
         );
 

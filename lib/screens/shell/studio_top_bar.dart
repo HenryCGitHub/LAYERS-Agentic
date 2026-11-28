@@ -303,7 +303,9 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
               ),
               Expanded(
-                child: releases.isEmpty
+                child: (releases.isEmpty &&
+                        (isNewGame ||
+                            !(workbench.conceptDraft?.hasSpec ?? false)))
                     ? const SizedBox.shrink()
                     : Center(
                         child: SingleChildScrollView(
@@ -311,92 +313,134 @@ class StudioTopBar extends StatelessWidget implements PreferredSizeWidget {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              for (int i = 0; i < releases.length; i++) ...[
-                                if (i > 0)
+                              if (!isNewGame &&
+                                  (workbench.conceptDraft?.hasSpec ?? false)) ...[
+                                _HeaderReleaseLink(
+                                  key: const ValueKey(
+                                    'header_project_brief_btn',
+                                  ),
+                                  label: 'Brief',
+                                  isCurrentRelease:
+                                      workbench.activeDocPage ==
+                                      WorkbenchDocPage.projectBrief,
+                                  isReleaseSpecActive:
+                                      workbench.activeDocPage ==
+                                      WorkbenchDocPage.projectBrief,
+                                  isDark: isDark,
+                                  onTap: () {
+                                    FocusManager.instance.primaryFocus
+                                        ?.unfocus();
+                                    workbench.selectProjectBrief();
+                                  },
+                                ),
+                                if (releases.isNotEmpty)
                                   Padding(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 6,
                                     ),
                                     child: Text(
-                                      '·',
+                                      '|',
                                       style: GoogleFonts.jetBrainsMono(
                                         fontSize: 11,
                                         color: textMuted,
                                       ),
                                     ),
                                   ),
-                                _HeaderReleaseLink(
-                                  key: ValueKey(
-                                    'header_release_${releases[i].id}',
-                                  ),
-                                  label:
-                                      (releases[i].sections['release_version'] ??
-                                              '')
-                                          .trim()
-                                          .isNotEmpty
-                                      ? releases[i]
-                                            .sections['release_version']!
-                                            .trim()
-                                      : releases[i].title,
-                                  isCurrentRelease:
-                                      releases[i].id ==
-                                          workbench.activeReleaseId &&
-                                      workbench.activeDocPage !=
-                                          WorkbenchDocPage.planNextRelease,
-                                  isReleaseSpecActive:
-                                      releases[i].id ==
-                                          workbench.activeReleaseId &&
-                                      workbench.isInspectingReleaseSpec,
-                                  isDark: isDark,
-                                  onTap: () {
-                                    FocusManager.instance.primaryFocus
-                                        ?.unfocus();
-                                    workbench.selectReleaseSpec(releases[i].id);
-                                  },
-                                ),
                               ],
-                              Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                ),
-                                child: Text(
-                                  '·',
-                                  style: GoogleFonts.jetBrainsMono(
-                                    fontSize: 11,
-                                    color: textMuted,
+                              if (releases.isNotEmpty) ...[
+                                for (int i = 0; i < releases.length; i++) ...[
+                                  if (i > 0)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                      ),
+                                      child: Text(
+                                        '·',
+                                        style: GoogleFonts.jetBrainsMono(
+                                          fontSize: 11,
+                                          color: textMuted,
+                                        ),
+                                      ),
+                                    ),
+                                  _HeaderReleaseLink(
+                                    key: ValueKey(
+                                      'header_release_${releases[i].id}',
+                                    ),
+                                    label:
+                                        (releases[i].sections['release_version'] ??
+                                                '')
+                                            .trim()
+                                            .isNotEmpty
+                                        ? releases[i]
+                                              .sections['release_version']!
+                                              .trim()
+                                        : releases[i].title,
+                                    isCurrentRelease:
+                                        releases[i].id ==
+                                            workbench.activeReleaseId &&
+                                        workbench.activeDocPage !=
+                                            WorkbenchDocPage.projectBrief &&
+                                        workbench.activeDocPage !=
+                                            WorkbenchDocPage.planNextRelease,
+                                    isReleaseSpecActive:
+                                        releases[i].id ==
+                                            workbench.activeReleaseId &&
+                                        workbench.isInspectingReleaseSpec,
+                                    isDark: isDark,
+                                    onTap: () {
+                                      FocusManager.instance.primaryFocus
+                                          ?.unfocus();
+                                      workbench.selectReleaseSpec(
+                                        releases[i].id,
+                                      );
+                                    },
                                   ),
-                                ),
-                              ),
-                              InkWell(
-                                key: const ValueKey('plan_next_release_btn'),
-                                onTap: () {
-                                  FocusManager.instance.primaryFocus?.unfocus();
-                                  workbench.openInPagePlanNextRelease();
-                                },
-                                borderRadius: BorderRadius.circular(2),
-                                child: Padding(
+                                ],
+                                Padding(
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                    vertical: 4,
+                                    horizontal: 6,
                                   ),
                                   child: Text(
-                                    '+ New',
+                                    '·',
                                     style: GoogleFonts.jetBrainsMono(
-                                      fontSize: 11.5,
-                                      fontWeight:
-                                          workbench.isPlanningNextRelease
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                      color: workbench.isPlanningNextRelease
-                                          ? focal
-                                          : textSecondary,
-                                      decoration: workbench.isPlanningNextRelease
-                                          ? TextDecoration.underline
-                                          : TextDecoration.none,
+                                      fontSize: 11,
+                                      color: textMuted,
                                     ),
                                   ),
                                 ),
-                              ),
+                                InkWell(
+                                  key: const ValueKey('plan_next_release_btn'),
+                                  onTap: () {
+                                    FocusManager.instance.primaryFocus
+                                        ?.unfocus();
+                                    workbench.openInPagePlanNextRelease();
+                                  },
+                                  borderRadius: BorderRadius.circular(2),
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                      vertical: 4,
+                                    ),
+                                    child: Text(
+                                      '+ New',
+                                      style: GoogleFonts.jetBrainsMono(
+                                        fontSize: 11.5,
+                                        fontWeight:
+                                            workbench.isPlanningNextRelease
+                                            ? FontWeight.w700
+                                            : FontWeight.w500,
+                                        color: workbench.isPlanningNextRelease
+                                            ? focal
+                                            : textSecondary,
+                                        decoration:
+                                            workbench.isPlanningNextRelease
+                                            ? TextDecoration.underline
+                                            : TextDecoration.none,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                         ),

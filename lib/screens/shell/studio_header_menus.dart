@@ -168,6 +168,7 @@ class StudioGddMenuButton extends StatelessWidget {
     };
 
     return MenuAnchor(
+      consumeOutsideTap: true,
       style: _flatMenuStyle(isDark),
       menuChildren: [
         if (hasFile ||
@@ -343,6 +344,7 @@ class StudioSettingsMenuButton extends StatelessWidget {
         workbench.unrealArchitectureMode == UnrealArchitectureMode.blueprint;
 
     return MenuAnchor(
+      consumeOutsideTap: true,
       style: _flatMenuStyle(isDark),
       menuChildren: [
         Padding(

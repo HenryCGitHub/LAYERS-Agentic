@@ -960,27 +960,27 @@ void main() {
 
         final e01 = wb.activeReleaseEpics.first;
         expect(
-          find.byKey(ValueKey('outliner_epic_${e01.id}')),
+          find.byKey(ValueKey('table_epic_open_${e01.id}')),
           findsOneWidget,
         );
         expect(
-          find.byKey(ValueKey('outliner_epic_toggle_${e01.id}')),
+          find.byKey(ValueKey('table_epic_toggle_${e01.id}')),
           findsOneWidget,
         );
         expect(
-          find.byKey(const ValueKey('outliner_feature_sb_f01')),
+          find.byKey(const ValueKey('table_feature_row_sb_f01')),
           findsOneWidget,
         );
         expect(
-          find.byKey(const ValueKey('outliner_feature_sb_f02')),
+          find.byKey(const ValueKey('table_feature_row_sb_f02')),
           findsOneWidget,
         );
         expect(
-          find.byKey(const ValueKey('outliner_release_summary')),
+          find.byKey(const ValueKey('release_header_summary')),
           findsOneWidget,
         );
 
-        await tester.tap(find.byKey(const ValueKey('outliner_feature_sb_f01')));
+        await tester.tap(find.byKey(const ValueKey('table_feature_row_sb_f01')));
         await tester.pumpAndSettle();
         expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
 
@@ -1033,8 +1033,10 @@ void main() {
         expect(wb.selectedFeatureSpec?.code, equals('F07'));
         expect(wb.selectedFeatureSpec?.title, equals('Wall Bounce Dash'));
 
-        // Select F02 -> live tuning syncs to Cloud AI (zero local-AI prompt/copy UI)
-        await tester.tap(find.byKey(const ValueKey('outliner_feature_sb_f02')));
+        // Close F07 overlay -> open F02 from Monday table -> live tuning syncs to Cloud AI
+        await tester.tap(find.byKey(const ValueKey('close_workbench_overlay_btn')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('table_feature_row_sb_f02')));
         await tester.pumpAndSettle();
         expect(wb.selectedFeatureSpec?.code, equals('F02'));
 
@@ -1141,7 +1143,7 @@ void main() {
 
         expect(wb.activeReleaseVersionTag, equals('v0.2'));
 
-        await tester.tap(find.byKey(const ValueKey('outliner_feature_sb_f01')));
+        await tester.tap(find.byKey(const ValueKey('table_feature_row_sb_f01')));
         await tester.pumpAndSettle();
         expect(
           find.byKey(const ValueKey('locked_baseline_banner')),

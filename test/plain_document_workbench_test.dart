@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:layers_agentic/agents/gemini_agent_client.dart';
@@ -12,9 +13,9 @@ import 'package:layers_agentic/providers/workbench_provider.dart';
 import 'package:layers_agentic/screens/release_workbench_screen.dart';
 import 'package:layers_agentic/screens/shell/studio_top_bar.dart';
 import 'package:layers_agentic/screens/stage1/stage1_idea_angles_card.dart';
+import 'package:layers_agentic/screens/workbench/monday_release_table.dart';
 import 'package:layers_agentic/screens/workbench/plain_plan_release_page.dart';
 import 'package:layers_agentic/screens/workbench/release_spec_sheet.dart';
-import 'package:layers_agentic/screens/workbench/workbench_outliner_rail.dart';
 import 'package:layers_agentic/services/local_vault_service.dart';
 import 'package:layers_agentic/services/storage/vault_storage_interface.dart';
 
@@ -271,44 +272,47 @@ void main() {
             ..loadPresetSpark('shellbreaker');
           addTearDown(wb.dispose);
           final firstProjId = wb.activeProjectId!;
-          final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+          final v01Id = wb.approveRootSpecAndLaunchWorkbench(
+            openReleaseSpec: true,
+          )!;
           final e01 = wb.activeReleaseEpics.first;
 
           await tester.pumpWidget(LayersAgenticApp(provider: wb));
           await tester.pumpAndSettle();
 
-          // Persistent 240px left outline with all 4 tiers & zero Idea tab.
+          // 2-screen workstation (no left rail): top bar Brief | v0.1 + MondayReleaseTable.
+          expect(find.byType(MondayReleaseTable), findsOneWidget);
           expect(
-            tester.getSize(find.byType(WorkbenchOutlinerRail)).width,
-            equals(240.0),
-          );
-          expect(
-            find.byKey(const ValueKey('outliner_project_brief')),
+            find.byKey(const ValueKey('header_project_brief_btn')),
             findsOneWidget,
           );
           expect(
-            find.byKey(ValueKey('outliner_release_$v01Id')),
+            find.byKey(ValueKey('header_release_$v01Id')),
             findsOneWidget,
           );
           expect(
-            find.byKey(ValueKey('outliner_epic_${e01.id}')),
+            find.byKey(ValueKey('table_epic_open_${e01.id}')),
             findsOneWidget,
           );
           expect(
-            find.byKey(const ValueKey('outliner_feature_sb_f01')),
+            find.byKey(const ValueKey('table_feature_row_sb_f01')),
             findsOneWidget,
           );
           expect(find.text('Idea'), findsNothing);
           expect(find.text('+ Add feature'), findsOneWidget);
           expect(find.text('+ Add slice'), findsNothing);
 
-          // + Add feature in outline footer creates a feature and auto-focuses feature_title_input.
+          // + Add feature in Release header creates a feature, opens Overlay, and auto-focuses feature_title_input.
           final countBefore = wb.activeReleaseEpics.first.features.length;
           await tester.tap(
-            find.byKey(const ValueKey('outline_add_slice_btn')),
+            find.byKey(const ValueKey('release_quick_add_feature_btn')),
           );
           await tester.pumpAndSettle();
 
+          expect(
+            find.byKey(const ValueKey('workbench_overlay_dialog')),
+            findsOneWidget,
+          );
           expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
           expect(
             wb.activeReleaseEpics.first.features.length,
@@ -386,8 +390,8 @@ void main() {
           await tester.pumpWidget(LayersAgenticApp(provider: wb));
           await tester.pumpAndSettle();
 
-          // Click v0.1 Release tier in left outline -> ReleaseSpecSheet.
-          await tester.tap(find.byKey(ValueKey('outliner_release_$v01Id')));
+          // Click v0.1 Release link in top header -> ReleaseSpecSheet.
+          await tester.tap(find.byKey(ValueKey('header_release_$v01Id')));
           await tester.pumpAndSettle();
           expect(wb.isInspectingReleaseSpec, isTrue);
           expect(find.byType(ReleaseSpecSheet), findsOneWidget);
@@ -544,11 +548,15 @@ void main() {
           expect(wb.activeReleaseVersionTag, equals('v0.2'));
 
           final v02Id = wb.activeReleaseId!;
-          await tester.tap(find.byKey(ValueKey('outliner_release_$v02Id')));
+          await tester.tap(find.byKey(ValueKey('header_release_$v02Id')));
           await tester.pumpAndSettle();
-          expect(find.text('+DELTA UPGRADES'), findsOneWidget);
-          expect(find.text('+NEW v0.2 FEATURES'), findsOneWidget);
-          expect(find.text('LOCKED BASELINE'), findsOneWidget);
+          expect(find.byType(MondayReleaseTable), findsOneWidget);
+          expect(find.text('+DELTA'), findsWidgets);
+          expect(find.text('+NEW v0.2'), findsWidgets);
+          expect(
+            find.textContaining('Locked v0.1 baseline (open in v0.1)'),
+            findsWidgets,
+          );
         });
       },
     );
@@ -563,27 +571,42 @@ void main() {
           final wb = WorkbenchProvider(enableAutoLoad: false)
             ..loadPresetSpark('shellbreaker');
           addTearDown(wb.dispose);
-          wb.approveRootSpecAndLaunchWorkbench();
+          wb.approveRootSpecAndLaunchWorkbench(openReleaseSpec: true);
 
           await tester.pumpWidget(LayersAgenticApp(provider: wb));
           await tester.pumpAndSettle();
 
-          // Navigate to F02 via outliner.
+          // Navigate to F02 via Monday table row.
           await tester.tap(
-            find.byKey(const ValueKey('outliner_feature_sb_f02')),
+            find.byKey(const ValueKey('table_feature_row_sb_f02')),
           );
           await tester.pumpAndSettle();
           expect(find.byType(ReleaseWorkbenchScreen), findsOneWidget);
 
           // 1) Silent 1-click Copy flashes Copied (~N tok) with ZERO SnackBar, then resets after 2s.
+          final overlayFinder = find.byKey(
+            const ValueKey('workbench_overlay_dialog'),
+          );
           expect(find.text('Copy CoPilot Prompt'), findsOneWidget);
-          expect(find.byIcon(Icons.bolt_rounded), findsOneWidget);
+          expect(
+            find.descendant(
+              of: overlayFinder,
+              matching: find.byIcon(Icons.bolt_rounded),
+            ),
+            findsOneWidget,
+          );
           await _tapVisible(
             tester,
             find.byKey(const ValueKey('copy_copilot_prompt_btn')),
           );
           expect(find.textContaining('Copied (~'), findsOneWidget);
-          expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+          expect(
+            find.descendant(
+              of: overlayFinder,
+              matching: find.byIcon(Icons.check_rounded),
+            ),
+            findsOneWidget,
+          );
           expect(find.byType(SnackBar), findsNothing);
           await tester.pump(const Duration(seconds: 3));
           expect(find.text('Copy CoPilot Prompt'), findsOneWidget);
@@ -625,7 +648,13 @@ void main() {
             find.text('Copy CoPilot [FIX] Prompt (1)'),
             findsOneWidget,
           );
-          expect(find.byIcon(Icons.build_outlined), findsOneWidget);
+          expect(
+            find.descendant(
+              of: overlayFinder,
+              matching: find.byIcon(Icons.build_outlined),
+            ),
+            findsOneWidget,
+          );
 
           final fxId = wb.selectedFeatureSpec!.fixes.first.id;
           await _tapVisible(
@@ -767,33 +796,29 @@ void main() {
               await tester.pumpWidget(LayersAgenticApp(provider: wb));
               await tester.pumpAndSettle();
 
-              // Release Spec
+              // Monday Release Table
               expect(find.byType(ReleaseSpecSheet), findsOneWidget);
-              if (size.width >= 960) {
-                expect(find.byType(WorkbenchOutlinerRail), findsOneWidget);
-                expect(
-                  find.byType(WorkbenchCompactSwitcherBar),
-                  findsNothing,
-                );
-              } else {
-                expect(find.byType(WorkbenchOutlinerRail), findsNothing);
-                expect(
-                  find.byType(WorkbenchCompactSwitcherBar),
-                  findsOneWidget,
-                );
-              }
+              expect(find.byType(MondayReleaseTable), findsOneWidget);
 
               // Project Brief
               wb.selectProjectBrief();
               await tester.pumpAndSettle();
 
-              // Epic Domain
+              // Epic Domain Overlay
               wb.selectEpic(e01.id);
               await tester.pumpAndSettle();
+              expect(
+                find.byKey(const ValueKey('workbench_overlay_dialog')),
+                findsOneWidget,
+              );
 
-              // Feature Slice
+              // Feature Overlay
               wb.selectFeature(e01.id, f02.id);
               await tester.pumpAndSettle();
+              expect(
+                find.byKey(const ValueKey('workbench_overlay_dialog')),
+                findsOneWidget,
+              );
 
               // Plan Next Release
               wb.openInPagePlanNextRelease();
@@ -821,15 +846,18 @@ void main() {
           await tester.pumpWidget(LayersAgenticApp(provider: wb));
           await tester.pumpAndSettle();
 
-          // 1) Before any release is launched, + Add slice footer is hidden cleanly.
+          // 1) Before any release is launched, + Add feature action is hidden cleanly.
           expect(
-            find.byKey(const ValueKey('outline_add_slice_btn')),
+            find.byKey(const ValueKey('release_quick_add_feature_btn')),
             findsNothing,
           );
 
-          // Launch v0.1 -> release label in outliner is deduplicated ("v0.1 · Prototype").
-          final v01Id = wb.approveRootSpecAndLaunchWorkbench()!;
+          // Launch v0.1 -> lands on Monday Release Table with deduplicated title.
+          final v01Id = wb.approveRootSpecAndLaunchWorkbench(
+            openReleaseSpec: true,
+          )!;
           await tester.pumpAndSettle();
+          expect(find.byType(MondayReleaseTable), findsOneWidget);
           expect(find.text('v0.1 · Prototype'), findsOneWidget);
           expect(find.textContaining('v0.1 · v0.1'), findsNothing);
 
@@ -851,20 +879,28 @@ void main() {
 
           // 2) Feature F02 on v0.1 never leaks seeded +DELTA (v0.1): ... text.
           await tester.tap(
-            find.byKey(const ValueKey('outliner_feature_sb_f02')),
+            find.byKey(const ValueKey('table_feature_row_sb_f02')),
           );
           await tester.pumpAndSettle();
           expect(find.textContaining('+DELTA (v0.1):'), findsNothing);
-
-          // 3) Quick-add slice sets Stage 2 summary banner; navigating to F01 clears it.
           await tester.tap(
-            find.byKey(const ValueKey('outline_add_slice_btn')),
+            find.byKey(const ValueKey('close_workbench_overlay_btn')),
+          );
+          await tester.pumpAndSettle();
+
+          // 3) Quick-add feature sets Stage 2 summary banner; opening F01 from table clears it.
+          await tester.tap(
+            find.byKey(const ValueKey('release_quick_add_feature_btn')),
           );
           await tester.pumpAndSettle();
           expect(wb.lastStage2RefineSummary, isNotNull);
+          await tester.tap(
+            find.byKey(const ValueKey('close_workbench_overlay_btn')),
+          );
+          await tester.pumpAndSettle();
 
           await tester.tap(
-            find.byKey(const ValueKey('outliner_feature_sb_f01')),
+            find.byKey(const ValueKey('table_feature_row_sb_f01')),
           );
           await tester.pumpAndSettle();
           expect(wb.lastStage2RefineSummary, isNull);
@@ -922,9 +958,9 @@ void main() {
           expect(lockedUnpassedF03.status, equals(FeatureStatus.active));
           expect(lockedUnpassedF03.isPassed, isFalse);
 
-          // Check v0.1 link still renders cleanly in outline with deduplicated label.
+          // Check v0.1 link still renders cleanly in top header.
           expect(
-            find.byKey(ValueKey('outliner_release_$v01Id')),
+            find.byKey(ValueKey('header_release_$v01Id')),
             findsOneWidget,
           );
         });
@@ -988,9 +1024,8 @@ void main() {
           expect(wb.activeProjectId, isNot(equals('proj_legacy')));
           expect(wb.projectReleases, isEmpty);
           expect(find.text('v0.1 · Legacy Prototype'), findsNothing);
-          expect(find.text('No release launched yet'), findsOneWidget);
           expect(
-            find.byKey(const ValueKey('outline_add_slice_btn')),
+            find.byKey(const ValueKey('release_quick_add_feature_btn')),
             findsNothing,
           );
         });
@@ -1034,7 +1069,7 @@ void main() {
             findsNothing,
           );
 
-          // 2) Launch v0.1 and check single Cancel on Epic + Add feature & Feature + Add var forms.
+          // 2) Launch v0.1 -> open E01 overlay -> single Cancel on Epic + Add feature & Feature + Add var forms.
           await _tapVisible(
             tester,
             find.byKey(const ValueKey('approve_launch_workbench_btn')),
@@ -1042,7 +1077,7 @@ void main() {
           final e01 = wb.activeReleaseEpics.first;
           await _tapVisible(
             tester,
-            find.byKey(ValueKey('outliner_epic_${e01.id}')),
+            find.byKey(ValueKey('table_epic_open_${e01.id}')),
           );
           await _tapVisible(
             tester,
@@ -1052,11 +1087,15 @@ void main() {
           expect(find.text('Cancel'), findsOneWidget);
           await _tapVisible(tester, find.text('Cancel'));
           expect(find.byKey(const ValueKey('add_feature_form')), findsNothing);
-
-          // 3) Quick-add New Feature via outline footer -> rename updates PIE check & starter sections.
           await _tapVisible(
             tester,
-            find.byKey(const ValueKey('outline_add_slice_btn')),
+            find.byKey(const ValueKey('close_workbench_overlay_btn')),
+          );
+
+          // 3) Quick-add New Feature via Release header -> rename updates PIE check & starter sections.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('release_quick_add_feature_btn')),
           );
           final added = wb.selectedFeatureSpec!;
           wb.updateFeatureScope(
@@ -1074,7 +1113,7 @@ void main() {
             contains('Storm Wind Gust Recovery'),
           );
 
-          // Open + Add var on Feature page -> single Cancel button.
+          // Open + Add var on Feature overlay -> single Cancel button.
           await _tapVisible(
             tester,
             find.byKey(const ValueKey('feature_add_tuning_btn')),
@@ -1085,12 +1124,16 @@ void main() {
           );
           expect(find.text('Cancel'), findsOneWidget);
           await _tapVisible(tester, find.text('Cancel'));
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('close_workbench_overlay_btn')),
+          );
 
           // 4) Passing F02 clears stale Stage 2 banner upon advancing, and v0.2 shows honest 1/N passed count.
           final f02 = wb.activeReleaseEpics.first.features[1];
           await _tapVisible(
             tester,
-            find.byKey(ValueKey('outliner_feature_${f02.id}')),
+            find.byKey(ValueKey('table_feature_row_${f02.id}')),
           );
           for (final chk in wb.selectedFeatureSpec!.checks) {
             wb.toggleFeatureCheck(e01.id, f02.id, chk.id, true);
@@ -1126,7 +1169,7 @@ void main() {
           );
           await _tapVisible(
             tester,
-            find.byKey(ValueKey('outliner_release_${wb.activeReleaseId!}')),
+            find.byKey(ValueKey('header_release_${wb.activeReleaseId!}')),
           );
           expect(
             find.textContaining(
@@ -1204,20 +1247,20 @@ void main() {
           final f01 = e01.features.first;
           await _tapVisible(
             tester,
-            find.byKey(ValueKey('outliner_epic_${e01.id}')),
-          );
-          await _tapVisible(
-            tester,
-            find.byKey(ValueKey('outliner_feature_${f01.id}')),
+            find.byKey(ValueKey('table_feature_row_${f01.id}')),
           );
           expect(
             find.byKey(const ValueKey('delete_feature_btn')),
             findsNothing,
           );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('close_workbench_overlay_btn')),
+          );
 
           await _tapVisible(
             tester,
-            find.byKey(const ValueKey('outline_add_slice_btn')),
+            find.byKey(const ValueKey('release_quick_add_feature_btn')),
           );
           final createdId = wb.selectedFeatureId!;
           expect(
@@ -1232,12 +1275,16 @@ void main() {
             wb.activeReleaseEpics.first.features.any((f) => f.id == createdId),
             isFalse,
           );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('close_workbench_overlay_btn')),
+          );
 
-          // 4) Open F02 -> + Paste log -> Flag [FIX] displays log excerpt in Fixes (1).
+          // 4) Open F02 from Monday table -> + Paste log -> Flag [FIX] displays log excerpt in Fixes (1).
           final f02 = wb.activeReleaseEpics.first.features[1];
           await _tapVisible(
             tester,
-            find.byKey(ValueKey('outliner_feature_${f02.id}')),
+            find.byKey(ValueKey('table_feature_row_${f02.id}')),
           );
           await _tapVisible(
             tester,
@@ -1345,21 +1392,18 @@ void main() {
             ),
           );
 
-          // Release Spec: Contract Left vs Shipping Right.
+          // Release Table: Goal left of Done When + MondayReleaseTable below.
           wb.selectReleaseSpec();
           await tester.pumpAndSettle();
-          expect(
-            find.byKey(const ValueKey('plain_two_col_row')),
-            findsOneWidget,
-          );
+          expect(find.byType(MondayReleaseTable), findsOneWidget);
           expect(
             tester
-                .getTopLeft(find.byKey(const ValueKey('release_col_contract')))
+                .getTopLeft(find.byKey(const ValueKey('release_goal_input')))
                 .dx,
             lessThan(
               tester
                   .getTopLeft(
-                    find.byKey(const ValueKey('release_col_shipping')),
+                    find.byKey(const ValueKey('release_done_when_input')),
                   )
                   .dx,
             ),
@@ -1397,7 +1441,10 @@ void main() {
           await tester.pumpAndSettle();
 
           expect(
-            find.byKey(const ValueKey('plain_single_col_stack')),
+            find.descendant(
+              of: find.byKey(const ValueKey('workbench_overlay_dialog')),
+              matching: find.byKey(const ValueKey('plain_single_col_stack')),
+            ),
             findsOneWidget,
           );
           expect(
@@ -1411,6 +1458,83 @@ void main() {
             ),
           );
           expect(tester.takeException(), isNull);
+        });
+      },
+    );
+
+    testWidgets(
+      'Monday table row copy stays inline without opening overlay; Prev/Next steppers, backdrop tap & Esc dismiss wide overlay cleanly',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(vault: vault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          wb.approveRootSpecAndLaunchWorkbench(openReleaseSpec: true);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // 1) Row ⚡ Copy flashes Copied (~N tok) inline without opening the overlay.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('table_feature_copy_sb_f02')),
+          );
+          expect(find.textContaining('Copied (~'), findsOneWidget);
+          expect(
+            find.byKey(const ValueKey('workbench_overlay_dialog')),
+            findsNothing,
+          );
+
+          // 2) Tap Feature row F02 -> opens wide 2-column Overlay -> Next -> F03 -> Prev -> F02 -> backdrop closes.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('table_feature_row_sb_f02')),
+          );
+          expect(
+            find.byKey(const ValueKey('workbench_overlay_dialog')),
+            findsOneWidget,
+          );
+          expect(wb.selectedFeatureSpec?.code, equals('F02'));
+
+          await tester.tap(find.byKey(const ValueKey('overlay_next_btn')));
+          await tester.pumpAndSettle();
+          expect(wb.selectedFeatureSpec?.code, equals('F03'));
+
+          await tester.tap(find.byKey(const ValueKey('overlay_prev_btn')));
+          await tester.pumpAndSettle();
+          expect(wb.selectedFeatureSpec?.code, equals('F02'));
+
+          // Tap top-left backdrop outside centered overlay -> closes overlay.
+          await tester.tapAt(const Offset(4, 52));
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('workbench_overlay_dialog')),
+            findsNothing,
+          );
+          expect(wb.isInspectingReleaseSpec, isTrue);
+
+          // 3) Tap Epic header E01 -> opens Epic Overlay -> Esc key closes overlay cleanly.
+          final e01 = wb.activeReleaseEpics.first;
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('table_epic_open_${e01.id}')),
+          );
+          expect(
+            find.byKey(const ValueKey('workbench_overlay_dialog')),
+            findsOneWidget,
+          );
+          expect(wb.isInspectingEpicDomain, isTrue);
+
+          await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('workbench_overlay_dialog')),
+            findsNothing,
+          );
+          expect(wb.isInspectingReleaseSpec, isTrue);
         });
       },
     );

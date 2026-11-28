@@ -25,6 +25,7 @@ class FloatingAiRefineDock extends StatefulWidget {
   final VoidCallback? onDismissError;
   final bool alwaysShowUndo;
   final Widget? customErrorBanner;
+  final double maxWidth;
 
   const FloatingAiRefineDock({
     super.key,
@@ -47,6 +48,7 @@ class FloatingAiRefineDock extends StatefulWidget {
     this.onDismissError,
     this.alwaysShowUndo = false,
     this.customErrorBanner,
+    this.maxWidth = kPlainDocWideMaxWidth,
   });
 
   @override
@@ -130,7 +132,7 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
         ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: kPlainDocWideMaxWidth),
+          constraints: BoxConstraints(maxWidth: widget.maxWidth),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
