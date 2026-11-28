@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../models/epic_spec.dart';
 import '../../theme/app_theme.dart';
+import 'plain_doc_widgets.dart';
+import 'workbench_shared_widgets.dart';
 
 /// Shared inline editor box for Epic `§01` and Feature `§01` Scope contracts.
 class InlineScopeEditorBox extends StatefulWidget {
@@ -695,6 +697,81 @@ class FeatureOpenFixesList extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Compact read-only quick reference of parent Epic `@OWNERS` and interrupt rule
+/// displayed under Playtest & Cues on a Feature page.
+class FeatureEpicOwnersRefCard extends StatelessWidget {
+  final EpicSpec epic;
+  final bool isDark;
+  final VoidCallback onOpenEpic;
+
+  const FeatureEpicOwnersRefCard({
+    super.key,
+    required this.epic,
+    required this.isDark,
+    required this.onOpenEpic,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = AppTheme.textPrimaryFor(isDark);
+    final secondary = AppTheme.textSecondaryFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+    final focal = AppTheme.focalAccentFor(isDark);
+    final owners = epic.sceneOwnership;
+
+    return KeyedSubtree(
+      key: const ValueKey('feature_epic_owners_ref'),
+      child: EpicSectionCard(
+        isDark: isDark,
+        code: 'OWN',
+        title: '${epic.code} Shared @OWNERS',
+        trailing: PlainTextLink(
+          key: const ValueKey('feature_open_epic_owners_btn'),
+          label: 'Open ${epic.code} →',
+          isDark: isDark,
+          mono: true,
+          fontSize: 11.5,
+          color: focal,
+          onTap: onOpenEpic,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (owners.isEmpty)
+              Text(
+                'No shared @OWNERS set on ${epic.code} yet.',
+                style: TextStyle(fontSize: 12.5, color: muted),
+              )
+            else
+              Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                children: [
+                  for (final own in owners)
+                    Text(
+                      own.path,
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: primary,
+                      ),
+                    ),
+                ],
+              ),
+            if (epic.interrupts.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                'Rule: ${epic.interrupts.first}',
+                style: TextStyle(fontSize: 12, color: secondary),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

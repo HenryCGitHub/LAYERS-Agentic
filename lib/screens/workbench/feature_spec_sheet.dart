@@ -91,12 +91,9 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
     final red = AppTheme.accentRedFor(isDark);
     final amber = AppTheme.accentAmberFor(isDark);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // 1. Conditional Fixes (completely hidden when openFixes is empty)
-        if (openFixes.isNotEmpty)
-          EpicSectionCard(
+    final Widget? fixesCard = openFixes.isEmpty
+        ? null
+        : EpicSectionCard(
             isDark: isDark,
             code: 'FIX',
             title: 'Fixes (${openFixes.length})',
@@ -108,10 +105,10 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                   wb.resolveFeatureFix(epic.id, feat.id, fixId),
               onDelete: (fixId) => wb.deleteFeatureFix(epic.id, feat.id, fixId),
             ),
-          ),
+          );
 
-        // 2. Playtest (PIE) + Broken in PIE?
-        EpicSectionCard(
+    // Playtest (PIE) + Broken in PIE?
+    final Widget pieCard = EpicSectionCard(
           isDark: isDark,
           code: 'PIE',
           title:
@@ -287,10 +284,16 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
               ],
             ],
           ),
-        ),
+        );
 
-        // 3. Goal / Scope
-        EpicSectionCard(
+    final Widget specColumn = KeyedSubtree(
+      key: const ValueKey('feature_col_spec'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PlainColumnLabel(label: 'WHAT TO BUILD', isDark: isDark),
+          // 1. Goal / Scope
+          EpicSectionCard(
           isDark: isDark,
           code: '§01',
           title: 'Goal & Scope',
@@ -709,9 +712,20 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
             ],
           ),
         ),
+        ],
+      ),
+    );
 
-        // 6. Cues
-        EpicSectionCard(
+    final Widget playtestColumn = KeyedSubtree(
+      key: const ValueKey('feature_col_playtest'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PlainColumnLabel(label: 'CHECK IN PIE', isDark: isDark),
+          if (fixesCard != null) fixesCard,
+          pieCard,
+          // 3. Cues
+          EpicSectionCard(
           isDark: isDark,
           code: '§04',
           title: 'Cues (VFX, SFX & HUD)',
@@ -770,8 +784,22 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
             ],
           ),
         ),
-        const SizedBox(height: 24),
-      ],
+          FeatureEpicOwnersRefCard(
+            epic: epic,
+            isDark: isDark,
+            onOpenEpic: () {
+              FocusManager.instance.primaryFocus?.unfocus();
+              wb.selectEpic(epic.id);
+            },
+          ),
+        ],
+      ),
+    );
+
+    return PlainTwoColumnLayout(
+      left: specColumn,
+      right: playtestColumn,
+      narrowRightFirst: true,
     );
   }
 

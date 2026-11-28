@@ -110,7 +110,7 @@ class Stage1SectionCard extends StatelessWidget {
     final focal = AppTheme.focalAccentFor(isDark);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 26),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -219,6 +219,68 @@ class Stage1ContractRow extends StatelessWidget {
                 fontSize: 13.5,
                 color: AppTheme.textPrimaryFor(isDark),
                 height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact inline key-value underline input used in Stage 1 §02 Setup editing.
+class Stage1ContractEditField extends StatelessWidget {
+  final Key fieldKey;
+  final String label;
+  final String? hintText;
+  final TextEditingController controller;
+  final Color border;
+  final Color focal;
+  final Color textPrimary;
+  final Color textMuted;
+
+  const Stage1ContractEditField({
+    super.key,
+    required this.fieldKey,
+    required this.label,
+    this.hintText,
+    required this.controller,
+    required this.border,
+    required this.focal,
+    required this.textPrimary,
+    required this.textMuted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          SizedBox(
+            width: 112,
+            child: Text(
+              label,
+              style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: textMuted),
+            ),
+          ),
+          Expanded(
+            child: TextField(
+              key: fieldKey,
+              controller: controller,
+              style: TextStyle(fontSize: 13, color: textPrimary),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: hintText,
+                hintStyle: TextStyle(fontSize: 12, color: textMuted),
+                contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                border: UnderlineInputBorder(
+                  borderSide: BorderSide(color: border),
+                ),
+                focusedBorder: UnderlineInputBorder(
+                  borderSide: BorderSide(color: focal),
+                ),
               ),
             ),
           ),

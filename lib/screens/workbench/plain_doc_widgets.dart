@@ -569,3 +569,84 @@ class PlainBreadcrumbBar extends StatelessWidget {
     );
   }
 }
+
+/// Shared max-width and responsive breakpoint for balanced 2-column specs.
+const double kPlainDocWideMaxWidth = 1140;
+const double kPlainDocTwoColBreakpoint = 860;
+
+/// Subtle uppercase mono eyebrow naming a desktop column's role (`WHAT TO BUILD`,
+/// `CHECK IN PIE`, etc.).
+class PlainColumnLabel extends StatelessWidget {
+  final String label;
+  final bool isDark;
+
+  const PlainColumnLabel({
+    super.key,
+    required this.label,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontFamily: 'monospace',
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.0,
+          color: AppTheme.textMutedFor(isDark),
+        ),
+      ),
+    );
+  }
+}
+
+/// Responsive 2-column layout (`Row` when available width >= [breakpoint],
+/// otherwise single-column `Column` optionally placing [right] first).
+class PlainTwoColumnLayout extends StatelessWidget {
+  final Widget left;
+  final Widget right;
+  final int leftFlex;
+  final int rightFlex;
+  final double breakpoint;
+  final double columnGap;
+  final bool narrowRightFirst;
+
+  const PlainTwoColumnLayout({
+    super.key,
+    required this.left,
+    required this.right,
+    this.leftFlex = 6,
+    this.rightFlex = 6,
+    this.breakpoint = kPlainDocTwoColBreakpoint,
+    this.columnGap = 28,
+    this.narrowRightFirst = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth >= breakpoint) {
+          return Row(
+            key: const ValueKey('plain_two_col_row'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(flex: leftFlex, child: left),
+              SizedBox(width: columnGap),
+              Expanded(flex: rightFlex, child: right),
+            ],
+          );
+        }
+        return Column(
+          key: const ValueKey('plain_single_col_stack'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: narrowRightFirst ? [right, left] : [left, right],
+        );
+      },
+    );
+  }
+}

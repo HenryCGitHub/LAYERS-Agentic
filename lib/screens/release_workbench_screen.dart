@@ -251,17 +251,19 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
     return Column(
       children: [
-        Expanded(
-          child: SingleChildScrollView(
-            controller: _specScrollController,
-            padding: const EdgeInsets.fromLTRB(28, 24, 28, 40),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 700),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Breadcrumbs
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.fromLTRB(24, 14, 24, 12),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: border, width: 1)),
+          ),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kPlainDocWideMaxWidth),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Breadcrumbs
                     Wrap(
                       key: const ValueKey('stage2_breadcrumbs'),
                       crossAxisAlignment: WrapCrossAlignment.center,
@@ -559,7 +561,23 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ],
                       ],
                     ),
-
+                ],
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: SingleChildScrollView(
+            controller: _specScrollController,
+            padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: kPlainDocWideMaxWidth,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                     if (wb.isActiveReleaseComplete) ...[
                       const SizedBox(height: 14),
                       Container(
@@ -638,8 +656,6 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                         ),
                       ),
                     ],
-
-                    PlainDocDivider(isDark: isDark, spacing: 20),
 
                     if (feature == null)
                       EpicDomainSheet(

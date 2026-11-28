@@ -99,11 +99,14 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
     final relVer = wb.activeReleaseVersionTag;
     final visibleFeatures = wb.visibleFeaturesForEpic(epic);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // §01 Domain Scope
-        EpicSectionCard(
+    final Widget archColumn = KeyedSubtree(
+      key: const ValueKey('epic_col_arch'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PlainColumnLabel(label: 'ARCHITECTURE CONTRACT', isDark: isDark),
+          // §01 Domain Scope
+          EpicSectionCard(
           isDark: isDark,
           code: '§01',
           title: 'Domain Scope',
@@ -566,9 +569,12 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
             ],
           ),
         ),
+        ],
+      ),
+    );
 
-        // §04 Out of Scope
-        EpicSectionCard(
+    // §04 Out of Scope (placed below Features as scope guardrail)
+    final Widget cutsCard = EpicSectionCard(
           isDark: isDark,
           code: '§04',
           title: 'Out of Scope',
@@ -620,10 +626,16 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
                   ),
             ],
           ),
-        ),
+        );
 
-        // §05 Child Slices
-        EpicSectionCard(
+    final Widget queueColumn = KeyedSubtree(
+      key: const ValueKey('epic_col_queue'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PlainColumnLabel(label: 'BUILD QUEUE & GUARDRAILS', isDark: isDark),
+          // §05 Child Features
+          EpicSectionCard(
           isDark: isDark,
           code: '§05',
           title: 'Features (${visibleFeatures.length})',
@@ -736,8 +748,14 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
             ],
           ),
         ),
-        const SizedBox(height: 24),
-      ],
+          cutsCard,
+        ],
+      ),
+    );
+
+    return PlainTwoColumnLayout(
+      left: archColumn,
+      right: queueColumn,
     );
   }
 }

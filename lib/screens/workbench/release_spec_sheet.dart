@@ -166,72 +166,100 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
       key: ValueKey('release_sheet_${releaseDoc.id}'),
       child: Column(
         children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 14),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: border, width: 1)),
+            ),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: kPlainDocWideMaxWidth,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'RELEASE · $relVer · ${epicsParsed.length} ${epicsParsed.length == 1 ? 'EPIC' : 'EPICS'} · ${rollup.passed}/${rollup.total} PASSED',
+                      style: GoogleFonts.jetBrainsMono(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.9,
+                        color: textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    PlainEditableLineField(
+                      fieldKey: const ValueKey('release_title_input'),
+                      value: releaseDoc.title,
+                      isDark: isDark,
+                      hintText: 'Release title...',
+                      style: AppTheme.displayFont(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        color: textPrimary,
+                      ),
+                      onCommit: (val) =>
+                          wb.updateReleaseSpec(releaseDoc.id, title: val),
+                    ),
+                    const SizedBox(height: 14),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        PlainPrimaryButton(
+                          key: const ValueKey('release_primary_action_btn'),
+                          label: primaryAction.label,
+                          onPressed: primaryAction.onPressed,
+                          isDark: isDark,
+                        ),
+                        PlainPrimaryButton(
+                          key: const ValueKey('release_preview_spec_btn'),
+                          label: 'Preview Spec',
+                          outlined: true,
+                          isDark: isDark,
+                          onPressed: () {
+                            FocusManager.instance.primaryFocus?.unfocus();
+                            showCoPilotPromptPreviewDialog(
+                              context,
+                              title: '$relVer Release Spec',
+                              promptText: wb.buildReleaseSpecMarkdown(
+                                releaseDoc.id,
+                              ),
+                              isDark: isDark,
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(28, 28, 28, 40),
+              padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 700),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Text(
-                        'RELEASE · $relVer · ${epicsParsed.length} ${epicsParsed.length == 1 ? 'EPIC' : 'EPICS'} · ${rollup.passed}/${rollup.total} PASSED',
-                        style: GoogleFonts.jetBrainsMono(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.9,
-                          color: textMuted,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      PlainEditableLineField(
-                        fieldKey: const ValueKey('release_title_input'),
-                        value: releaseDoc.title,
-                        isDark: isDark,
-                        hintText: 'Release title...',
-                        style: AppTheme.displayFont(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
-                          color: textPrimary,
-                        ),
-                        onCommit: (val) =>
-                            wb.updateReleaseSpec(releaseDoc.id, title: val),
-                      ),
-                      const SizedBox(height: 16),
-                      Wrap(
-                        spacing: 10,
-                        runSpacing: 8,
-                        crossAxisAlignment: WrapCrossAlignment.center,
+                  constraints: const BoxConstraints(
+                    maxWidth: kPlainDocWideMaxWidth,
+                  ),
+                  child: PlainTwoColumnLayout(
+                    leftFlex: 5,
+                    rightFlex: 7,
+                    left: KeyedSubtree(
+                      key: const ValueKey('release_col_contract'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          PlainPrimaryButton(
-                            key: const ValueKey('release_primary_action_btn'),
-                            label: primaryAction.label,
-                            onPressed: primaryAction.onPressed,
+                          PlainColumnLabel(
+                            label: 'RELEASE CONTRACT',
                             isDark: isDark,
                           ),
-                          PlainPrimaryButton(
-                            key: const ValueKey('release_preview_spec_btn'),
-                            label: 'Preview Spec',
-                            outlined: true,
-                            isDark: isDark,
-                            onPressed: () {
-                              FocusManager.instance.primaryFocus?.unfocus();
-                              showCoPilotPromptPreviewDialog(
-                                context,
-                                title: '$relVer Release Spec',
-                                promptText: wb.buildReleaseSpecMarkdown(
-                                  releaseDoc.id,
-                                ),
-                                isDark: isDark,
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      PlainDocDivider(isDark: isDark, spacing: 22),
-
-                      PlainSectionHeader(title: 'Goal', isDark: isDark),
+                          PlainSectionHeader(title: 'Goal', isDark: isDark),
                       const SizedBox(height: 8),
                       PlainEditableLineField(
                         fieldKey: const ValueKey('release_goal_input'),
@@ -259,12 +287,23 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
                         minLines: 2,
                         allowEmpty: true,
                         hintText: '[Player Action] -> [Observable Viewport Result]',
-                        onCommit: (val) =>
-                            wb.updateReleaseSpec(releaseDoc.id, doneWhen: val),
-                      ),
-                      const SizedBox(height: 24),
-
-                      PlainSectionHeader(
+                          onCommit: (val) =>
+                              wb.updateReleaseSpec(releaseDoc.id, doneWhen: val),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+                    ),
+                  ),
+                  right: KeyedSubtree(
+                    key: const ValueKey('release_col_shipping'),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        PlainColumnLabel(
+                          label: "WHAT'S SHIPPING",
+                          isDark: isDark,
+                        ),
+                        PlainSectionHeader(
                         title: 'In Scope',
                         isDark: isDark,
                         trailing: PlainTextLink(
@@ -503,6 +542,8 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
                 ),
               ),
             ),
+          ),
+          ),
           ),
           FloatingAiRefineDock(
             isDark: isDark,

@@ -409,7 +409,7 @@ class EpicSectionCard extends StatelessWidget {
     final border = AppTheme.borderFor(isDark);
     final muted = AppTheme.textMutedFor(isDark);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 24),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -445,7 +445,7 @@ class EpicSectionCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           child,
         ],
       ),

@@ -183,11 +183,14 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
     final focal = AppTheme.focalAccentFor(isDark);
     final changed = wb.lastStage1ChangedSections;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // §01 Pitch & Core Loop
-        Stage1SectionCard(
+    final Widget setupColumn = KeyedSubtree(
+      key: const ValueKey('brief_col_setup'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PlainColumnLabel(label: 'GAME & ENGINE SETUP', isDark: isDark),
+          // §01 Pitch & Core Loop
+          Stage1SectionCard(
           isDark: isDark,
           code: '01',
           title: 'Pitch & Core Loop',
@@ -448,48 +451,48 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                 const SizedBox(height: 12),
               ],
               if (_editingContracts) ...[
-                _buildContractEditField(
-                  key: const ValueKey('stage1_project_anchor_input'),
+                Stage1ContractEditField(
+                  fieldKey: const ValueKey('stage1_project_anchor_input'),
                   label: 'Project Base',
                   hintText:
                       'e.g. Module: MyGame · Extends BP_ThirdPersonCharacter (or Blank)',
-                  ctrl: _ueProjectAnchorCtrl,
+                  controller: _ueProjectAnchorCtrl,
                   border: border,
                   focal: focal,
                   textPrimary: textPrimary,
                   textMuted: textMuted,
                 ),
-                _buildContractEditField(
-                  key: const ValueKey('stage1_camera_input'),
+                Stage1ContractEditField(
+                  fieldKey: const ValueKey('stage1_camera_input'),
                   label: 'Camera',
-                  ctrl: _cameraCtrl,
+                  controller: _cameraCtrl,
                   border: border,
                   focal: focal,
                   textPrimary: textPrimary,
                   textMuted: textMuted,
                 ),
-                _buildContractEditField(
-                  key: const ValueKey('stage1_scale_input'),
+                Stage1ContractEditField(
+                  fieldKey: const ValueKey('stage1_scale_input'),
                   label: 'World Scale',
-                  ctrl: _scaleCtrl,
+                  controller: _scaleCtrl,
                   border: border,
                   focal: focal,
                   textPrimary: textPrimary,
                   textMuted: textMuted,
                 ),
-                _buildContractEditField(
-                  key: const ValueKey('stage1_input_contract_input'),
+                Stage1ContractEditField(
+                  fieldKey: const ValueKey('stage1_input_contract_input'),
                   label: 'Inputs',
-                  ctrl: _inputContractCtrl,
+                  controller: _inputContractCtrl,
                   border: border,
                   focal: focal,
                   textPrimary: textPrimary,
                   textMuted: textMuted,
                 ),
-                _buildContractEditField(
-                  key: const ValueKey('stage1_asset_policy_input'),
+                Stage1ContractEditField(
+                  fieldKey: const ValueKey('stage1_asset_policy_input'),
                   label: 'Assets',
-                  ctrl: _assetPolicyCtrl,
+                  controller: _assetPolicyCtrl,
                   border: border,
                   focal: focal,
                   textPrimary: textPrimary,
@@ -556,9 +559,18 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
             ],
           ),
         ),
+        ],
+      ),
+    );
 
-        // §03 Pillars, Feel & Trade-Offs
-        Stage1SectionCard(
+    final Widget planColumn = KeyedSubtree(
+      key: const ValueKey('brief_col_plan'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          PlainColumnLabel(label: 'DIRECTION & v0.1 PLAN', isDark: isDark),
+          // §03 Pillars, Feel & Trade-Offs
+          Stage1SectionCard(
           isDark: isDark,
           code: '03',
           title: 'Pillars & Trade-Offs',
@@ -888,53 +900,13 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
           activeProjectId: widget.activeProjectId,
           isUpdated: changed.contains('s05'),
         ),
-      ],
-    );
-  }
-
-  Widget _buildContractEditField({
-    required Key key,
-    required String label,
-    String? hintText,
-    required TextEditingController ctrl,
-    required Color border,
-    required Color focal,
-    required Color textPrimary,
-    required Color textMuted,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 112,
-            child: Text(
-              label,
-              style: GoogleFonts.jetBrainsMono(fontSize: 11.5, color: textMuted),
-            ),
-          ),
-          Expanded(
-            child: TextField(
-              key: key,
-              controller: ctrl,
-              style: TextStyle(fontSize: 13, color: textPrimary),
-              decoration: InputDecoration(
-                isDense: true,
-                hintText: hintText,
-                hintStyle: TextStyle(fontSize: 12, color: textMuted),
-                contentPadding: const EdgeInsets.symmetric(vertical: 6),
-                border: UnderlineInputBorder(
-                  borderSide: BorderSide(color: border),
-                ),
-                focusedBorder: UnderlineInputBorder(
-                  borderSide: BorderSide(color: focal),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
+    );
+
+    return PlainTwoColumnLayout(
+      left: setupColumn,
+      right: planColumn,
     );
   }
 }

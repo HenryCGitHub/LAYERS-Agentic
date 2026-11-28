@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../theme/app_theme.dart';
+import 'plain_doc_widgets.dart';
 
 /// Shared slim 1-line flat AI Refine bar with expandable prompt links and
 /// inline Undo / Error status.
@@ -129,7 +130,7 @@ class _FloatingAiRefineDockState extends State<FloatingAiRefineDock> {
         ),
       child: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 700),
+          constraints: const BoxConstraints(maxWidth: kPlainDocWideMaxWidth),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,

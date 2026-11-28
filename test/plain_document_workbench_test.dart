@@ -1267,6 +1267,153 @@ void main() {
         });
       },
     );
+
+    testWidgets(
+      'Option A 2-column desktop layout renders balanced left/right columns at 1280x800 and stacks PIE-first at 640x800',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(vault: vault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          wb.approveRootSpecAndLaunchWorkbench();
+
+          final e01 = wb.activeReleaseEpics.first;
+          final f02 = e01.features.firstWhere((f) => f.code == 'F02');
+          wb.selectFeature(e01.id, f02.id);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // Feature: Spec Left vs Playtest + Cues + @OWNERS Right.
+          expect(
+            find.byKey(const ValueKey('plain_two_col_row')),
+            findsOneWidget,
+          );
+          expect(
+            tester.getTopLeft(find.byKey(const ValueKey('feature_col_spec'))).dx,
+            lessThan(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('feature_col_playtest')))
+                  .dx,
+            ),
+          );
+          expect(
+            tester
+                .getTopLeft(
+                  find.byKey(const ValueKey('feature_epic_owners_ref')),
+                )
+                .dx,
+            equals(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('feature_col_playtest')))
+                  .dx,
+            ),
+          );
+
+          // Open Epic via compact @OWNERS link.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('feature_open_epic_owners_btn')),
+          );
+          expect(wb.selectedFeatureSpec, isNull);
+          expect(wb.selectedEpicSpec?.id, equals(e01.id));
+
+          // Epic: Architecture Left vs Features -> Out of Scope Right.
+          expect(
+            find.byKey(const ValueKey('plain_two_col_row')),
+            findsOneWidget,
+          );
+          expect(
+            tester.getTopLeft(find.byKey(const ValueKey('epic_col_arch'))).dx,
+            lessThan(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('epic_col_queue')))
+                  .dx,
+            ),
+          );
+          expect(
+            tester
+                .getTopLeft(find.byKey(const ValueKey('show_add_feature_btn')))
+                .dy,
+            lessThan(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('epic_add_cut_btn')))
+                  .dy,
+            ),
+          );
+
+          // Release Spec: Contract Left vs Shipping Right.
+          wb.selectReleaseSpec();
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('plain_two_col_row')),
+            findsOneWidget,
+          );
+          expect(
+            tester
+                .getTopLeft(find.byKey(const ValueKey('release_col_contract')))
+                .dx,
+            lessThan(
+              tester
+                  .getTopLeft(
+                    find.byKey(const ValueKey('release_col_shipping')),
+                  )
+                  .dx,
+            ),
+          );
+
+          // Project Brief: Setup Left vs Plan Right.
+          wb.selectProjectBrief();
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('plain_two_col_row')),
+            findsOneWidget,
+          );
+          expect(
+            tester.getTopLeft(find.byKey(const ValueKey('brief_col_setup'))).dx,
+            lessThan(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('brief_col_plan')))
+                  .dx,
+            ),
+          );
+          expect(tester.takeException(), isNull);
+        });
+
+        await _runWithViewport(tester, const Size(640, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+          wb.approveRootSpecAndLaunchWorkbench();
+
+          final e01 = wb.activeReleaseEpics.first;
+          final f02 = e01.features.firstWhere((f) => f.code == 'F02');
+          wb.selectFeature(e01.id, f02.id);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          expect(
+            find.byKey(const ValueKey('plain_single_col_stack')),
+            findsOneWidget,
+          );
+          expect(
+            tester
+                .getTopLeft(find.byKey(const ValueKey('feature_col_playtest')))
+                .dy,
+            lessThan(
+              tester
+                  .getTopLeft(find.byKey(const ValueKey('feature_col_spec')))
+                  .dy,
+            ),
+          );
+          expect(tester.takeException(), isNull);
+        });
+      },
+    );
   });
 }
 

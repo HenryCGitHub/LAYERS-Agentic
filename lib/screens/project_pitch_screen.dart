@@ -113,13 +113,15 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(28, 16, 28, 14),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 14),
             decoration: BoxDecoration(
               border: Border(bottom: BorderSide(color: border, width: 1)),
             ),
             child: Center(
               child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 700),
+                constraints: const BoxConstraints(
+                  maxWidth: kPlainDocWideMaxWidth,
+                ),
                 child: _buildBriefHeader(
                   wb: wb,
                   spec: draft,
@@ -135,10 +137,12 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(28, 22, 28, 40),
+              padding: const EdgeInsets.fromLTRB(24, 18, 24, 28),
               child: Center(
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 700),
+                  constraints: const BoxConstraints(
+                    maxWidth: kPlainDocWideMaxWidth,
+                  ),
                   child: Stage1SpecDocument(
                     workbench: wb,
                     spec: draft,
