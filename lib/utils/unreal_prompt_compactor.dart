@@ -47,6 +47,32 @@ class UnrealPromptCompactor {
     return items.join(' | ');
   }
 
+  static String _projectContextLine(
+    ProjectConceptBlueprint rootSpec,
+    UnrealArchitectureMode mode,
+  ) {
+    final ueVer = rootSpec.ueVersion.trim().isEmpty
+        ? 'UE 5.5'
+        : rootSpec.ueVersion.trim();
+    final ueAnchor = compactProse(_s(rootSpec.ueProjectAnchor, mode));
+    final basePart = ueAnchor.isEmpty ? '' : ' | BASE=$ueAnchor';
+    final scalePart = compactProse(_s(rootSpec.characterScale, mode));
+    final assetsPart = compactProse(_s(rootSpec.assetPolicy, mode));
+    final projCuts = compactCuts(rootSpec.outOfScope.take(4).toList(), mode: mode);
+    return '@PROJECT ${rootSpec.normalizedTitle} | UE=$ueVer$basePart | CAM=${compactProse(_s(rootSpec.cameraContract, mode))} | SCALE=$scalePart | INPUT=${_s(rootSpec.inputContract, mode)} | FEEL=${rootSpec.selectedCoreFeelOption.label} | ASSETS=$assetsPart'
+        '${projCuts.isEmpty ? '' : ' | CUTS=$projCuts'}';
+  }
+
+  static String _compactLogSnippet(String raw) {
+    final lines = [
+      for (final line in raw.replaceAll('\r\n', '\n').split('\n'))
+        if (line.trim().isNotEmpty) UnrealSpecGuard.sanitizeLine(line.trim()),
+    ];
+    if (lines.isEmpty) return '';
+    final joined = lines.take(4).join(' // ');
+    return joined.length <= 280 ? joined : '${joined.substring(0, 280)}…';
+  }
+
   /// Fast character-based LLM token estimate (~4 chars per token).
   static int estimateTokens(String text) {
     final trimmed = text.trim();
@@ -119,7 +145,7 @@ class UnrealPromptCompactor {
       final base = feat.introducedIn.trim().isEmpty
           ? 'v0.1'
           : feat.introducedIn.trim();
-      return '$base ✓ BASELINE';
+      return feat.isPassed ? '$base ✓ BASELINE' : '$base BASELINE (OPEN)';
     }
     if (feat.isPassed) return 'PASS ✓';
     if (feat.openFixesCount > 0) return '${feat.openFixesCount} FIX';
@@ -175,11 +201,7 @@ class UnrealPromptCompactor {
       '[UE5_COPILOT TASK=$task TARGET=${cleanFeat.code} · ${cleanFeat.title} REL=$ver$baseSuffix MODE=${mode.pillLabel}]',
     );
 
-    final projCuts = compactCuts(rootSpec.outOfScope.take(4).toList(), mode: mode);
-    b.writeln(
-      '@PROJECT ${rootSpec.normalizedTitle} | CAM=${compactProse(_s(rootSpec.cameraContract, mode))} | INPUT=${_s(rootSpec.inputContract, mode)}'
-      '${projCuts.isEmpty ? '' : ' | CUTS=$projCuts'}',
-    );
+    b.writeln(_projectContextLine(rootSpec, mode));
     b.writeln(
       '@EPIC ${cleanEpic.code}(${cleanEpic.title}): ${compactProse(_s(cleanEpic.goal, mode))}',
     );
@@ -272,6 +294,12 @@ class UnrealPromptCompactor {
         for (final fx in openFixes) '[FIX] ${compactProse(fx.text)}',
       ].join(' | ');
       b.writeln('@FIX_NOW: $fixesText');
+      for (final fx in openFixes) {
+        final snippet = _compactLogSnippet(fx.errorLog);
+        if (snippet.isNotEmpty) {
+          b.writeln('@LOG: $snippet');
+        }
+      }
     }
 
     if (effChecks.isEmpty) {
@@ -339,12 +367,7 @@ class UnrealPromptCompactor {
       '[UE5_COPILOT TASK=EPIC_BRIEF TARGET=${cleanEpic.code} · ${cleanEpic.title} REL=$ver MODE=${mode.pillLabel}]',
     );
     if (includeRootContext) {
-      final projCuts =
-          compactCuts(rootSpec.outOfScope.take(4).toList(), mode: mode);
-      b.writeln(
-        '@PROJECT ${rootSpec.normalizedTitle} | CAM=${compactProse(_s(rootSpec.cameraContract, mode))} | INPUT=${_s(rootSpec.inputContract, mode)}'
-        '${projCuts.isEmpty ? '' : ' | CUTS=$projCuts'}',
-      );
+      b.writeln(_projectContextLine(rootSpec, mode));
     }
     b.writeln(
       '@EPIC ${cleanEpic.code}(${cleanEpic.title}) [$passedCount/${visibleFeatures.length} PASS | $openFixesCount FIX]: ${compactProse(cleanEpic.goal)}',

@@ -33,6 +33,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
   bool _addingCut = false;
 
   final TextEditingController _pitchController = TextEditingController();
+  final TextEditingController _ueProjectAnchorCtrl = TextEditingController();
   final TextEditingController _cameraCtrl = TextEditingController();
   final TextEditingController _scaleCtrl = TextEditingController();
   final TextEditingController _inputContractCtrl = TextEditingController();
@@ -43,6 +44,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
 
   String? _lastProjectId;
   String? _lastSyncedPitch;
+  String? _lastSyncedUeAnchor;
   String? _lastSyncedCamera;
   String? _lastSyncedScale;
   String? _lastSyncedInputContract;
@@ -105,6 +107,12 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
       _lastSyncedPitch = widget.spec.pitch;
     }
     if (_editingContracts) {
+      if (oldWidget.spec.ueProjectAnchor != widget.spec.ueProjectAnchor ||
+          (_lastSyncedUeAnchor != null &&
+              _lastSyncedUeAnchor != widget.spec.ueProjectAnchor)) {
+        _ueProjectAnchorCtrl.text = widget.spec.ueProjectAnchor;
+        _lastSyncedUeAnchor = widget.spec.ueProjectAnchor;
+      }
       if (oldWidget.spec.cameraContract != widget.spec.cameraContract ||
           (_lastSyncedCamera != null &&
               _lastSyncedCamera != widget.spec.cameraContract)) {
@@ -152,6 +160,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
   @override
   void dispose() {
     _pitchController.dispose();
+    _ueProjectAnchorCtrl.dispose();
     _cameraCtrl.dispose();
     _scaleCtrl.dispose();
     _inputContractCtrl.dispose();
@@ -324,10 +333,12 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                   onTap: wb.isAgentBusy
                       ? null
                       : () {
+                          _ueProjectAnchorCtrl.text = spec.ueProjectAnchor;
                           _cameraCtrl.text = spec.cameraContract;
                           _scaleCtrl.text = spec.characterScale;
                           _inputContractCtrl.text = spec.inputContract;
                           _assetPolicyCtrl.text = spec.assetPolicy;
+                          _lastSyncedUeAnchor = spec.ueProjectAnchor;
                           _lastSyncedCamera = spec.cameraContract;
                           _lastSyncedScale = spec.characterScale;
                           _lastSyncedInputContract = spec.inputContract;
@@ -338,6 +349,52 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Text(
+                'UE5 VERSION',
+                style: GoogleFonts.jetBrainsMono(
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                  color: textMuted,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 14,
+                runSpacing: 6,
+                children: [
+                  for (final ver in ProjectConceptBlueprint.ueVersionOptions)
+                    InkWell(
+                      key: ValueKey('ue_version_opt_${ver.replaceAll(' ', '_')}'),
+                      onTap: wb.isAgentBusy
+                          ? null
+                          : () => wb.updateRootSpecSections(ueVersion: ver),
+                      child: Container(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: spec.ueVersion == ver ? focal : border,
+                              width: spec.ueVersion == ver ? 2 : 1,
+                            ),
+                          ),
+                        ),
+                        child: Text(
+                          spec.ueVersion == ver ? '✓ $ver' : ver,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: spec.ueVersion == ver
+                                ? FontWeight.w700
+                                : FontWeight.w400,
+                            color: spec.ueVersion == ver
+                                ? textPrimary
+                                : textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
               if (spec.effectiveCameraDecisionOptions.isNotEmpty) ...[
                 Text(
                   'CAMERA FORK',
@@ -392,6 +449,17 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
               ],
               if (_editingContracts) ...[
                 _buildContractEditField(
+                  key: const ValueKey('stage1_project_anchor_input'),
+                  label: 'Project Base',
+                  hintText:
+                      'e.g. Module: MyGame · Extends BP_ThirdPersonCharacter (or Blank)',
+                  ctrl: _ueProjectAnchorCtrl,
+                  border: border,
+                  focal: focal,
+                  textPrimary: textPrimary,
+                  textMuted: textMuted,
+                ),
+                _buildContractEditField(
                   key: const ValueKey('stage1_camera_input'),
                   label: 'Camera',
                   ctrl: _cameraCtrl,
@@ -444,6 +512,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                       isDark: isDark,
                       onPressed: () {
                         wb.updateRootSpecSections(
+                          ueProjectAnchor: _ueProjectAnchorCtrl.text,
                           cameraContract: _cameraCtrl.text,
                           characterScale: _scaleCtrl.text,
                           inputContract: _inputContractCtrl.text,
@@ -455,6 +524,13 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
                   ],
                 ),
               ] else ...[
+                Stage1ContractRow(
+                  label: 'UE5 Project',
+                  value: spec.ueProjectAnchor.trim().isEmpty
+                      ? spec.ueVersion
+                      : '${spec.ueVersion} · ${spec.ueProjectAnchor.trim()}',
+                  isDark: isDark,
+                ),
                 Stage1ContractRow(
                   label: 'Camera',
                   value: spec.cameraContract,
@@ -819,6 +895,7 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
   Widget _buildContractEditField({
     required Key key,
     required String label,
+    String? hintText,
     required TextEditingController ctrl,
     required Color border,
     required Color focal,
@@ -844,6 +921,8 @@ class _Stage1SpecDocumentState extends State<Stage1SpecDocument> {
               style: TextStyle(fontSize: 13, color: textPrimary),
               decoration: InputDecoration(
                 isDense: true,
+                hintText: hintText,
+                hintStyle: TextStyle(fontSize: 12, color: textMuted),
                 contentPadding: const EdgeInsets.symmetric(vertical: 6),
                 border: UnderlineInputBorder(
                   borderSide: BorderSide(color: border),

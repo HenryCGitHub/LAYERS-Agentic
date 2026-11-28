@@ -110,11 +110,31 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
         ? firstEpic.features.last.code
         : 'F01';
     final newFeatCode = featureCodes.allocate();
+    final domainCorpus = <String>[
+      rootSpec.sparkPrompt,
+      rootSpec.pitch,
+      rootSpec.coreLoop.join(' '),
+      for (final ep in currentEpics) ...[
+        ep.title,
+        ep.goal,
+        for (final f in ep.features) ...[f.title, f.goal],
+      ],
+    ].join(' ').toLowerCase();
+    final hasCombatCue = RegExp(
+      r'\b(?:combat|enemy|enemies|damage|melee|shooter|arena|boss|weapon|brawler|crab|parry|attack|strike|turret)\b',
+    ).hasMatch(domainCorpus);
+    final hasNonCombatCue = RegExp(
+      r'\b(?:parkour|courier|rooftop|parcel|grapple|wall-run|wallrun|racer|drift|puzzle|cozy|runner|obstacle|course|finish\s*gate|checkpoint)\b',
+    ).hasMatch(domainCorpus);
+    final isNonCombat = !hasCombatCue && hasNonCombatCue;
+
     upgradesByKey[firstKey] = [
       EpicUpgradeOption(
         id: 'up_${firstKey}_juice',
         targetFeatureCode: firstFeatCode,
-        text: '+45ms Hit-Stop impact freeze & camera lag snap',
+        text: isNonCombat
+            ? '+Landing momentum camera dip & speed-line burst'
+            : '+45ms Hit-Stop impact freeze & camera lag snap',
         chosen: true,
       ),
       EpicUpgradeOption(
@@ -125,36 +145,75 @@ ProgressiveReleaseDraft buildOfflineProgressiveDraft({
     ];
     newFeaturesByKey[firstKey] = [
       UnrealSpecGuard.sanitizeFeatureSpec(
-        FeatureSpec(
-          id: '${firstKey}_${targetVersion}_chain',
-          code: newFeatCode,
-          title: 'Counter Impulse & Quick Recover',
-          introducedIn: targetVersion,
-          sliceTime: '45 min',
-          status: FeatureStatus.active,
-          goal:
-              'Grant a brief $targetVersion follow-up dash refund inside ${firstEpic.code} when landing clean counters.',
-          tuning: [
-            EpicTuningParam(key: 'ChainWindowS', value: '0.35', unit: 's'),
-            EpicTuningParam(
-              key: 'CounterBurstSpeed',
-              value: '950',
-              unit: 'cm/s',
-            ),
-            EpicTuningParam(
-              key: 'ShockwaveRadius',
-              value: '240',
-              unit: 'cm',
-            ),
-          ],
-          checks: [
-            EpicPieCheck(
-              id: 'off_feat_c1',
-              text:
-                  'Trigger counter -> Follow-up movement bursts cleanly with 0 cooldown wait',
-            ),
-          ],
-        ),
+        isNonCombat
+            ? FeatureSpec(
+                id: '${firstKey}_${targetVersion}_chain',
+                code: newFeatCode,
+                title: 'Momentum Vault & Quick Recover',
+                introducedIn: targetVersion,
+                sliceTime: '45 min',
+                status: FeatureStatus.active,
+                goal:
+                    'Chain a brief $targetVersion speed burst inside ${firstEpic.code} when landing clean obstacle vaults or drops.',
+                tuning: [
+                  EpicTuningParam(
+                    key: 'ChainWindowS',
+                    value: '0.35',
+                    unit: 's',
+                  ),
+                  EpicTuningParam(
+                    key: 'VaultBoostSpeed',
+                    value: '950',
+                    unit: 'cm/s',
+                  ),
+                  EpicTuningParam(
+                    key: 'LandingGraceWindowS',
+                    value: '0.18',
+                    unit: 's',
+                  ),
+                ],
+                checks: [
+                  EpicPieCheck(
+                    id: 'off_feat_c1',
+                    text:
+                        'Land clean vault or roll -> Follow-up sprint surges cleanly with zero stall',
+                  ),
+                ],
+              )
+            : FeatureSpec(
+                id: '${firstKey}_${targetVersion}_chain',
+                code: newFeatCode,
+                title: 'Counter Impulse & Quick Recover',
+                introducedIn: targetVersion,
+                sliceTime: '45 min',
+                status: FeatureStatus.active,
+                goal:
+                    'Grant a brief $targetVersion follow-up dash refund inside ${firstEpic.code} when landing clean counters.',
+                tuning: [
+                  EpicTuningParam(
+                    key: 'ChainWindowS',
+                    value: '0.35',
+                    unit: 's',
+                  ),
+                  EpicTuningParam(
+                    key: 'CounterBurstSpeed',
+                    value: '950',
+                    unit: 'cm/s',
+                  ),
+                  EpicTuningParam(
+                    key: 'ShockwaveRadius',
+                    value: '240',
+                    unit: 'cm',
+                  ),
+                ],
+                checks: [
+                  EpicPieCheck(
+                    id: 'off_feat_c1',
+                    text:
+                        'Trigger counter -> Follow-up movement bursts cleanly with 0 cooldown wait',
+                  ),
+                ],
+              ),
         mode: archMode,
       ),
     ];

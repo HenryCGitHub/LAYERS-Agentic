@@ -43,6 +43,13 @@ class UnrealContextBuilder {
     ProjectConceptBlueprint rootSpec,
     UnrealArchitectureMode mode,
   ) {
+    final ueVer = rootSpec.ueVersion.trim().isEmpty
+        ? 'UE 5.5'
+        : rootSpec.ueVersion.trim();
+    b.writeln('UE5 Version: $ueVer');
+    if (rootSpec.ueProjectAnchor.trim().isNotEmpty) {
+      b.writeln('Project Base: ${_s(rootSpec.ueProjectAnchor, mode)}');
+    }
     b.writeln('Target Architecture: ${mode.architectureContract}');
     b.writeln('Policy: ${mode.codePolicyContract}');
     b.writeln();
@@ -189,7 +196,7 @@ class UnrealContextBuilder {
       final baseVer = feat.introducedIn.trim().isEmpty
           ? 'v0.1'
           : feat.introducedIn.trim();
-      return '$baseVer ✓ BASELINE';
+      return feat.isPassed ? '$baseVer ✓ BASELINE' : '$baseVer BASELINE (OPEN)';
     }
     if (feat.isPassed) return 'PASSED ✓';
     if (feat.openFixesCount > 0) return '${feat.openFixesCount} FIX';
@@ -204,7 +211,14 @@ class UnrealContextBuilder {
     UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
   }) {
     final b = StringBuffer();
-    b.writeln('# PROJECT GDD · ${rootSpec.normalizedTitle} (${mode.pillLabel})');
+    final ueVer = rootSpec.ueVersion.trim().isEmpty
+        ? 'UE 5.5'
+        : rootSpec.ueVersion.trim();
+    final baseAnchor = _s(rootSpec.ueProjectAnchor, mode);
+    final baseSuffix = baseAnchor.isEmpty ? '' : ' · Base: $baseAnchor';
+    b.writeln(
+      '# PROJECT GDD · ${rootSpec.normalizedTitle} ($ueVer · ${mode.pillLabel})$baseSuffix',
+    );
     b.writeln('Arch: ${mode.architectureContract}');
     b.writeln();
     b.writeln('## §01 Concept & 30s Loop');
@@ -295,6 +309,20 @@ class UnrealContextBuilder {
             b.writeln(
               '  - ${feat.code} · ${feat.title} [$tag] — ${UnrealPromptCompactor.compactProse(feat.goal)}$deltaNote',
             );
+            if (feat.controls.isNotEmpty) {
+              final inputs = [
+                for (final c in feat.controls) '${c.action}(${c.trigger})',
+              ].join(', ');
+              b.writeln('    - Inputs: $inputs');
+            }
+            final effChecks = feat.effectiveChecksForRelease(relVer);
+            if (effChecks.isNotEmpty) {
+              final gates = [
+                for (final chk in effChecks)
+                  '[${chk.passed ? 'x' : ' '}] ${UnrealPromptCompactor.compactProse(chk.text)}',
+              ].join('; ');
+              b.writeln('    - Gate: $gates');
+            }
           }
         }
       }
@@ -355,8 +383,11 @@ class UnrealContextBuilder {
         '# ULTIMATE ENGINE COPILOT — FOCUSED [FIX] PASS · ${cleanFeat.code} · ${cleanFeat.title}',
       );
     } else if (isLockedBaseline) {
+      final baseNote = cleanFeat.isPassed
+          ? 'Shipped in ${cleanFeat.introducedIn}, Viewing $ver'
+          : 'Locked ${cleanFeat.introducedIn} baseline — open in ${cleanFeat.introducedIn}, Viewing $ver';
       b.writeln(
-        '# ULTIMATE ENGINE COPILOT — LOCKED BASELINE REFERENCE · ${cleanFeat.code} · ${cleanFeat.title} (Shipped in ${cleanFeat.introducedIn}, Viewing $ver)',
+        '# ULTIMATE ENGINE COPILOT — LOCKED BASELINE REFERENCE · ${cleanFeat.code} · ${cleanFeat.title} ($baseNote)',
       );
     } else if (isUpgradeDelta) {
       b.writeln(
@@ -367,9 +398,21 @@ class UnrealContextBuilder {
         '# ULTIMATE ENGINE COPILOT — BUILD FEATURE · ${cleanFeat.code} · ${cleanFeat.title} ($ver)',
       );
     }
+    final ueVer = rootSpec.ueVersion.trim().isEmpty
+        ? 'UE 5.5'
+        : rootSpec.ueVersion.trim();
+    final ueAnchor = _s(rootSpec.ueProjectAnchor, mode);
     b.writeln(
       'Project: ${rootSpec.normalizedTitle} | Mode: ${mode.fullLabel} | Release: $ver | Owning Epic: ${cleanEpic.code} (${cleanEpic.title})',
     );
+    b.writeln(
+      'UE5 Version: $ueVer${ueAnchor.isEmpty ? '' : ' | Project Base: $ueAnchor'}',
+    );
+    b.writeln('Camera Contract: ${_s(rootSpec.cameraContract, mode)}');
+    b.writeln('Character Scale: ${_s(rootSpec.characterScale, mode)}');
+    b.writeln('Input Contract: ${_s(rootSpec.inputContract, mode)}');
+    b.writeln('Core Feel: ${rootSpec.selectedCoreFeelOption.label}');
+    b.writeln('Asset Policy: ${_s(rootSpec.assetPolicy, mode)}');
     b.writeln();
     b.writeln('## 1. Parent Epic Architecture Guardrails (Read-Only)');
     _writeEpicOwnershipAndRules(b, cleanEpic, mode);
@@ -390,6 +433,10 @@ class UnrealContextBuilder {
           b.writeln('- [ACTIVE TARGET ->] ${sib.code} · ${sib.title} — ${sib.goal}');
         } else if (sib.isPassedForRelease(ver)) {
           b.writeln('- [PASSED — DO NOT REGRESS] ${sib.code} · ${sib.title}');
+        } else if (sib.isLockedBaselineInRelease(ver)) {
+          b.writeln(
+            '- [LOCKED ${sib.introducedIn} BASELINE (OPEN) — DO NOT BUILD IN $ver] ${sib.code} · ${sib.title}',
+          );
         } else {
           b.writeln('- [QUEUED — DO NOT BUILD YET] ${sib.code} · ${sib.title}');
         }
@@ -480,6 +527,13 @@ class UnrealContextBuilder {
       b.writeln('## Open [FIX] Revisions to Resolve Now');
       for (final fx in openFixes) {
         b.writeln('- [FIX] ${fx.text}');
+        if (fx.errorLog.trim().isNotEmpty) {
+          b.writeln('  ```text');
+          for (final line in fx.errorLog.trim().split('\n')) {
+            b.writeln('  ${_s(line, mode)}');
+          }
+          b.writeln('  ```');
+        }
       }
       b.writeln();
       b.writeln('### CoPilot Execution Instruction');

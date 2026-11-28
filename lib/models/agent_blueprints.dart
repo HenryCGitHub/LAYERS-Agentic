@@ -109,6 +109,8 @@ class ProjectConceptBlueprint {
   List<String> coreLoop;
 
   // §02 Global Unreal Engine 5 Scale & Architecture
+  String ueVersion;
+  String ueProjectAnchor;
   String cameraChoiceId;
   String cameraContract;
   String characterScale;
@@ -141,6 +143,8 @@ class ProjectConceptBlueprint {
     this.sparkPrompt = '',
     this.gameTitle = 'UNTITLED UNREAL PROJECT',
     this.architectureMode = UnrealArchitectureMode.blueprint,
+    this.ueVersion = 'UE 5.5',
+    this.ueProjectAnchor = '',
     String? cameraChoiceId,
     String? cameraContract,
     String? characterScale,
@@ -183,6 +187,13 @@ class ProjectConceptBlueprint {
             v02UpgradesByLineageKey ?? <String, List<EpicUpgradeOption>>{},
         v02NewFeaturesByLineageKey =
             v02NewFeaturesByLineageKey ?? <String, List<FeatureSpec>>{};
+
+  static const List<String> ueVersionOptions = [
+    'UE 5.4',
+    'UE 5.5',
+    'UE 5.6',
+    'UE 5.7',
+  ];
 
   static const List<ConceptSectionOption> defaultCameraOptions = [
     ConceptSectionOption(
@@ -293,6 +304,8 @@ class ProjectConceptBlueprint {
       sparkPrompt: sparkPrompt,
       gameTitle: gameTitle,
       architectureMode: architectureMode,
+      ueVersion: ueVersion,
+      ueProjectAnchor: ueProjectAnchor,
       pitch: pitch,
       coreLoop: List<String>.from(coreLoop),
       cameraChoiceId: cameraChoiceId,
@@ -328,6 +341,9 @@ class ProjectConceptBlueprint {
         'sparkPrompt': sparkPrompt,
         'gameTitle': gameTitle,
         'architectureMode': architectureMode.id,
+        'ueVersion': ueVersion,
+        if (ueProjectAnchor.trim().isNotEmpty)
+          'ueProjectAnchor': ueProjectAnchor,
         'pitch': pitch,
         'coreLoop': coreLoop,
         'cameraChoiceId': cameraChoiceId,
@@ -458,6 +474,8 @@ class ProjectConceptBlueprint {
           .toString(),
     );
 
+    final rawUeVer = (json['ueVersion'] ?? 'UE 5.5').toString().trim();
+
     return ProjectConceptBlueprint(
       sparkPrompt: (json['sparkPrompt'] ?? json['prompt'] ?? '').toString(),
       gameTitle: (json['gameTitle'] ??
@@ -467,6 +485,8 @@ class ProjectConceptBlueprint {
           .toString()
           .trim(),
       architectureMode: archMode,
+      ueVersion: rawUeVer.isEmpty ? 'UE 5.5' : rawUeVer,
+      ueProjectAnchor: (json['ueProjectAnchor'] ?? '').toString().trim(),
       pitch: (json['pitch'] ?? json['goal'] ?? '').toString().trim(),
       coreLoop: loop,
       cameraChoiceId: (json['cameraChoiceId'] ?? 'isometric').toString().trim(),

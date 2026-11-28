@@ -63,6 +63,11 @@ class WorkbenchShell extends StatelessWidget {
     final isDark = workbench.isDark;
     final textPrimary = AppTheme.textPrimaryFor(isDark);
     final textSecondary = AppTheme.textSecondaryFor(isDark);
+    final suppressDuplicateStage1OfflineBanner =
+        (workbench.activeDocPage == WorkbenchDocPage.newGameIdea ||
+                workbench.activeDocPage == WorkbenchDocPage.projectBrief) &&
+            workbench.stage1InlineError != null &&
+            workbench.offlineErrorMessage == workbench.stage1InlineError;
 
     return Scaffold(
       backgroundColor: AppTheme.bgCanvasFor(isDark),
@@ -71,7 +76,7 @@ class WorkbenchShell extends StatelessWidget {
         children: [
           Column(
             children: [
-              if (workbench.isOffline)
+              if (workbench.isOffline && !suppressDuplicateStage1OfflineBanner)
                 Container(
                   key: const ValueKey('global_offline_banner'),
                   width: double.infinity,

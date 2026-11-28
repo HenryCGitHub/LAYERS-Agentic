@@ -414,12 +414,54 @@ CONSTRAINTS:
     required int round,
   }) {
     final lower = rawSpark.toLowerCase();
-    final steerLower = steerNote.toLowerCase();
-    final isCoop = steerLower.contains('co-op') || steerLower.contains('coop');
-    final steerTag = steerNote.trim().isEmpty
-        ? ''
-        : ' (${UnrealSpecGuard.sanitizeLine(steerNote, mode: mode)})';
+    final combinedLower = '$rawSpark ${steerHistory.join(' ')} $steerNote'.toLowerCase();
+    final isCoop = combinedLower.contains('co-op') || combinedLower.contains('coop');
+    final isFpsExplicit = combinedLower.contains('first-person') ||
+        combinedLower.contains('first person') ||
+        RegExp(r'\bfps\b').hasMatch(combinedLower);
+    final isTopDownExplicit = !isFpsExplicit &&
+        (combinedLower.contains('top-down') ||
+            combinedLower.contains('top down'));
+    final isSideExplicit = !isFpsExplicit &&
+        !isTopDownExplicit &&
+        (combinedLower.contains('side-scroller') ||
+            combinedLower.contains('side scroller'));
+    final isTpsExplicit = !isFpsExplicit &&
+        !isTopDownExplicit &&
+        !isSideExplicit &&
+        (combinedLower.contains('third-person') ||
+            combinedLower.contains('third person') ||
+            RegExp(r'\btps\b').hasMatch(combinedLower));
+
+    final explicitCam = isFpsExplicit
+        ? (hint: 'First-Person Direct', viewId: 'fps')
+        : (isTopDownExplicit
+              ? (hint: 'Top-Down View', viewId: 'topdown')
+              : (isSideExplicit
+                    ? (hint: 'Side-View Follow', viewId: 'sidescroller')
+                    : (isTpsExplicit
+                          ? (hint: 'Third-Person Pursuit', viewId: 'tps')
+                          : null)));
+
+    final timerMatch = RegExp(
+      r'(\d{2,3})\s*(?:-|\s)*(?:second|seconds|sec|s)\b',
+      caseSensitive: false,
+    ).firstMatch('$rawSpark $steerNote');
+    final timerLabel = timerMatch != null ? '${timerMatch.group(1)}s' : '60s';
+
+    final cleanSteer = UnrealSpecGuard.sanitizeLine(
+      steerNote,
+      mode: mode,
+    ).trim().replaceFirst(RegExp(r'\.+$'), '');
+    final steerSuffix =
+        cleanSteer.isEmpty ? '' : ' Focus: $cleanSteer';
     final passTag = reroll && round > 1 ? ' v$round' : '';
+
+    String camHintFor(String fallbackHint) =>
+        explicitCam?.hint ?? fallbackHint;
+    String viewIdFor(String fallbackViewId) =>
+        explicitCam?.viewId ?? fallbackViewId;
+    String withSteer(String basePitch) => '$basePitch$steerSuffix.';
 
     final List<SparkAngleOption> options;
     if (lower.contains('fish') || lower.contains('boat') || lower.contains('dredge')) {
@@ -428,18 +470,20 @@ CONSTRAINTS:
           id: 'arcade',
           styleTag: 'ARCADE DUEL',
           title: 'Snap-Hook Trawler$passTag',
-          pitch:
-              'Midnight trawler duel — cast jittered lines, win violent reel stamina pulls, and bank 3 catches before storm flood$steerTag.',
-          cameraHint: 'First-Person Boat Deck',
-          viewChoiceId: 'fps',
+          pitch: withSteer(
+            'Midnight trawler duel — cast jittered lines, win violent reel stamina pulls, and bank 3 catches before storm flood',
+          ),
+          cameraHint: camHintFor('First-Person Boat Deck'),
+          viewChoiceId: viewIdFor('fps'),
           sliceHint: '1 Night Shift + 3 Catches',
         ),
         SparkAngleOption(
           id: 'tactical',
           styleTag: 'TACTICAL WATCH',
           title: 'Fog Pier Beacon$passTag',
-          pitch:
-              'Foggy pier watch — balance narrow floodlights against sonar pings so deep threats never breach the dock$steerTag.',
+          pitch: withSteer(
+            'Foggy pier watch — balance narrow floodlights against sonar pings so deep threats never breach the dock',
+          ),
           cameraHint: 'Isometric Foggy Pier',
           viewChoiceId: 'isometric',
           sliceHint: '1 Wooden Pier + 2 Predators',
@@ -448,10 +492,11 @@ CONSTRAINTS:
           id: 'atmospheric',
           styleTag: 'TENSE SHIFT',
           title: 'Cabin Mimic Shift$passTag',
-          pitch:
-              'Quiet single-boat shift — winch up deep catches, check twitching crates under lamp light, and toss mimics overboard$steerTag.',
-          cameraHint: 'First-Person Cabin',
-          viewChoiceId: 'fps',
+          pitch: withSteer(
+            'Quiet single-boat shift — winch up deep catches, check twitching crates under lamp light, and toss mimics overboard',
+          ),
+          cameraHint: camHintFor('First-Person Cabin'),
+          viewChoiceId: viewIdFor('fps'),
           sliceHint: '1 Shift + Specimen Gate',
         ),
       ];
@@ -463,31 +508,36 @@ CONSTRAINTS:
           id: 'arcade',
           styleTag: 'ARCADE FLOW',
           title: 'Skyhook Sling Runner$passTag',
-          pitch:
-              'Rooftop grapple sprint — fire crane tethers, pump winch slings, and flare into wingsuit glides over skyline gaps$steerTag.',
-          cameraHint: 'Third-Person Pursuit',
-          viewChoiceId: 'tps',
+          pitch: withSteer(
+            'Rooftop grapple sprint — fire crane tethers, pump winch slings, and flare into glides over skyline gaps within $timerLabel',
+          ),
+          cameraHint: camHintFor('Third-Person Pursuit'),
+          viewChoiceId: viewIdFor('tps'),
           sliceHint: '1 Rooftop Course + 2 Pads',
         ),
         SparkAngleOption(
           id: 'tactical',
           styleTag: 'PHYSICS RIG',
           title: 'Heavy Cargo Walker$passTag',
-          pitch:
-              'Weighted parcel rig — counterbalance bulky reactor crates across skybridges while venting thruster heat on steep drops$steerTag.',
-          cameraHint: 'Tight Shoulder Aim',
-          viewChoiceId: 'tps',
+          pitch: withSteer(
+            'Weighted parcel rig — counterbalance bulky reactor crates across skybridges while venting thruster heat on steep drops',
+          ),
+          cameraHint: explicitCam != null
+              ? explicitCam.hint
+              : 'Tight Shoulder Aim',
+          viewChoiceId: viewIdFor('tps'),
           sliceHint: '1 Skybridge + Vent Gauge',
         ),
         SparkAngleOption(
           id: 'atmospheric',
           styleTag: 'STORM SHIFT',
           title: 'Cloudline Night Drop$passTag',
-          pitch:
-              'Storm-tier rooftop courier — track sodium tower beacons through crosswind gusts to stamp silent high-altitude drops$steerTag.',
-          cameraHint: 'Third-Person Pursuit',
-          viewChoiceId: 'tps',
-          sliceHint: '60s Wind Corridor Run',
+          pitch: withSteer(
+            'Storm-tier rooftop courier — track sodium tower beacons through crosswind gusts to stamp silent high-altitude drops before $timerLabel',
+          ),
+          cameraHint: camHintFor('Third-Person Pursuit'),
+          viewChoiceId: viewIdFor('tps'),
+          sliceHint: '$timerLabel Wind Corridor Run',
         ),
       ];
     } else if (lower.contains('cozy') ||
@@ -500,30 +550,33 @@ CONSTRAINTS:
           id: 'arcade',
           styleTag: 'ORDER RUSH',
           title: 'Counter Rush Loop$passTag',
-          pitch:
-              'Fast shop-floor sprint — prep stations, dodge clutter, and clear timed counter orders cleanly before dusk bell$steerTag.',
-          cameraHint: 'Isometric Counter View',
-          viewChoiceId: 'isometric',
+          pitch: withSteer(
+            'Fast shop-floor sprint — prep stations, dodge clutter, and clear timed counter orders cleanly before dusk bell',
+          ),
+          cameraHint: camHintFor('Isometric Counter View'),
+          viewChoiceId: viewIdFor('isometric'),
           sliceHint: '1 Station Room + 3 Orders',
         ),
         SparkAngleOption(
           id: 'tactical',
           styleTag: 'SYSTEMIC CRAFT',
           title: 'Tactile Workshop Chain$passTag',
-          pitch:
-              'Compact workbench chain — link resource plots and heat timings into high-yield recipes inside one cozy yard$steerTag.',
-          cameraHint: 'Top-Down Workshop',
-          viewChoiceId: 'topdown',
+          pitch: withSteer(
+            'Compact workbench chain — link resource plots and heat timings into high-yield recipes inside one cozy yard',
+          ),
+          cameraHint: camHintFor('Top-Down Workshop'),
+          viewChoiceId: viewIdFor('topdown'),
           sliceHint: '1 Yard + 3 Combine Recipes',
         ),
         SparkAngleOption(
           id: 'atmospheric',
           styleTag: 'COZY SHIFT',
           title: 'Lantern Porch Oddities$passTag',
-          pitch:
-              'Quiet twilight shop — tend 3 glowing crop beds and craft oddity charms for roaming regulars without a clock$steerTag.',
-          cameraHint: 'Isometric Porch',
-          viewChoiceId: 'isometric',
+          pitch: withSteer(
+            'Quiet twilight shop — tend 3 glowing crop beds and craft oddity charms for roaming regulars without a clock',
+          ),
+          cameraHint: camHintFor('Isometric Porch'),
+          viewChoiceId: viewIdFor('isometric'),
           sliceHint: '1 Quiet Plot + 3 Guests',
         ),
       ];
@@ -535,31 +588,34 @@ CONSTRAINTS:
           id: 'arcade',
           styleTag: 'ARCADE ACTION',
           title: 'High-Tempo Rush$passTag',
-          pitch:
-              '${coopPrefix}Snappy $cleanVerb — instant dash movement, crisp hitstop impacts, and fast arena wave clears$steerTag.',
-          cameraHint: 'Isometric Arena',
-          viewChoiceId: 'isometric',
+          pitch: withSteer(
+            '${coopPrefix}Snappy $cleanVerb — instant dash movement, crisp hitstop impacts, and fast arena wave clears',
+          ),
+          cameraHint: camHintFor('Isometric Arena'),
+          viewChoiceId: viewIdFor('isometric'),
           sliceHint: '1 Greybox Room + 3 Beats',
         ),
         SparkAngleOption(
           id: 'tactical',
           styleTag: 'TACTICAL DEPTH',
           title: 'Committed Risk Duel$passTag',
-          pitch:
-              '${coopPrefix}Deliberate $cleanVerb — read telegraphed threats cleanly and commit limited stamina or ability charges$steerTag.',
-          cameraHint: 'Third-Person Follow',
-          viewChoiceId: 'tps',
+          pitch: withSteer(
+            '${coopPrefix}Deliberate $cleanVerb — read telegraphed threats cleanly and commit limited stamina or ability charges',
+          ),
+          cameraHint: camHintFor('Third-Person Follow'),
+          viewChoiceId: viewIdFor('tps'),
           sliceHint: '1 Encounter + Guard Counter',
         ),
         SparkAngleOption(
           id: 'atmospheric',
           styleTag: 'FOCUSED SHIFT',
           title: 'Tight Room Tension$passTag',
-          pitch:
-              '${coopPrefix}Grounded $cleanVerb — navigate one tight room using diegetic world cues and clean sound reads$steerTag.',
-          cameraHint: 'First-Person Direct',
-          viewChoiceId: 'fps',
-          sliceHint: '1 Room + 60s Survival',
+          pitch: withSteer(
+            '${coopPrefix}Grounded $cleanVerb — navigate one tight room using diegetic world cues and clean sound reads',
+          ),
+          cameraHint: camHintFor('First-Person Direct'),
+          viewChoiceId: viewIdFor('fps'),
+          sliceHint: '1 Room + $timerLabel Survival',
         ),
       ];
     }

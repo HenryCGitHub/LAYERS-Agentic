@@ -42,7 +42,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
       }
     }
     for (final f in visible) {
-      if (!f.isPassedForRelease(ver)) return f.id;
+      if (!f.isResolvedForRelease(ver)) return f.id;
     }
     return visible.first.id;
   }
@@ -68,7 +68,7 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     final hasAnyOpenFixes = spec.openFixes.isNotEmpty ||
         visible.any((f) => f.openFixesCount > 0);
     final allFeaturesPassed = visible.every(
-      (f) => f.isPassedForRelease(releaseVersion),
+      (f) => f.isResolvedForRelease(releaseVersion),
     );
     if (!hasAnyOpenFixes && allFeaturesPassed) {
       spec.lifecycle = EpicLifecycle.stable;
@@ -358,15 +358,31 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
     });
   }
 
-  void flagFeatureFix(String epicId, String featureId, String fixText) {
+  void flagFeatureFix(
+    String epicId,
+    String featureId,
+    String fixText, {
+    String errorLog = '',
+  }) {
     final clean = fixText.trim();
     if (clean.isEmpty) return;
     final mode = unrealArchitectureMode;
+    var cleanLog = errorLog
+        .replaceAll('\r\n', '\n')
+        .split('\n')
+        .map((l) => l.trimRight())
+        .where((l) => l.trim().isNotEmpty)
+        .join('\n')
+        .trim();
+    if (cleanLog.length > 1200) {
+      cleanLog = '${cleanLog.substring(0, 1200)}…';
+    }
     _updateAndPersistFeature(epicId, featureId, (spec, feat, relVer) {
       feat.fixes.add(
         EpicPieFix(
           id: 'fix_${DateTime.now().microsecondsSinceEpoch}',
           text: UnrealSpecGuard.sanitizeLine(clean, mode: mode),
+          errorLog: cleanLog,
           resolved: false,
         ),
       );
@@ -621,10 +637,12 @@ extension WorkbenchReleaseMixin on WorkbenchProvider {
 
     for (int offset = 0; offset < flat.length; offset++) {
       final pair = flat[(startIdx + offset) % flat.length];
-      if (!pair.feat.isPassedForRelease(relVer)) {
+      if (!pair.feat.isResolvedForRelease(relVer)) {
         _selectedEpicId = pair.epicId;
         _expandedEpicIds.add(pair.epicId);
         _selectedFeatureId = pair.feat.id;
+        _lastStage2RefineSummary = null;
+        _stage2RefineError = null;
         _syncActiveProjectMetadata();
         notifyListeners();
         return true;

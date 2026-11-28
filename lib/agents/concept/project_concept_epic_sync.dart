@@ -303,6 +303,129 @@ void syncEpicCameraFramingImpl(
   final isFps = lowerId.contains('fps') || lowerId.contains('first');
   final isSide = lowerId.contains('side');
 
+  final camLabel = draft.effectiveCameraDecisionOptions
+      .firstWhere(
+        (o) => o.id == optionId,
+        orElse: () => ProjectConceptBlueprint.defaultCameraOptions.first,
+      )
+      .label;
+  final rigPhrase = isFps
+      ? 'first-person UCameraComponent'
+      : (isTps
+            ? 'over-shoulder USpringArmComponent rig'
+            : (isSide
+                  ? 'locked side-view USpringArmComponent'
+                  : 'angled USpringArmComponent rig'));
+  final followPhrase = isFps
+      ? 'first-person UCameraComponent look'
+      : (isTps
+            ? 'over-shoulder USpringArmComponent follow'
+            : (isSide
+                  ? 'side-view USpringArmComponent tracking'
+                  : 'USpringArmComponent tracking'));
+
+  final staleCamPipeRx = RegExp(
+    r'\s*\|\s*Camera:\s*[^|\n]+',
+    caseSensitive: false,
+  );
+  draft.pitch = draft.pitch.replaceAll(staleCamPipeRx, '').trim();
+  if (isFps) {
+    draft.pitch = draft.pitch.replaceAll(
+      RegExp(
+        r'\b(?:Third-Person\s+Pursuit|Third-Person|Over-Shoulder)\b',
+        caseSensitive: false,
+      ),
+      'First-Person',
+    );
+  }
+  if (staleCamPipeRx.hasMatch(draft.sparkPrompt)) {
+    draft.sparkPrompt = draft.sparkPrompt.replaceAll(
+      staleCamPipeRx,
+      ' | Camera: $camLabel ($optionId)',
+    );
+  }
+
+  String rewriteGoalCamera(String raw) {
+    var out = raw.trim();
+    if (out.isEmpty) return out;
+    final springGoalRx = RegExp(
+      r'(?:third-person|over-shoulder|follow|locked(?:\s+side-view)?|smooth(?:ed)?|dampened|angled)?\s*USpringArmComponent(?:\s+(?:follow(?:\s+rig)?|framing|rig|tracking|orbit(?:ing)?|camera))?',
+      caseSensitive: false,
+    );
+    final fpsGoalRx = RegExp(
+      r'first-person\s+UCameraComponent(?:\s+(?:look|framing|rig|view))?',
+      caseSensitive: false,
+    );
+    if (springGoalRx.hasMatch(out)) {
+      out = out.replaceAll(springGoalRx, followPhrase);
+    } else if (fpsGoalRx.hasMatch(out)) {
+      out = out.replaceAll(fpsGoalRx, followPhrase);
+    }
+    if (isFps) {
+      out = out.replaceAll(
+        RegExp(r'\b(?:third-person|over-shoulder)\b', caseSensitive: false),
+        'first-person',
+      );
+    } else if (isTps) {
+      out = out.replaceAll(
+        RegExp(r'\bfirst-person\b', caseSensitive: false),
+        'over-shoulder',
+      );
+    }
+    return out.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  }
+
+  String rewriteOwnerRole(String raw) {
+    var out = raw.trim();
+    if (out.isEmpty) return out;
+    if (isFps) {
+      out = out.replaceAll(
+        RegExp(
+          r'USpringArmComponent(?:\s*(?:\+\s*UCameraComponent|\s+(?:follow(?:\s+rig)?|camera(?:\s+rig)?|rig)))?',
+          caseSensitive: false,
+        ),
+        'first-person UCameraComponent',
+      );
+      out = out.replaceAll(
+        RegExp(r'\b(?:third-person|over-shoulder)\b', caseSensitive: false),
+        'first-person',
+      );
+    } else if (RegExp(
+      r'first-person\s+UCameraComponent',
+      caseSensitive: false,
+    ).hasMatch(out)) {
+      out = out.replaceAll(
+        RegExp(r'first-person\s+UCameraComponent', caseSensitive: false),
+        rigPhrase,
+      );
+    } else {
+      out = out.replaceAll(
+        RegExp(
+          r'USpringArmComponent(?:\s+(?:follow(?:\s+rig)?|camera(?:\s+rig)?|rig))?',
+          caseSensitive: false,
+        ),
+        rigPhrase,
+      );
+    }
+    return out.replaceAll(RegExp(r'\s{2,}'), ' ').trim();
+  }
+
+  locoEpic.goal = rewriteGoalCamera(locoEpic.goal);
+  locoEpic.inScope = [for (final s in locoEpic.inScope) rewriteGoalCamera(s)];
+  for (int i = 0; i < locoEpic.sceneOwnership.length; i++) {
+    final own = locoEpic.sceneOwnership[i];
+    locoEpic.sceneOwnership[i] = own.copyWith(
+      role: rewriteOwnerRole(own.role),
+    );
+  }
+  if (locoEpic.features.isNotEmpty) {
+    final firstFeat = locoEpic.features.first;
+    firstFeat.goal = rewriteGoalCamera(firstFeat.goal);
+    firstFeat.inScope = [
+      for (final s in firstFeat.inScope) rewriteGoalCamera(s),
+    ];
+  }
+
   void upsertTailTuning(String key, String value, String unit) {
     if (locoEpic.tuning.isNotEmpty || locoEpic.features.isEmpty) {
       _upsertTuningParam(locoEpic.tuning, key, value, unit);

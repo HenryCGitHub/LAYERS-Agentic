@@ -214,7 +214,7 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
 
     FeatureSpec? nextOpenFeature;
     for (final f in visibleEpicFeatures) {
-      if (!f.isPassedForRelease(relVer)) {
+      if (!f.isResolvedForRelease(relVer)) {
         nextOpenFeature = f;
         break;
       }
@@ -543,6 +543,18 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                                   }
                                 },
                               ),
+                            if (wb.canDeleteFeature(epic, feature))
+                              PlainTextLink(
+                                key: const ValueKey('delete_feature_btn'),
+                                label: 'Delete',
+                                isDark: isDark,
+                                fontSize: 12,
+                                color: muted,
+                                onTap: () {
+                                  FocusManager.instance.primaryFocus?.unfocus();
+                                  wb.deleteUnbuiltFeature(epic.id, feature.id);
+                                },
+                              ),
                           ],
                         ],
                       ],
@@ -563,7 +575,9 @@ class _ReleaseWorkbenchScreenState extends State<ReleaseWorkbenchScreen> {
                           children: [
                             Expanded(
                               child: Text(
-                                '✓ $relVer Complete (${releaseRollup.passed}/${releaseRollup.total} Features Passed)',
+                                releaseRollup.passed < releaseRollup.total
+                                    ? '✓ $relVer Active Features Complete (${releaseRollup.passed}/${releaseRollup.total} Total Passed)'
+                                    : '✓ $relVer Complete (${releaseRollup.passed}/${releaseRollup.total} Features Passed)',
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w600,

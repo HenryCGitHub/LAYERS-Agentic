@@ -2564,5 +2564,294 @@ void main() {
         }
       },
     );
+
+    test(
+      '24. Simulation #2 P1/P2 fixes: honest v0.2 baseline rollups/GDD, FPS Camera Fork sync, New Feature rename propagation, and non-combat offline synthesis',
+      () async {
+        // 1) Offline rooftop courier synthesis respects FPS + 90s + clean title + non-combat v0.2
+        const courierSpark =
+            'First-person UE5 rooftop parcel courier game where you sprint, wall-run, grapple-swing across rain-slick rooftops, and land intact parcel drops before a 90-second timer expires';
+        final anglesOutcome = await SparkAngleAgent.proposeAngles(
+          rawSpark: courierSpark,
+          apiKey: '',
+        );
+        expect(anglesOutcome.deck, isNotNull);
+        expect(
+          anglesOutcome.deck!.angles.every((a) => a.viewChoiceId == 'fps'),
+          isTrue,
+        );
+        expect(
+          anglesOutcome.deck!.angles.last.sliceHint,
+          contains('90s'),
+        );
+
+        final courierSpec = await ProjectConceptAgent.draftSpecFromSpark(
+          sparkPrompt: anglesOutcome.deck!.buildSelectedHandoffPrompt(),
+          apiKey: '',
+        );
+        expect(courierSpec.normalizedTitle, isNot(startsWith('FIRST PERSON')));
+        expect(courierSpec.cameraChoiceId, equals('fps'));
+        expect(courierSpec.pitch, isNot(contains('| Camera:')));
+        expect(
+          courierSpec.initialEpics.first.goal.toLowerCase(),
+          isNot(contains('uspringarmcomponent')),
+        );
+        expect(
+          courierSpec.initialEpics.first.sceneOwnership.any(
+            (s) => s.role.toLowerCase().contains('uspringarmcomponent'),
+          ),
+          isFalse,
+        );
+
+        final v02Proposal = await ReleasePlannerAgent.proposeNextReleaseCopilot(
+          rootSpec: courierSpec,
+          currentEpics: courierSpec.initialEpics,
+          targetVersion: 'v0.2',
+          apiKey: '',
+        );
+        final v02Ups = v02Proposal.upgradesByLineageKey.values
+            .expand((l) => l)
+            .toList();
+        final v02NewFeats = v02Proposal.candidateNewFeaturesByLineageKey.values
+            .expand((l) => l)
+            .toList();
+        expect(
+          v02Ups.any((u) => u.text.contains('Hit-Stop')),
+          isFalse,
+        );
+        expect(
+          v02NewFeats.first.title,
+          equals('Momentum Vault & Quick Recover'),
+        );
+        expect(
+          v02NewFeats.first.goal.toLowerCase(),
+          isNot(contains('counters')),
+        );
+
+        // 2) Switching Camera Fork to FPS clears stale Third-Person / USpringArmComponent across E01, F01, pitch & v0.1 goal
+        final wbCam = WorkbenchProvider(enableAutoLoad: false);
+        wbCam.loadPresetSpark('shellbreaker');
+        wbCam.conceptDraft!.pitch =
+            'ROOFTOP RUN — Third-Person sprint | Camera: Third-Person Pursuit (tps)';
+        wbCam.selectCameraDecisionOption('fps');
+        final fpsE01 = wbCam.conceptDraft!.initialEpics.first;
+        expect(wbCam.conceptDraft!.pitch, isNot(contains('| Camera:')));
+        expect(wbCam.conceptDraft!.pitch, isNot(contains('Third-Person')));
+        expect(fpsE01.goal.toLowerCase(), isNot(contains('uspringarmcomponent')));
+        expect(
+          fpsE01.sceneOwnership.any(
+            (s) => s.role.toLowerCase().contains('uspringarmcomponent'),
+          ),
+          isFalse,
+        );
+        expect(
+          fpsE01.features.first.goal.toLowerCase(),
+          isNot(contains('uspringarmcomponent')),
+        );
+        wbCam.approveRootSpecAndLaunchWorkbench();
+        expect(
+          wbCam.activeRelease!.sections['goal'] ?? '',
+          isNot(contains('Third-Person')),
+        );
+        wbCam.dispose();
+
+        // 3) Quick-add New Feature rename updates starter inScope, doneWhen, checks & controls
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.approveRootSpecAndLaunchWorkbench();
+        final quickCreated = wb.quickAddSliceToActiveRelease()!;
+        wb.updateFeatureScope(
+          wb.selectedEpicId!,
+          quickCreated.id,
+          title: 'Storm Wind Gust Recovery',
+        );
+        final renamed = wb.selectedFeatureSpec!;
+        expect(renamed.title, equals('Storm Wind Gust Recovery'));
+        expect(renamed.inScope.join(' '), isNot(contains('New Feature')));
+        expect(renamed.doneWhen.join(' '), contains('Storm Wind Gust Recovery'));
+        expect(renamed.checks.first.text, contains('Storm Wind Gust Recovery'));
+        expect(renamed.controls.first.rule, contains('Storm Wind Gust Recovery'));
+
+        // 4) Passing only F01 in v0.1 and committing v0.2 does NOT count unpassed locked F02..F06 as passed
+        final e01 = wb.activeReleaseEpics.first;
+        final f01 = e01.features.firstWhere((f) => f.code == 'F01');
+        for (final chk in f01.checks) {
+          wb.toggleFeatureCheck(e01.id, f01.id, chk.id, true);
+        }
+        wb.passFeature(e01.id, f01.id);
+
+        await wb.openProgressiveReleaseCopilot();
+        wb.commitProgressiveReleaseDraft();
+        expect(wb.activeReleaseVersionTag, equals('v0.2'));
+
+        final v02Rollup = wb.activeReleaseFeatureRollup;
+        expect(v02Rollup.passed, equals(1));
+        expect(v02Rollup.total, greaterThan(6));
+
+        final gdd = wb.buildCoPilotGddExport().content;
+        expect(gdd, contains('[v0.1 ✓ BASELINE]'));
+        expect(gdd, contains('[v0.1 BASELINE (OPEN)]'));
+
+        final v02E01 = wb.activeReleaseEpics.first;
+        final lockedOpenF07 =
+            v02E01.features.firstWhere((f) => f.code == 'F07');
+        final activeV02Feat = wb.activeReleaseEpics.last.features.first;
+        final v02Readable = UnrealContextBuilder.buildCoPilotFeaturePrompt(
+          rootSpec: wb.conceptDraft!,
+          epic: v02E01,
+          feature: lockedOpenF07,
+          releaseVersion: 'v0.2',
+          releaseOrder: wb.projectReleaseOrder,
+          compact: false,
+        );
+        expect(
+          v02Readable,
+          contains('Locked v0.1 baseline — open in v0.1, Viewing v0.2'),
+        );
+        expect(
+          v02Readable,
+          isNot(contains('Shipped in v0.1, Viewing v0.2')),
+        );
+        final compactWithKeep = UnrealPromptCompactor.buildCompactFeaturePrompt(
+          rootSpec: wb.conceptDraft!,
+          epic: v02E01,
+          feature: v02E01.features.last,
+          releaseVersion: 'v0.2',
+          releaseOrder: wb.projectReleaseOrder,
+        );
+        expect(compactWithKeep, contains('KEEP=[F01]'));
+        expect(compactWithKeep, isNot(contains('KEEP=[F01,F02')));
+        expect(activeV02Feat.code, isNotEmpty);
+
+        wb.dispose();
+      },
+    );
+
+    test(
+      '25. Core loop upgrades: guarded Feature delete + Undo, UE5 Version & Project Base serialization/prompts, pasteable [FIX] logs, and enriched GDD',
+      () async {
+        final wb = WorkbenchProvider(enableAutoLoad: false);
+        wb.loadPresetSpark('shellbreaker');
+        wb.updateRootSpecSections(
+          ueVersion: 'UE 5.6',
+          ueProjectAnchor: 'Module: SkyhookGame · Extends BP_ThirdPersonCharacter',
+        );
+
+        // UE5 anchor round-trips cleanly via JSON & deepCopy
+        final clonedRoot = ProjectConceptBlueprint.fromJson(
+          wb.conceptDraft!.toJson(),
+        );
+        expect(clonedRoot.ueVersion, equals('UE 5.6'));
+        expect(
+          clonedRoot.ueProjectAnchor,
+          equals('Module: SkyhookGame · Extends BP_ThirdPersonCharacter'),
+        );
+        final legacyRoot = ProjectConceptBlueprint.fromJson(<String, dynamic>{
+          'gameTitle': 'LEGACY TEST',
+        });
+        expect(legacyRoot.ueVersion, equals('UE 5.5'));
+        expect(legacyRoot.ueProjectAnchor, isEmpty);
+
+        wb.approveRootSpecAndLaunchWorkbench();
+        final e01 = wb.activeReleaseEpics.first;
+        final passedF01 = e01.features.firstWhere((f) => f.code == 'F01');
+        final openF02 = e01.features.firstWhere((f) => f.code == 'F02');
+
+        // 1) Guarded delete blocks passed Features & sole remaining Features, allows unbuilt extra Features with Undo
+        expect(wb.canDeleteFeature(e01, passedF01), isFalse);
+        expect(wb.deleteUnbuiltFeature(e01.id, passedF01.id), isFalse);
+
+        final singleEpic = wb.addEpicToActiveRelease(
+          title: 'Single Arena Telemetry',
+          goal: 'Track single greybox run time.',
+        )!;
+        expect(
+          wb.canDeleteFeature(singleEpic, singleEpic.features.single),
+          isFalse,
+        );
+        expect(
+          wb.deleteUnbuiltFeature(singleEpic.id, singleEpic.features.single.id),
+          isFalse,
+        );
+
+        final quickAdded = wb.quickAddSliceToActiveRelease(epicId: e01.id)!;
+        final e01WithExtra =
+            wb.activeReleaseEpics.firstWhere((e) => e.id == e01.id);
+        final countBeforeDelete = e01WithExtra.features.length;
+        expect(wb.canDeleteFeature(e01WithExtra, quickAdded), isTrue);
+        expect(wb.deleteUnbuiltFeature(e01.id, quickAdded.id), isTrue);
+        expect(
+          wb.activeReleaseEpics
+              .firstWhere((e) => e.id == e01.id)
+              .features
+              .length,
+          equals(countBeforeDelete - 1),
+        );
+        expect(wb.selectedFeatureId, isNot(equals(quickAdded.id)));
+        expect(wb.undoStage2Edit(), isTrue);
+        expect(
+          wb.activeReleaseEpics
+              .firstWhere((e) => e.id == e01.id)
+              .features
+              .length,
+          equals(countBeforeDelete),
+        );
+        // Clean up quickAdded before v0.2 check
+        wb.deleteUnbuiltFeature(e01.id, quickAdded.id);
+
+        // 2) Pasteable multi-line UE5 error log on [FIX] + self-contained @PROJECT & enriched GDD
+        wb.flagFeatureFix(
+          e01.id,
+          openF02.id,
+          'Dash overlap hits null collider',
+          errorLog:
+              'LogBlueprintUserMessages: Error: Accessed None trying to read property DashHitbox\nEnsure condition failed: DashHitbox != nullptr',
+        );
+        final e01Fixed = wb.activeReleaseEpics.first;
+        final fixedF02 = e01Fixed.features.firstWhere((f) => f.id == openF02.id);
+        final fixRoundTrip = EpicPieFix.fromJson(fixedF02.fixes.first.toJson());
+        expect(
+          fixRoundTrip.errorLog,
+          contains('Accessed None trying to read property DashHitbox'),
+        );
+
+        final compactFixPrompt = wb.activeFeatureBuildPrompt(e01Fixed, fixedF02);
+        expect(compactFixPrompt, contains('UE=UE 5.6'));
+        expect(compactFixPrompt, contains('BASE=Module: SkyhookGame'));
+        expect(compactFixPrompt, contains('SCALE='));
+        expect(compactFixPrompt, contains('FEEL='));
+        expect(compactFixPrompt, contains('ASSETS='));
+        expect(compactFixPrompt, contains('@LOG:'));
+        expect(
+          compactFixPrompt,
+          contains('Accessed None trying to read property DashHitbox'),
+        );
+
+        final readableFixPrompt =
+            wb.activeFeatureReadablePrompt(e01Fixed, fixedF02);
+        expect(readableFixPrompt, contains('```text'));
+        expect(
+          readableFixPrompt,
+          contains('Ensure condition failed: DashHitbox != nullptr'),
+        );
+
+        final gdd = wb.buildCoPilotGddExport().content;
+        expect(gdd, contains('UE 5.6'));
+        expect(gdd, contains('Base: Module: SkyhookGame'));
+        expect(gdd, contains('- Inputs:'));
+        expect(gdd, contains('- Gate:'));
+        expect(compactFixPrompt, contains('@VARS'));
+
+        // 3) Locked v0.1 baselines cannot be deleted from v0.2
+        await wb.openProgressiveReleaseCopilot();
+        wb.commitProgressiveReleaseDraft();
+        final v02E02 = wb.activeReleaseEpics[1];
+        final lockedV01Feat = v02E02.features.first;
+        expect(wb.canDeleteFeature(v02E02, lockedV01Feat), isFalse);
+        expect(wb.deleteUnbuiltFeature(v02E02.id, lockedV01Feat.id), isFalse);
+
+        wb.dispose();
+      },
+    );
   });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../models/epic_spec.dart';
 import '../../theme/app_theme.dart';
 
 /// Shared inline editor box for Epic `§01` and Feature `§01` Scope contracts.
@@ -561,6 +562,139 @@ class _InlineSingleLineAdderBoxState extends State<InlineSingleLineAdderBox> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Renders open `[FIX]` notes and optional pasted UE5 error logs on Stage 2 Feature sheets.
+class FeatureOpenFixesList extends StatelessWidget {
+  final List<EpicPieFix> openFixes;
+  final bool isLockedBaseline;
+  final bool isDark;
+  final void Function(String fixId) onResolve;
+  final void Function(String fixId) onDelete;
+
+  const FeatureOpenFixesList({
+    super.key,
+    required this.openFixes,
+    required this.isLockedBaseline,
+    required this.isDark,
+    required this.onResolve,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final border = AppTheme.borderFor(isDark);
+    final primary = AppTheme.textPrimaryFor(isDark);
+    final secondary = AppTheme.textSecondaryFor(isDark);
+    final muted = AppTheme.textMutedFor(isDark);
+    final green = AppTheme.accentGreenFor(isDark);
+    final red = AppTheme.accentRedFor(isDark);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (int i = 0; i < openFixes.length; i++)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            decoration: BoxDecoration(
+              border: Border(bottom: BorderSide(color: border, width: 1)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '[FIX]',
+                  style: GoogleFonts.jetBrainsMono(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: red,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        openFixes[i].text,
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          color: primary,
+                          height: 1.4,
+                        ),
+                      ),
+                      if (openFixes[i].errorLog.trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              left: BorderSide(
+                                color: red.withValues(alpha: 0.6),
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          child: Text(
+                            openFixes[i].errorLog.trim(),
+                            maxLines: 4,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.jetBrainsMono(
+                              fontSize: 11.5,
+                              color: secondary,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (!isLockedBaseline) ...[
+                  const SizedBox(width: 8),
+                  InkWell(
+                    key: ValueKey('resolve_fix_${openFixes[i].id}'),
+                    onTap: () => onResolve(openFixes[i].id),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        'Resolve',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: green,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  InkWell(
+                    onTap: () => onDelete(openFixes[i].id),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      child: Text(
+                        '×',
+                        style: TextStyle(fontSize: 15, color: muted),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

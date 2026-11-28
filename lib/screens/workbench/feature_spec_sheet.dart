@@ -37,8 +37,10 @@ class FeatureSpecSheet extends StatefulWidget {
 
 class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
   final TextEditingController _fixInputController = TextEditingController();
+  final TextEditingController _fixLogController = TextEditingController();
 
   bool _editingScope = false;
+  bool _showFixLogInput = false;
   bool _showControlForm = false;
   int? _editingControlIndex;
   bool _addingTuning = false;
@@ -50,7 +52,9 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectionKey != widget.selectionKey) {
       _fixInputController.clear();
+      _fixLogController.clear();
       _editingScope = false;
+      _showFixLogInput = false;
       _showControlForm = false;
       _editingControlIndex = null;
       _addingTuning = false;
@@ -62,6 +66,7 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
   @override
   void dispose() {
     _fixInputController.dispose();
+    _fixLogController.dispose();
     super.dispose();
   }
 
@@ -95,75 +100,13 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
             isDark: isDark,
             code: 'FIX',
             title: 'Fixes (${openFixes.length})',
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                for (int i = 0; i < openFixes.length; i++)
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: border, width: 1),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '[FIX]',
-                          style: GoogleFonts.jetBrainsMono(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: red,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            openFixes[i].text,
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              color: primary,
-                              height: 1.4,
-                            ),
-                          ),
-                        ),
-                        if (!isLockedBaseline) ...[
-                          const SizedBox(width: 8),
-                          PlainTextLink(
-                            key: ValueKey('resolve_fix_${openFixes[i].id}'),
-                            label: 'Resolve',
-                            isDark: isDark,
-                            color: green,
-                            onTap: () => wb.resolveFeatureFix(
-                              epic.id,
-                              feat.id,
-                              openFixes[i].id,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          InkWell(
-                            onTap: () => wb.deleteFeatureFix(
-                              epic.id,
-                              feat.id,
-                              openFixes[i].id,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 2,
-                              ),
-                              child: Text(
-                                '×',
-                                style: TextStyle(fontSize: 15, color: muted),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-              ],
+            child: FeatureOpenFixesList(
+              openFixes: openFixes,
+              isLockedBaseline: isLockedBaseline,
+              isDark: isDark,
+              onResolve: (fixId) =>
+                  wb.resolveFeatureFix(epic.id, feat.id, fixId),
+              onDelete: (fixId) => wb.deleteFeatureFix(epic.id, feat.id, fixId),
             ),
           ),
 
@@ -173,15 +116,15 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
           code: 'PIE',
           title:
               'Playtest (${feat.passedChecksCountForRelease(relVer)}/${effectiveChecks.length})',
-          trailing: isLockedBaseline
+          trailing: (isLockedBaseline || _addingCheck)
               ? null
               : PlainTextLink(
                   key: const ValueKey('feature_add_check_btn'),
-                  label: _addingCheck ? 'Cancel' : '+ Add check',
+                  label: '+ Add check',
                   isDark: isDark,
                   fontSize: 11.5,
-                  color: _addingCheck ? muted : focal,
-                  onTap: () => setState(() => _addingCheck = !_addingCheck),
+                  color: focal,
+                  onTap: () => setState(() => _addingCheck = true),
                 ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -294,6 +237,16 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                             _submitFlagFix(wb, epic.id, feat.id),
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    PlainTextLink(
+                      key: const ValueKey('toggle_fix_log_btn'),
+                      label: _showFixLogInput ? 'Hide log' : '+ Paste log',
+                      isDark: isDark,
+                      fontSize: 11.5,
+                      color: _showFixLogInput ? muted : secondary,
+                      onTap: () =>
+                          setState(() => _showFixLogInput = !_showFixLogInput),
+                    ),
                     const SizedBox(width: 10),
                     PlainPrimaryButton(
                       key: const ValueKey('flag_fix_btn'),
@@ -305,6 +258,32 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
                     ),
                   ],
                 ),
+                if (_showFixLogInput) ...[
+                  const SizedBox(height: 8),
+                  TextField(
+                    key: const ValueKey('flag_fix_log_input'),
+                    controller: _fixLogController,
+                    minLines: 2,
+                    maxLines: 5,
+                    style: GoogleFonts.jetBrainsMono(
+                      fontSize: 12,
+                      color: primary,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      hintText:
+                          'Paste UE5 Output Log, Blueprint compile error, or C++ build error (optional)...',
+                      hintStyle: TextStyle(fontSize: 11.5, color: muted),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      border: UnderlineInputBorder(
+                        borderSide: BorderSide(color: border),
+                      ),
+                      focusedBorder: UnderlineInputBorder(
+                        borderSide: BorderSide(color: red),
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ],
           ),
@@ -434,17 +413,17 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
           isDark: isDark,
           code: '§02',
           title: 'Controls',
-          trailing: isLockedBaseline
+          trailing: (isLockedBaseline || _showControlForm)
               ? null
               : PlainTextLink(
                   key: const ValueKey('feature_add_control_btn'),
-                  label: _showControlForm ? 'Cancel' : '+ Add input',
+                  label: '+ Add input',
                   isDark: isDark,
                   fontSize: 11.5,
-                  color: _showControlForm ? muted : focal,
+                  color: focal,
                   onTap: () {
                     setState(() {
-                      _showControlForm = !_showControlForm;
+                      _showControlForm = true;
                       _editingControlIndex = null;
                     });
                   },
@@ -593,15 +572,15 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
           isDark: isDark,
           code: '§03',
           title: 'Tuning · ${target.tuningColumnLabel}',
-          trailing: isLockedBaseline
+          trailing: (isLockedBaseline || _addingTuning)
               ? null
               : PlainTextLink(
                   key: const ValueKey('feature_add_tuning_btn'),
-                  label: _addingTuning ? 'Cancel' : '+ Add var',
+                  label: '+ Add var',
                   isDark: isDark,
                   fontSize: 11.5,
-                  color: _addingTuning ? muted : focal,
-                  onTap: () => setState(() => _addingTuning = !_addingTuning),
+                  color: focal,
+                  onTap: () => setState(() => _addingTuning = true),
                 ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -736,15 +715,15 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
           isDark: isDark,
           code: '§04',
           title: 'Cues (VFX, SFX & HUD)',
-          trailing: isLockedBaseline
+          trailing: (isLockedBaseline || _addingCue)
               ? null
               : PlainTextLink(
                   key: const ValueKey('feature_add_cue_btn'),
-                  label: _addingCue ? 'Cancel' : '+ Add cue',
+                  label: '+ Add cue',
                   isDark: isDark,
                   fontSize: 11.5,
-                  color: _addingCue ? muted : focal,
-                  onTap: () => setState(() => _addingCue = !_addingCue),
+                  color: focal,
+                  onTap: () => setState(() => _addingCue = true),
                 ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -818,8 +797,13 @@ class _FeatureSpecSheetState extends State<FeatureSpecSheet> {
   ) {
     final text = _fixInputController.text.trim();
     if (text.isEmpty) return;
+    final logText = _fixLogController.text.trim();
     _fixInputController.clear();
-    wb.flagFeatureFix(epicId, featureId, text);
+    _fixLogController.clear();
+    if (_showFixLogInput) {
+      setState(() => _showFixLogInput = false);
+    }
+    wb.flagFeatureFix(epicId, featureId, text, errorLog: logText);
   }
 }
 

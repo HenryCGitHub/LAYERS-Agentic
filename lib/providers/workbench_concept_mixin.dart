@@ -582,6 +582,8 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
   void updateRootSpecSections({
     String? gameTitle,
     String? pitch,
+    String? ueVersion,
+    String? ueProjectAnchor,
     String? cameraContract,
     String? characterScale,
     String? inputContract,
@@ -604,6 +606,15 @@ extension WorkbenchConceptMixin on WorkbenchProvider {
     if (pitch != null && pitch.trim().isNotEmpty) {
       draft.pitch = UnrealSpecGuard.sanitizeLine(pitch, mode: mode);
       changed.add('s01');
+    }
+    if (ueVersion != null && ueVersion.trim().isNotEmpty) {
+      draft.ueVersion = ueVersion.trim();
+      changed.add('s02');
+    }
+    if (ueProjectAnchor != null) {
+      draft.ueProjectAnchor =
+          UnrealSpecGuard.sanitizeLine(ueProjectAnchor, mode: mode);
+      changed.add('s02');
     }
     if (cameraContract != null) {
       draft.cameraContract =

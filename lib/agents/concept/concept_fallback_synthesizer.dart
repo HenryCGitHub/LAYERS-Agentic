@@ -93,18 +93,63 @@ ProjectConceptBlueprint buildSynthesizedFallback(
           ? 'physics'
           : 'snappy';
 
-  final titleWords = cleaned
+  final sparkCore = cleaned
+      .replaceAll(
+        RegExp(
+          r'\s*\|\s*(?:Camera|Target v0\.1[^:]*|Mode|Steers):.*$',
+          caseSensitive: false,
+        ),
+        '',
+      )
+      .trim();
+  const titleStopWords = <String>{
+    'first',
+    'person',
+    'third',
+    'top',
+    'down',
+    'side',
+    'scroller',
+    'isometric',
+    'ue5',
+    'unreal',
+    'engine',
+    'game',
+    'where',
+    'you',
+    'the',
+    'and',
+    'for',
+    'with',
+    'into',
+    'before',
+    'from',
+    'that',
+    'this',
+    'your',
+    'build',
+    'make',
+    'create',
+    'prototype',
+  };
+  final rawWords = (sparkCore.isEmpty ? cleaned : sparkCore)
       .replaceAll(RegExp(r'[^A-Za-z0-9\s]'), ' ')
       .split(RegExp(r'\s+'))
       .where((w) => w.length >= 3)
+      .toList();
+  final meaningfulWords = rawWords
+      .where((w) => !titleStopWords.contains(w.toLowerCase()))
       .take(2)
       .map((w) => w.toUpperCase())
       .toList();
+  final titleWords = meaningfulWords.isNotEmpty
+      ? meaningfulWords
+      : rawWords.take(2).map((w) => w.toUpperCase()).toList();
   final title =
       titleWords.isEmpty ? 'PROTOTYPE ZERO' : titleWords.join(' ');
-  final rawShortSpark = cleaned.isEmpty
+  final rawShortSpark = sparkCore.isEmpty
       ? 'Focused Unreal Engine 5 vertical prototype testing core player movement and primary interaction'
-      : cleaned;
+      : sparkCore;
   final shortSpark = UnrealSpecGuard.sanitizeLine(
     rawShortSpark,
     mode: archMode,
@@ -611,8 +656,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
         releaseVersion: 'v0.1',
         lifecycle: EpicLifecycle.active,
         coreLoopBeat: 'Beat 1 · ${loop[0]}',
-        goal:
-            'Own responsive ACharacter run/jump physics with coyote time and smooth USpringArmComponent follow.',
+        goal: cameraChoice == 'fps'
+            ? 'Own responsive ACharacter run/jump physics with coyote time and first-person UCameraComponent look.'
+            : 'Own responsive ACharacter run/jump physics with coyote time and smooth USpringArmComponent follow.',
         inScope: const [
           'Run speed 620 cm/s + crisp jump arc across obstacle platforms',
           '500 cm air dash burst resetting on landing',
@@ -627,7 +673,9 @@ ProjectConceptBlueprint buildSynthesizedFallback(
           ),
           EpicSceneOwnership(
             path: _ownerAsset('RunnerCharacter', archMode),
-            role: 'ACharacter + coyote jump buffer + USpringArmComponent follow rig',
+            role: cameraChoice == 'fps'
+                ? 'ACharacter + coyote jump buffer + first-person UCameraComponent'
+                : 'ACharacter + coyote jump buffer + USpringArmComponent follow rig',
           ),
         ],
         outOfScope: const ['No wall-climb stamina bars or weapon combat'],

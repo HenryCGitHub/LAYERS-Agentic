@@ -142,12 +142,14 @@ class EpicPieCheck {
 class EpicPieFix {
   String id;
   String text;
+  String errorLog;
   bool resolved;
   int createdAtMs;
 
   EpicPieFix({
     required this.id,
     required this.text,
+    this.errorLog = '',
     this.resolved = false,
     int? createdAtMs,
   }) : createdAtMs = createdAtMs ?? DateTime.now().millisecondsSinceEpoch;
@@ -155,12 +157,14 @@ class EpicPieFix {
   EpicPieFix copyWith({
     String? id,
     String? text,
+    String? errorLog,
     bool? resolved,
     int? createdAtMs,
   }) {
     return EpicPieFix(
       id: id ?? this.id,
       text: text ?? this.text,
+      errorLog: errorLog ?? this.errorLog,
       resolved: resolved ?? this.resolved,
       createdAtMs: createdAtMs ?? this.createdAtMs,
     );
@@ -169,6 +173,7 @@ class EpicPieFix {
   Map<String, dynamic> toJson() => <String, dynamic>{
         'id': id,
         'text': text,
+        if (errorLog.trim().isNotEmpty) 'errorLog': errorLog,
         'resolved': resolved,
         'createdAtMs': createdAtMs,
       };
@@ -177,7 +182,8 @@ class EpicPieFix {
     return EpicPieFix(
       id: (json['id'] ?? 'fix_${idx + 1}').toString(),
       text: (json['text'] ?? '').toString().trim(),
-      resolved: json['resolved'] == true,
+      errorLog: (json['errorLog'] ?? '').toString().trim(),
+      resolved: json['passed'] == true || json['resolved'] == true,
       createdAtMs: (json['createdAtMs'] is num)
           ? (json['createdAtMs'] as num).toInt()
           : int.tryParse((json['createdAtMs'] ?? '').toString()) ?? 0,
@@ -324,7 +330,11 @@ class FeatureSpec {
   bool get isPassed =>
       status == FeatureStatus.passed && openFixes.isEmpty;
 
-  bool isPassedForRelease(String releaseVersion) =>
+  /// Whether [FeatureSpec] has actually passed PIE (never auto-true just for being locked).
+  bool isPassedForRelease(String releaseVersion) => isPassed;
+
+  /// Whether [FeatureSpec] is either passed or a locked baseline carried forward cleanly.
+  bool isResolvedForRelease(String releaseVersion) =>
       isLockedBaselineInRelease(releaseVersion) || isPassed;
 
   String get executionModeLabel => openFixesCount > 0
@@ -618,7 +628,7 @@ class EpicSpec {
     if (features.isNotEmpty) {
       final visible = featuresForRelease(releaseVersion);
       return visible.isNotEmpty &&
-          visible.every((f) => f.isPassedForRelease(releaseVersion));
+          visible.every((f) => f.isResolvedForRelease(releaseVersion));
     }
     return false;
   }
@@ -650,7 +660,7 @@ class EpicSpec {
     final readyToPass = visible.isNotEmpty
         ? visible.every((f) {
             final eff = f.effectiveChecksForRelease(releaseVersion);
-            return f.isPassedForRelease(releaseVersion) ||
+            return f.isResolvedForRelease(releaseVersion) ||
                 (eff.isNotEmpty && eff.every((c) => c.passed));
           })
         : allChecksPassed;

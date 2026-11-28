@@ -627,14 +627,16 @@ class _EpicDomainSheetState extends State<EpicDomainSheet> {
           isDark: isDark,
           code: '§05',
           title: 'Features (${visibleFeatures.length})',
-          trailing: PlainTextLink(
-            key: const ValueKey('show_add_feature_btn'),
-            label: _showAddFeature ? 'Cancel' : '+ Add feature',
-            isDark: isDark,
-            fontSize: 11.5,
-            color: _showAddFeature ? muted : focal,
-            onTap: () => setState(() => _showAddFeature = !_showAddFeature),
-          ),
+          trailing: _showAddFeature
+              ? null
+              : PlainTextLink(
+                  key: const ValueKey('show_add_feature_btn'),
+                  label: '+ Add feature',
+                  isDark: isDark,
+                  fontSize: 11.5,
+                  color: focal,
+                  onTap: () => setState(() => _showAddFeature = true),
+                ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

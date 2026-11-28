@@ -312,7 +312,7 @@ extension WorkbenchProgressivePlannerMixin on WorkbenchProvider {
         for (final bf in base.features) bf.id: bf,
       };
       for (final feat in nextEpic.features) {
-        final wasPassedInBase = feat.isPassedForRelease(baseRelVer);
+        final wasPassedInBase = feat.isPassed;
         final seenCheckIds = <String>{};
         final foldedChecks = <EpicPieCheck>[];
         for (final c in feat.effectiveChecksForRelease(baseRelVer)) {

@@ -241,52 +241,60 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
         ),
         const SizedBox(height: 8),
         if (_editingTitle) ...[
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  key: const ValueKey('stage1_title_input'),
-                  controller: _titleController,
-                  autofocus: true,
-                  style: AppTheme.displayFont(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w700,
-                    color: textPrimary,
-                  ),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    border: UnderlineInputBorder(
-                      borderSide: BorderSide(color: border),
+          Material(
+            type: MaterialType.transparency,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const ValueKey('stage1_title_input'),
+                      controller: _titleController,
+                      autofocus: true,
+                      style: AppTheme.displayFont(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w700,
+                        color: textPrimary,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: UnderlineInputBorder(
+                          borderSide: BorderSide(color: border),
+                        ),
+                        focusedBorder: UnderlineInputBorder(
+                          borderSide: BorderSide(color: focal),
+                        ),
+                      ),
+                      onSubmitted: (val) {
+                        wb.updateRootSpecSections(gameTitle: val);
+                        setState(() => _editingTitle = false);
+                      },
                     ),
-                    focusedBorder: UnderlineInputBorder(
-                      borderSide: BorderSide(color: focal),
-                    ),
                   ),
-                  onSubmitted: (val) {
-                    wb.updateRootSpecSections(gameTitle: val);
-                    setState(() => _editingTitle = false);
-                  },
-                ),
+                  const SizedBox(width: 8),
+                  PlainPrimaryButton(
+                    key: const ValueKey('stage1_title_save_btn'),
+                    label: 'Save',
+                    isDark: isDark,
+                    onPressed: () {
+                      wb.updateRootSpecSections(
+                        gameTitle: _titleController.text,
+                      );
+                      setState(() => _editingTitle = false);
+                    },
+                  ),
+                  const SizedBox(width: 6),
+                  PlainTextLink(
+                    key: const ValueKey('stage1_title_cancel_btn'),
+                    label: 'Cancel',
+                    isDark: isDark,
+                    color: textMuted,
+                    onTap: () => setState(() => _editingTitle = false),
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              PlainPrimaryButton(
-                key: const ValueKey('stage1_title_save_btn'),
-                label: 'Save',
-                isDark: isDark,
-                onPressed: () {
-                  wb.updateRootSpecSections(gameTitle: _titleController.text);
-                  setState(() => _editingTitle = false);
-                },
-              ),
-              const SizedBox(width: 6),
-              PlainTextLink(
-                key: const ValueKey('stage1_title_cancel_btn'),
-                label: 'Cancel',
-                isDark: isDark,
-                color: textMuted,
-                onTap: () => setState(() => _editingTitle = false),
-              ),
-            ],
+            ),
           ),
         ] else ...[
           PlainEditableLineField(
@@ -479,6 +487,29 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             ),
           ],
         ),
+        if (!wb.hasLiveAiKey) ...[
+          const SizedBox(height: 12),
+          Row(
+            key: const ValueKey('offline_template_mode_notice'),
+            children: [
+              Expanded(
+                child: Text(
+                  'Template Mode (signed out) — Sign in with Google or add a Gemini key for live AI specs.',
+                  style: TextStyle(fontSize: 12, color: textMuted),
+                ),
+              ),
+              const SizedBox(width: 8),
+              PlainTextLink(
+                key: const ValueKey('intake_template_signin_btn'),
+                label: 'Sign in',
+                isDark: isDark,
+                fontSize: 12,
+                color: AppTheme.accentGreenFor(isDark),
+                onTap: wb.isAgentBusy ? null : wb.signInWithGoogle,
+              ),
+            ],
+          ),
+        ],
         if (wb.stage1InlineError != null) ...[
           const SizedBox(height: 14),
           _buildStage1InlineErrorBanner(
@@ -556,6 +587,16 @@ class _ProjectPitchScreenState extends State<ProjectPitchScreen> {
             ),
           ),
           const SizedBox(width: 8),
+          if (!wb.isUserLoggedIn) ...[
+            PlainTextLink(
+              key: const ValueKey('stage1_inline_signin_btn'),
+              label: 'Sign in',
+              isDark: isDark,
+              color: AppTheme.accentGreenFor(isDark),
+              onTap: wb.isAgentBusy ? null : wb.signInWithGoogle,
+            ),
+            const SizedBox(width: 8),
+          ],
           PlainTextLink(
             key: retryKey,
             label: 'Retry',

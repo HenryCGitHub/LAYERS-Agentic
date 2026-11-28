@@ -182,8 +182,34 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
         summary: 'Edited ${feat.code} scope',
       );
       _lastStage2RefineSummary = 'Edited ${feat.code} scope';
+      final prevTitle = feat.title.trim();
       if (title != null && title.trim().isNotEmpty) {
-        feat.title = UnrealSpecGuard.sanitizeLine(title, mode: mode);
+        final nextTitle = UnrealSpecGuard.sanitizeLine(title, mode: mode);
+        feat.title = nextTitle;
+        if (prevTitle.toLowerCase() == 'new feature' &&
+            nextTitle.isNotEmpty &&
+            nextTitle.toLowerCase() != 'new feature') {
+          String replacePlaceholder(String raw) => raw.replaceAll(
+                RegExp(r'\bNew Feature\b', caseSensitive: false),
+                nextTitle,
+              );
+          if (inScope == null) {
+            feat.inScope = feat.inScope.map(replacePlaceholder).toList();
+          }
+          if (doneWhen == null) {
+            feat.doneWhen = feat.doneWhen.map(replacePlaceholder).toList();
+          }
+          for (int i = 0; i < feat.checks.length; i++) {
+            feat.checks[i] = feat.checks[i].copyWith(
+              text: replacePlaceholder(feat.checks[i].text),
+            );
+          }
+          for (int i = 0; i < feat.controls.length; i++) {
+            feat.controls[i] = feat.controls[i].copyWith(
+              rule: replacePlaceholder(feat.controls[i].rule),
+            );
+          }
+        }
       }
       if (goal != null) {
         feat.goal = UnrealSpecGuard.sanitizeLine(goal, mode: mode);
@@ -657,5 +683,70 @@ extension WorkbenchSpecEditMixin on WorkbenchProvider {
     _syncActiveProjectMetadata();
     notifyListeners();
     return created;
+  }
+
+  /// True only for unpassed current-release Features that are not the sole Feature in [epic].
+  bool canDeleteFeature(
+    EpicSpec epic,
+    FeatureSpec feature, {
+    String? releaseVersion,
+  }) {
+    final ver = releaseVersion ?? activeReleaseVersionTag;
+    if (feature.isLockedBaselineInRelease(ver) || feature.isPassed) {
+      return false;
+    }
+    return visibleFeaturesForEpic(epic, releaseVersion: ver).length > 1;
+  }
+
+  /// Deletes an unbuilt, non-baseline Feature inside [epicId] with Stage 2 Undo support.
+  bool deleteUnbuiltFeature(String epicId, String featureId) {
+    final doc = documents[epicId];
+    if (doc == null || doc.tier != TierType.epic) return false;
+    final idx = activeReleaseEpicDocs.indexWhere((d) => d.id == epicId);
+    final spec = EpicSpec.fromDocument(doc, indexHint: idx >= 0 ? idx : 0);
+    final relVer = _releaseVersionForEpicDoc(doc, spec);
+    final featIdx = spec.features.indexWhere(
+      (f) => f.id == featureId || f.code == featureId,
+    );
+    if (featIdx < 0) return false;
+    final target = spec.features[featIdx];
+    if (!canDeleteFeature(spec, target, releaseVersion: relVer)) {
+      return false;
+    }
+
+    final visBefore = visibleFeaturesForEpic(spec, releaseVersion: relVer);
+    final visIdx = visBefore.indexWhere((f) => f.id == target.id);
+    _pushStage2UndoSnapshot(
+      epicDocId: epicId,
+      featureId: target.id,
+      snapshot: spec.deepCopy(),
+      summary: 'Deleted ${target.code} ${target.title}',
+    );
+    _lastStage2RefineSummary = 'Deleted ${target.code} ${target.title}';
+    _stage2RefineError = null;
+    spec.features.removeAt(featIdx);
+    _syncEpicLifecycleFromFeatures(spec, relVer);
+
+    final updatedDoc = spec.toTierDocument(
+      docId: doc.id,
+      parentReleaseId: doc.parentId ?? _activeReleaseId ?? '',
+    );
+    documents[doc.id] = updatedDoc;
+    _persistDocument(updatedDoc);
+
+    final visAfter = visibleFeaturesForEpic(spec, releaseVersion: relVer);
+    if (_selectedFeatureId == target.id) {
+      if (visAfter.isNotEmpty) {
+        final nextIdx = visIdx <= 0
+            ? 0
+            : (visIdx - 1).clamp(0, visAfter.length - 1);
+        _selectedFeatureId = visAfter[nextIdx].id;
+      } else {
+        _selectedFeatureId = null;
+      }
+    }
+    _syncActiveProjectMetadata();
+    notifyListeners();
+    return true;
   }
 }

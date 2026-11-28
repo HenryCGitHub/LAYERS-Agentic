@@ -996,6 +996,277 @@ void main() {
         });
       },
     );
+
+    testWidgets(
+      'Simulation #2 UI polish: single Stage 1 auth-error banner, single Cancel on inline add forms, New Feature rename propagation, Pass clears refine banner & honest v0.2 counter',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(vault: vault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false)
+            ..loadPresetSpark('shellbreaker');
+          addTearDown(wb.dispose);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // 1) Unauthenticated Stage 1 AI refine shows only Stage 1 inline error banner (never duplicate global_offline_banner).
+          await tester.enterText(
+            find.byKey(const ValueKey('stage1_codesign_input')),
+            'Make combat faster',
+          );
+          await tester.pumpAndSettle();
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('stage1_codesign_apply_btn')),
+          );
+          expect(
+            find.byKey(const ValueKey('stage1_inline_error_banner')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('stage1_inline_signin_btn')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('global_offline_banner')),
+            findsNothing,
+          );
+
+          // 2) Launch v0.1 and check single Cancel on Epic + Add feature & Feature + Add var forms.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('approve_launch_workbench_btn')),
+          );
+          final e01 = wb.activeReleaseEpics.first;
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('outliner_epic_${e01.id}')),
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('show_add_feature_btn')),
+          );
+          expect(find.byKey(const ValueKey('add_feature_form')), findsOneWidget);
+          expect(find.text('Cancel'), findsOneWidget);
+          await _tapVisible(tester, find.text('Cancel'));
+          expect(find.byKey(const ValueKey('add_feature_form')), findsNothing);
+
+          // 3) Quick-add New Feature via outline footer -> rename updates PIE check & starter sections.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('outline_add_slice_btn')),
+          );
+          final added = wb.selectedFeatureSpec!;
+          wb.updateFeatureScope(
+            e01.id,
+            added.id,
+            title: 'Storm Wind Gust Recovery',
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.textContaining('Storm Wind Gust Recovery'),
+            findsWidgets,
+          );
+          expect(
+            wb.selectedFeatureSpec!.checks.first.text,
+            contains('Storm Wind Gust Recovery'),
+          );
+
+          // Open + Add var on Feature page -> single Cancel button.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('feature_add_tuning_btn')),
+          );
+          expect(
+            find.byKey(const ValueKey('feature_tuning_key_input')),
+            findsOneWidget,
+          );
+          expect(find.text('Cancel'), findsOneWidget);
+          await _tapVisible(tester, find.text('Cancel'));
+
+          // 4) Passing F02 clears stale Stage 2 banner upon advancing, and v0.2 shows honest 1/N passed count.
+          final f02 = wb.activeReleaseEpics.first.features[1];
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('outliner_feature_${f02.id}')),
+          );
+          for (final chk in wb.selectedFeatureSpec!.checks) {
+            wb.toggleFeatureCheck(e01.id, f02.id, chk.id, true);
+          }
+          wb.addFeatureTuningParam(
+            e01.id,
+            f02.id,
+            key: 'TempPreviewDist',
+            value: '120',
+            unit: 'cm',
+          );
+          await tester.pumpAndSettle();
+          expect(wb.lastStage2RefineSummary, isNotNull);
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('pass_feature_btn')),
+          );
+          expect(wb.lastStage2RefineSummary, isNull);
+
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('plan_next_release_btn')),
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('copilot_commit_btn')),
+          );
+          expect(wb.activeReleaseVersionTag, equals('v0.2'));
+          expect(wb.activeReleaseFeatureRollup.passed, equals(1));
+          expect(
+            wb.activeReleaseFeatureRollup.passed,
+            lessThan(wb.activeReleaseFeatureRollup.total - 3),
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('outliner_release_${wb.activeReleaseId!}')),
+          );
+          expect(
+            find.textContaining(
+              '1/${wb.activeReleaseFeatureRollup.total} PASSED',
+            ),
+            findsOneWidget,
+          );
+        });
+      },
+    );
+
+    testWidgets(
+      'Core loop upgrades: signed-out Template Mode notice, UE5 Version & Project Base UI, guarded Delete button, and pasteable [FIX] error log',
+      (tester) async {
+        final vault = _PlainMemoryVaultBackend();
+        _installPlainTestHooks(vault: vault);
+
+        await _runWithViewport(tester, const Size(1280, 800), () async {
+          final wb = WorkbenchProvider(enableAutoLoad: false);
+          addTearDown(wb.dispose);
+
+          await tester.pumpWidget(LayersAgenticApp(provider: wb));
+          await tester.pumpAndSettle();
+
+          // 1) Signed-out New Game intake renders Template Mode notice & Sign in CTA; hides when key is added.
+          expect(
+            find.byKey(const ValueKey('offline_template_mode_notice')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('intake_template_signin_btn')),
+            findsOneWidget,
+          );
+          wb.updateAiConfig(apiKey: 'AIzaTemplateModeHiddenTestKey');
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('offline_template_mode_notice')),
+            findsNothing,
+          );
+
+          // 2) Load Shellbreaker & configure UE 5.6 + Project Base / Module in §02 UE5 Setup.
+          wb.loadPresetSpark('shellbreaker');
+          await tester.pumpAndSettle();
+
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('ue_version_opt_UE_5.6')),
+          );
+          expect(wb.conceptDraft!.ueVersion, equals('UE 5.6'));
+
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('stage1_edit_contracts_btn')),
+          );
+          await _enterAndUnfocus(
+            tester,
+            find.byKey(const ValueKey('stage1_project_anchor_input')),
+            'Module: ShellGame · Extends ACharacter',
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('stage1_contracts_save_btn')),
+          );
+          expect(
+            wb.conceptDraft!.ueProjectAnchor,
+            equals('Module: ShellGame · Extends ACharacter'),
+          );
+
+          // 3) Launch v0.1 -> passed F01 hides Delete button; quick-added unbuilt Feature shows Delete & removes cleanly.
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('approve_launch_workbench_btn')),
+          );
+          final e01 = wb.activeReleaseEpics.first;
+          final f01 = e01.features.first;
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('outliner_epic_${e01.id}')),
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('outliner_feature_${f01.id}')),
+          );
+          expect(
+            find.byKey(const ValueKey('delete_feature_btn')),
+            findsNothing,
+          );
+
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('outline_add_slice_btn')),
+          );
+          final createdId = wb.selectedFeatureId!;
+          expect(
+            find.byKey(const ValueKey('delete_feature_btn')),
+            findsOneWidget,
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('delete_feature_btn')),
+          );
+          expect(
+            wb.activeReleaseEpics.first.features.any((f) => f.id == createdId),
+            isFalse,
+          );
+
+          // 4) Open F02 -> + Paste log -> Flag [FIX] displays log excerpt in Fixes (1).
+          final f02 = wb.activeReleaseEpics.first.features[1];
+          await _tapVisible(
+            tester,
+            find.byKey(ValueKey('outliner_feature_${f02.id}')),
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('toggle_fix_log_btn')),
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('flag_fix_input')),
+            'Dash collider clips corner',
+          );
+          await tester.enterText(
+            find.byKey(const ValueKey('flag_fix_log_input')),
+            'LogPhysics: Warning: SweptTrace blocked at Z=12',
+          );
+          await _tapVisible(
+            tester,
+            find.byKey(const ValueKey('flag_fix_btn')),
+          );
+          expect(find.text('FIXES (1)'), findsOneWidget);
+          expect(
+            find.textContaining('SweptTrace blocked at Z=12'),
+            findsOneWidget,
+          );
+          expect(
+            find.text('Copy CoPilot [FIX] Prompt (1)'),
+            findsOneWidget,
+          );
+        });
+      },
+    );
   });
 }
 

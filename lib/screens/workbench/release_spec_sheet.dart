@@ -61,7 +61,7 @@ class _ReleaseSpecSheetState extends State<ReleaseSpecSheet> {
           firstFixEpic = ep;
           firstFixFeat = f;
         }
-        if (firstOpenFeat == null && !f.isPassedForRelease(relVer)) {
+        if (firstOpenFeat == null && !f.isResolvedForRelease(relVer)) {
           firstOpenEpic = ep;
           firstOpenFeat = f;
         }

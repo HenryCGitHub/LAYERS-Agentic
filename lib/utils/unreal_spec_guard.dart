@@ -331,9 +331,30 @@ class UnrealSpecGuard {
         for (final chk in items) EpicPieCheck(id: chk.id, text: sanitizeLine(chk.text, mode: mode), passed: chk.passed),
       ];
 
-  static List<EpicPieFix> _sanitizeFixes(List<EpicPieFix> items, UnrealArchitectureMode mode) => [
+  static String _sanitizeMultiLineLog(
+    String raw, {
+    UnrealArchitectureMode mode = UnrealArchitectureMode.blueprint,
+  }) {
+    if (raw.trim().isEmpty) return '';
+    return [
+      for (final line in raw.replaceAll('\r\n', '\n').split('\n'))
+        if (line.trim().isNotEmpty) sanitizeLine(line.trimRight(), mode: mode),
+    ].join('\n');
+  }
+
+  static List<EpicPieFix> _sanitizeFixes(
+    List<EpicPieFix> items,
+    UnrealArchitectureMode mode,
+  ) =>
+      [
         for (final fx in items)
-          EpicPieFix(id: fx.id, text: sanitizeLine(fx.text, mode: mode), resolved: fx.resolved, createdAtMs: fx.createdAtMs),
+          EpicPieFix(
+            id: fx.id,
+            text: sanitizeLine(fx.text, mode: mode),
+            errorLog: _sanitizeMultiLineLog(fx.errorLog, mode: mode),
+            resolved: fx.resolved,
+            createdAtMs: fx.createdAtMs,
+          ),
       ];
 
   static FeatureSpec sanitizeFeatureSpec(
@@ -421,6 +442,9 @@ class UnrealSpecGuard {
     final out = raw.deepCopy();
     final mode = modeOverride ?? out.architectureMode;
     out.architectureMode = mode;
+    out.ueVersion =
+        out.ueVersion.trim().isEmpty ? 'UE 5.5' : out.ueVersion.trim();
+    out.ueProjectAnchor = sanitizeLine(out.ueProjectAnchor, mode: mode);
     out.pitch = sanitizeLine(out.pitch, mode: mode);
     out.coreLoop = _sanitizeList(out.coreLoop, mode);
     out.cameraContract = sanitizeLine(out.cameraContract, mode: mode);
